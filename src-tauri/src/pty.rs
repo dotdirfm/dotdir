@@ -181,8 +181,8 @@ pub struct PtyHandle {
     pub thread_handle: windows_sys::Win32::Foundation::HANDLE,
 }
 
-// HPCON is *mut c_void which is not Send by default; we manage its lifetime
-// exclusively through the Mutex<HashMap<u32, PtyHandle>> in AppState.
+// HANDLE is *mut c_void which is not Send by default; we manage handle
+// lifetimes exclusively through the Mutex<HashMap<u32, PtyHandle>> in AppState.
 #[cfg(windows)]
 unsafe impl Send for PtyHandle {}
 
@@ -229,7 +229,7 @@ pub fn spawn(cwd: &str, cols: u16, rows: u16) -> std::io::Result<PtyHandle> {
 
         // Create the pseudo-console.
         let size = COORD { X: cols as i16, Y: rows as i16 };
-        let mut con_pty: HPCON = std::ptr::null_mut();
+        let mut con_pty: HPCON = 0;
         let hr = CreatePseudoConsole(size, pty_in_read, pty_out_write, 0, &mut con_pty);
 
         // These ends are now owned by the ConPTY; close our copies.
@@ -256,14 +256,15 @@ pub fn spawn(cwd: &str, cols: u16, rows: u16) -> std::io::Result<PtyHandle> {
             return Err(io::Error::last_os_error());
         }
 
+        // HPCON is isize; pass a pointer to the value as the attribute data.
         if UpdateProcThreadAttribute(
             attr_list,
             0,
-            PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-            con_pty as *mut _,
+            PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE as usize,
+            (&con_pty as *const HPCON).cast(),
             std::mem::size_of::<HPCON>(),
             std::ptr::null_mut(),
-            std::ptr::null_mut(),
+            std::ptr::null(),
         ) == 0
         {
             DeleteProcThreadAttributeList(attr_list);
@@ -311,7 +312,7 @@ pub fn spawn(cwd: &str, cols: u16, rows: u16) -> std::io::Result<PtyHandle> {
         let mut written: u32 = 0;
         WriteFile(
             pty_in_write,
-            PS_PROMPT_INIT.as_ptr() as *const _,
+            PS_PROMPT_INIT.as_ptr(),
             PS_PROMPT_INIT.len() as u32,
             &mut written,
             std::ptr::null_mut(),
@@ -356,7 +357,7 @@ pub fn write_all(
         let ok = unsafe {
             WriteFile(
                 handle,
-                data[offset..].as_ptr() as *const _,
+                data[offset..].as_ptr(),
                 (data.len() - offset) as u32,
                 &mut written,
                 std::ptr::null_mut(),
@@ -396,7 +397,7 @@ pub fn read_blocking(
     let ok = unsafe {
         ReadFile(
             handle,
-            buf.as_mut_ptr() as *mut _,
+            buf.as_mut_ptr(),
             buf.len() as u32,
             &mut read,
             std::ptr::null_mut(),
@@ -411,9 +412,11 @@ pub fn read_blocking(
 /// Terminate child process and release all ConPTY handles.
 #[cfg(windows)]
 pub fn close(handle: &mut PtyHandle) {
-    use windows_sys::Win32::Foundation::{CloseHandle, INFINITE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Console::ClosePseudoConsole;
-    use windows_sys::Win32::System::Threading::{TerminateProcess, WaitForSingleObject};
+    use windows_sys::Win32::System::Threading::{
+        TerminateProcess, WaitForSingleObject, INFINITE,
+    };
     unsafe {
         TerminateProcess(handle.process_handle, 1);
         WaitForSingleObject(handle.process_handle, INFINITE);
@@ -422,7 +425,7 @@ pub fn close(handle: &mut PtyHandle) {
         CloseHandle(handle.read_handle);
         CloseHandle(handle.process_handle);
         CloseHandle(handle.thread_handle);
-        handle.con_pty = std::ptr::null_mut();
+        handle.con_pty = 0;
         handle.write_handle = INVALID_HANDLE_VALUE;
         handle.read_handle = INVALID_HANDLE_VALUE;
         handle.process_handle = INVALID_HANDLE_VALUE;

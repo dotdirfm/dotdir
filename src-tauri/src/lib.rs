@@ -247,8 +247,15 @@ fn pty_spawn(cwd: String, state: State<'_, AppState>, app_handle: tauri::AppHand
     let handle = pty::spawn(&cwd, 80, 24).map_err(|e| CmdError(FsError::Io(e)))?;
     #[cfg(unix)]
     let master_fd = handle.master_fd;
+    // HANDLE is *mut c_void which is not Send; wrap it so we can move it
+    // safely into the reader thread.  The handle outlives the thread because
+    // pty_close() can only be called after the frontend receives pty:exit.
     #[cfg(windows)]
-    let read_handle = handle.read_handle;
+    struct SendHandle(windows_sys::Win32::Foundation::HANDLE);
+    #[cfg(windows)]
+    unsafe impl Send for SendHandle {}
+    #[cfg(windows)]
+    let read_handle = SendHandle(handle.read_handle);
     state.ptys.lock().unwrap().insert(id, handle);
 
     #[cfg(unix)]
@@ -272,7 +279,7 @@ fn pty_spawn(cwd: String, state: State<'_, AppState>, app_handle: tauri::AppHand
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
         loop {
-            match pty::read_blocking(read_handle, &mut buf) {
+            match pty::read_blocking(read_handle.0, &mut buf) {
                 Ok(0) | Err(_) => {
                     let _ = app_handle.emit("pty:exit", PtyExitEvent { pty_id: id });
                     break;
