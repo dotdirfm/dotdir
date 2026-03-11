@@ -1,0 +1,32 @@
+[package]
+name = "faraday-tauri"
+version = "0.1.0"
+description = "Faraday File Manager"
+authors = ["Mikhail Isupov"]
+edition = "2021"
+
+[workspace]
+members = ["faraday-core"]
+
+[lib]
+name = "faraday_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+faraday-core = { path = "faraday-core" }
+dirs = "6"
+axum = { version = "0.7", features = ["ws"] }
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.5", features = ["fs"] }
+futures = "0.3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+

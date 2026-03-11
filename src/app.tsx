@@ -1,0 +1,419 @@
+import { FsNode } from 'fss-lang';
+import type { LayeredResolver, ThemeKind } from 'fss-lang';
+import { createFsNode } from 'fss-lang/helpers';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { FsChangeType } from './types';
+import { bridge } from './bridge';
+import { detectLang } from './langDetect';
+import { actionQueue } from './actionQueue';
+import { FileList } from './FileList';
+import { FileViewer } from './FileViewer';
+import { FileEditor } from './FileEditor';
+import { ImageViewer, isImageFile } from './ImageViewer';
+import { ModalDialog, type ModalDialogProps } from './ModalDialog';
+import { TerminalPanel } from './Terminal';
+import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
+import { createPanelResolver, invalidateFssCache, syncLayers } from './fss';
+import { basename, dirname, join } from './path';
+
+function buildParentChain(dirPath: string): FsNode | undefined {
+  if (dirname(dirPath) === dirPath) return undefined;
+
+  const ancestors: string[] = [];
+  let cur = dirPath;
+  while (true) {
+    ancestors.push(cur);
+    const parent = dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  ancestors.reverse();
+
+  let node: FsNode | undefined;
+  for (const p of ancestors) {
+    node = createFsNode({
+      name: basename(p) || p,
+      type: 'folder',
+      path: p,
+      parent: node,
+    });
+  }
+  return node;
+}
+
+function handleToFsNode(handle: FileSystemHandle & { meta?: HandleMeta }, dirPath: string, parent?: FsNode): FsNode {
+  const isDir = handle.kind === 'directory';
+  return createFsNode({
+    name: handle.name,
+    type: isDir ? 'folder' : 'file',
+    lang: isDir ? '' : detectLang(handle.name),
+    meta: {
+      size: handle.meta?.size ?? 0,
+      mtimeMs: handle.meta?.mtimeMs ?? 0,
+      executable: !isDir && handle.meta != null && (handle.meta.mode & 0o111) !== 0,
+      hidden: handle.meta?.hidden ?? handle.name.startsWith('.'),
+      nlink: handle.meta?.nlink ?? 1,
+      entryKind: handle.meta?.kind ?? (isDir ? 'directory' : 'file'),
+      linkTarget: handle.meta?.linkTarget,
+    },
+    path: join(dirPath, handle.name),
+    parent,
+  });
+}
+
+interface PanelState {
+  currentPath: string;
+  parentNode?: FsNode;
+  entries: FsNode[];
+}
+
+const emptyPanel: PanelState = { currentPath: '', parentNode: undefined, entries: [] };
+
+async function findExistingParent(startPath: string): Promise<string> {
+  let cur = dirname(startPath);
+  while (cur !== '/') {
+    if (await bridge.fsa.exists(cur)) return cur;
+    cur = dirname(cur);
+  }
+  return '/';
+}
+
+function getAncestors(dirPath: string): string[] {
+  const ancestors: string[] = [];
+  let cur = dirPath;
+  while (true) {
+    ancestors.push(cur);
+    const parent = dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  return ancestors;
+}
+
+function usePanel(theme: ThemeKind, showError: (message: string) => void) {
+  const [state, setState] = useState<PanelState>(emptyPanel);
+  const [navigating, setNavigating] = useState(false);
+  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navAbortRef = useRef<AbortController | null>(null);
+  const resolverRef = useRef<LayeredResolver | null>(null);
+  if (!resolverRef.current) {
+    resolverRef.current = createPanelResolver(theme);
+  }
+
+  const observerRef = useRef<FileSystemObserver | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentPathRef = useRef<string>('');
+
+  useEffect(() => {
+    resolverRef.current!.setTheme(theme);
+  }, [theme]);
+
+  const showErrorRef = useRef(showError);
+  showErrorRef.current = showError;
+
+  const setupWatches = useCallback((dirPath: string) => {
+    const observer = observerRef.current!;
+    observer.disconnect();
+    const ancestors = getAncestors(dirPath);
+    for (const ancestor of ancestors) {
+      observer.observe(new DirectoryHandle(ancestor));
+      observer.observe(new DirectoryHandle(join(ancestor, '.faraday')));
+    }
+  }, []);
+
+  const navigateTo = useCallback(
+    async (path: string) => {
+      navAbortRef.current?.abort();
+      const abort = new AbortController();
+      navAbortRef.current = abort;
+
+      navTimerRef.current = setTimeout(() => setNavigating(true), 300);
+      try {
+        const work = (async () => {
+          currentPathRef.current = path;
+          await syncLayers(resolverRef.current!, path);
+          if (abort.signal.aborted) return;
+          const dirHandle = new DirectoryHandle(path);
+          const parent = buildParentChain(path);
+          const nodes: FsNode[] = [];
+          for await (const [, handle] of dirHandle.entries()) {
+            if (abort.signal.aborted) return;
+            nodes.push(handleToFsNode(handle, path, parent));
+          }
+          if (abort.signal.aborted) return;
+          setState({ currentPath: path, parentNode: parent, entries: nodes });
+          setupWatches(path);
+        })();
+        work.catch(() => {});
+        await Promise.race([
+          work,
+          new Promise<void>((resolve) => {
+            abort.signal.addEventListener('abort', () => resolve(), { once: true });
+          }),
+        ]);
+      } catch (err) {
+        if (!abort.signal.aborted) {
+          const msg = err && typeof err === 'object' && 'message' in err
+            ? (err as { message: string }).message
+            : String(err);
+          showErrorRef.current(`Failed to read directory: ${msg}`);
+        }
+      } finally {
+        clearTimeout(navTimerRef.current!);
+        navTimerRef.current = null;
+        setNavigating(false);
+      }
+    },
+    [setupWatches],
+  );
+
+  const cancelNavigation = useCallback(() => {
+    navAbortRef.current?.abort();
+    navAbortRef.current = null;
+    if (navTimerRef.current) {
+      clearTimeout(navTimerRef.current);
+      navTimerRef.current = null;
+    }
+    setNavigating(false);
+  }, []);
+
+  useEffect(() => {
+    const handleRecords = (records: FileSystemChangeRecord[]) => {
+      const curPath = currentPathRef.current;
+      if (!curPath) return;
+
+      let needsRefresh = false;
+      let needsFssRefresh = false;
+      let navigateUp = false;
+
+      for (const record of records) {
+        const rootPath = record.root.path;
+        const changedName = record.relativePathComponents[0] ?? null;
+        const type: FsChangeType = record.type;
+
+        if (rootPath === curPath) {
+          if (type === 'errored') {
+            navigateUp = true;
+          } else {
+            needsRefresh = true;
+          }
+        } else if (rootPath.endsWith('/.faraday')) {
+          if (changedName === 'fs.css') {
+            const parentDir = dirname(rootPath);
+            invalidateFssCache(parentDir);
+            needsFssRefresh = true;
+          }
+        } else if (curPath.startsWith(rootPath + '/') || curPath === rootPath) {
+          if (changedName === '.faraday') {
+            invalidateFssCache(rootPath);
+            needsFssRefresh = true;
+          } else if (changedName) {
+            const relative = curPath.slice(rootPath.length + 1);
+            const nextSegment = relative.split('/')[0];
+            if (changedName === nextSegment && type === 'disappeared') {
+              navigateUp = true;
+            }
+          }
+        }
+      }
+
+      if (navigateUp) {
+        if (debounceRef.current) {
+          clearTimeout(debounceRef.current);
+          debounceRef.current = null;
+        }
+        findExistingParent(curPath).then((parent) => {
+          navigateToRef.current(parent);
+        });
+        return;
+      }
+
+      if (needsRefresh || needsFssRefresh) {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+          debounceRef.current = null;
+          navigateToRef.current(currentPathRef.current);
+        }, 100);
+      }
+    };
+
+    observerRef.current = new FileSystemObserver(handleRecords);
+
+    return () => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+    };
+  }, []);
+
+  const navigateToRef = useRef(navigateTo);
+  navigateToRef.current = navigateTo;
+
+  return { ...state, navigateTo, navigating, cancelNavigation, resolver: resolverRef.current! };
+}
+
+type PanelSide = 'left' | 'right';
+
+export function App() {
+  const [theme, setTheme] = useState<ThemeKind>('dark');
+  const [dialog, setDialog] = useState<Omit<ModalDialogProps, 'onClose'> | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
+  const showError = useCallback((message: string) => {
+    setDialog({ title: 'Error', message, variant: 'error' });
+  }, []);
+  const left = usePanel(theme, showError);
+  const right = usePanel(theme, showError);
+  const [activePanel, setActivePanel] = useState<PanelSide>('left');
+  const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number } | null>(null);
+  const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
+
+  const handleViewFile = useCallback((filePath: string, fileName: string, fileSize: number) => {
+    setViewerFile({ path: filePath, name: fileName, size: fileSize });
+  }, []);
+
+  const handleEditFile = useCallback((filePath: string, fileName: string, fileSize: number, langId: string) => {
+    setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
+  }, []);
+
+  const handleTerminalCwd = useCallback((path: string) => {
+    const panel = activePanel === 'left' ? left : right;
+    if (path !== panel.currentPath) {
+      panel.navigateTo(path);
+    }
+  }, [activePanel, left, right]);
+
+  useEffect(() => {
+    bridge.theme.get().then((t) => setTheme(t as ThemeKind));
+    return bridge.theme.onChange((t) => setTheme(t as ThemeKind));
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  const isBrowser = !('__TAURI_INTERNALS__' in window);
+
+  // Initial navigation: use URL path in browser mode, home dir otherwise
+  useEffect(() => {
+    const urlPath = isBrowser ? decodeURIComponent(window.location.pathname) : '';
+    const hasUrlPath = urlPath.length > 1; // not just "/"
+
+    if (hasUrlPath) {
+      bridge.fsa.exists(urlPath).then(async (exists) => {
+        if (exists) {
+          left.navigateTo(urlPath);
+        } else {
+          const parent = await findExistingParent(urlPath);
+          left.navigateTo(parent);
+          showError(`Directory not found: ${urlPath}`);
+        }
+      });
+      bridge.utils.getHomePath().then((home) => right.navigateTo(home));
+    } else {
+      bridge.utils.getHomePath().then((home) => {
+        left.navigateTo(home);
+        right.navigateTo(home);
+      });
+    }
+  }, []);
+
+  // Sync active panel path to URL (browser mode only)
+  const activePath = activePanel === 'left' ? left.currentPath : right.currentPath;
+  useEffect(() => {
+    if (isBrowser && activePath) {
+      history.replaceState(null, '', activePath);
+    }
+  }, [activePath]);
+
+  // Re-navigate both panels on WebSocket reconnect
+  const leftPathRef = useRef(left.currentPath);
+  leftPathRef.current = left.currentPath;
+  const rightPathRef = useRef(right.currentPath);
+  rightPathRef.current = right.currentPath;
+
+  useEffect(() => {
+    if (bridge.onReconnect) {
+      return bridge.onReconnect(() => {
+        left.navigateTo(leftPathRef.current);
+        right.navigateTo(rightPathRef.current);
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        actionQueue.enqueue(() => setActivePanel((s) => (s === 'left' ? 'right' : 'left')));
+      } else if (e.key === 'Escape') {
+        left.cancelNavigation();
+        right.cancelNavigation();
+      } else if (e.key === '.' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        setShowHidden((s) => !s);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  if (!left.currentPath || !right.currentPath) {
+    return <div className="loading">Loading...</div>;
+  }
+
+  const activeCwd = activePanel === 'left' ? left.currentPath : right.currentPath;
+
+  return (
+    <div className="app">
+      <div className="panels">
+        <div className={`panel ${activePanel === 'left' ? 'active' : ''}`} onClick={() => setActivePanel('left')}>
+          {left.navigating && <div className="panel-progress" />}
+          <FileList
+            currentPath={left.currentPath}
+            parentNode={left.parentNode}
+            entries={showHidden ? left.entries : left.entries.filter((e) => !e.meta.hidden)}
+            onNavigate={left.navigateTo}
+            onViewFile={handleViewFile}
+            onEditFile={handleEditFile}
+            active={activePanel === 'left'}
+            resolver={left.resolver}
+          />
+        </div>
+        <div className={`panel ${activePanel === 'right' ? 'active' : ''}`} onClick={() => setActivePanel('right')}>
+          {right.navigating && <div className="panel-progress" />}
+          <FileList
+            currentPath={right.currentPath}
+            parentNode={right.parentNode}
+            entries={showHidden ? right.entries : right.entries.filter((e) => !e.meta.hidden)}
+            onNavigate={right.navigateTo}
+            onViewFile={handleViewFile}
+            onEditFile={handleEditFile}
+            active={activePanel === 'right'}
+            resolver={right.resolver}
+          />
+        </div>
+      </div>
+      <div className="terminal-panel">
+        <TerminalPanel cwd={activeCwd} onCwdChange={handleTerminalCwd} />
+      </div>
+      {viewerFile &&
+        (isImageFile(viewerFile.name) ? (
+          <ImageViewer filePath={viewerFile.path} fileName={viewerFile.name} fileSize={viewerFile.size} onClose={() => setViewerFile(null)} />
+        ) : (
+          <FileViewer filePath={viewerFile.path} fileName={viewerFile.name} fileSize={viewerFile.size} onClose={() => setViewerFile(null)} />
+        ))}
+      {editorFile && (
+        <FileEditor
+          filePath={editorFile.path}
+          fileName={editorFile.name}
+          langId={editorFile.langId}
+          onClose={() => setEditorFile(null)}
+        />
+      )}
+      {dialog && <ModalDialog {...dialog} onClose={() => setDialog(null)} />}
+    </div>
+  );
+}
