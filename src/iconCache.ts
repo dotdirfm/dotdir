@@ -2,6 +2,7 @@ import { DirectoryHandle } from './fsa';
 import { bridge } from './bridge';
 
 const MAX_SIZE = 200;
+const isTauri = '__TAURI_INTERNALS__' in window;
 
 const cache = new Map<string, string>();
 const pending = new Map<string, Promise<void>>();
@@ -34,8 +35,24 @@ function evictIfNeeded(): void {
   }
 }
 
-export async function loadIcons(names: string[]): Promise<void> {
+async function loadIconViaFs(name: string): Promise<void> {
   const dir = await ensureIconsDir();
+  const handle = await dir.getFileHandle(name);
+  const file = await handle.getFile();
+  const content = await file.text();
+  cache.set(name, svgToDataUrl(content));
+  evictIfNeeded();
+}
+
+async function loadIconViaHttp(name: string): Promise<void> {
+  const resp = await fetch(`/icons/${name}`);
+  if (!resp.ok) return;
+  const svg = await resp.text();
+  cache.set(name, svgToDataUrl(svg));
+  evictIfNeeded();
+}
+
+export async function loadIcons(names: string[]): Promise<void> {
   const promises: Promise<void>[] = [];
 
   for (const name of names) {
@@ -48,11 +65,11 @@ export async function loadIcons(names: string[]): Promise<void> {
 
     const p = (async () => {
       try {
-        const handle = await dir.getFileHandle(name);
-        const file = await handle.getFile();
-        const content = await file.text();
-        cache.set(name, svgToDataUrl(content));
-        evictIfNeeded();
+        if (isTauri) {
+          await loadIconViaFs(name);
+        } else {
+          await loadIconViaHttp(name);
+        }
       } catch {
         // Icon file not found — ignore
       } finally {

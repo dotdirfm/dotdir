@@ -4,11 +4,13 @@
 /// JSON-RPC 2.0 over WebSocket. Uses faraday-core for all FS ops.
 
 use axum::{
+    body::Body,
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
+        Path, State,
     },
-    response::IntoResponse,
+    http::{header, StatusCode, Uri},
+    response::{IntoResponse, Response},
     routing::get,
     Router,
 };
@@ -19,11 +21,19 @@ use faraday_core::{
     watch::{EventCallback, FsWatcher},
 };
 use futures::{SinkExt, StreamExt};
+use rust_embed::RustEmbed;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::mpsc;
-use tower_http::services::{ServeDir, ServeFile};
+
+#[derive(RustEmbed)]
+#[folder = "../dist"]
+struct EmbeddedAssets;
+
+#[derive(RustEmbed)]
+#[folder = "icons-bundle"]
+struct EmbeddedIcons;
 
 // ── JSON entry for the wire ─────────────────────────────────────────
 
@@ -341,6 +351,112 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
     }
 }
 
+// ── Icon serving ───────────────────────────────────────────────────
+
+async fn icon_handler(
+    State(state): State<ServerState>,
+    Path(name): Path<String>,
+) -> Response {
+    // Disk override via --icons-dir
+    if let Some(ref dir) = *state.icons_dir {
+        let path = PathBuf::from(dir).join(&name);
+        if let Ok(bytes) = tokio::fs::read(&path).await {
+            return Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "image/svg+xml")
+                .body(Body::from(bytes))
+                .unwrap();
+        }
+    }
+
+    // Embedded fallback
+    match EmbeddedIcons::get(&name) {
+        Some(file) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "image/svg+xml")
+            .body(Body::from(file.data.into_owned()))
+            .unwrap(),
+        None => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::empty())
+            .unwrap(),
+    }
+}
+
+// ── macOS Dock suppression ─────────────────────────────────────────
+
+#[cfg(target_os = "macos")]
+fn suppress_dock_icon() {
+    unsafe {
+        let cls = objc2::runtime::AnyClass::get(c"NSApplication").expect("NSApplication class");
+        let app: *mut objc2::runtime::AnyObject = objc2::msg_send![cls, sharedApplication];
+        // NSApplicationActivationPolicyAccessory = 1
+        let _: bool = objc2::msg_send![app, setActivationPolicy: 1_isize];
+    }
+}
+
+// ── Asset serving ──────────────────────────────────────────────────
+
+async fn embedded_asset_handler(uri: Uri) -> Response {
+    let path = uri.path().trim_start_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+
+    match EmbeddedAssets::get(path) {
+        Some(file) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, file.metadata.mimetype())
+            .body(Body::from(file.data.into_owned()))
+            .unwrap(),
+        None => {
+            // SPA fallback: serve index.html for client-side routing
+            match EmbeddedAssets::get("index.html") {
+                Some(file) => Response::builder()
+                    .status(StatusCode::OK)
+                    .header(header::CONTENT_TYPE, "text/html")
+                    .body(Body::from(file.data.into_owned()))
+                    .unwrap(),
+                None => Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::empty())
+                    .unwrap(),
+            }
+        }
+    }
+}
+
+async fn disk_asset_handler(uri: Uri, dir: &str) -> Response {
+    let path = uri.path().trim_start_matches('/');
+    let file_path = PathBuf::from(dir).join(if path.is_empty() { "index.html" } else { path });
+
+    match tokio::fs::read(&file_path).await {
+        Ok(bytes) => {
+            let mime = mime_guess::from_path(&file_path)
+                .first_or_octet_stream()
+                .to_string();
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, mime)
+                .body(Body::from(bytes))
+                .unwrap()
+        }
+        Err(_) => {
+            // SPA fallback
+            let index = PathBuf::from(dir).join("index.html");
+            match tokio::fs::read(&index).await {
+                Ok(bytes) => Response::builder()
+                    .status(StatusCode::OK)
+                    .header(header::CONTENT_TYPE, "text/html")
+                    .body(Body::from(bytes))
+                    .unwrap(),
+                Err(_) => Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::empty())
+                    .unwrap(),
+            }
+        }
+    }
+}
+
 // ── Config parsing ──────────────────────────────────────────────────
 
 struct Config {
@@ -387,26 +503,6 @@ fn parse_config(args: &[String]) -> Config {
         }
     }
 
-    if static_dir.is_none() {
-        for c in ["dist-web", "../dist-web"] {
-            if PathBuf::from(c).join("index.html").exists() {
-                static_dir = Some(c.into());
-                break;
-            }
-        }
-    }
-
-    if icons_dir.is_none() {
-        for c in ["src-tauri/icons-bundle", "icons-bundle", "icons"] {
-            if PathBuf::from(c).exists() {
-                if let Ok(p) = std::fs::canonicalize(c) {
-                    icons_dir = Some(p.to_string_lossy().into_owned());
-                }
-                break;
-            }
-        }
-    }
-
     Config {
         port,
         host,
@@ -420,6 +516,9 @@ fn parse_config(args: &[String]) -> Config {
 /// Run the headless HTTP + WebSocket server.
 /// `args` are the arguments after the `serve` subcommand.
 pub fn run(args: &[String]) {
+    #[cfg(target_os = "macos")]
+    suppress_dock_icon();
+
     let config = parse_config(args);
     let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
     rt.block_on(async {
@@ -429,20 +528,18 @@ pub fn run(args: &[String]) {
 
         let app = Router::new()
             .route("/ws", get(ws_handler))
+            .route("/icons/:name", get(icon_handler))
             .with_state(state);
 
-        let app = if let Some(ref dir) = config.static_dir {
-            let index = PathBuf::from(dir).join("index.html");
-            if index.exists() {
-                eprintln!("Serving web UI from {dir}");
-                app.fallback_service(
-                    ServeDir::new(dir).not_found_service(ServeFile::new(index)),
-                )
-            } else {
-                app
-            }
+        let app = if let Some(dir) = config.static_dir {
+            eprintln!("Serving web UI from {dir} (disk)");
+            app.fallback(move |uri: Uri| {
+                let dir = dir.clone();
+                async move { disk_asset_handler(uri, &dir).await }
+            })
         } else {
-            app
+            eprintln!("Serving web UI from embedded assets");
+            app.fallback(embedded_asset_handler)
         };
 
         let addr = format!("{}:{}", config.host, config.port);
