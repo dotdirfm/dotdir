@@ -35,13 +35,6 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
-      - name: Rust check
-        working-directory: src-tauri
-        run: cargo check --workspace
-
-      - name: Build frontend
-        run: pnpm build
-
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:

@@ -39,10 +39,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build frdye
-        working-directory: src-tauri
-        run: cargo build -p frdye --release
-
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
