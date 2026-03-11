@@ -8,6 +8,12 @@ function shellQuote(path: string): string {
   return "'" + path.replace(/'/g, "'\\''") + "'";
 }
 
+/** OSC 7 delivers Windows paths with a leading slash: /C:/Users/… → C:/Users/… */
+function normalizePtyPath(raw: string): string {
+  const m = raw.match(/^\/([A-Za-z]:\/.*)/);
+  return m ? m[1] : raw;
+}
+
 interface TerminalPanelProps {
   cwd: string;
   onCwdChange?: (path: string) => void;
@@ -74,7 +80,7 @@ export function TerminalPanel({ cwd, onCwdChange }: TerminalPanelProps) {
     term.parser.registerOscHandler(7, (data) => {
       const match = data.match(/^file:\/\/[^/]*(\/.*)/);
       if (match) {
-        const path = decodeURIComponent(match[1]);
+        const path = normalizePtyPath(decodeURIComponent(match[1]));
         lastTerminalCwdRef.current = path;
         onCwdChangeRef.current?.(path);
       }
@@ -112,7 +118,7 @@ export function TerminalPanel({ cwd, onCwdChange }: TerminalPanelProps) {
           // Update cwd from the OSC 7 payload
           const pathMatch = osc7Match[1].match(/^file:\/\/[^/]*(\/.*)/);
           if (pathMatch) {
-            lastTerminalCwdRef.current = decodeURIComponent(pathMatch[1]);
+            lastTerminalCwdRef.current = normalizePtyPath(decodeURIComponent(pathMatch[1]));
           }
 
           suppressRef.current = false;

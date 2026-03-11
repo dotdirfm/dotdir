@@ -247,6 +247,8 @@ fn pty_spawn(cwd: String, state: State<'_, AppState>, app_handle: tauri::AppHand
     let handle = pty::spawn(&cwd, 80, 24).map_err(|e| CmdError(FsError::Io(e)))?;
     #[cfg(unix)]
     let master_fd = handle.master_fd;
+    #[cfg(windows)]
+    let read_handle = handle.read_handle;
     state.ptys.lock().unwrap().insert(id, handle);
 
     #[cfg(unix)]
@@ -254,6 +256,23 @@ fn pty_spawn(cwd: String, state: State<'_, AppState>, app_handle: tauri::AppHand
         let mut buf = [0u8; 4096];
         loop {
             match pty::read_blocking(master_fd, &mut buf) {
+                Ok(0) | Err(_) => {
+                    let _ = app_handle.emit("pty:exit", PtyExitEvent { pty_id: id });
+                    break;
+                }
+                Ok(n) => {
+                    let data = String::from_utf8_lossy(&buf[..n]).into_owned();
+                    let _ = app_handle.emit("pty:data", PtyDataEvent { pty_id: id, data });
+                }
+            }
+        }
+    });
+
+    #[cfg(windows)]
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        loop {
+            match pty::read_blocking(read_handle, &mut buf) {
                 Ok(0) | Err(_) => {
                     let _ = app_handle.emit("pty:exit", PtyExitEvent { pty_id: id });
                     break;
@@ -277,7 +296,11 @@ fn pty_write(pty_id: u32, data: String, state: State<'_, AppState>) -> CmdResult
     {
         pty::write_all(handle.master_fd, data.as_bytes()).map_err(|e| CmdError(FsError::Io(e)))?;
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        pty::write_all(handle.write_handle, data.as_bytes()).map_err(|e| CmdError(FsError::Io(e)))?;
+    }
+    #[cfg(not(any(unix, windows)))]
     { let _ = handle; let _ = data; return Err(CmdError(FsError::Io(std::io::Error::new(std::io::ErrorKind::Unsupported, "PTY not supported")))); }
     Ok(())
 }
@@ -290,7 +313,11 @@ fn pty_resize(pty_id: u32, cols: u32, rows: u32, state: State<'_, AppState>) -> 
     {
         pty::resize(handle.master_fd, cols as u16, rows as u16).map_err(|e| CmdError(FsError::Io(e)))?;
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        pty::resize(handle.con_pty, cols as u16, rows as u16).map_err(|e| CmdError(FsError::Io(e)))?;
+    }
+    #[cfg(not(any(unix, windows)))]
     { let _ = (handle, cols, rows); return Err(CmdError(FsError::Io(std::io::Error::new(std::io::ErrorKind::Unsupported, "PTY not supported")))); }
     Ok(())
 }
