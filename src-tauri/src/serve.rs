@@ -219,44 +219,39 @@ fn handle_pty_spawn(
     let pty_id = session
         .next_pty_id
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-    #[cfg(unix)]
-    let master_fd = handle.master_fd;
+    let reader = handle.reader.clone();
 
     session.ptys.lock().unwrap().insert(pty_id, handle);
 
     // Start reader thread that sends pty.data notifications
-    #[cfg(unix)]
-    {
-        let tx_pty = tx.clone();
-        std::thread::spawn(move || {
-            let mut buf = [0u8; 4096];
-            loop {
-                match pty::read_blocking(master_fd, &mut buf) {
-                    Ok(0) | Err(_) => {
-                        let n = json!({
-                            "jsonrpc": "2.0",
-                            "method": "pty.exit",
-                            "params": { "ptyId": pty_id }
-                        });
-                        let _ = tx_pty.send(Message::Text(n.to_string()));
+    let tx_pty = tx.clone();
+    std::thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        loop {
+            match pty::read_blocking(&reader, &mut buf) {
+                Ok(0) | Err(_) => {
+                    let n = json!({
+                        "jsonrpc": "2.0",
+                        "method": "pty.exit",
+                        "params": { "ptyId": pty_id }
+                    });
+                    let _ = tx_pty.send(Message::Text(n.to_string()));
+                    break;
+                }
+                Ok(n) => {
+                    let data = String::from_utf8_lossy(&buf[..n]).into_owned();
+                    let msg = json!({
+                        "jsonrpc": "2.0",
+                        "method": "pty.data",
+                        "params": { "ptyId": pty_id, "data": data }
+                    });
+                    if tx_pty.send(Message::Text(msg.to_string())).is_err() {
                         break;
-                    }
-                    Ok(n) => {
-                        let data = String::from_utf8_lossy(&buf[..n]).into_owned();
-                        let msg = json!({
-                            "jsonrpc": "2.0",
-                            "method": "pty.data",
-                            "params": { "ptyId": pty_id, "data": data }
-                        });
-                        if tx_pty.send(Message::Text(msg.to_string())).is_err() {
-                            break;
-                        }
                     }
                 }
             }
-        });
-    }
+        }
+    });
 
     Message::Text(
         json!({ "jsonrpc": "2.0", "id": id, "result": pty_id }).to_string(),
@@ -319,8 +314,7 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
             let data = params["data"].as_str().ok_or(FsError::InvalidInput)?;
             let ptys = session.ptys.lock().unwrap();
             let handle = ptys.get(&pty_id).ok_or(FsError::BadFd)?;
-            #[cfg(unix)]
-            pty::write_all(handle.master_fd, data.as_bytes()).map_err(FsError::Io)?;
+            pty::write_all(&handle.writer, data.as_bytes()).map_err(FsError::Io)?;
             Ok(Value::Null)
         }
         "pty.resize" => {
@@ -329,8 +323,7 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
             let rows = params["rows"].as_u64().ok_or(FsError::InvalidInput)? as u16;
             let ptys = session.ptys.lock().unwrap();
             let handle = ptys.get(&pty_id).ok_or(FsError::BadFd)?;
-            #[cfg(unix)]
-            pty::resize(handle.master_fd, cols, rows).map_err(FsError::Io)?;
+            pty::resize(handle.master.as_ref(), cols, rows).map_err(FsError::Io)?;
             Ok(Value::Null)
         }
         "pty.close" => {
