@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { actionQueue } from '../actionQueue';
 import { resolveEntryStyle } from '../fss';
 import { getCachedIconUrl, loadIcons } from '../iconCache';
-import { dirname, join } from '../path';
+import { dirname, isRootPath, join } from '../path';
 import { ColumnsScroller, type ColumnsScrollerProps } from './ColumnsScroller';
 import { useElementSize } from './useElementSize';
 
@@ -230,7 +230,7 @@ export const FileList = memo(function FileList({
         case 'Backspace':
           e.preventDefault();
           actionQueue.enqueue(async () => {
-            if (currentPathRef.current !== '/') {
+            if (!isRootPath(currentPathRef.current)) {
               await onNavigateRef.current(dirname(currentPathRef.current));
             }
           });

@@ -5,6 +5,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { FsaRawEntry, FsChangeEvent } from './types';
+import { normalizePath } from './path';
 
 // Rust returns snake_case fields — map to camelCase
 interface RustFsEntry {
@@ -111,15 +112,15 @@ export const tauriBridge = {
   },
   utils: {
     async getHomePath(): Promise<string> {
-      return invoke<string>('get_home_path');
+      return normalizePath(await invoke<string>('get_home_path'));
     },
     async getIconsPath(): Promise<string> {
-      return invoke<string>('get_icons_path');
+      return normalizePath(await invoke<string>('get_icons_path'));
     },
   },
   theme: {
     async get(): Promise<string> {
-      return invoke<string>('get_theme');
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     },
     onChange(callback: (theme: string) => void): () => void {
       // Tauri v2 doesn't have a native theme change event yet.

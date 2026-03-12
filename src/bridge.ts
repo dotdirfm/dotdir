@@ -1,8 +1,11 @@
-/// Dynamic bridge provider â€” detects Tauri vs browser and loads the right backend.
+/// Dynamic bridge provider — detects Tauri vs browser and loads the right backend.
 ///
 /// Uses ES module live bindings: importers of `bridge` always see the current value.
 /// Must call `initBridge()` before rendering (from main.tsx).
+import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import type { FsaRawEntry, FsChangeEvent } from './types';
+import { tauriBridge } from './tauriBridge';
+import { createWsBridge } from './wsBridge';
 
 export interface Bridge {
   fsa: {
@@ -41,11 +44,9 @@ export interface Bridge {
 export let bridge: Bridge;
 
 export async function initBridge(): Promise<void> {
-  if ('__TAURI_INTERNALS__' in window) {
-    const { tauriBridge } = await import('./tauriBridge');
+  if (isTauriApp()) {
     bridge = tauriBridge;
   } else {
-    const { createWsBridge } = await import('./wsBridge');
     bridge = await createWsBridge(`ws://${location.host}/ws`);
   }
 }

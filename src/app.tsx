@@ -2,6 +2,7 @@ import { FsNode } from 'fss-lang';
 import type { LayeredResolver, ThemeKind } from 'fss-lang';
 import { createFsNode } from 'fss-lang/helpers';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import type { FsChangeType } from './types';
 import { bridge } from './bridge';
 import { detectLang } from './langDetect';
@@ -14,7 +15,7 @@ import { ModalDialog, type ModalDialogProps } from './ModalDialog';
 import { TerminalPanel } from './Terminal';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, syncLayers } from './fss';
-import { basename, dirname, join } from './path';
+import { basename, dirname, isRootPath, join } from './path';
 
 function buildParentChain(dirPath: string): FsNode | undefined {
   if (dirname(dirPath) === dirPath) return undefined;
@@ -71,11 +72,12 @@ const emptyPanel: PanelState = { currentPath: '', parentNode: undefined, entries
 
 async function findExistingParent(startPath: string): Promise<string> {
   let cur = dirname(startPath);
-  while (cur !== '/') {
+  while (true) {
     if (await bridge.fsa.exists(cur)) return cur;
-    cur = dirname(cur);
+    const parent = dirname(cur);
+    if (parent === cur || isRootPath(cur)) return cur;
+    cur = parent;
   }
-  return '/';
 }
 
 function getAncestors(dirPath: string): string[] {
@@ -267,6 +269,8 @@ export function App() {
   const left = usePanel(theme, showError);
   const right = usePanel(theme, showError);
   const [activePanel, setActivePanel] = useState<PanelSide>('left');
+  const [terminalHeight, setTerminalHeight] = useState(32);
+  const terminalResizeRef = useRef<{ startY: number; startHeight: number } | null>(null);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
 
@@ -294,7 +298,7 @@ export function App() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
-  const isBrowser = !('__TAURI_INTERNALS__' in window);
+  const isBrowser = !isTauriApp();
 
   // Initial navigation: use URL path in browser mode, home dir otherwise
   useEffect(() => {
@@ -360,6 +364,36 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  useEffect(() => {
+    const handlePointerMove = (e: MouseEvent) => {
+      const activeResize = terminalResizeRef.current;
+      if (!activeResize) return;
+      const nextHeight = activeResize.startHeight + (activeResize.startY - e.clientY);
+      const maxHeight = Math.max(160, Math.floor(window.innerHeight * 0.7));
+      setTerminalHeight(Math.min(maxHeight, Math.max(28, nextHeight)));
+    };
+
+    const handlePointerUp = () => {
+      if (!terminalResizeRef.current) return;
+      terminalResizeRef.current = null;
+      document.body.classList.remove('terminal-resizing');
+    };
+
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', handlePointerUp);
+    return () => {
+      window.removeEventListener('mousemove', handlePointerMove);
+      window.removeEventListener('mouseup', handlePointerUp);
+      document.body.classList.remove('terminal-resizing');
+    };
+  }, []);
+
+  const handleTerminalResizeStart = useCallback((e: { clientY: number; preventDefault(): void }) => {
+    terminalResizeRef.current = { startY: e.clientY, startHeight: terminalHeight };
+    document.body.classList.add('terminal-resizing');
+    e.preventDefault();
+  }, [terminalHeight]);
+
   if (!left.currentPath || !right.currentPath) {
     return <div className="loading">Loading...</div>;
   }
@@ -396,7 +430,8 @@ export function App() {
           />
         </div>
       </div>
-      <div className="terminal-panel">
+      <div className="terminal-panel" style={{ height: `${terminalHeight}px` }}>
+        <div className="terminal-resize-handle" onMouseDown={handleTerminalResizeStart} />
         <TerminalPanel cwd={activeCwd} onCwdChange={handleTerminalCwd} />
       </div>
       {viewerFile &&
@@ -417,3 +452,4 @@ export function App() {
     </div>
   );
 }
+
