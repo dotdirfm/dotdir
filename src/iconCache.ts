@@ -1,8 +1,9 @@
+import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import { DirectoryHandle } from './fsa';
 import { bridge } from './bridge';
 
 const MAX_SIZE = 200;
-const isTauri = '__TAURI_INTERNALS__' in window;
+const isTauri = isTauriApp();
 
 const cache = new Map<string, string>();
 const pending = new Map<string, Promise<void>>();
@@ -90,3 +91,4 @@ export function getCachedIconUrl(name: string): string | undefined {
   }
   return url;
 }
+

@@ -2,6 +2,7 @@ import { FsNode } from 'fss-lang';
 import type { LayeredResolver, ThemeKind } from 'fss-lang';
 import { createFsNode } from 'fss-lang/helpers';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import type { FsChangeType } from './types';
 import { bridge } from './bridge';
 import { detectLang } from './langDetect';
@@ -295,7 +296,7 @@ export function App() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
-  const isBrowser = !('__TAURI_INTERNALS__' in window);
+  const isBrowser = !isTauriApp();
 
   // Initial navigation: use URL path in browser mode, home dir otherwise
   useEffect(() => {
@@ -418,3 +419,4 @@ export function App() {
     </div>
   );
 }
+
