@@ -273,27 +273,21 @@ fn pty_spawn(cwd: String, state: State<'_, AppState>, app_handle: tauri::AppHand
             return Err(CmdError(FsError::Io(e)));
         }
     };
-    #[cfg(unix)]
-    let master_fd = handle.master_fd;
-    // HANDLE is *mut c_void which is not Send.  Cast to usize (which IS Send)
-    // before moving into the reader thread; cast back to HANDLE inside the thread.
-    // The handle value remains valid because pty_close() is only called after the
-    // frontend receives pty:exit, which is emitted by this very thread.
-    #[cfg(windows)]
-    let read_handle_raw = handle.read_handle as usize;
-    #[cfg(windows)]
-    let stderr_handle_raw = handle.stderr_handle as usize;
-    #[cfg(windows)]
-    let process_handle_raw = handle.process_handle as usize;
+    let reader = handle.reader.clone();
     state.ptys.lock().unwrap().insert(id, handle);
     write_debug_log(&format!("pty_spawn started id={}", id));
 
-    #[cfg(unix)]
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
         loop {
-            match pty::read_blocking(master_fd, &mut buf) {
-                Ok(0) | Err(_) => {
+            match pty::read_blocking(&reader, &mut buf) {
+                Ok(0) => {
+                    write_debug_log(&format!("pty read eof id={}", id));
+                    let _ = app_handle.emit("pty:exit", PtyExitEvent { pty_id: id });
+                    break;
+                }
+                Err(err) => {
+                    write_debug_log(&format!("pty read error id={} error={}", id, err));
                     let _ = app_handle.emit("pty:exit", PtyExitEvent { pty_id: id });
                     break;
                 }
@@ -304,71 +298,6 @@ fn pty_spawn(cwd: String, state: State<'_, AppState>, app_handle: tauri::AppHand
             }
         }
     });
-
-    #[cfg(windows)]
-    let stdout_app_handle = app_handle.clone();
-
-    #[cfg(windows)]
-    std::thread::spawn(move || {
-        let read_handle = read_handle_raw as windows_sys::Win32::Foundation::HANDLE;
-        let mut buf = [0u8; 4096];
-        loop {
-            match pty::read_blocking(read_handle, &mut buf) {
-                Ok(0) => {
-                    write_debug_log(&format!("pty read eof id={}", id));
-                    let _ = stdout_app_handle.emit("pty:exit", PtyExitEvent { pty_id: id });
-                    break;
-                }
-                Err(err) => {
-                    write_debug_log(&format!("pty read error id={} error={}", id, err));
-                    let _ = stdout_app_handle.emit("pty:exit", PtyExitEvent { pty_id: id });
-                    break;
-                }
-                Ok(n) => {
-                    let data = String::from_utf8_lossy(&buf[..n]).into_owned();
-                    let _ = stdout_app_handle.emit("pty:data", PtyDataEvent { pty_id: id, data });
-                }
-            }
-        }
-    });
-
-    #[cfg(windows)]
-    let stderr_app_handle = app_handle.clone();
-
-    #[cfg(windows)]
-    std::thread::spawn(move || {
-        let read_handle = stderr_handle_raw as windows_sys::Win32::Foundation::HANDLE;
-        let mut buf = [0u8; 4096];
-        loop {
-            match pty::read_blocking(read_handle, &mut buf) {
-                Ok(0) => break,
-                Err(err) => {
-                    write_debug_log(&format!("pty stderr read error id={} error={}", id, err));
-                    break;
-                }
-                Ok(n) => {
-                    let data = String::from_utf8_lossy(&buf[..n]).into_owned();
-                    let _ = stderr_app_handle.emit("pty:data", PtyDataEvent { pty_id: id, data });
-                }
-            }
-        }
-    });
-
-
-    #[cfg(windows)]
-    std::thread::spawn(move || {
-        use windows_sys::Win32::System::Threading::{GetExitCodeProcess, WaitForSingleObject, INFINITE};
-
-        let process_handle = process_handle_raw as windows_sys::Win32::Foundation::HANDLE;
-        let wait_result = unsafe { WaitForSingleObject(process_handle, INFINITE) };
-        let mut exit_code = 0u32;
-        let exit_ok = unsafe { GetExitCodeProcess(process_handle, &mut exit_code) };
-        if exit_ok != 0 {
-            write_debug_log(&format!("pty process exit id={} wait_result={} exit_code=0x{:08x}", id, wait_result, exit_code));
-        } else {
-            write_debug_log(&format!("pty process exit id={} wait_result={} exit_code=<unavailable>", id, wait_result));
-        }
-    });
     Ok(id)
 }
 
@@ -376,16 +305,7 @@ fn pty_spawn(cwd: String, state: State<'_, AppState>, app_handle: tauri::AppHand
 fn pty_write(pty_id: u32, data: String, state: State<'_, AppState>) -> CmdResult<()> {
     let ptys = state.ptys.lock().unwrap();
     let handle = ptys.get(&pty_id).ok_or(CmdError(FsError::BadFd))?;
-    #[cfg(unix)]
-    {
-        pty::write_all(handle.master_fd, data.as_bytes()).map_err(|e| CmdError(FsError::Io(e)))?;
-    }
-    #[cfg(windows)]
-    {
-        pty::write_all(handle.write_handle, data.as_bytes()).map_err(|e| CmdError(FsError::Io(e)))?;
-    }
-    #[cfg(not(any(unix, windows)))]
-    { let _ = handle; let _ = data; return Err(CmdError(FsError::Io(std::io::Error::new(std::io::ErrorKind::Unsupported, "PTY not supported")))); }
+    pty::write_all(&handle.writer, data.as_bytes()).map_err(|e| CmdError(FsError::Io(e)))?;
     Ok(())
 }
 
@@ -393,16 +313,8 @@ fn pty_write(pty_id: u32, data: String, state: State<'_, AppState>) -> CmdResult
 fn pty_resize(pty_id: u32, cols: u32, rows: u32, state: State<'_, AppState>) -> CmdResult<()> {
     let ptys = state.ptys.lock().unwrap();
     let handle = ptys.get(&pty_id).ok_or(CmdError(FsError::BadFd))?;
-    #[cfg(unix)]
-    {
-        pty::resize(handle.master_fd, cols as u16, rows as u16).map_err(|e| CmdError(FsError::Io(e)))?;
-    }
-    #[cfg(windows)]
-    {
-        pty::resize(handle.con_pty, cols as u16, rows as u16).map_err(|e| CmdError(FsError::Io(e)))?;
-    }
-    #[cfg(not(any(unix, windows)))]
-    { let _ = (handle, cols, rows); return Err(CmdError(FsError::Io(std::io::Error::new(std::io::ErrorKind::Unsupported, "PTY not supported")))); }
+    pty::resize(handle.master.as_ref(), cols as u16, rows as u16)
+        .map_err(|e| CmdError(FsError::Io(e)))?;
     Ok(())
 }
 
