@@ -4,9 +4,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Faraday</title>
+    <script>
+      window.__FARADAY_BOOT_MARKER__ = [];
+      window.__faradayBoot = function (message) {
+        try {
+          window.__FARADAY_BOOT_MARKER__.push(message);
+          var el = document.getElementById('boot-status');
+          if (el) el.textContent = message;
+        } catch (_) {}
+      };
+      window.__faradayBoot('Faraday HTML loaded');
+    </script>
   </head>
 
   <body>
+    <div
+      id="boot-status"
+      style="padding:16px;font-family:Consolas,monospace;font-size:14px;color:#f38ba8;background:#1e1e2e;min-height:100vh;"
+    >
+      Starting Faraday...
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

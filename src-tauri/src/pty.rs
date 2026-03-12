@@ -165,20 +165,14 @@ pub fn close(handle: &mut PtyHandle) {
 /// Rust escape note: `'\\\\'` in the Rust source becomes `'\\'` in the
 /// string, which is the PowerShell regex pattern that matches one backslash.
 #[cfg(windows)]
-const PS_PROMPT_INIT: &str = concat!(
-    "function prompt {",
-    " [char]27 + ']7;file://localhost/' + ($pwd.Path -replace '\\\\','/') + [char]27 + '\\';",
-    " \"PS $($pwd.Path)> \" };",
-    " Clear-Host\r\n",
-);
-
-#[cfg(windows)]
 pub struct PtyHandle {
     pub con_pty: windows_sys::Win32::System::Console::HPCON,
     pub write_handle: windows_sys::Win32::Foundation::HANDLE,
     pub read_handle: windows_sys::Win32::Foundation::HANDLE,
+    pub stderr_handle: windows_sys::Win32::Foundation::HANDLE,
     pub process_handle: windows_sys::Win32::Foundation::HANDLE,
     pub thread_handle: windows_sys::Win32::Foundation::HANDLE,
+    pub child: std::process::Child,
 }
 
 // HANDLE is *mut c_void which is not Send by default; we manage handle
@@ -188,161 +182,62 @@ unsafe impl Send for PtyHandle {}
 
 #[cfg(windows)]
 pub fn spawn(cwd: &str, cols: u16, rows: u16) -> std::io::Result<PtyHandle> {
-    use std::ffi::OsStr;
     use std::io;
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Storage::FileSystem::WriteFile;
-    use windows_sys::Win32::System::Console::{
-        CreatePseudoConsole, COORD, HPCON,
-    };
-    use windows_sys::Win32::System::Pipes::CreatePipe;
-    use windows_sys::Win32::System::Threading::{
-        CreateProcessW, DeleteProcThreadAttributeList, InitializeProcThreadAttributeList,
-        UpdateProcThreadAttribute, EXTENDED_STARTUPINFO_PRESENT, PROCESS_INFORMATION,
-        PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, STARTUPINFOEXW,
-    };
+    use std::os::windows::io::{AsRawHandle, IntoRawHandle};
+    use std::os::windows::process::CommandExt;
+    use std::process::{Command, Stdio};
+    use windows_sys::Win32::Foundation::{HANDLE, INVALID_HANDLE_VALUE};
 
-    fn to_wide(s: &str) -> Vec<u16> {
-        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
-    }
+    let shell = find_cmd();
+    crate::write_debug_log(&format!("pty shell path={} cwd={}", shell, cwd));
+    let mut child = Command::new(&shell)
+        .args(["/Q", "/D", "/K"])
+        .creation_flags(0x0800_0000)
+        .current_dir(cwd.replace('/', "\\"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
 
-    unsafe {
-        // Create anonymous pipes for PTY I/O.
-        // pty_in_read  → ConPTY reads input from here
-        // pty_in_write → we write input to here
-        // pty_out_read → we read output from here
-        // pty_out_write → ConPTY writes output to here
-        let mut pty_in_read: HANDLE = INVALID_HANDLE_VALUE;
-        let mut pty_in_write: HANDLE = INVALID_HANDLE_VALUE;
-        let mut pty_out_read: HANDLE = INVALID_HANDLE_VALUE;
-        let mut pty_out_write: HANDLE = INVALID_HANDLE_VALUE;
+    let write_handle = child
+        .stdin
+        .take()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "missing child stdin"))?
+        .into_raw_handle() as HANDLE;
+    let read_handle = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "missing child stdout"))?
+        .into_raw_handle() as HANDLE;
+    let stderr_handle = child
+        .stderr
+        .take()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "missing child stderr"))?
+        .into_raw_handle() as HANDLE;
+    let process_handle = child.as_raw_handle() as HANDLE;
 
-        if CreatePipe(&mut pty_in_read, &mut pty_in_write, std::ptr::null(), 0) == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        if CreatePipe(&mut pty_out_read, &mut pty_out_write, std::ptr::null(), 0) == 0 {
-            CloseHandle(pty_in_read);
-            CloseHandle(pty_in_write);
-            return Err(io::Error::last_os_error());
-        }
+    let _ = (cols, rows);
 
-        // Create the pseudo-console.
-        let size = COORD { X: cols as i16, Y: rows as i16 };
-        let mut con_pty: HPCON = 0;
-        let hr = CreatePseudoConsole(size, pty_in_read, pty_out_write, 0, &mut con_pty);
-
-        // These ends are now owned by the ConPTY; close our copies.
-        CloseHandle(pty_in_read);
-        CloseHandle(pty_out_write);
-
-        if hr < 0 {
-            CloseHandle(pty_in_write);
-            CloseHandle(pty_out_read);
-            return Err(io::Error::from_raw_os_error(hr));
-        }
-
-        // Build a PROC_THREAD_ATTRIBUTE_LIST large enough for one attribute.
-        let mut attr_size: usize = 0;
-        InitializeProcThreadAttributeList(std::ptr::null_mut(), 1, 0, &mut attr_size);
-        let mut attr_buf = vec![0u8; attr_size];
-        let attr_list = attr_buf.as_mut_ptr()
-            as windows_sys::Win32::System::Threading::LPPROC_THREAD_ATTRIBUTE_LIST;
-
-        if InitializeProcThreadAttributeList(attr_list, 1, 0, &mut attr_size) == 0 {
-            windows_sys::Win32::System::Console::ClosePseudoConsole(con_pty);
-            CloseHandle(pty_in_write);
-            CloseHandle(pty_out_read);
-            return Err(io::Error::last_os_error());
-        }
-
-        // HPCON is isize; pass a pointer to the value as the attribute data.
-        if UpdateProcThreadAttribute(
-            attr_list,
-            0,
-            PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE as usize,
-            (&con_pty as *const HPCON).cast(),
-            std::mem::size_of::<HPCON>(),
-            std::ptr::null_mut(),
-            std::ptr::null(),
-        ) == 0
-        {
-            DeleteProcThreadAttributeList(attr_list);
-            windows_sys::Win32::System::Console::ClosePseudoConsole(con_pty);
-            CloseHandle(pty_in_write);
-            CloseHandle(pty_out_read);
-            return Err(io::Error::last_os_error());
-        }
-
-        // Populate STARTUPINFOEXW.
-        let mut startup_info: STARTUPINFOEXW = std::mem::zeroed();
-        startup_info.StartupInfo.cb = std::mem::size_of::<STARTUPINFOEXW>() as u32;
-        startup_info.lpAttributeList = attr_list;
-
-        // Find PowerShell: prefer pwsh (PS 7+) then fall back to powershell.exe.
-        let shell = find_powershell();
-        let mut cmd_wide = to_wide(&shell);
-        let cwd_wide = to_wide(cwd);
-
-        let mut proc_info: PROCESS_INFORMATION = std::mem::zeroed();
-        let ok = CreateProcessW(
-            std::ptr::null(),
-            cmd_wide.as_mut_ptr(),
-            std::ptr::null(),
-            std::ptr::null(),
-            0,                             // bInheritHandles = FALSE
-            EXTENDED_STARTUPINFO_PRESENT,  // required to use lpAttributeList
-            std::ptr::null(),
-            cwd_wide.as_ptr(),
-            &startup_info.StartupInfo,
-            &mut proc_info,
-        );
-
-        DeleteProcThreadAttributeList(attr_list);
-
-        if ok == 0 {
-            windows_sys::Win32::System::Console::ClosePseudoConsole(con_pty);
-            CloseHandle(pty_in_write);
-            CloseHandle(pty_out_read);
-            return Err(io::Error::last_os_error());
-        }
-
-        // Send shell initialisation: install OSC 7 cwd-reporting prompt and clear.
-        // Windows paths look like C:\Users\alice; the URL form is /C:/Users/alice.
-        let mut written: u32 = 0;
-        WriteFile(
-            pty_in_write,
-            PS_PROMPT_INIT.as_ptr(),
-            PS_PROMPT_INIT.len() as u32,
-            &mut written,
-            std::ptr::null_mut(),
-        );
-
-        Ok(PtyHandle {
-            con_pty,
-            write_handle: pty_in_write,
-            read_handle: pty_out_read,
-            process_handle: proc_info.hProcess,
-            thread_handle: proc_info.hThread,
-        })
-    }
+    Ok(PtyHandle {
+        con_pty: 0,
+        write_handle,
+        read_handle,
+        stderr_handle,
+        process_handle,
+        thread_handle: INVALID_HANDLE_VALUE,
+        child,
+    })
 }
 
-/// Locate PowerShell: try `pwsh.exe` (PowerShell 7+) then `powershell.exe`.
 #[cfg(windows)]
-fn find_powershell() -> String {
-    for name in &["pwsh.exe", "powershell.exe"] {
-        if let Ok(out) = std::process::Command::new("where.exe").arg(name).output() {
-            if out.status.success() {
-                if let Ok(s) = std::str::from_utf8(&out.stdout) {
-                    if let Some(path) = s.lines().next().map(|l| l.trim().to_string()).filter(|p| !p.is_empty()) {
-                        return path;
-                    }
-                }
-            }
+fn find_cmd() -> String {
+    if let Ok(comspec) = std::env::var("ComSpec") {
+        let trimmed = comspec.trim().trim_matches('"');
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
         }
     }
-    "powershell.exe".to_string()
+    "C:\\WINDOWS\\system32\\cmd.exe".to_string()
 }
 
 #[cfg(windows)]
@@ -377,6 +272,10 @@ pub fn resize(
     cols: u16,
     rows: u16,
 ) -> std::io::Result<()> {
+    if con_pty == 0 {
+        let _ = (cols, rows);
+        return Ok(());
+    }
     use windows_sys::Win32::System::Console::{ResizePseudoConsole, COORD};
     let size = COORD { X: cols as i16, Y: rows as i16 };
     let hr = unsafe { ResizePseudoConsole(con_pty, size) };
@@ -414,20 +313,25 @@ pub fn read_blocking(
 pub fn close(handle: &mut PtyHandle) {
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Console::ClosePseudoConsole;
-    use windows_sys::Win32::System::Threading::{
-        TerminateProcess, WaitForSingleObject, INFINITE,
-    };
+    use windows_sys::Win32::System::Threading::{WaitForSingleObject, INFINITE};
     unsafe {
-        TerminateProcess(handle.process_handle, 1);
-        WaitForSingleObject(handle.process_handle, INFINITE);
-        ClosePseudoConsole(handle.con_pty);
+        let _ = handle.child.kill();
+        let _ = handle.child.wait();
+        if handle.con_pty != 0 {
+            ClosePseudoConsole(handle.con_pty);
+        }
         CloseHandle(handle.write_handle);
         CloseHandle(handle.read_handle);
+        CloseHandle(handle.stderr_handle);
         CloseHandle(handle.process_handle);
-        CloseHandle(handle.thread_handle);
+        if handle.thread_handle != INVALID_HANDLE_VALUE {
+            WaitForSingleObject(handle.thread_handle, INFINITE);
+            CloseHandle(handle.thread_handle);
+        }
         handle.con_pty = 0;
         handle.write_handle = INVALID_HANDLE_VALUE;
         handle.read_handle = INVALID_HANDLE_VALUE;
+        handle.stderr_handle = INVALID_HANDLE_VALUE;
         handle.process_handle = INVALID_HANDLE_VALUE;
         handle.thread_handle = INVALID_HANDLE_VALUE;
     }

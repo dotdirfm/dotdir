@@ -2,6 +2,8 @@ use faraday_core::error::FsError;
 use faraday_core::ops::{self, EntryInfo, FdTable, StatResult};
 use faraday_core::watch::{EventCallback, FsWatcher};
 use serde::Serialize;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
@@ -100,6 +102,24 @@ impl From<CmdError> for tauri::ipc::InvokeError {
 }
 
 type CmdResult<T> = Result<T, CmdError>;
+
+fn debug_log_path() -> PathBuf {
+    let base = dirs::data_local_dir()
+        .or_else(dirs::data_dir)
+        .unwrap_or_else(std::env::temp_dir);
+    base.join("Faraday").join("startup.log")
+}
+
+pub fn write_debug_log(message: &str) {
+    let path = debug_log_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{message}");
+    }
+}
 
 fn is_eacces(e: &FsError) -> bool {
     matches!(e, FsError::PermissionDenied)
@@ -245,7 +265,14 @@ struct PtyExitEvent {
 #[tauri::command]
 fn pty_spawn(cwd: String, state: State<'_, AppState>, app_handle: tauri::AppHandle) -> CmdResult<u32> {
     let id = state.next_pty_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let handle = pty::spawn(&cwd, 80, 24).map_err(|e| CmdError(FsError::Io(e)))?;
+    write_debug_log(&format!("pty_spawn requested id={} cwd={}", id, cwd));
+    let handle = match pty::spawn(&cwd, 80, 24) {
+        Ok(handle) => handle,
+        Err(e) => {
+            write_debug_log(&format!("pty_spawn failed id={} cwd={} error={}", id, cwd, e));
+            return Err(CmdError(FsError::Io(e)));
+        }
+    };
     #[cfg(unix)]
     let master_fd = handle.master_fd;
     // HANDLE is *mut c_void which is not Send.  Cast to usize (which IS Send)
@@ -254,7 +281,12 @@ fn pty_spawn(cwd: String, state: State<'_, AppState>, app_handle: tauri::AppHand
     // frontend receives pty:exit, which is emitted by this very thread.
     #[cfg(windows)]
     let read_handle_raw = handle.read_handle as usize;
+    #[cfg(windows)]
+    let stderr_handle_raw = handle.stderr_handle as usize;
+    #[cfg(windows)]
+    let process_handle_raw = handle.process_handle as usize;
     state.ptys.lock().unwrap().insert(id, handle);
+    write_debug_log(&format!("pty_spawn started id={}", id));
 
     #[cfg(unix)]
     std::thread::spawn(move || {
@@ -274,23 +306,69 @@ fn pty_spawn(cwd: String, state: State<'_, AppState>, app_handle: tauri::AppHand
     });
 
     #[cfg(windows)]
+    let stdout_app_handle = app_handle.clone();
+
+    #[cfg(windows)]
     std::thread::spawn(move || {
         let read_handle = read_handle_raw as windows_sys::Win32::Foundation::HANDLE;
         let mut buf = [0u8; 4096];
         loop {
             match pty::read_blocking(read_handle, &mut buf) {
-                Ok(0) | Err(_) => {
-                    let _ = app_handle.emit("pty:exit", PtyExitEvent { pty_id: id });
+                Ok(0) => {
+                    write_debug_log(&format!("pty read eof id={}", id));
+                    let _ = stdout_app_handle.emit("pty:exit", PtyExitEvent { pty_id: id });
+                    break;
+                }
+                Err(err) => {
+                    write_debug_log(&format!("pty read error id={} error={}", id, err));
+                    let _ = stdout_app_handle.emit("pty:exit", PtyExitEvent { pty_id: id });
                     break;
                 }
                 Ok(n) => {
                     let data = String::from_utf8_lossy(&buf[..n]).into_owned();
-                    let _ = app_handle.emit("pty:data", PtyDataEvent { pty_id: id, data });
+                    let _ = stdout_app_handle.emit("pty:data", PtyDataEvent { pty_id: id, data });
                 }
             }
         }
     });
 
+    #[cfg(windows)]
+    let stderr_app_handle = app_handle.clone();
+
+    #[cfg(windows)]
+    std::thread::spawn(move || {
+        let read_handle = stderr_handle_raw as windows_sys::Win32::Foundation::HANDLE;
+        let mut buf = [0u8; 4096];
+        loop {
+            match pty::read_blocking(read_handle, &mut buf) {
+                Ok(0) => break,
+                Err(err) => {
+                    write_debug_log(&format!("pty stderr read error id={} error={}", id, err));
+                    break;
+                }
+                Ok(n) => {
+                    let data = String::from_utf8_lossy(&buf[..n]).into_owned();
+                    let _ = stderr_app_handle.emit("pty:data", PtyDataEvent { pty_id: id, data });
+                }
+            }
+        }
+    });
+
+
+    #[cfg(windows)]
+    std::thread::spawn(move || {
+        use windows_sys::Win32::System::Threading::{GetExitCodeProcess, WaitForSingleObject, INFINITE};
+
+        let process_handle = process_handle_raw as windows_sys::Win32::Foundation::HANDLE;
+        let wait_result = unsafe { WaitForSingleObject(process_handle, INFINITE) };
+        let mut exit_code = 0u32;
+        let exit_ok = unsafe { GetExitCodeProcess(process_handle, &mut exit_code) };
+        if exit_ok != 0 {
+            write_debug_log(&format!("pty process exit id={} wait_result={} exit_code=0x{:08x}", id, wait_result, exit_code));
+        } else {
+            write_debug_log(&format!("pty process exit id={} wait_result={} exit_code=<unavailable>", id, wait_result));
+        }
+    });
     Ok(id)
 }
 
@@ -381,13 +459,20 @@ fn get_theme(window: tauri::Window) -> String {
     }
 }
 
+#[tauri::command]
+fn debug_log(message: String) {
+    write_debug_log(&message);
+}
+
 // ── App setup ────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    write_debug_log("faraday_tauri_lib::run entered");
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            write_debug_log("tauri setup started");
             let handle = app.handle().clone();
             let cb: EventCallback = Arc::new(move |watch_id, kind, name| {
                 let event = FsChangeEvent {
@@ -408,6 +493,7 @@ pub fn run() {
                 next_pty_id: std::sync::atomic::AtomicU32::new(0),
             };
             app.manage(state);
+            write_debug_log("tauri setup completed");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -423,6 +509,7 @@ pub fn run() {
             get_home_path,
             get_icons_path,
             get_theme,
+            debug_log,
             pty_spawn,
             pty_write,
             pty_resize,
