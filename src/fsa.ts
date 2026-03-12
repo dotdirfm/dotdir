@@ -1,6 +1,6 @@
 import type { FsaRawEntry, EntryKind, FsChangeEvent, FsChangeType } from './types';
 import { bridge } from './bridge';
-import { join } from './path';
+import { join, normalizePath } from './path';
 
 export interface HandleMeta {
   size: number;
@@ -136,7 +136,7 @@ export class DirectoryHandle implements FileSystemDirectoryHandle {
   readonly meta?: HandleMeta;
 
   constructor(path: string, name?: string, meta?: HandleMeta) {
-    this.path = path;
+    this.path = normalizePath(path);
     this.name = name ?? path.split('/').pop() ?? path;
     this.meta = meta;
   }
@@ -214,7 +214,7 @@ export class FileHandle implements FileSystemFileHandle {
   readonly meta?: HandleMeta;
 
   constructor(path: string, name: string, meta?: HandleMeta) {
-    this.path = path;
+    this.path = normalizePath(path);
     this.name = name;
     this.meta = meta;
   }

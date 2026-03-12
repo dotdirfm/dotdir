@@ -14,7 +14,7 @@ import { ModalDialog, type ModalDialogProps } from './ModalDialog';
 import { TerminalPanel } from './Terminal';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, syncLayers } from './fss';
-import { basename, dirname, join } from './path';
+import { basename, dirname, isRootPath, join } from './path';
 
 function buildParentChain(dirPath: string): FsNode | undefined {
   if (dirname(dirPath) === dirPath) return undefined;
@@ -71,11 +71,12 @@ const emptyPanel: PanelState = { currentPath: '', parentNode: undefined, entries
 
 async function findExistingParent(startPath: string): Promise<string> {
   let cur = dirname(startPath);
-  while (cur !== '/') {
+  while (true) {
     if (await bridge.fsa.exists(cur)) return cur;
-    cur = dirname(cur);
+    const parent = dirname(cur);
+    if (parent === cur || isRootPath(cur)) return cur;
+    cur = parent;
   }
-  return '/';
 }
 
 function getAncestors(dirPath: string): string[] {

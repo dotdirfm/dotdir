@@ -2,6 +2,7 @@ use faraday_core::error::FsError;
 use faraday_core::ops::{self, EntryInfo, FdTable, StatResult};
 use faraday_core::watch::{EventCallback, FsWatcher};
 use serde::Serialize;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{Emitter, Manager, State};
 
@@ -334,12 +335,33 @@ fn pty_close(pty_id: u32, state: State<'_, AppState>) {
     }
 }
 
+fn resolve_icons_path(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        candidates.push(resource_dir.join("icons"));
+        candidates.push(resource_dir.join("icons-bundle"));
+    }
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        candidates.push(current_dir.join("src-tauri").join("icons-bundle"));
+        candidates.push(current_dir.join("icons-bundle"));
+    }
+
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            candidates.push(exe_dir.join("icons"));
+            candidates.push(exe_dir.join("icons-bundle"));
+        }
+    }
+
+    candidates.into_iter().find(|path| path.is_dir())
+}
+
 #[tauri::command]
 fn get_icons_path(app_handle: tauri::AppHandle) -> String {
-    app_handle
-        .path()
-        .resource_dir()
-        .map(|p| p.join("icons").to_string_lossy().into_owned())
+    resolve_icons_path(&app_handle)
+        .map(|path| path.to_string_lossy().into_owned())
         .unwrap_or_default()
 }
 
