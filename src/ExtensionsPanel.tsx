@@ -1,0 +1,216 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  type ExtensionRef,
+  type MarketplaceExtension,
+  searchMarketplace,
+  installExtension,
+  uninstallExtension,
+  loadExtensions,
+  type LoadedExtension,
+} from './extensions';
+
+interface Props {
+  onClose: () => void;
+  onExtensionsChanged: () => void;
+}
+
+type Tab = 'marketplace' | 'installed';
+
+export function ExtensionsPanel({ onClose, onExtensionsChanged }: Props) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [tab, setTab] = useState<Tab>('marketplace');
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<MarketplaceExtension[]>([]);
+  const [installed, setInstalled] = useState<LoadedExtension[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    dialogRef.current?.showModal();
+    const dialog = dialogRef.current!;
+    const handleClose = () => onClose();
+    dialog.addEventListener('close', handleClose);
+    return () => dialog.removeEventListener('close', handleClose);
+  }, [onClose]);
+
+  const refreshInstalled = useCallback(async () => {
+    try {
+      const exts = await loadExtensions();
+      setInstalled(exts);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { refreshInstalled(); }, [refreshInstalled]);
+
+  const doSearch = useCallback(async (q: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await searchMarketplace(q);
+      setResults(data.extensions);
+    } catch {
+      setError('Could not reach marketplace');
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { doSearch(''); }, [doSearch]);
+
+  const handleSearchInput = (value: string) => {
+    setQuery(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => doSearch(value), 300);
+  };
+
+  const installedSet = new Set(installed.map(e => `${e.ref.publisher}.${e.ref.name}`));
+
+  const handleInstall = async (ext: MarketplaceExtension) => {
+    if (!ext.latest_version) return;
+    const key = `${ext.publisher.username}.${ext.name}`;
+    setInstalling(key);
+    setError('');
+    try {
+      await installExtension(ext.publisher.username, ext.name, ext.latest_version.version);
+      await refreshInstalled();
+      onExtensionsChanged();
+    } catch (err) {
+      setError(`Install failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    setInstalling(null);
+  };
+
+  const handleUninstall = async (ref: ExtensionRef) => {
+    const key = `${ref.publisher}.${ref.name}`;
+    setInstalling(key);
+    setError('');
+    try {
+      await uninstallExtension(ref.publisher, ref.name);
+      await refreshInstalled();
+      onExtensionsChanged();
+    } catch (err) {
+      setError(`Uninstall failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    setInstalling(null);
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  };
+
+  return (
+    <dialog ref={dialogRef} className="ext-panel" onKeyDown={(e) => e.stopPropagation()}>
+      <div className="ext-panel-header">
+        <span className="ext-panel-title">Extensions</span>
+        <button className="ext-panel-close" onClick={() => dialogRef.current?.close()}>✕</button>
+      </div>
+
+      <div className="ext-panel-tabs">
+        <button className={`ext-tab ${tab === 'marketplace' ? 'active' : ''}`} onClick={() => setTab('marketplace')}>
+          Marketplace
+        </button>
+        <button className={`ext-tab ${tab === 'installed' ? 'active' : ''}`} onClick={() => setTab('installed')}>
+          Installed ({installed.length})
+        </button>
+      </div>
+
+      {tab === 'marketplace' && (
+        <div className="ext-search">
+          <input
+            type="text"
+            placeholder="Search extensions..."
+            value={query}
+            onChange={(e) => handleSearchInput(e.target.value)}
+            autoFocus
+          />
+        </div>
+      )}
+
+      {error && <div className="ext-error">{error}</div>}
+
+      <div className="ext-list">
+        {tab === 'marketplace' && (
+          loading ? (
+            <div className="ext-empty">Searching...</div>
+          ) : results.length === 0 ? (
+            <div className="ext-empty">No extensions found</div>
+          ) : (
+            results.map((ext) => {
+              const key = `${ext.publisher.username}.${ext.name}`;
+              const isInstalled = installedSet.has(key);
+              const isBusy = installing === key;
+              return (
+                <div key={ext.id} className="ext-item">
+                  <div className="ext-icon">
+                    {ext.display_name[0]?.toUpperCase() ?? '?'}
+                  </div>
+                  <div className="ext-info">
+                    <div className="ext-name">{ext.display_name}</div>
+                    <div className="ext-publisher">{ext.publisher.display_name || ext.publisher.username}</div>
+                    <div className="ext-desc">{ext.description}</div>
+                    <div className="ext-meta">
+                      {ext.latest_version && <span>v{ext.latest_version.version}</span>}
+                      {ext.latest_version && <span>{formatSize(ext.latest_version.archive_size)}</span>}
+                      <span>↓ {ext.total_downloads}</span>
+                    </div>
+                  </div>
+                  <div className="ext-actions">
+                    {isInstalled ? (
+                      <button className="ext-btn installed" disabled>Installed</button>
+                    ) : (
+                      <button
+                        className="ext-btn install"
+                        disabled={isBusy || !ext.latest_version}
+                        onClick={() => handleInstall(ext)}
+                      >
+                        {isBusy ? 'Installing...' : 'Install'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )
+        )}
+
+        {tab === 'installed' && (
+          installed.length === 0 ? (
+            <div className="ext-empty">No extensions installed</div>
+          ) : (
+            installed.map((ext) => {
+              const key = `${ext.ref.publisher}.${ext.ref.name}`;
+              const isBusy = installing === key;
+              return (
+                <div key={key} className="ext-item">
+                  <div className="ext-icon">
+                    {(ext.manifest.displayName || ext.manifest.name)[0]?.toUpperCase() ?? '?'}
+                  </div>
+                  <div className="ext-info">
+                    <div className="ext-name">{ext.manifest.displayName || ext.manifest.name}</div>
+                    <div className="ext-publisher">{ext.manifest.publisher}</div>
+                    <div className="ext-desc">{ext.manifest.description || ''}</div>
+                    <div className="ext-meta">
+                      <span>v{ext.ref.version}</span>
+                    </div>
+                  </div>
+                  <div className="ext-actions">
+                    <button
+                      className="ext-btn uninstall"
+                      disabled={isBusy}
+                      onClick={() => handleUninstall(ext.ref)}
+                    >
+                      {isBusy ? 'Removing...' : 'Uninstall'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )
+        )}
+      </div>
+    </dialog>
+  );
+}

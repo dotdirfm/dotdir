@@ -13,6 +13,7 @@ import { FileEditor } from './FileEditor';
 import { ImageViewer, isMediaFile, type MediaFileEntry } from './ImageViewer';
 import { ModalDialog, type ModalDialogProps } from './ModalDialog';
 import { TerminalPanel } from './Terminal';
+import { ExtensionsPanel } from './ExtensionsPanel';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
 import { loadExtensions } from './extensions';
@@ -275,6 +276,7 @@ export function App() {
   const [terminalVisibleHeight, setTerminalVisibleHeight] = useState(20);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
+  const [showExtensions, setShowExtensions] = useState(false);
 
   const activePanelRef = useRef(activePanel);
   activePanelRef.current = activePanel;
@@ -389,6 +391,9 @@ export function App() {
       } else if (e.key === 'o' && e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         setPanelsVisible((s) => !s);
+      } else if (e.key === 'F11') {
+        e.preventDefault();
+        setShowExtensions((s) => !s);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -452,7 +457,7 @@ export function App() {
         <div className="action-bar-item"><span className="action-bar-key">8</span><span className="action-bar-label">Delete</span></div>
         <div className="action-bar-item"><span className="action-bar-key">9</span><span className="action-bar-label">PullDn</span></div>
         <div className="action-bar-item"><span className="action-bar-key">10</span><span className="action-bar-label">Quit</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">11</span><span className="action-bar-label">Plugin</span></div>
+        <div className="action-bar-item" onClick={() => setShowExtensions(s => !s)}><span className="action-bar-key">11</span><span className="action-bar-label">Plugin</span></div>
         <div className="action-bar-item"><span className="action-bar-key">12</span><span className="action-bar-label">Screen</span></div>
       </div>
       {viewerFile &&
@@ -474,6 +479,16 @@ export function App() {
           fileName={editorFile.name}
           langId={editorFile.langId}
           onClose={() => setEditorFile(null)}
+        />
+      )}
+      {showExtensions && (
+        <ExtensionsPanel
+          onClose={() => setShowExtensions(false)}
+          onExtensionsChanged={() => {
+            loadExtensions()
+              .then((exts) => setExtensionLayers(exts))
+              .catch(() => {});
+          }}
         />
       )}
       {dialog && <ModalDialog {...dialog} onClose={() => setDialog(null)} />}
