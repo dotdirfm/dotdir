@@ -19,6 +19,7 @@ type SessionListener = (event: TerminalSessionEvent) => void;
 export class TerminalSession {
   private static readonly replayLimit = 64 * 1024;
   private readonly listeners = new Set<SessionListener>();
+  private readonly decoder = new TextDecoder();
   private readonly initialCwd: string;
   private ptyId: number | null = null;
   private currentCwd: string;
@@ -79,7 +80,7 @@ export class TerminalSession {
 
       this.cleanupData = bridge.pty.onData((ptyId, data) => {
         if (ptyId !== this.ptyId) return;
-        this.handleData(data);
+        this.handleData(typeof data === 'string' ? data : this.decoder.decode(data, { stream: true }));
       });
 
       this.cleanupExit = bridge.pty.onExit((ptyId) => {

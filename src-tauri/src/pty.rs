@@ -43,6 +43,47 @@ fn shell_init(shell: &str) -> Option<String> {
             r#" setopt HIST_IGNORE_SPACE; __frd(){ printf '\e]7;file://localhost%s\e\\' "$PWD"; printf '\e[999;1H'; printf '\e]133;A\e\\';}; __frd_pre(){ printf '\e]133;C\e\\';}; precmd_functions+=(__frd); preexec_functions+=(__frd_pre); __frd_cls(){ printf '\e[2J\e[3J\e[999;1H'; zle reset-prompt;}; zle -N clear-screen __frd_cls; printf '\e[2J\e[999;1H'"#
                 .to_string(),
         ),
+        "fish" => Some(
+            r#" function __frd_prompt --on-event fish_prompt; printf '\e]7;file://localhost%s\e\\' $PWD; printf '\e[999;1H'; printf '\e]133;A\e\\'; end; function __frd_preexec --on-event fish_preexec; printf '\e]133;C\e\\'; end; printf '\e[2J\e[999;1H'"#
+                .to_string(),
+        ),
+        #[cfg(windows)]
+        "powershell.exe" | "pwsh.exe" => Some(
+            concat!(
+                "function prompt {",
+                " [Console]::Write(",
+                "[char]27 + ']7;file://localhost/' + ($pwd.Path -replace '\\\\','/') + [char]27 + '\\' +",
+                " [char]27 + '[999;1H' +",
+                " [char]27 + ']133;A' + [char]27 + '\\'",
+                ");",
+                " 'PS ' + $pwd.Path + '> '",
+                " };",
+                " try{ Set-PSReadLineKeyHandler -Key Enter -ScriptBlock {",
+                " [Console]::Write([char]27 + ']133;C' + [char]27 + '\\');",
+                " [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()",
+                " } }catch{};",
+                " [Console]::Write([char]27 + '[2J' + [char]27 + '[999;1H')\r\n",
+            )
+            .to_string(),
+        ),
+        "pwsh" => Some(
+            concat!(
+                "function prompt {",
+                " [Console]::Write(",
+                "[char]27 + ']7;file://localhost' + $pwd.Path + [char]27 + '\\' +",
+                " [char]27 + '[999;1H' +",
+                " [char]27 + ']133;A' + [char]27 + '\\'",
+                ");",
+                " 'PS ' + $pwd.Path + '> '",
+                " };",
+                " try{ Set-PSReadLineKeyHandler -Key Enter -ScriptBlock {",
+                " [Console]::Write([char]27 + ']133;C' + [char]27 + '\\');",
+                " [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()",
+                " } }catch{};",
+                " [Console]::Write([char]27 + '[2J' + [char]27 + '[999;1H')",
+            )
+            .to_string(),
+        ),
         _ => None,
     }
 }

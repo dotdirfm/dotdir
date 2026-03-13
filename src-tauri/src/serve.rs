@@ -173,7 +173,8 @@ async fn process_message(
 
         return Some(match data {
             Ok(bytes) => {
-                let mut frame = Vec::with_capacity(4 + bytes.len());
+                let mut frame = Vec::with_capacity(1 + 4 + bytes.len());
+                frame.push(0x00); // type: RPC response
                 frame.extend_from_slice(&id_num.to_le_bytes());
                 frame.extend_from_slice(&bytes);
                 Message::Binary(frame)
@@ -233,17 +234,13 @@ fn handle_pty_spawn(
 
     session.ptys.lock().unwrap().insert(pty_id, handle);
 
-    // Start reader thread that sends pty.data notifications
+    // Start reader thread that sends pty data as binary frames
     let tx_pty = tx.clone();
     std::thread::spawn(move || {
+        let pty_id_bytes = pty_id.to_le_bytes();
         let mut buf = [0u8; 4096];
-        let mut leftover = Vec::new(); // incomplete UTF-8 bytes from previous read
         loop {
-            // Read into buffer after any leftover bytes
-            let offset = leftover.len();
-            buf[..offset].copy_from_slice(&leftover);
-            leftover.clear();
-            match pty::read_blocking(&reader, &mut buf[offset..]) {
+            match pty::read_blocking(&reader, &mut buf) {
                 Ok(0) | Err(_) => {
                     let n = json!({
                         "jsonrpc": "2.0",
@@ -254,26 +251,12 @@ fn handle_pty_spawn(
                     break;
                 }
                 Ok(n) => {
-                    let total = offset + n;
-                    // Find the last valid UTF-8 boundary
-                    let valid_up_to = match std::str::from_utf8(&buf[..total]) {
-                        Ok(_) => total,
-                        Err(e) => e.valid_up_to(),
-                    };
-                    // Save any trailing incomplete UTF-8 bytes for next read
-                    if valid_up_to < total {
-                        leftover.extend_from_slice(&buf[valid_up_to..total]);
-                    }
-                    if valid_up_to == 0 {
-                        continue; // nothing to send yet
-                    }
-                    let data = unsafe { std::str::from_utf8_unchecked(&buf[..valid_up_to]) };
-                    let msg = json!({
-                        "jsonrpc": "2.0",
-                        "method": "pty.data",
-                        "params": { "ptyId": pty_id, "data": data }
-                    });
-                    if tx_pty.send(Message::Text(msg.to_string())).is_err() {
+                    // Binary frame: [0x01][pty_id: u32 LE][raw bytes]
+                    let mut frame = Vec::with_capacity(1 + 4 + n);
+                    frame.push(0x01); // type: PTY data
+                    frame.extend_from_slice(&pty_id_bytes);
+                    frame.extend_from_slice(&buf[..n]);
+                    if tx_pty.send(Message::Binary(frame)).is_err() {
                         break;
                     }
                 }
