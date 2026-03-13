@@ -16,7 +16,7 @@ import { TerminalPanel } from './Terminal';
 import { ExtensionsPanel } from './ExtensionsPanel';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
-import { loadExtensions } from './extensions';
+import { extensionHost } from './extensionHostClient';
 import { basename, dirname, isRootPath, join } from './path';
 
 function buildParentChain(dirPath: string): FsNode | undefined {
@@ -325,33 +325,48 @@ export function App() {
 
   const isBrowser = !isTauriApp();
 
-  // Load extensions, then perform initial navigation
-  useEffect(() => {
-    loadExtensions()
-      .then((exts) => setExtensionLayers(exts))
-      .catch(() => {})
-      .then(() => {
-        const urlPath = isBrowser ? decodeURIComponent(window.location.pathname) : '';
-        const hasUrlPath = urlPath.length > 1; // not just "/"
+  const leftPathRef = useRef(left.currentPath);
+  leftPathRef.current = left.currentPath;
+  const rightPathRef = useRef(right.currentPath);
+  rightPathRef.current = right.currentPath;
 
-        if (hasUrlPath) {
-          bridge.fsa.exists(urlPath).then(async (exists) => {
-            if (exists) {
-              left.navigateTo(urlPath);
-            } else {
-              const parent = await findExistingParent(urlPath);
-              left.navigateTo(parent);
-              showError(`Directory not found: ${urlPath}`);
-            }
-          });
-          bridge.utils.getHomePath().then((home) => right.navigateTo(home));
+  // Navigate panels immediately — don't wait for extensions
+  useEffect(() => {
+    const urlPath = isBrowser ? decodeURIComponent(window.location.pathname) : '';
+    const hasUrlPath = urlPath.length > 1; // not just "/"
+
+    if (hasUrlPath) {
+      bridge.fsa.exists(urlPath).then(async (exists) => {
+        if (exists) {
+          left.navigateTo(urlPath);
         } else {
-          bridge.utils.getHomePath().then((home) => {
-            left.navigateTo(home);
-            right.navigateTo(home);
-          });
+          const parent = await findExistingParent(urlPath);
+          left.navigateTo(parent);
+          showError(`Directory not found: ${urlPath}`);
         }
       });
+      bridge.utils.getHomePath().then((home) => right.navigateTo(home));
+    } else {
+      bridge.utils.getHomePath().then((home) => {
+        left.navigateTo(home);
+        right.navigateTo(home);
+      });
+    }
+  }, []);
+
+  // Start Extension Host lazily — re-navigate panels when extensions load
+  useEffect(() => {
+    const unsub = extensionHost.onLoaded((exts) => {
+      setExtensionLayers(exts);
+      // Re-navigate to recompute styles with new extension layers
+      if (leftPathRef.current) left.navigateTo(leftPathRef.current);
+      if (rightPathRef.current) right.navigateTo(rightPathRef.current);
+    });
+    extensionHost.start();
+    return () => {
+      unsub();
+      extensionHost.dispose();
+    };
   }, []);
 
   // Sync active panel path to URL (browser mode only)
@@ -361,12 +376,6 @@ export function App() {
       history.replaceState(null, '', activePath);
     }
   }, [activePath]);
-
-  // Re-navigate both panels on WebSocket reconnect
-  const leftPathRef = useRef(left.currentPath);
-  leftPathRef.current = left.currentPath;
-  const rightPathRef = useRef(right.currentPath);
-  rightPathRef.current = right.currentPath;
 
   useEffect(() => {
     if (bridge.onReconnect) {
@@ -485,9 +494,7 @@ export function App() {
         <ExtensionsPanel
           onClose={() => setShowExtensions(false)}
           onExtensionsChanged={() => {
-            loadExtensions()
-              .then((exts) => setExtensionLayers(exts))
-              .catch(() => {});
+            extensionHost.restart();
           }}
         />
       )}
