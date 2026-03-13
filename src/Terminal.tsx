@@ -193,11 +193,15 @@ export function TerminalPanel({ cwd, onCwdChange, onVisibleHeight, onPromptActiv
       return true;
     });
 
+    const decoder = new TextDecoder();
+
     const cleanupData = bridge.pty.onData((id, data) => {
       if (id !== ptyIdRef.current) return;
 
       if (suppressRef.current) {
-        suppressBufRef.current += data;
+        // Suppress mode: decode to string for OSC 7 pattern matching
+        const text = typeof data === 'string' ? data : decoder.decode(data, { stream: true });
+        suppressBufRef.current += text;
         const buf = suppressBufRef.current;
         const osc7Match = buf.match(/\x1b\]7;([^\x07\x1b]*?)(?:\x07|\x1b\\)/);
         if (osc7Match) {

@@ -25,7 +25,7 @@ export interface Bridge {
     write(ptyId: number, data: string): Promise<void>;
     resize(ptyId: number, cols: number, rows: number): Promise<void>;
     close(ptyId: number): Promise<void>;
-    onData(callback: (ptyId: number, data: string) => void): () => void;
+    onData(callback: (ptyId: number, data: string | Uint8Array) => void): () => void;
     onExit(callback: (ptyId: number) => void): () => void;
   };
   utils: {

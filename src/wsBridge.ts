@@ -11,10 +11,10 @@ type Pending = {
   reject: (err: Error) => void;
 };
 
-type PtyDataCallback = (ptyId: number, data: string) => void;
+type PtyDataCallback = (ptyId: number, data: Uint8Array) => void;
 type PtyExitCallback = (ptyId: number) => void;
 
-const BINARY_HEADER_SIZE = 4; // uint32 LE requestId prefix on binary frames
+const BINARY_TYPE_PTY = 0x01;
 
 export async function createWsBridge(wsUrl: string): Promise<Bridge> {
   let ws: WebSocket;
@@ -57,8 +57,6 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
           name: (msg.params.name as string) ?? null,
         };
         for (const cb of changeListeners) cb(event);
-      } else if (msg.method === 'pty.data') {
-        for (const cb of ptyDataListeners) cb(msg.params.ptyId, msg.params.data);
       } else if (msg.method === 'pty.exit') {
         for (const cb of ptyExitListeners) cb(msg.params.ptyId);
       }
@@ -81,9 +79,18 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
 
   function handleBinary(data: ArrayBuffer): void {
     const view = new DataView(data);
-    const requestId = view.getUint32(0, true);
-    const payload = data.slice(BINARY_HEADER_SIZE);
+    const type = view.getUint8(0);
 
+    if (type === BINARY_TYPE_PTY) {
+      const ptyId = view.getUint32(1, true);
+      const payload = new Uint8Array(data, 5);
+      for (const cb of ptyDataListeners) cb(ptyId, payload);
+      return;
+    }
+
+    // BINARY_TYPE_RPC: [0x00][request_id: u32 LE][payload]
+    const requestId = view.getUint32(1, true);
+    const payload = data.slice(5);
     const p = pending.get(requestId);
     if (!p) return;
     pending.delete(requestId);
