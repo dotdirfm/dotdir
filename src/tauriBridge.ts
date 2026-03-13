@@ -83,8 +83,8 @@ export const tauriBridge = {
     },
   },
   pty: {
-    async spawn(cwd: string): Promise<number> {
-      return invoke<number>('pty_spawn', { cwd });
+    async spawn(cwd: string, cols?: number, rows?: number): Promise<number> {
+      return invoke<number>('pty_spawn', { cwd, cols, rows });
     },
     async write(ptyId: number, data: string): Promise<void> {
       return invoke<void>('pty_write', { ptyId, data });

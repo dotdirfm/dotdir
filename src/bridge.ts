@@ -1,4 +1,4 @@
-/// Dynamic bridge provider — detects Tauri vs browser and loads the right backend.
+/// Dynamic bridge provider ï¿½ detects Tauri vs browser and loads the right backend.
 ///
 /// Uses ES module live bindings: importers of `bridge` always see the current value.
 /// Must call `initBridge()` before rendering (from main.tsx).
@@ -21,7 +21,7 @@ export interface Bridge {
     writeFile(filePath: string, data: string): Promise<void>;
   };
   pty: {
-    spawn(cwd: string): Promise<number>;
+    spawn(cwd: string, cols?: number, rows?: number): Promise<number>;
     write(ptyId: number, data: string): Promise<void>;
     resize(ptyId: number, cols: number, rows: number): Promise<void>;
     close(ptyId: number): Promise<void>;

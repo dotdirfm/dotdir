@@ -263,10 +263,10 @@ struct PtyExitEvent {
 }
 
 #[tauri::command]
-fn pty_spawn(cwd: String, state: State<'_, AppState>, app_handle: tauri::AppHandle) -> CmdResult<u32> {
+fn pty_spawn(cwd: String, cols: Option<u16>, rows: Option<u16>, state: State<'_, AppState>, app_handle: tauri::AppHandle) -> CmdResult<u32> {
     let id = state.next_pty_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     write_debug_log(&format!("pty_spawn requested id={} cwd={}", id, cwd));
-    let handle = match pty::spawn(&cwd, 80, 24) {
+    let handle = match pty::spawn(&cwd, cols.unwrap_or(80), rows.unwrap_or(24)) {
         Ok(handle) => handle,
         Err(e) => {
             write_debug_log(&format!("pty_spawn failed id={} cwd={} error={}", id, cwd, e));

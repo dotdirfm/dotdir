@@ -210,8 +210,10 @@ fn handle_pty_spawn(
         Some(s) => s,
         None => return rpc_error(id, &FsError::InvalidInput),
     };
+    let cols = params["cols"].as_u64().unwrap_or(80) as u16;
+    let rows = params["rows"].as_u64().unwrap_or(24) as u16;
 
-    let handle = match pty::spawn(cwd, 80, 24) {
+    let handle = match pty::spawn(cwd, cols, rows) {
         Ok(h) => h,
         Err(e) => return rpc_error(id, &FsError::Io(e)),
     };

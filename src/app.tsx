@@ -269,8 +269,8 @@ export function App() {
   const left = usePanel(theme, showError);
   const right = usePanel(theme, showError);
   const [activePanel, setActivePanel] = useState<PanelSide>('left');
-  const [terminalHeight, setTerminalHeight] = useState(32);
-  const terminalResizeRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const [panelsVisible, setPanelsVisible] = useState(true);
+  const [terminalVisibleHeight, setTerminalVisibleHeight] = useState(20);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
 
@@ -358,51 +358,32 @@ export function App() {
       } else if (e.key === '.' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         setShowHidden((s) => !s);
+      } else if (e.key === 'o' && e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        setPanelsVisible((s) => !s);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  useEffect(() => {
-    const handlePointerMove = (e: MouseEvent) => {
-      const activeResize = terminalResizeRef.current;
-      if (!activeResize) return;
-      const nextHeight = activeResize.startHeight + (activeResize.startY - e.clientY);
-      const maxHeight = Math.max(160, Math.floor(window.innerHeight * 0.7));
-      setTerminalHeight(Math.min(maxHeight, Math.max(28, nextHeight)));
-    };
-
-    const handlePointerUp = () => {
-      if (!terminalResizeRef.current) return;
-      terminalResizeRef.current = null;
-      document.body.classList.remove('terminal-resizing');
-    };
-
-    window.addEventListener('mousemove', handlePointerMove);
-    window.addEventListener('mouseup', handlePointerUp);
-    return () => {
-      window.removeEventListener('mousemove', handlePointerMove);
-      window.removeEventListener('mouseup', handlePointerUp);
-      document.body.classList.remove('terminal-resizing');
-    };
-  }, []);
-
-  const handleTerminalResizeStart = useCallback((e: { clientY: number; preventDefault(): void }) => {
-    terminalResizeRef.current = { startY: e.clientY, startHeight: terminalHeight };
-    document.body.classList.add('terminal-resizing');
-    e.preventDefault();
-  }, [terminalHeight]);
 
   if (!left.currentPath || !right.currentPath) {
     return <div className="loading">Loading...</div>;
   }
 
   const activeCwd = activePanel === 'left' ? left.currentPath : right.currentPath;
+  const ACTION_BAR_HEIGHT = 24;
 
   return (
     <div className="app">
-      <div className="panels">
+      <div className="terminal-background">
+        <TerminalPanel cwd={activeCwd} onCwdChange={handleTerminalCwd} onVisibleHeight={setTerminalVisibleHeight} />
+      </div>
+      <div
+        className={`panels-overlay${panelsVisible ? '' : ' hidden'}`}
+        style={{ bottom: `${terminalVisibleHeight + ACTION_BAR_HEIGHT}px` }}
+      >
         <div className={`panel ${activePanel === 'left' ? 'active' : ''}`} onClick={() => setActivePanel('left')}>
           {left.navigating && <div className="panel-progress" />}
           <FileList
@@ -430,9 +411,19 @@ export function App() {
           />
         </div>
       </div>
-      <div className="terminal-panel" style={{ height: `${terminalHeight}px` }}>
-        <div className="terminal-resize-handle" onMouseDown={handleTerminalResizeStart} />
-        <TerminalPanel cwd={activeCwd} onCwdChange={handleTerminalCwd} />
+      <div className="action-bar">
+        <div className="action-bar-item"><span className="action-bar-key">1</span><span className="action-bar-label">Help</span></div>
+        <div className="action-bar-item"><span className="action-bar-key">2</span><span className="action-bar-label">Menu</span></div>
+        <div className="action-bar-item"><span className="action-bar-key">3</span><span className="action-bar-label">View</span></div>
+        <div className="action-bar-item"><span className="action-bar-key">4</span><span className="action-bar-label">Edit</span></div>
+        <div className="action-bar-item"><span className="action-bar-key">5</span><span className="action-bar-label">Copy</span></div>
+        <div className="action-bar-item"><span className="action-bar-key">6</span><span className="action-bar-label">Move</span></div>
+        <div className="action-bar-item"><span className="action-bar-key">7</span><span className="action-bar-label">MkDir</span></div>
+        <div className="action-bar-item"><span className="action-bar-key">8</span><span className="action-bar-label">Delete</span></div>
+        <div className="action-bar-item"><span className="action-bar-key">9</span><span className="action-bar-label">PullDn</span></div>
+        <div className="action-bar-item"><span className="action-bar-key">10</span><span className="action-bar-label">Quit</span></div>
+        <div className="action-bar-item"><span className="action-bar-key">11</span><span className="action-bar-label">Plugin</span></div>
+        <div className="action-bar-item"><span className="action-bar-key">12</span><span className="action-bar-label">Screen</span></div>
       </div>
       {viewerFile &&
         (isImageFile(viewerFile.name) ? (

@@ -1,5 +1,4 @@
 import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef } from 'react';
 import { bridge } from './bridge';
@@ -27,25 +26,34 @@ function buildCdCommand(path: string): string {
   return ` cd ${shellQuote(path)}\n`;
 }
 
+const MAX_COMMAND_LINES = 12;
+
 interface TerminalPanelProps {
   cwd: string;
   onCwdChange?: (path: string) => void;
+  onVisibleHeight?: (px: number) => void;
 }
 
-export function TerminalPanel({ cwd, onCwdChange }: TerminalPanelProps) {
+export function TerminalPanel({ cwd, onCwdChange, onVisibleHeight }: TerminalPanelProps) {
   const windowsPipeMode = isWindowsPath(cwd);
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
-  const fitRef = useRef<FitAddon | null>(null);
   const ptyIdRef = useRef<number | null>(null);
   const lastTerminalCwdRef = useRef<string>(cwd);
   const onCwdChangeRef = useRef(onCwdChange);
   onCwdChangeRef.current = onCwdChange;
+  const onVisibleHeightRef = useRef(onVisibleHeight);
+  onVisibleHeightRef.current = onVisibleHeight;
   const suppressRef = useRef(false);
   const suppressBufRef = useRef('');
   const suppressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fitFrameRef = useRef<number | null>(null);
   const lineBufferRef = useRef('');
+  const promptAbsRowRef = useRef<number | null>(null);
+  const trackingRef = useRef(false);
+  const lastVisibleHeightRef = useRef(0);
+  const cellHeightRef = useRef(18);
+  const pendingPromptRef = useRef(false);
 
   useEffect(() => {
     if (ptyIdRef.current === null) return;
@@ -72,12 +80,72 @@ export function TerminalPanel({ cwd, onCwdChange }: TerminalPanelProps) {
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const parentEl = container.parentElement;
+    if (!parentEl) return;
+
+    const measureCells = () => {
+      const screen = container.querySelector('.xterm-screen') as HTMLElement;
+      if (screen && term.rows > 0 && term.cols > 0) {
+        const rect = screen.getBoundingClientRect();
+        cellHeightRef.current = rect.height / term.rows;
+      }
+    };
+
+    const reportVisibleHeight = () => {
+      let lines = 1;
+      if (trackingRef.current && promptAbsRowRef.current !== null) {
+        const buf = term.buffer.active;
+        const currentAbsRow = buf.baseY + buf.cursorY;
+        lines = currentAbsRow - promptAbsRowRef.current + 1;
+        if (lines > MAX_COMMAND_LINES || lines < 1) {
+          trackingRef.current = false;
+          lines = 1;
+        }
+      }
+      const height = Math.max(lines, 1) * cellHeightRef.current;
+      if (Math.abs(height - lastVisibleHeightRef.current) > 0.5) {
+        lastVisibleHeightRef.current = height;
+        onVisibleHeightRef.current?.(height);
+      }
+    };
+
+    const updatePromptPosition = () => {
+      const buf = term.buffer.active;
+      promptAbsRowRef.current = buf.baseY + buf.cursorY;
+      trackingRef.current = true;
+      reportVisibleHeight();
+    };
+
+    const doFit = () => {
+      const parentRect = parentEl.getBoundingClientRect();
+      if (parentRect.width === 0 || parentRect.height === 0) return;
+
+      measureCells();
+      const cellH = cellHeightRef.current;
+      if (cellH <= 0) return;
+
+      const screen = container.querySelector('.xterm-screen') as HTMLElement;
+      let cellW = 7;
+      if (screen && term.cols > 0) {
+        cellW = screen.getBoundingClientRect().width / term.cols;
+      }
+      if (cellW <= 0) return;
+
+      const cols = Math.max(2, Math.floor((parentRect.width - 4) / cellW));
+      const rows = Math.max(1, Math.floor(parentRect.height / cellH));
+
+      if (cols !== term.cols || rows !== term.rows) {
+        term.resize(cols, rows);
+      }
+    };
 
     const scheduleFit = () => {
       if (fitFrameRef.current !== null) cancelAnimationFrame(fitFrameRef.current);
       fitFrameRef.current = requestAnimationFrame(() => {
         fitFrameRef.current = null;
-        fit.fit();
+        doFit();
+        measureCells();
+        reportVisibleHeight();
       });
     };
 
@@ -86,15 +154,19 @@ export function TerminalPanel({ cwd, onCwdChange }: TerminalPanelProps) {
       fontSize: 13,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       theme: {
-        background: 'var(--bg)' === 'var(--bg)' ? '#1e1e2e' : undefined,
+        background: '#1e1e2e',
       },
     });
-    const fit = new FitAddon();
-    term.loadAddon(fit);
     term.open(container);
-    scheduleFit();
     termRef.current = term;
-    fitRef.current = fit;
+
+    // Prevent xterm from consuming Ctrl+O so the app-level handler can toggle panels
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.key === 'o' && e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+        return false; // let event propagate to window handler
+      }
+      return true;
+    });
 
     term.parser.registerOscHandler(7, (data) => {
       const match = data.match(/^file:\/\/[^/]*(\/.*)/);
@@ -103,47 +175,8 @@ export function TerminalPanel({ cwd, onCwdChange }: TerminalPanelProps) {
         lastTerminalCwdRef.current = path;
         onCwdChangeRef.current?.(path);
       }
+      pendingPromptRef.current = true;
       return true;
-    });
-
-    bridge.pty.spawn(cwd).then((id) => {
-      ptyIdRef.current = id;
-
-      term.onData((data) => {
-        if (!windowsPipeMode) {
-          bridge.pty.write(id, data);
-          return;
-        }
-
-        for (const ch of data) {
-          if (ch === '\r') {
-            const line = lineBufferRef.current;
-            lineBufferRef.current = '';
-            term.write('\r\n');
-            bridge.pty.write(id, line + '\r\n');
-          } else if (ch === '\u007f') {
-            if (lineBufferRef.current.length > 0) {
-              lineBufferRef.current = lineBufferRef.current.slice(0, -1);
-              term.write('\b \b');
-            }
-          } else if (ch >= ' ' || ch === '\t') {
-            lineBufferRef.current += ch;
-            term.write(ch);
-          }
-        }
-      });
-
-      term.onResize(({ cols, rows }) => {
-        bridge.pty.resize(id, cols, rows);
-      });
-
-      scheduleFit();
-      bridge.pty.resize(id, term.cols, term.rows);
-      if (!windowsPipeMode) {
-        bridge.pty.write(id, buildCdCommand(cwd));
-      }
-    }).catch((err) => {
-      term.write('\\r\\n[Terminal failed to start: ' + String(err) + ']\\r\\n');
     });
 
     const cleanupData = bridge.pty.onData((id, data) => {
@@ -169,11 +202,19 @@ export function TerminalPanel({ cwd, onCwdChange }: TerminalPanelProps) {
           }
 
           term.write('\r\x1b[2K' + afterOsc);
+          updatePromptPosition();
         }
         return;
       }
 
       term.write(data);
+
+      if (pendingPromptRef.current) {
+        pendingPromptRef.current = false;
+        updatePromptPosition();
+      } else {
+        reportVisibleHeight();
+      }
     });
 
     const cleanupExit = bridge.pty.onExit((id) => {
@@ -184,7 +225,58 @@ export function TerminalPanel({ cwd, onCwdChange }: TerminalPanelProps) {
     });
 
     const ro = new ResizeObserver(() => scheduleFit());
-    ro.observe(container);
+    ro.observe(parentEl);
+
+    // Initial fit + cursor positioning in first frame, then spawn PTY
+    fitFrameRef.current = requestAnimationFrame(() => {
+      fitFrameRef.current = null;
+      doFit();
+      measureCells();
+
+      if (term.rows > 1) {
+        term.write(`\x1b[${term.rows};1H`);
+      }
+
+      reportVisibleHeight();
+
+      bridge.pty.spawn(cwd, term.cols, term.rows).then((id) => {
+        ptyIdRef.current = id;
+
+        term.onData((data) => {
+          if (!windowsPipeMode) {
+            bridge.pty.write(id, data);
+            return;
+          }
+
+          for (const ch of data) {
+            if (ch === '\r') {
+              const line = lineBufferRef.current;
+              lineBufferRef.current = '';
+              term.write('\r\n');
+              bridge.pty.write(id, line + '\r\n');
+            } else if (ch === '\u007f') {
+              if (lineBufferRef.current.length > 0) {
+                lineBufferRef.current = lineBufferRef.current.slice(0, -1);
+                term.write('\b \b');
+              }
+            } else if (ch >= ' ' || ch === '\t') {
+              lineBufferRef.current += ch;
+              term.write(ch);
+            }
+          }
+        });
+
+        term.onResize(({ cols, rows }) => {
+          bridge.pty.resize(id, cols, rows);
+        });
+
+        if (!windowsPipeMode) {
+          bridge.pty.write(id, buildCdCommand(cwd));
+        }
+      }).catch((err) => {
+        term.write('\r\n[Terminal failed to start: ' + String(err) + ']\r\n');
+      });
+    });
 
     return () => {
       ro.disconnect();

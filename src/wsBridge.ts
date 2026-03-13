@@ -205,7 +205,8 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       },
     },
     pty: {
-      spawn: (cwd: string) => rpc('pty.spawn', { cwd }) as Promise<number>,
+      spawn: (cwd: string, cols?: number, rows?: number) =>
+        rpc('pty.spawn', { cwd, ...(cols != null && rows != null ? { cols, rows } : {}) }) as Promise<number>,
       write: (ptyId: number, data: string) =>
         rpc('pty.write', { ptyId, data }) as Promise<void>,
       resize: (ptyId: number, cols: number, rows: number) =>
