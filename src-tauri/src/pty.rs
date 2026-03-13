@@ -1,14 +1,27 @@
 /// PTY (pseudo-terminal) operations for spawning shells.
 
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
+use serde::Serialize;
 use std::io::{self, Read, Write};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+
+#[derive(Clone, Serialize)]
+pub struct TerminalProfile {
+    pub id: String,
+    pub label: String,
+    pub shell: String,
+}
 
 pub struct PtyHandle {
     pub master: Box<dyn MasterPty + Send>,
     pub reader: Arc<Mutex<Box<dyn Read + Send>>>,
     pub writer: Arc<Mutex<Box<dyn Write + Send>>>,
     pub child: Box<dyn Child + Send>,
+    pub shell: String,
+    pub cwd: String,
+    pub profile_id: String,
+    pub profile_label: String,
 }
 
 fn portable_pty_error(err: impl std::fmt::Display) -> io::Error {
@@ -21,11 +34,6 @@ fn shell_init(shell: &str) -> Option<String> {
         .and_then(|name| name.to_str())
         .unwrap_or_default();
 
-    #[cfg(windows)]
-    if shell_name.eq_ignore_ascii_case("cmd.exe") {
-        return Some("prompt $e]7;file://localhost/$P$e\\\\$P$G\r\ncls\r\n".to_string());
-    }
-
     match shell_name {
         "bash" => Some(
             r#" __frd(){ printf '\e]7;file://localhost%s\e\\' "$PWD"; printf '\e[999;1H'; printf '\e]133;A\e\\';}; PROMPT_COMMAND="__frd;${PROMPT_COMMAND}"; PS0='\e]133;C\e\\'; printf '\e[2J\e[999;1H'"#
@@ -35,37 +43,94 @@ fn shell_init(shell: &str) -> Option<String> {
             r#" setopt HIST_IGNORE_SPACE; __frd(){ printf '\e]7;file://localhost%s\e\\' "$PWD"; printf '\e[999;1H'; printf '\e]133;A\e\\';}; __frd_pre(){ printf '\e]133;C\e\\';}; precmd_functions+=(__frd); preexec_functions+=(__frd_pre); __frd_cls(){ printf '\e[2J\e[3J\e[999;1H'; zle reset-prompt;}; zle -N clear-screen __frd_cls; printf '\e[2J\e[999;1H'"#
                 .to_string(),
         ),
-        #[cfg(windows)]
-        "powershell.exe" | "pwsh.exe" => Some(
-            concat!(
-                "function prompt {",
-                " [char]27 + ']7;file://localhost/' + ($pwd.Path -replace '\\\\','/') + [char]27 + '\\';",
-                " \"PS $($pwd.Path)> \" };",
-                " Clear-Host\r\n",
-            )
-            .to_string(),
-        ),
         _ => None,
     }
 }
 
 #[cfg(windows)]
-fn resolve_shell() -> String {
+fn system_root() -> String {
+    std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\WINDOWS".to_string())
+}
+
+#[cfg(windows)]
+fn file_exists(path: &str) -> bool {
+    PathBuf::from(path).is_file()
+}
+
+#[cfg(windows)]
+fn resolve_cmd_shell() -> String {
     if let Ok(comspec) = std::env::var("ComSpec") {
         let trimmed = comspec.trim().trim_matches('"');
-        if !trimmed.is_empty() {
+        if !trimmed.is_empty() && file_exists(trimmed) {
             return trimmed.to_string();
         }
     }
-    "C:\\WINDOWS\\system32\\cmd.exe".to_string()
+    format!("{}\\System32\\cmd.exe", system_root())
+}
+
+#[cfg(windows)]
+fn resolve_powershell_shell() -> String {
+    let shell = format!(
+        "{}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        system_root()
+    );
+    if file_exists(&shell) {
+        shell
+    } else {
+        "powershell.exe".to_string()
+    }
 }
 
 #[cfg(not(windows))]
-fn resolve_shell() -> String {
+fn default_unix_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
 
-pub fn spawn(cwd: &str, cols: u16, rows: u16) -> io::Result<PtyHandle> {
+#[cfg(windows)]
+pub fn list_profiles() -> Vec<TerminalProfile> {
+    vec![
+        TerminalProfile {
+            id: "cmd".to_string(),
+            label: "Command Prompt".to_string(),
+            shell: resolve_cmd_shell(),
+        },
+        TerminalProfile {
+            id: "powershell".to_string(),
+            label: "Windows PowerShell".to_string(),
+            shell: resolve_powershell_shell(),
+        },
+    ]
+}
+
+#[cfg(not(windows))]
+pub fn list_profiles() -> Vec<TerminalProfile> {
+    vec![TerminalProfile {
+        id: "default".to_string(),
+        label: "Default Shell".to_string(),
+        shell: default_unix_shell(),
+    }]
+}
+
+fn resolve_profile(profile_id: Option<&str>) -> TerminalProfile {
+    let profiles = list_profiles();
+    if let Some(profile_id) = profile_id {
+        if let Some(profile) = profiles.iter().find(|profile| profile.id == profile_id) {
+            return profile.clone();
+        }
+    }
+
+    profiles
+        .into_iter()
+        .next()
+        .expect("at least one terminal profile")
+}
+
+pub fn spawn(
+    cwd: &str,
+    profile_id: Option<&str>,
+    cols: u16,
+    rows: u16,
+) -> io::Result<PtyHandle> {
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
@@ -76,17 +141,28 @@ pub fn spawn(cwd: &str, cols: u16, rows: u16) -> io::Result<PtyHandle> {
         })
         .map_err(portable_pty_error)?;
 
-    let shell = resolve_shell();
-    crate::write_debug_log(&format!("pty shell path={} cwd={}", shell, cwd));
+    let profile = resolve_profile(profile_id);
+    let shell = profile.shell.clone();
+    crate::write_debug_log(&format!(
+        "pty shell path={} cwd={} profile={}",
+        shell, cwd, profile.id
+    ));
 
     let mut cmd = CommandBuilder::new(shell.clone());
     cmd.cwd(cwd);
 
     #[cfg(windows)]
-    {
-        cmd.arg("/Q");
-        cmd.arg("/D");
-        cmd.arg("/K");
+    match profile.id.as_str() {
+        "cmd" => {
+            cmd.arg("/Q");
+            cmd.arg("/D");
+            cmd.arg("/K");
+        }
+        "powershell" => {
+            cmd.arg("-NoLogo");
+            cmd.arg("-NoProfile");
+        }
+        _ => {}
     }
 
     #[cfg(not(windows))]
@@ -108,6 +184,10 @@ pub fn spawn(cwd: &str, cols: u16, rows: u16) -> io::Result<PtyHandle> {
         reader: Arc::new(Mutex::new(reader)),
         writer: Arc::new(Mutex::new(writer)),
         child,
+        shell: shell.clone(),
+        cwd: cwd.to_string(),
+        profile_id: profile.id,
+        profile_label: profile.label,
     };
 
     if let Some(init) = shell_init(&shell) {
@@ -138,7 +218,10 @@ pub fn resize(master: &dyn MasterPty, cols: u16, rows: u16) -> io::Result<()> {
 }
 
 /// Blocking read from PTY master. Returns 0 on EOF (child exited).
-pub fn read_blocking(reader: &Arc<Mutex<Box<dyn Read + Send>>>, buf: &mut [u8]) -> io::Result<usize> {
+pub fn read_blocking(
+    reader: &Arc<Mutex<Box<dyn Read + Send>>>,
+    buf: &mut [u8],
+) -> io::Result<usize> {
     let mut reader = reader
         .lock()
         .map_err(|_| io::Error::other("pty reader lock poisoned"))?;

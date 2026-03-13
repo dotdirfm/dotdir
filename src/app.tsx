@@ -269,9 +269,10 @@ export function App() {
   const left = usePanel(theme, showError);
   const right = usePanel(theme, showError);
   const [activePanel, setActivePanel] = useState<PanelSide>('left');
+  const [terminalHeight, setTerminalHeight] = useState(52);
+  const terminalResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [promptActive, setPromptActive] = useState(true);
-  const [terminalVisibleHeight, setTerminalVisibleHeight] = useState(20);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
 
@@ -322,10 +323,9 @@ export function App() {
 
   const isBrowser = !isTauriApp();
 
-  // Initial navigation: use URL path in browser mode, home dir otherwise
   useEffect(() => {
     const urlPath = isBrowser ? decodeURIComponent(window.location.pathname) : '';
-    const hasUrlPath = urlPath.length > 1; // not just "/"
+    const hasUrlPath = urlPath.length > 1;
 
     if (hasUrlPath) {
       bridge.fsa.exists(urlPath).then(async (exists) => {
@@ -346,7 +346,6 @@ export function App() {
     }
   }, []);
 
-  // Sync active panel path to URL (browser mode only)
   const activePath = activePanel === 'left' ? left.currentPath : right.currentPath;
   useEffect(() => {
     if (isBrowser && activePath) {
@@ -354,7 +353,6 @@ export function App() {
     }
   }, [activePath]);
 
-  // Re-navigate both panels on WebSocket reconnect
   const leftPathRef = useRef(left.currentPath);
   leftPathRef.current = left.currentPath;
   const rightPathRef = useRef(right.currentPath);
@@ -389,22 +387,58 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  useEffect(() => {
+    const handlePointerMove = (e: PointerEvent) => {
+      const activeResize = terminalResizeRef.current;
+      if (!activeResize || e.pointerId !== activeResize.pointerId) return;
+      const nextHeight = activeResize.startHeight + (activeResize.startY - e.clientY);
+      const maxHeight = Math.max(180, Math.floor(window.innerHeight * 0.8));
+      setTerminalHeight(Math.min(maxHeight, Math.max(52, nextHeight)));
+    };
+
+    const handlePointerUp = (e: PointerEvent) => {
+      if (!terminalResizeRef.current || e.pointerId !== terminalResizeRef.current.pointerId) return;
+      terminalResizeRef.current = null;
+      document.body.classList.remove('terminal-resizing');
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+      document.body.classList.remove('terminal-resizing');
+    };
+  }, []);
+
+  const handleTerminalResizeStart = useCallback((e: { clientY: number; pointerId: number; preventDefault(): void }) => {
+    terminalResizeRef.current = { pointerId: e.pointerId, startY: e.clientY, startHeight: terminalHeight };
+    document.body.classList.add('terminal-resizing');
+    e.preventDefault();
+  }, [terminalHeight]);
 
   if (!left.currentPath || !right.currentPath) {
     return <div className="loading">Loading...</div>;
   }
 
   const activeCwd = activePanel === 'left' ? left.currentPath : right.currentPath;
-  const ACTION_BAR_HEIGHT = 24;
+  const actionBarHeight = 24;
 
   return (
     <div className="app">
-      <div className="terminal-background">
-        <TerminalPanel cwd={activeCwd} onCwdChange={handleTerminalCwd} onVisibleHeight={setTerminalVisibleHeight} onPromptActive={setPromptActive} />
+      <div className="terminal-background" style={{ height: `${terminalHeight}px` }}>
+        <div className="terminal-resize-handle" onPointerDown={handleTerminalResizeStart} />
+        <TerminalPanel
+          cwd={activeCwd}
+          onCwdChange={handleTerminalCwd}
+          onPromptActive={setPromptActive}
+        />
       </div>
       <div
         className={`panels-overlay${panelsVisible && promptActive ? '' : ' hidden'}`}
-        style={{ bottom: `${terminalVisibleHeight + ACTION_BAR_HEIGHT}px` }}
+        style={{ bottom: `${terminalHeight + actionBarHeight}px` }}
       >
         <div className={`panel ${activePanel === 'left' ? 'active' : ''}`} onClick={() => setActivePanel('left')}>
           {left.navigating && <div className="panel-progress" />}
@@ -474,4 +508,3 @@ export function App() {
     </div>
   );
 }
-

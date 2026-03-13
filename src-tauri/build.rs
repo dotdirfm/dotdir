@@ -1,4 +1,7 @@
 fn main() {
+    println!("cargo:rerun-if-changed=tauri.conf.json");
+    println!("cargo:rerun-if-changed=../dist");
+
     // Ensure ../dist exists so rust-embed compiles in dev mode.
     // In release, Tauri's `beforeBuildCommand` runs `pnpm build` first,
     // populating dist/ with the real frontend build.

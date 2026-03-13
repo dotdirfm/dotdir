@@ -212,8 +212,9 @@ fn handle_pty_spawn(
     };
     let cols = params["cols"].as_u64().unwrap_or(80) as u16;
     let rows = params["rows"].as_u64().unwrap_or(24) as u16;
+    let profile_id = params["profileId"].as_str();
 
-    let handle = match pty::spawn(cwd, cols, rows) {
+    let handle = match pty::spawn(cwd, profile_id, cols, rows) {
         Ok(h) => h,
         Err(e) => return rpc_error(id, &FsError::Io(e)),
     };
@@ -222,6 +223,13 @@ fn handle_pty_spawn(
         .next_pty_id
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let reader = handle.reader.clone();
+    let result = json!({
+        "ptyId": pty_id,
+        "cwd": handle.cwd,
+        "shell": handle.shell,
+        "profileId": handle.profile_id,
+        "profileLabel": handle.profile_label,
+    });
 
     session.ptys.lock().unwrap().insert(pty_id, handle);
 
@@ -273,9 +281,7 @@ fn handle_pty_spawn(
         }
     });
 
-    Message::Text(
-        json!({ "jsonrpc": "2.0", "id": id, "result": pty_id }).to_string(),
-    )
+    Message::Text(json!({ "jsonrpc": "2.0", "id": id, "result": result }).to_string())
 }
 
 fn rpc_error(id: &Value, e: &FsError) -> Message {
@@ -360,6 +366,7 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
                 .unwrap_or_default()
         )),
         "utils.getIconsPath" => Ok(json!(session.icons_dir.as_deref().unwrap_or(""))),
+        "utils.getTerminalProfiles" => Ok(serde_json::to_value(pty::list_profiles()).unwrap()),
         _ => Err(FsError::InvalidInput),
     }
 }

@@ -262,11 +262,37 @@ struct PtyExitEvent {
     pty_id: u32,
 }
 
+#[derive(Serialize, Clone)]
+struct PtySpawnResult {
+    pty_id: u32,
+    cwd: String,
+    shell: String,
+    profile_id: String,
+    profile_label: String,
+}
+
 #[tauri::command]
-fn pty_spawn(cwd: String, cols: Option<u16>, rows: Option<u16>, state: State<'_, AppState>, app_handle: tauri::AppHandle) -> CmdResult<u32> {
+fn pty_spawn(
+    cwd: String,
+    profile_id: Option<String>,
+    cols: Option<u16>,
+    rows: Option<u16>,
+    state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> CmdResult<PtySpawnResult> {
     let id = state.next_pty_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    write_debug_log(&format!("pty_spawn requested id={} cwd={}", id, cwd));
-    let handle = match pty::spawn(&cwd, cols.unwrap_or(80), rows.unwrap_or(24)) {
+    write_debug_log(&format!(
+        "pty_spawn requested id={} cwd={} profile={}",
+        id,
+        cwd,
+        profile_id.as_deref().unwrap_or("<default>")
+    ));
+    let handle = match pty::spawn(
+        &cwd,
+        profile_id.as_deref(),
+        cols.unwrap_or(80),
+        rows.unwrap_or(24),
+    ) {
         Ok(handle) => handle,
         Err(e) => {
             write_debug_log(&format!("pty_spawn failed id={} cwd={} error={}", id, cwd, e));
@@ -274,6 +300,13 @@ fn pty_spawn(cwd: String, cols: Option<u16>, rows: Option<u16>, state: State<'_,
         }
     };
     let reader = handle.reader.clone();
+    let result = PtySpawnResult {
+        pty_id: id,
+        cwd: handle.cwd.clone(),
+        shell: handle.shell.clone(),
+        profile_id: handle.profile_id.clone(),
+        profile_label: handle.profile_label.clone(),
+    };
     state.ptys.lock().unwrap().insert(id, handle);
     write_debug_log(&format!("pty_spawn started id={}", id));
 
@@ -313,7 +346,12 @@ fn pty_spawn(cwd: String, cols: Option<u16>, rows: Option<u16>, state: State<'_,
             }
         }
     });
-    Ok(id)
+    Ok(result)
+}
+
+#[tauri::command]
+fn get_terminal_profiles() -> Vec<pty::TerminalProfile> {
+    pty::list_profiles()
 }
 
 #[tauri::command]
@@ -328,7 +366,7 @@ fn pty_write(pty_id: u32, data: String, state: State<'_, AppState>) -> CmdResult
 fn pty_resize(pty_id: u32, cols: u32, rows: u32, state: State<'_, AppState>) -> CmdResult<()> {
     let ptys = state.ptys.lock().unwrap();
     let handle = ptys.get(&pty_id).ok_or(CmdError(FsError::BadFd))?;
-    pty::resize(handle.master.as_ref(), cols as u16, rows as u16)
+    pty::resize(handle.master.as_ref(), cols.max(2) as u16, rows.max(1) as u16)
         .map_err(|e| CmdError(FsError::Io(e)))?;
     Ok(())
 }
@@ -435,6 +473,7 @@ pub fn run() {
             fsa_unwatch,
             get_home_path,
             get_icons_path,
+            get_terminal_profiles,
             get_theme,
             debug_log,
             pty_spawn,
