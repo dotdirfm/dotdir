@@ -14,7 +14,8 @@ import { ImageViewer, isMediaFile, type MediaFileEntry } from './ImageViewer';
 import { ModalDialog, type ModalDialogProps } from './ModalDialog';
 import { TerminalPanel } from './Terminal';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
-import { createPanelResolver, invalidateFssCache, syncLayers } from './fss';
+import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
+import { loadExtensions } from './extensions';
 import { basename, dirname, isRootPath, join } from './path';
 
 function buildParentChain(dirPath: string): FsNode | undefined {
@@ -322,28 +323,33 @@ export function App() {
 
   const isBrowser = !isTauriApp();
 
-  // Initial navigation: use URL path in browser mode, home dir otherwise
+  // Load extensions, then perform initial navigation
   useEffect(() => {
-    const urlPath = isBrowser ? decodeURIComponent(window.location.pathname) : '';
-    const hasUrlPath = urlPath.length > 1; // not just "/"
+    loadExtensions()
+      .then((exts) => setExtensionLayers(exts))
+      .catch(() => {})
+      .then(() => {
+        const urlPath = isBrowser ? decodeURIComponent(window.location.pathname) : '';
+        const hasUrlPath = urlPath.length > 1; // not just "/"
 
-    if (hasUrlPath) {
-      bridge.fsa.exists(urlPath).then(async (exists) => {
-        if (exists) {
-          left.navigateTo(urlPath);
+        if (hasUrlPath) {
+          bridge.fsa.exists(urlPath).then(async (exists) => {
+            if (exists) {
+              left.navigateTo(urlPath);
+            } else {
+              const parent = await findExistingParent(urlPath);
+              left.navigateTo(parent);
+              showError(`Directory not found: ${urlPath}`);
+            }
+          });
+          bridge.utils.getHomePath().then((home) => right.navigateTo(home));
         } else {
-          const parent = await findExistingParent(urlPath);
-          left.navigateTo(parent);
-          showError(`Directory not found: ${urlPath}`);
+          bridge.utils.getHomePath().then((home) => {
+            left.navigateTo(home);
+            right.navigateTo(home);
+          });
         }
       });
-      bridge.utils.getHomePath().then((home) => right.navigateTo(home));
-    } else {
-      bridge.utils.getHomePath().then((home) => {
-        left.navigateTo(home);
-        right.navigateTo(home);
-      });
-    }
   }, []);
 
   // Sync active panel path to URL (browser mode only)

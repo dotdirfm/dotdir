@@ -55,7 +55,6 @@ src-tauri/
     serve.rs           # Headless HTTP + WebSocket server (axum, JSON-RPC 2.0)
     rpc.rs             # JSON-RPC 2.0 command dispatcher
   faraday-core/        # Pure Rust core: ops, watch, error, proto
-  icons-bundle/        # Bundled Material Design SVG icons
 ```
 
 ## Architecture
@@ -105,11 +104,10 @@ pnpm build:rust:dev   # Build Rust binary (debug)
 ./src-tauri/target/release/faraday-tauri serve \
   --port 8080 \
   --host 0.0.0.0 \
-  --static-dir dist-web \
-  --icons-dir src-tauri/icons-bundle
+  --static-dir dist-web
 ```
 
-The server auto-detects `dist-web/` and `icons-bundle/` relative to CWD. Port and host can also be set via `FARADAY_PORT` and `FARADAY_HOST` environment variables.
+The server auto-detects `dist-web/` relative to CWD. Port and host can also be set via `FARADAY_PORT` and `FARADAY_HOST` environment variables.
 
 ### Development (headless with HMR)
 

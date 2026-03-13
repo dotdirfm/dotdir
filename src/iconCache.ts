@@ -1,5 +1,5 @@
 import { isTauri as isTauriApp } from '@tauri-apps/api/core';
-import { DirectoryHandle } from './fsa';
+import { DirectoryHandle, FileHandle } from './fsa';
 import { bridge } from './bridge';
 
 const MAX_SIZE = 200;
@@ -15,6 +15,10 @@ async function ensureIconsDir(): Promise<DirectoryHandle> {
     iconsDirHandle = new DirectoryHandle(iconsPath);
   }
   return iconsDirHandle;
+}
+
+function isAbsolutePath(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:/.test(path);
 }
 
 function svgToDataUrl(svg: string): string {
@@ -34,6 +38,15 @@ function evictIfNeeded(): void {
     const oldest = cache.keys().next().value!;
     cache.delete(oldest);
   }
+}
+
+async function loadIconAbsolute(path: string): Promise<void> {
+  const fileName = path.split('/').pop() ?? path;
+  const handle = new FileHandle(path, fileName);
+  const file = await handle.getFile();
+  const content = await file.text();
+  cache.set(path, svgToDataUrl(content));
+  evictIfNeeded();
 }
 
 async function loadIconViaFs(name: string): Promise<void> {
@@ -66,7 +79,9 @@ export async function loadIcons(names: string[]): Promise<void> {
 
     const p = (async () => {
       try {
-        if (isTauri) {
+        if (isAbsolutePath(name)) {
+          await loadIconAbsolute(name);
+        } else if (isTauri) {
           await loadIconViaFs(name);
         } else {
           await loadIconViaHttp(name);

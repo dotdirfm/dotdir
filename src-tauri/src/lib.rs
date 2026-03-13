@@ -345,18 +345,11 @@ fn resolve_icons_path(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
 
     if let Ok(resource_dir) = app_handle.path().resource_dir() {
         candidates.push(resource_dir.join("icons"));
-        candidates.push(resource_dir.join("icons-bundle"));
-    }
-
-    if let Ok(current_dir) = std::env::current_dir() {
-        candidates.push(current_dir.join("src-tauri").join("icons-bundle"));
-        candidates.push(current_dir.join("icons-bundle"));
     }
 
     if let Ok(current_exe) = std::env::current_exe() {
         if let Some(exe_dir) = current_exe.parent() {
             candidates.push(exe_dir.join("icons"));
-            candidates.push(exe_dir.join("icons-bundle"));
         }
     }
 

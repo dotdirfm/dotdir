@@ -31,10 +31,6 @@ use tokio::sync::mpsc;
 #[folder = "../dist"]
 struct EmbeddedAssets;
 
-#[derive(RustEmbed)]
-#[folder = "icons-bundle"]
-struct EmbeddedIcons;
-
 // ── JSON entry for the wire ─────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -347,38 +343,6 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
     }
 }
 
-// ── Icon serving ───────────────────────────────────────────────────
-
-async fn icon_handler(
-    State(state): State<ServerState>,
-    Path(name): Path<String>,
-) -> Response {
-    // Disk override via --icons-dir
-    if let Some(ref dir) = *state.icons_dir {
-        let path = PathBuf::from(dir).join(&name);
-        if let Ok(bytes) = tokio::fs::read(&path).await {
-            return Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, "image/svg+xml")
-                .body(Body::from(bytes))
-                .unwrap();
-        }
-    }
-
-    // Embedded fallback
-    match EmbeddedIcons::get(&name) {
-        Some(file) => Response::builder()
-            .status(StatusCode::OK)
-            .header(header::CONTENT_TYPE, "image/svg+xml")
-            .body(Body::from(file.data.into_owned()))
-            .unwrap(),
-        None => Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::empty())
-            .unwrap(),
-    }
-}
-
 // ── macOS Dock suppression ─────────────────────────────────────────
 
 #[cfg(target_os = "macos")]
@@ -524,7 +488,6 @@ pub fn run(args: &[String]) {
 
         let app = Router::new()
             .route("/ws", get(ws_handler))
-            .route("/icons/:name", get(icon_handler))
             .with_state(state);
 
         let app = if let Some(dir) = config.static_dir {
