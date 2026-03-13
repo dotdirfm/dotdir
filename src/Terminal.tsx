@@ -32,9 +32,10 @@ interface TerminalPanelProps {
   cwd: string;
   onCwdChange?: (path: string) => void;
   onVisibleHeight?: (px: number) => void;
+  onPromptActive?: (active: boolean) => void;
 }
 
-export function TerminalPanel({ cwd, onCwdChange, onVisibleHeight }: TerminalPanelProps) {
+export function TerminalPanel({ cwd, onCwdChange, onVisibleHeight, onPromptActive }: TerminalPanelProps) {
   const windowsPipeMode = isWindowsPath(cwd);
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -44,6 +45,8 @@ export function TerminalPanel({ cwd, onCwdChange, onVisibleHeight }: TerminalPan
   onCwdChangeRef.current = onCwdChange;
   const onVisibleHeightRef = useRef(onVisibleHeight);
   onVisibleHeightRef.current = onVisibleHeight;
+  const onPromptActiveRef = useRef(onPromptActive);
+  onPromptActiveRef.current = onPromptActive;
   const suppressRef = useRef(false);
   const suppressBufRef = useRef('');
   const suppressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -176,6 +179,17 @@ export function TerminalPanel({ cwd, onCwdChange, onVisibleHeight }: TerminalPan
         onCwdChangeRef.current?.(path);
       }
       pendingPromptRef.current = true;
+      return true;
+    });
+
+    // Shell integration: OSC 133 markers (like iTerm2/VS Code)
+    // A = prompt start (command finished), C = command execution start
+    term.parser.registerOscHandler(133, (data) => {
+      if (data === 'A') {
+        onPromptActiveRef.current?.(true);
+      } else if (data === 'C') {
+        onPromptActiveRef.current?.(false);
+      }
       return true;
     });
 

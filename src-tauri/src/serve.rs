@@ -229,8 +229,13 @@ fn handle_pty_spawn(
     let tx_pty = tx.clone();
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
+        let mut leftover = Vec::new(); // incomplete UTF-8 bytes from previous read
         loop {
-            match pty::read_blocking(&reader, &mut buf) {
+            // Read into buffer after any leftover bytes
+            let offset = leftover.len();
+            buf[..offset].copy_from_slice(&leftover);
+            leftover.clear();
+            match pty::read_blocking(&reader, &mut buf[offset..]) {
                 Ok(0) | Err(_) => {
                     let n = json!({
                         "jsonrpc": "2.0",
@@ -241,7 +246,20 @@ fn handle_pty_spawn(
                     break;
                 }
                 Ok(n) => {
-                    let data = String::from_utf8_lossy(&buf[..n]).into_owned();
+                    let total = offset + n;
+                    // Find the last valid UTF-8 boundary
+                    let valid_up_to = match std::str::from_utf8(&buf[..total]) {
+                        Ok(_) => total,
+                        Err(e) => e.valid_up_to(),
+                    };
+                    // Save any trailing incomplete UTF-8 bytes for next read
+                    if valid_up_to < total {
+                        leftover.extend_from_slice(&buf[valid_up_to..total]);
+                    }
+                    if valid_up_to == 0 {
+                        continue; // nothing to send yet
+                    }
+                    let data = unsafe { std::str::from_utf8_unchecked(&buf[..valid_up_to]) };
                     let msg = json!({
                         "jsonrpc": "2.0",
                         "method": "pty.data",

@@ -270,6 +270,7 @@ export function App() {
   const right = usePanel(theme, showError);
   const [activePanel, setActivePanel] = useState<PanelSide>('left');
   const [panelsVisible, setPanelsVisible] = useState(true);
+  const [promptActive, setPromptActive] = useState(true);
   const [terminalVisibleHeight, setTerminalVisibleHeight] = useState(20);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
@@ -399,10 +400,10 @@ export function App() {
   return (
     <div className="app">
       <div className="terminal-background">
-        <TerminalPanel cwd={activeCwd} onCwdChange={handleTerminalCwd} onVisibleHeight={setTerminalVisibleHeight} />
+        <TerminalPanel cwd={activeCwd} onCwdChange={handleTerminalCwd} onVisibleHeight={setTerminalVisibleHeight} onPromptActive={setPromptActive} />
       </div>
       <div
-        className={`panels-overlay${panelsVisible ? '' : ' hidden'}`}
+        className={`panels-overlay${panelsVisible && promptActive ? '' : ' hidden'}`}
         style={{ bottom: `${terminalVisibleHeight + ACTION_BAR_HEIGHT}px` }}
       >
         <div className={`panel ${activePanel === 'left' ? 'active' : ''}`} onClick={() => setActivePanel('left')}>

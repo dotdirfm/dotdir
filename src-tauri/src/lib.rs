@@ -279,8 +279,12 @@ fn pty_spawn(cwd: String, cols: Option<u16>, rows: Option<u16>, state: State<'_,
 
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
+        let mut leftover = Vec::new(); // incomplete UTF-8 bytes from previous read
         loop {
-            match pty::read_blocking(&reader, &mut buf) {
+            let offset = leftover.len();
+            buf[..offset].copy_from_slice(&leftover);
+            leftover.clear();
+            match pty::read_blocking(&reader, &mut buf[offset..]) {
                 Ok(0) => {
                     write_debug_log(&format!("pty read eof id={}", id));
                     let _ = app_handle.emit("pty:exit", PtyExitEvent { pty_id: id });
@@ -292,7 +296,18 @@ fn pty_spawn(cwd: String, cols: Option<u16>, rows: Option<u16>, state: State<'_,
                     break;
                 }
                 Ok(n) => {
-                    let data = String::from_utf8_lossy(&buf[..n]).into_owned();
+                    let total = offset + n;
+                    let valid_up_to = match std::str::from_utf8(&buf[..total]) {
+                        Ok(_) => total,
+                        Err(e) => e.valid_up_to(),
+                    };
+                    if valid_up_to < total {
+                        leftover.extend_from_slice(&buf[valid_up_to..total]);
+                    }
+                    if valid_up_to == 0 {
+                        continue;
+                    }
+                    let data = unsafe { std::str::from_utf8_unchecked(&buf[..valid_up_to]) }.to_owned();
                     let _ = app_handle.emit("pty:data", PtyDataEvent { pty_id: id, data });
                 }
             }
