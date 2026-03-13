@@ -1,7 +1,7 @@
 import { FsNode } from 'fss-lang';
 import type { LayeredResolver, ThemeKind } from 'fss-lang';
 import { createFsNode } from 'fss-lang/helpers';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import type { FsChangeType } from './types';
 import { bridge } from './bridge';
@@ -10,7 +10,7 @@ import { actionQueue } from './actionQueue';
 import { FileList } from './FileList';
 import { FileViewer } from './FileViewer';
 import { FileEditor } from './FileEditor';
-import { ImageViewer, isImageFile } from './ImageViewer';
+import { ImageViewer, isMediaFile, type MediaFileEntry } from './ImageViewer';
 import { ModalDialog, type ModalDialogProps } from './ModalDialog';
 import { TerminalPanel } from './Terminal';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
@@ -271,16 +271,37 @@ export function App() {
   const [activePanel, setActivePanel] = useState<PanelSide>('left');
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [terminalVisibleHeight, setTerminalVisibleHeight] = useState(20);
-  const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number } | null>(null);
+  const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
 
+  const activePanelRef = useRef(activePanel);
+  activePanelRef.current = activePanel;
+
   const handleViewFile = useCallback((filePath: string, fileName: string, fileSize: number) => {
-    setViewerFile({ path: filePath, name: fileName, size: fileSize });
+    setViewerFile({ path: filePath, name: fileName, size: fileSize, panel: activePanelRef.current });
   }, []);
 
   const handleEditFile = useCallback((filePath: string, fileName: string, fileSize: number, langId: string) => {
     setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
   }, []);
+
+  const viewerPanelEntries = viewerFile ? (viewerFile.panel === 'left' ? left.entries : right.entries) : [];
+  const mediaFiles = useMemo(() => {
+    if (!viewerFile || !isMediaFile(viewerFile.name)) return [];
+    const entries = showHidden ? viewerPanelEntries : viewerPanelEntries.filter(e => !e.meta.hidden);
+    return entries
+      .filter(e => e.type === 'file' && isMediaFile(e.name))
+      .map(e => ({ path: e.path as string, name: e.name, size: Number(e.meta.size) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [viewerFile, viewerPanelEntries, showHidden]);
+
+  const handleNavigateMedia = useCallback((file: MediaFileEntry) => {
+    setViewerFile(prev => prev ? { ...file, panel: prev.panel } : null);
+  }, []);
+
+  const viewerActiveName = viewerFile && isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
+  const leftRequestedCursor = viewerFile?.panel === 'left' ? viewerActiveName : undefined;
+  const rightRequestedCursor = viewerFile?.panel === 'right' ? viewerActiveName : undefined;
 
   const handleTerminalCwd = useCallback((path: string) => {
     const panel = activePanel === 'left' ? left : right;
@@ -395,6 +416,7 @@ export function App() {
             onEditFile={handleEditFile}
             active={activePanel === 'left'}
             resolver={left.resolver}
+            requestedActiveName={leftRequestedCursor}
           />
         </div>
         <div className={`panel ${activePanel === 'right' ? 'active' : ''}`} onClick={() => setActivePanel('right')}>
@@ -408,6 +430,7 @@ export function App() {
             onEditFile={handleEditFile}
             active={activePanel === 'right'}
             resolver={right.resolver}
+            requestedActiveName={rightRequestedCursor}
           />
         </div>
       </div>
@@ -426,8 +449,15 @@ export function App() {
         <div className="action-bar-item"><span className="action-bar-key">12</span><span className="action-bar-label">Screen</span></div>
       </div>
       {viewerFile &&
-        (isImageFile(viewerFile.name) ? (
-          <ImageViewer filePath={viewerFile.path} fileName={viewerFile.name} fileSize={viewerFile.size} onClose={() => setViewerFile(null)} />
+        (isMediaFile(viewerFile.name) ? (
+          <ImageViewer
+            filePath={viewerFile.path}
+            fileName={viewerFile.name}
+            fileSize={viewerFile.size}
+            mediaFiles={mediaFiles}
+            onClose={() => setViewerFile(null)}
+            onNavigateMedia={handleNavigateMedia}
+          />
         ) : (
           <FileViewer filePath={viewerFile.path} fileName={viewerFile.name} fileSize={viewerFile.size} onClose={() => setViewerFile(null)} />
         ))}

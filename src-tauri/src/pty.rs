@@ -28,11 +28,11 @@ fn shell_init(shell: &str) -> Option<String> {
 
     match shell_name {
         "bash" => Some(
-            r#" __frd(){ printf '\e]7;file://localhost%s\e\\' "$PWD";}; PROMPT_COMMAND="__frd;${PROMPT_COMMAND}"; printf '\e[2J\e[999;1H'"#
+            r#" __frd(){ printf '\e]7;file://localhost%s\e\\' "$PWD"; printf '\e[999;1H';}; PROMPT_COMMAND="__frd;${PROMPT_COMMAND}"; printf '\e[2J\e[999;1H'"#
                 .to_string(),
         ),
         "zsh" => Some(
-            r#" setopt HIST_IGNORE_SPACE; __frd(){ printf '\e]7;file://localhost%s\e\\' "$PWD";}; precmd_functions+=(__frd); printf '\e[2J\e[999;1H'"#
+            r#" setopt HIST_IGNORE_SPACE; __frd(){ printf '\e]7;file://localhost%s\e\\' "$PWD"; printf '\e[999;1H';}; precmd_functions+=(__frd); __frd_cls(){ printf '\e[2J\e[3J\e[999;1H'; zle reset-prompt;}; zle -N clear-screen __frd_cls; printf '\e[2J\e[999;1H'"#
                 .to_string(),
         ),
         #[cfg(windows)]

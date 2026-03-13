@@ -20,6 +20,7 @@ interface FileListProps {
   onEditFile?: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
   active: boolean;
   resolver: LayeredResolver;
+  requestedActiveName?: string;
 }
 
 interface DisplayEntry {
@@ -66,6 +67,7 @@ export const FileList = memo(function FileList({
   onEditFile,
   active,
   resolver,
+  requestedActiveName,
 }: FileListProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [topmostIndex, setTopmostIndex] = useState(0);
@@ -157,6 +159,13 @@ export const FileList = memo(function FileList({
     setActiveIndex(0);
     setTopmostIndex(0);
   }, [currentPath, displayEntries]);
+
+  useEffect(() => {
+    if (!requestedActiveName) return;
+    const entries = displayEntriesRef.current;
+    const idx = entries.findIndex(d => d.entry.name === requestedActiveName);
+    if (idx >= 0) setActiveIndex(idx);
+  }, [requestedActiveName]);
 
   const navigateToEntry = useCallback(async (entry: FsNode): Promise<void> => {
     if (entry.name === '..') {
