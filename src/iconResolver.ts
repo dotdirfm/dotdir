@@ -28,14 +28,16 @@ export function setIconTheme(type: IconThemeType, path?: string): void {
   currentThemeType = type;
 
   if (type === 'vscode' && path) {
-    vscodeIconTheme.load(path).catch(() => {
+    vscodeIconTheme.load(path).then(() => {
+      notifyThemeChange();
+    }).catch(() => {
       currentThemeType = 'none';
+      notifyThemeChange();
     });
   } else {
     vscodeIconTheme.clear();
+    notifyThemeChange();
   }
-
-  notifyThemeChange();
 }
 
 export function setIconThemeKind(kind: 'dark' | 'light'): void {

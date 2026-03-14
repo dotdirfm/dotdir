@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { actionQueue } from '../actionQueue';
 import { commandRegistry } from '../commands';
 import { resolveEntryStyle } from '../fss';
+import type { ResolvedEntryStyle } from '../types';
 import { resolveIcon, loadIconsForPaths, getCachedIcon, onIconThemeChange } from '../iconResolver';
 import { dirname, join } from '../path';
 import { ColumnsScroller, type ColumnsScrollerProps } from './ColumnsScroller';
@@ -35,7 +36,7 @@ interface NavigationState {
 
 interface DisplayEntry {
   entry: FsNode;
-  style: { color?: string; opacity?: number; icon: string | null; sortPriority: number; groupFirst: boolean };
+  style: ResolvedEntryStyle;
   iconPath: string | null;
   iconFallbackUrl: string;
 }
@@ -486,7 +487,14 @@ export const FileList = memo(function FileList({
           }}
         >
           <span className="entry-icon"><img src={iconUrl} width={16} height={16} alt="" /></span>
-          <span className="entry-name" style={style.color ? { color: style.color } : undefined}>
+          <span className="entry-name" style={{
+            color: style.color,
+            fontWeight: style.fontWeight,
+            fontStyle: style.fontStyle,
+            fontStretch: style.fontStretch,
+            fontVariant: style.fontVariant,
+            textDecoration: style.textDecoration,
+          }}>
             {entry.name}
           </span>
           {'size' in entry.meta && entry.type === 'file' && <span className="entry-size">{formatSize(entry.meta.size)}</span>}
