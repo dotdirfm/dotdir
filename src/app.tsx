@@ -16,7 +16,7 @@ import { ExtensionsPanel } from './ExtensionsPanel';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
-import { readSettings, type LoadedExtension } from './extensions';
+import { readSettings, DEFAULT_EDITOR_FILE_SIZE_LIMIT, type LoadedExtension } from './extensions';
 import { languageRegistry } from './languageRegistry';
 import { setIconTheme, setIconThemeKind } from './iconResolver';
 import { basename, dirname, isRootPath, join } from './path';
@@ -280,12 +280,14 @@ export function App() {
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
   const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
+  const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
   const activeIconThemeRef = useRef(activeIconTheme);
   activeIconThemeRef.current = activeIconTheme;
 
   useEffect(() => {
     readSettings().then((s) => {
       if (s.iconTheme) setActiveIconTheme(s.iconTheme);
+      if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
     });
   }, []);
 
@@ -374,6 +376,7 @@ export function App() {
 
     const registerLanguages = async (exts: LoadedExtension[]) => {
       languageRegistry.clear();
+      // First pass: register all languages and grammar contents
       for (const ext of exts) {
         if (ext.languages) {
           for (const lang of ext.languages) {
@@ -382,10 +385,12 @@ export function App() {
         }
         if (ext.grammars) {
           for (const grammar of ext.grammars) {
-            await languageRegistry.registerGrammar(grammar);
+            languageRegistry.registerGrammar(grammar);
           }
         }
       }
+      // Second pass: activate tokenization (after all grammars are available for cross-references)
+      await languageRegistry.activateGrammars();
     };
 
     const updateIconTheme = (exts: LoadedExtension[], themeId: string | undefined) => {
@@ -484,6 +489,7 @@ export function App() {
             onNavigate={left.navigateTo}
             onViewFile={handleViewFile}
             onEditFile={handleEditFile}
+            editorFileSizeLimit={editorFileSizeLimit}
             active={activePanel === 'left'}
             resolver={left.resolver}
             requestedActiveName={leftRequestedCursor}
@@ -498,6 +504,7 @@ export function App() {
             onNavigate={right.navigateTo}
             onViewFile={handleViewFile}
             onEditFile={handleEditFile}
+            editorFileSizeLimit={editorFileSizeLimit}
             active={activePanel === 'right'}
             resolver={right.resolver}
             requestedActiveName={rightRequestedCursor}

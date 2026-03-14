@@ -515,6 +515,7 @@ body {
 }
 
 .file-editor-header {
+  position: relative;
   display: flex;
   align-items: center;
   padding: 8px 12px;
@@ -535,6 +536,50 @@ body {
 
 .file-editor-editor {
   height: 100%;
+}
+
+.lang-picker-btn {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.lang-picker-btn:hover {
+  background: var(--bg-hover);
+}
+
+.lang-picker-dropdown {
+  position: absolute;
+  top: 36px;
+  right: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 100;
+  min-width: 150px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.lang-picker-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.lang-picker-item:hover {
+  background: var(--bg-hover);
+}
+
+.lang-picker-item.active {
+  background: var(--accent);
+  color: var(--bg);
 }
 
 .image-viewer-body {

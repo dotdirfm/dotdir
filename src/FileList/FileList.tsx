@@ -18,6 +18,7 @@ interface FileListProps {
   onNavigate: (path: string) => Promise<void>;
   onViewFile?: (filePath: string, fileName: string, fileSize: number) => void;
   onEditFile?: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
+  editorFileSizeLimit?: number;
   active: boolean;
   resolver: LayeredResolver;
   requestedActiveName?: string;
@@ -65,6 +66,7 @@ export const FileList = memo(function FileList({
   onNavigate,
   onViewFile,
   onEditFile,
+  editorFileSizeLimit = 1024 * 1024,
   active,
   resolver,
   requestedActiveName,
@@ -91,6 +93,8 @@ export const FileList = memo(function FileList({
   onViewFileRef.current = onViewFile;
   const onEditFileRef = useRef(onEditFile);
   onEditFileRef.current = onEditFile;
+  const editorFileSizeLimitRef = useRef(editorFileSizeLimit);
+  editorFileSizeLimitRef.current = editorFileSizeLimit;
 
   const sorted = useMemo(() => {
     const withStyle = entries.map((entry) => {
@@ -270,19 +274,19 @@ export const FileList = memo(function FileList({
           e.preventDefault();
           actionQueue.enqueue(() => {
             const item = displayEntriesRef.current[activeIndexRef.current];
-            if (
-              item &&
-              item.entry.type === 'file' &&
-              typeof item.entry.lang === 'string' &&
-              item.entry.lang &&
-              onEditFileRef.current
-            ) {
-              onEditFileRef.current(
-                item.entry.path as string,
-                item.entry.name,
-                Number(item.entry.meta.size),
-                item.entry.lang,
-              );
+            if (item && item.entry.type === 'file' && onEditFileRef.current) {
+              const fileSize = Number(item.entry.meta.size);
+              if (fileSize <= editorFileSizeLimitRef.current) {
+                const langId = typeof item.entry.lang === 'string' && item.entry.lang
+                  ? item.entry.lang
+                  : 'plaintext';
+                onEditFileRef.current(
+                  item.entry.path as string,
+                  item.entry.name,
+                  fileSize,
+                  langId,
+                );
+              }
             }
           });
           break;

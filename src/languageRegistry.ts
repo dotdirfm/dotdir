@@ -115,8 +115,8 @@ class LanguageRegistry {
     });
   }
 
-  /** Register a TextMate grammar contributed by an extension. */
-  async registerGrammar(data: GrammarData): Promise<void> {
+  /** Register a TextMate grammar contributed by an extension (content only, no tokenization). */
+  registerGrammar(data: GrammarData): void {
     const { contribution, content } = data;
     this.grammarContents.set(contribution.scopeName, content);
 
@@ -131,10 +131,15 @@ class LanguageRegistry {
     if (!this.registeredLanguages.has(contribution.language)) {
       this.registerLanguage({ id: contribution.language });
     }
+  }
 
-    // Wait for oniguruma to be ready before setting up tokenization
+  /** Set up tokenization for all registered grammars. Call after all grammars are registered. */
+  async activateGrammars(): Promise<void> {
     await this.initialize();
-    await this.setupTokenization(contribution.language, contribution.scopeName);
+    
+    for (const [langId, scopeName] of this.languageToScope) {
+      await this.setupTokenization(langId, scopeName);
+    }
   }
 
   /** Clear all registrations. Called before re-loading extensions. */

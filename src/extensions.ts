@@ -460,7 +460,10 @@ export async function uninstallExtension(publisherUsername: string, extName: str
 
 export interface FaradaySettings {
   iconTheme?: string; // "publisher.name" of the active icon theme
+  editorFileSizeLimit?: number; // Max file size in bytes to open for editing (default: 1MB)
 }
+
+export const DEFAULT_EDITOR_FILE_SIZE_LIMIT = 1024 * 1024; // 1MB
 
 async function getSettingsPath(): Promise<string> {
   const homePath = await bridge.utils.getHomePath();

@@ -1,8 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import * as monaco from 'monaco-editor';
 import { FileHandle } from './fsa';
 import { bridge } from './bridge';
 import { languageRegistry } from './languageRegistry';
+
+function getAvailableLanguages(): { id: string; name: string }[] {
+  const langs = monaco.languages.getLanguages();
+  return langs
+    .map(l => ({ id: l.id, name: l.aliases?.[0] ?? l.id }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 // Configure Monaco editor worker
 (self as unknown as Record<string, unknown>).MonacoEnvironment = {
@@ -25,7 +32,20 @@ export function FileEditor({ filePath, fileName, langId, onClose }: FileEditorPr
   const editorHostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [content, setContent] = useState<string | null>(null);
+  const [currentLangId, setCurrentLangId] = useState(langId);
+  const [showLangPicker, setShowLangPicker] = useState(false);
   const dirtyRef = useRef(false);
+
+  const handleLanguageChange = useCallback((newLangId: string) => {
+    setCurrentLangId(newLangId);
+    setShowLangPicker(false);
+    if (editorRef.current) {
+      const model = editorRef.current.getModel();
+      if (model) {
+        monaco.editor.setModelLanguage(model, newLangId);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const handle = new FileHandle(filePath, fileName);
@@ -61,8 +81,8 @@ export function FileEditor({ filePath, fileName, langId, onClose }: FileEditorPr
     const isDark =
       typeof document !== 'undefined' ? document.documentElement.dataset.theme !== 'light' : true;
 
-    // Use the langId from detection; Monaco will only highlight if a grammar is registered
-    const monacoLangId = languageRegistry.hasGrammar(langId) ? langId : 'plaintext';
+    // Use the currentLangId; Monaco will only highlight if a grammar is registered
+    const monacoLangId = languageRegistry.hasGrammar(currentLangId) ? currentLangId : currentLangId;
 
     const editor = monaco.editor.create(editorHostRef.current, {
       value: content,
@@ -141,7 +161,9 @@ export function FileEditor({ filePath, fileName, langId, onClose }: FileEditorPr
       editor.dispose();
       editorRef.current = null;
     };
-  }, [content, langId]);
+  }, [content, currentLangId, filePath]);
+
+  const availableLanguages = getAvailableLanguages();
 
   return (
     <dialog
@@ -151,7 +173,26 @@ export function FileEditor({ filePath, fileName, langId, onClose }: FileEditorPr
     >
       <div className="file-editor-header">
         <span style={{ flex: 1 }}>{fileName}</span>
-        {langId && <span style={{ marginLeft: 12 }}>{langId}</span>}
+        <button
+          className="lang-picker-btn"
+          onClick={() => setShowLangPicker(!showLangPicker)}
+          title="Change language"
+        >
+          {currentLangId}
+        </button>
+        {showLangPicker && (
+          <div className="lang-picker-dropdown">
+            {availableLanguages.map(lang => (
+              <div
+                key={lang.id}
+                className={`lang-picker-item${lang.id === currentLangId ? ' active' : ''}`}
+                onClick={() => handleLanguageChange(lang.id)}
+              >
+                {lang.name}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div className="file-editor-body">
         <div ref={editorHostRef} className="file-editor-editor" />
