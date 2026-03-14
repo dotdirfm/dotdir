@@ -391,6 +391,7 @@ pub fn run() {
     write_debug_log("faraday_tauri_lib::run entered");
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_http::init())
         .setup(|app| {
             write_debug_log("tauri setup started");
             let handle = app.handle().clone();

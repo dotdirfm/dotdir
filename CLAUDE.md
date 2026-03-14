@@ -15,12 +15,12 @@ pnpm build:rust:dev         # Rust debug build
 
 Headless server (browser mode):
 ```bash
-pnpm build:rust && ./src-tauri/target/release/faraday-tauri serve  # http://127.0.0.1:3001
+pnpm build:rust && ./src-tauri/target/release/faraday serve  # http://127.0.0.1:3001
 ```
 
 Headless dev with HMR:
 ```bash
-pnpm build:rust:dev && ./src-tauri/target/debug/faraday-tauri serve &
+pnpm build:rust:dev && ./src-tauri/target/debug/faraday serve &
 pnpm dev:web                # Vite at http://localhost:5173 (proxies /ws → :3001)
 ```
 

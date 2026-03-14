@@ -5,6 +5,15 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "opener:default"
+    "opener:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://lastcompute.ru/**" },
+        { "url": "https://marketplace.visualstudio.com/**" },
+        { "url": "https://*.gallerycdn.vsassets.io/**" },
+        { "url": "https://*.vo.msecnd.net/**" }
+      ]
+    }
   ]
 }

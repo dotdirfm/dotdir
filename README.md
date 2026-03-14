@@ -44,7 +44,7 @@ src/
   Terminal.tsx         # Integrated terminal (xterm.js + PTY)
   ModalDialog.tsx      # Error/confirmation dialogs
 src-tauri/
-  Cargo.toml           # Workspace manifest (faraday-tauri + faraday-core)
+  Cargo.toml           # Workspace manifest (faraday + faraday-core)
   tauri.conf.json      # Tauri app config
   src/
     main.rs            # Entry point — desktop / serve / rpc modes
@@ -65,7 +65,7 @@ The app accesses the filesystem through multiple backends, all using `faraday-co
 
 1. **Tauri (desktop)** — Rust commands called via Tauri IPC. Primary backend.
 2. **Elevated helper** — Spawned with admin privileges on EACCES. Communicates over a Unix socket using a custom binary protocol (`faraday-core/src/proto.rs`).
-3. **Headless server** — `faraday-tauri serve`. HTTP for static files + WebSocket for FS operations via JSON-RPC 2.0. Used for browser-only or remote access.
+3. **Headless server** — `faraday serve`. HTTP for static files + WebSocket for FS operations via JSON-RPC 2.0. Used for browser-only or remote access.
 
 ### Bridge System
 
@@ -97,11 +97,11 @@ pnpm build:rust       # Build Rust binary (release)
 pnpm build:rust:dev   # Build Rust binary (debug)
 
 # Run headless
-./src-tauri/target/release/faraday-tauri serve
+./src-tauri/target/release/faraday serve
 # → http://127.0.0.1:3001
 
 # With options
-./src-tauri/target/release/faraday-tauri serve \
+./src-tauri/target/release/faraday serve \
   --port 8080 \
   --host 0.0.0.0 \
   --static-dir dist-web
@@ -112,7 +112,7 @@ The server auto-detects `dist-web/` relative to CWD. Port and host can also be s
 ### Development (headless with HMR)
 
 ```bash
-pnpm build:rust:dev && ./src-tauri/target/debug/faraday-tauri serve &
+pnpm build:rust:dev && ./src-tauri/target/debug/faraday serve &
 pnpm dev:web          # Vite dev server at http://localhost:5173 (proxies /ws → :3001)
 ```
 

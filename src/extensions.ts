@@ -2,7 +2,7 @@ import { bridge } from './bridge';
 import { FileHandle } from './fsa';
 import { dirname, join } from './path';
 
-export const MARKETPLACE_URL = 'http://185.245.107.17';
+export const MARKETPLACE_URL = 'https://lastcompute.ru';
 
 // FSS-based icon theme (Faraday format)
 export interface ExtensionIconThemeFss {

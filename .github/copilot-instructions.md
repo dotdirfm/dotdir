@@ -13,7 +13,7 @@ pnpm build:rust:dev     # Rust debug build only
 
 Headless mode (after building Rust):
 ```bash
-./src-tauri/target/release/faraday-tauri serve --port 8080 --host 0.0.0.0
+./src-tauri/target/release/faraday serve --port 8080 --host 0.0.0.0
 ```
 
 No test suite or linter is configured.
