@@ -13,6 +13,7 @@ import { basename, dirname } from './path';
 
 export interface JsoncFileWatcher<T> {
   getValue(): T;
+  setValue(value: T): void;
   onChange(callback: (value: T) => void): () => void;
   dispose(): Promise<void>;
 }
@@ -119,6 +120,11 @@ export async function createJsoncFileWatcher<T>(
 
   return {
     getValue: () => currentValue,
+    
+    setValue(value: T): void {
+      currentValue = value;
+      // Don't notify listeners - this is for internal updates before saving
+    },
     
     onChange(callback: (value: T) => void): () => void {
       listeners.add(callback);

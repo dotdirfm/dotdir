@@ -3,6 +3,7 @@ import type { LayeredResolver, ThemeKind } from 'fss-lang';
 import { createFsNode } from 'fss-lang/helpers';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri as isTauriApp } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { FsChangeType } from './types';
 import { bridge } from './bridge';
 import { FileList } from './FileList';
@@ -18,8 +19,8 @@ import { commandRegistry } from './commands';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
-import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type LoadedExtension } from './extensions';
-import { initUserSettings, onSettingsChange } from './userSettings';
+import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type LoadedExtension, type PanelPersistedState } from './extensions';
+import { initUserSettings, onSettingsChange, updateSettings } from './userSettings';
 import { languageRegistry } from './languageRegistry';
 import { setIconTheme, setIconThemeKind } from './iconResolver';
 import { basename, dirname, isRootPath, join } from './path';
@@ -285,6 +286,9 @@ export function App() {
   const [showExtensions, setShowExtensions] = useState(false);
   const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
   const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
+  const [initialLeftPanel, setInitialLeftPanel] = useState<PanelPersistedState | undefined>(undefined);
+  const [initialRightPanel, setInitialRightPanel] = useState<PanelPersistedState | undefined>(undefined);
+  const [initialActivePanel, setInitialActivePanel] = useState<PanelSide | undefined>(undefined);
   const activeIconThemeRef = useRef(activeIconTheme);
   activeIconThemeRef.current = activeIconTheme;
   const commandPalette = useCommandPalette();
@@ -294,9 +298,12 @@ export function App() {
     initUserSettings().then((s) => {
       if (s.iconTheme) setActiveIconTheme(s.iconTheme);
       if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
+      if (s.leftPanel) setInitialLeftPanel(s.leftPanel);
+      if (s.rightPanel) setInitialRightPanel(s.rightPanel);
+      if (s.activePanel) setInitialActivePanel(s.activePanel);
     });
     
-    // Listen for settings changes
+    // Listen for settings changes (but don't update panel state from external changes)
     const unsubscribe = onSettingsChange((s) => {
       if (s.iconTheme) setActiveIconTheme(s.iconTheme);
       if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
@@ -341,6 +348,32 @@ export function App() {
   const viewerActiveName = viewerFile && isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
   const leftRequestedCursor = viewerFile?.panel === 'left' ? viewerActiveName : undefined;
   const rightRequestedCursor = viewerFile?.panel === 'right' ? viewerActiveName : undefined;
+
+  // Panel state persistence
+  const handleLeftStateChange = useCallback((selectedName: string | undefined, topmostName: string | undefined) => {
+    updateSettings({
+      leftPanel: {
+        currentPath: left.currentPath,
+        selectedName,
+        topmostName,
+      },
+    });
+  }, [left.currentPath]);
+
+  const handleRightStateChange = useCallback((selectedName: string | undefined, topmostName: string | undefined) => {
+    updateSettings({
+      rightPanel: {
+        currentPath: right.currentPath,
+        selectedName,
+        topmostName,
+      },
+    });
+  }, [right.currentPath]);
+
+  // Save active panel when it changes
+  useEffect(() => {
+    updateSettings({ activePanel });
+  }, [activePanel]);
 
   const handleTerminalCwd = useCallback((path: string) => {
     const panel = activePanel === 'left' ? left : right;
@@ -524,6 +557,29 @@ export function App() {
       when: 'focusEditor',
     }));
 
+    // Exit command
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.exit',
+      'Exit',
+      async () => {
+        if (isTauriApp()) {
+          await getCurrentWindow().close();
+        } else {
+          window.close();
+        }
+      },
+      { category: 'Application' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.exit',
+      key: 'f10',
+    }));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.exit',
+      key: 'cmd+q',
+      mac: 'cmd+q',
+    }));
+
     return () => {
       for (const dispose of disposables) dispose();
     };
@@ -536,12 +592,34 @@ export function App() {
   const rightPathRef = useRef(right.currentPath);
   rightPathRef.current = right.currentPath;
 
-  // Navigate panels immediately — don't wait for extensions
+  // Navigate panels using persisted state or defaults
   useEffect(() => {
     const urlPath = isBrowser ? decodeURIComponent(window.location.pathname) : '';
     const hasUrlPath = urlPath.length > 1; // not just "/"
 
+    const navigatePanel = async (
+      panel: typeof left,
+      persistedState: PanelPersistedState | undefined,
+      fallbackPath?: string
+    ) => {
+      let targetPath = persistedState?.currentPath ?? fallbackPath;
+      
+      if (targetPath) {
+        const exists = await bridge.fsa.exists(targetPath);
+        if (!exists) {
+          targetPath = await findExistingParent(targetPath);
+        }
+      }
+      
+      if (!targetPath) {
+        targetPath = await bridge.utils.getHomePath();
+      }
+      
+      await panel.navigateTo(targetPath);
+    };
+
     if (hasUrlPath) {
+      // URL path takes priority for left panel
       bridge.fsa.exists(urlPath).then(async (exists) => {
         if (exists) {
           left.navigateTo(urlPath);
@@ -551,14 +629,16 @@ export function App() {
           showError(`Directory not found: ${urlPath}`);
         }
       });
-      bridge.utils.getHomePath().then((home) => right.navigateTo(home));
+      navigatePanel(right, initialRightPanel);
     } else {
-      bridge.utils.getHomePath().then((home) => {
-        left.navigateTo(home);
-        right.navigateTo(home);
-      });
+      // Use persisted state
+      navigatePanel(left, initialLeftPanel);
+      navigatePanel(right, initialRightPanel);
+      if (initialActivePanel) {
+        setActivePanel(initialActivePanel);
+      }
     }
-  }, []);
+  }, [initialLeftPanel, initialRightPanel, initialActivePanel]);
 
   const latestExtensionsRef = useRef<LoadedExtension[]>([]);
 
@@ -691,7 +771,9 @@ export function App() {
             editorFileSizeLimit={editorFileSizeLimit}
             active={activePanel === 'left'}
             resolver={left.resolver}
-            requestedActiveName={leftRequestedCursor}
+            requestedActiveName={leftRequestedCursor ?? initialLeftPanel?.selectedName}
+            requestedTopmostName={initialLeftPanel?.topmostName}
+            onStateChange={handleLeftStateChange}
           />
         </div>
         <div className={`panel ${activePanel === 'right' ? 'active' : ''}`} onClick={() => setActivePanel('right')}>
@@ -706,7 +788,9 @@ export function App() {
             editorFileSizeLimit={editorFileSizeLimit}
             active={activePanel === 'right'}
             resolver={right.resolver}
-            requestedActiveName={rightRequestedCursor}
+            requestedActiveName={rightRequestedCursor ?? initialRightPanel?.selectedName}
+            requestedTopmostName={initialRightPanel?.topmostName}
+            onStateChange={handleRightStateChange}
           />
         </div>
       </div>

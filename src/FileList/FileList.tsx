@@ -23,6 +23,14 @@ interface FileListProps {
   active: boolean;
   resolver: LayeredResolver;
   requestedActiveName?: string;
+  requestedTopmostName?: string;
+  onStateChange?: (selectedName: string | undefined, topmostName: string | undefined) => void;
+}
+
+interface NavigationState {
+  path: string;
+  selectedName: string;
+  topmostName: string;
 }
 
 interface DisplayEntry {
@@ -71,6 +79,8 @@ export const FileList = memo(function FileList({
   active,
   resolver,
   requestedActiveName,
+  requestedTopmostName,
+  onStateChange,
 }: FileListProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [topmostIndex, setTopmostIndex] = useState(0);
@@ -78,6 +88,7 @@ export const FileList = memo(function FileList({
   const [iconsVersion, setIconsVersion] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const prevPathRef = useRef(currentPath);
+  const navStackRef = useRef<NavigationState[]>([]);
   const { width } = useElementSize(rootRef);
 
   const columnCount = Math.max(1, width ? Math.ceil(width / COLUMN_WIDTH) : 1);
@@ -161,18 +172,38 @@ export const FileList = memo(function FileList({
       setActiveIndex((i) => Math.min(i, displayEntries.length - 1));
       return;
     }
+    
+    // Navigating to parent - check if we have stored state
     if (prevPath.startsWith(currentPath)) {
+      const stack = navStackRef.current;
+      // Pop states until we find one for current path or stack is empty
+      while (stack.length > 0 && stack[stack.length - 1].path !== currentPath) {
+        stack.pop();
+      }
+      const savedState = stack.pop();
+      
+      if (savedState) {
+        // Restore from stack
+        const selectedIdx = displayEntries.findIndex(d => d.entry.name === savedState.selectedName);
+        const topmostIdx = displayEntries.findIndex(d => d.entry.name === savedState.topmostName);
+        setActiveIndex(selectedIdx >= 0 ? selectedIdx : 0);
+        setTopmostIndex(topmostIdx >= 0 ? topmostIdx : 0);
+        return;
+      }
+      
+      // Fallback: select the child folder we came from
       const remainder = prevPath.slice(currentPath.length).replace(/^\//, '');
       const childName = remainder.split('/')[0];
       if (childName) {
         const idx = displayEntries.findIndex((d) => d.entry.name === childName);
         if (idx >= 0) {
           setActiveIndex(idx);
-          setTopmostIndex(0);
+          setTopmostIndex(Math.max(0, idx - 5)); // Show some context above
           return;
         }
       }
     }
+    
     setActiveIndex(0);
     setTopmostIndex(0);
   }, [currentPath, displayEntries]);
@@ -184,10 +215,38 @@ export const FileList = memo(function FileList({
     if (idx >= 0) setActiveIndex(idx);
   }, [requestedActiveName]);
 
+  useEffect(() => {
+    if (!requestedTopmostName) return;
+    const entries = displayEntriesRef.current;
+    const idx = entries.findIndex(d => d.entry.name === requestedTopmostName);
+    if (idx >= 0) setTopmostIndex(idx);
+  }, [requestedTopmostName]);
+
+  const onStateChangeRef = useRef(onStateChange);
+  onStateChangeRef.current = onStateChange;
+
+  // Report state changes to parent
+  useEffect(() => {
+    if (!onStateChangeRef.current) return;
+    const selectedName = displayEntries[activeIndex]?.entry.name;
+    const topmostName = displayEntries[topmostIndex]?.entry.name;
+    onStateChangeRef.current(selectedName, topmostName);
+  }, [activeIndex, topmostIndex, displayEntries]);
+
   const navigateToEntry = useCallback(async (entry: FsNode): Promise<void> => {
     if (entry.name === '..') {
       await onNavigateRef.current(dirname(currentPathRef.current));
     } else if (entry.type === 'folder') {
+      // Save current state to navigation stack before entering folder
+      const selectedName = displayEntriesRef.current[activeIndexRef.current]?.entry.name;
+      const topmostName = displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
+      if (selectedName) {
+        navStackRef.current.push({
+          path: currentPathRef.current,
+          selectedName,
+          topmostName: topmostName ?? selectedName,
+        });
+      }
       await onNavigateRef.current(join(currentPathRef.current, entry.name));
     } else if (entry.type === 'file' && onViewFileRef.current) {
       onViewFileRef.current(entry.path as string, entry.name, Number(entry.meta.size));

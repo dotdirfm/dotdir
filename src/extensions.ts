@@ -494,9 +494,18 @@ export async function uninstallExtension(publisherUsername: string, extName: str
 
 // ── Settings ────────────────────────────────────────────────────────
 
+export interface PanelPersistedState {
+  currentPath: string;
+  selectedName?: string;
+  topmostName?: string;
+}
+
 export interface FaradaySettings {
   iconTheme?: string; // "publisher.name" of the active icon theme
   editorFileSizeLimit?: number; // Max file size in bytes to open for editing (default: 1MB)
+  leftPanel?: PanelPersistedState;
+  rightPanel?: PanelPersistedState;
+  activePanel?: 'left' | 'right';
 }
 
 export const DEFAULT_EDITOR_FILE_SIZE_LIMIT = 1024 * 1024; // 1MB
