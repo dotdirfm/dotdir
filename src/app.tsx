@@ -135,8 +135,10 @@ function usePanel(theme: ThemeKind, showError: (message: string) => void) {
 
   const navigateTo = useCallback(
     async (path: string) => {
-      if (currentPathRef.current === path) return;
-
+      // Skip if already navigating to this path
+      if (currentPathRef.current === path && navAbortRef.current) {
+        return;
+      }
       navAbortRef.current?.abort();
       const abort = new AbortController();
       navAbortRef.current = abort;
@@ -288,7 +290,7 @@ export function App() {
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
   const expectedTerminalCwdsRef = useRef<Map<string, number>>(new Map());
-  const requestedTerminalCwdRef = useRef<string | null>(null);
+  const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
   const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
   const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
@@ -340,7 +342,7 @@ export function App() {
   const rememberExpectedTerminalCwd = useCallback((path: string) => {
     const normalized = normalizeTerminalPath(path);
     expectedTerminalCwdsRef.current.set(normalized, Date.now() + 5000);
-    requestedTerminalCwdRef.current = normalized;
+    setRequestedTerminalCwd(normalized);
   }, []);
 
   const viewerPanelEntries = viewerFile ? (viewerFile.panel === 'left' ? left.entries : right.entries) : [];
@@ -434,7 +436,6 @@ export function App() {
 
     const expectedExpiry = expectedTerminalCwdsRef.current.get(normalizedPath);
     if (expectedExpiry && expectedExpiry > now) {
-      requestedTerminalCwdRef.current = null;
       return;
     }
 
@@ -450,8 +451,17 @@ export function App() {
     if (normalizedPath !== panel.currentPath) {
       panel.navigateTo(normalizedPath);
     }
-    requestedTerminalCwdRef.current = null;
+    setRequestedTerminalCwd(null);
   }, [activePanel, left, right]);
+
+  useEffect(() => {
+    if (!requestedTerminalCwd) return;
+    const activePath = normalizeTerminalPath(activePanel === 'left' ? left.currentPath : right.currentPath);
+    if (activePath === requestedTerminalCwd) {
+      setRequestedTerminalCwd(null);
+      expectedTerminalCwdsRef.current.delete(requestedTerminalCwd);
+    }
+  }, [activePanel, left.currentPath, requestedTerminalCwd, right.currentPath]);
 
   // Debounced prompt active handler - delay hiding panels to avoid flashing on fast commands
   const handlePromptActive = useCallback((active: boolean) => {
@@ -853,7 +863,7 @@ export function App() {
 
   const actionBarHeight = 24;
   const collapsedTerminalVisibleHeight = 40;
-  const activeCwd = requestedTerminalCwdRef.current ?? (activePanel === 'left' ? left.currentPath : right.currentPath);
+  const activeCwd = requestedTerminalCwd ?? (activePanel === 'left' ? left.currentPath : right.currentPath);
 
   return (
     <div className="app">

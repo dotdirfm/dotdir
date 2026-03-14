@@ -483,6 +483,10 @@ export class TerminalSession {
       '$1',
     );
     sanitized = sanitized.replace(
+      /(?:[A-Za-z]:\\[^\r\n>]*>\s*)cd \/d "[^"]+"(?:\r?\n)+([A-Za-z]:\\[^\r\n>]*>\s*)/g,
+      '$1',
+    );
+    sanitized = sanitized.replace(
       /(?:PS [^\r\n>]+>\s*)cd "(?:[^"`]|`.)+"(?:\r?\n)+(PS [^\r\n>]+>\s*)/g,
       '$1',
     );
@@ -514,6 +518,10 @@ export class TerminalSession {
     const stripped = data
       .replace(new RegExp(`(?:[A-Za-z]:\\\\[^\\r\\n>]*>\\s*)?${escapedCommand}(?:\\r?\\n)+${escapedPrompt}`, 'g'), this.recentAutoSyncPrompt ?? '')
       .replace(new RegExp(`(?:[A-Za-z]:\\\\[^\\r\\n>]*>\\s*)?${escapedCommand}(?:\\r?\\n)?`, 'g'), '')
+      .replace(/(?:[A-Za-z]:\\[^\r\n>]*>\s*)cd \/d "[^"]+"(?:\r?\n)+([A-Za-z]:\\[^\r\n>]*>\s*)/g, '$1')
+      .replace(/(?:[A-Za-z]:\\[^\r\n>]*>\s*)@cd \/d "[^"]+"(?:\r?\n)+([A-Za-z]:\\[^\r\n>]*>\s*)/g, '$1')
+      .replace(/(?:[A-Za-z]:\\[^\r\n>]*>\s*)cd \/d "[^"]+"(?:\r?\n)?/g, '')
+      .replace(/(?:[A-Za-z]:\\[^\r\n>]*>\s*)@cd \/d "[^"]+"(?:\r?\n)?/g, '')
       .replace(new RegExp(`${escapedPrompt}(?:\\r?\\n)+${escapedPrompt}`, 'g'), this.recentAutoSyncPrompt ?? '');
 
     if (stripped !== data && detectPrompt(stripped, this.capabilities.shellType)) {
