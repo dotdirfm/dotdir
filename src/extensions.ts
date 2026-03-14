@@ -10,8 +10,25 @@ export interface ExtensionIconTheme {
   path: string;
 }
 
+export interface ExtensionLanguage {
+  id: string;
+  aliases?: string[];
+  extensions?: string[];
+  filenames?: string[];
+  configuration?: string; // relative path to language-configuration.json
+}
+
+export interface ExtensionGrammar {
+  language: string;
+  scopeName: string;
+  path: string; // relative path to .tmLanguage.json / .plist
+  embeddedLanguages?: Record<string, string>;
+}
+
 export interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme;
+  languages?: ExtensionLanguage[];
+  grammars?: ExtensionGrammar[];
 }
 
 export interface ExtensionManifest {
@@ -20,6 +37,7 @@ export interface ExtensionManifest {
   publisher: string;
   displayName?: string;
   description?: string;
+  icon?: string; // relative path to icon image
   contributes?: ExtensionContributions;
 }
 
@@ -29,13 +47,23 @@ export interface ExtensionRef {
   version: string;
 }
 
+export interface LoadedGrammar {
+  contribution: ExtensionGrammar;
+  content: object; // parsed TextMate grammar JSON
+}
+
 export interface LoadedExtension {
   ref: ExtensionRef;
   manifest: ExtensionManifest;
   dirPath: string;
+  iconUrl?: string;
   iconThemeFss?: string;
   /** Directory containing the icon theme FSS file, for resolving relative url() paths */
   iconThemeBasePath?: string;
+  /** Language contributions from this extension */
+  languages?: ExtensionLanguage[];
+  /** Grammar contributions with their loaded content */
+  grammars?: LoadedGrammar[];
 }
 
 export interface MarketplaceExtension {
@@ -107,7 +135,46 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         iconThemeBasePath = dirname(fssPath);
       }
 
-      loaded.push({ ref, manifest, dirPath: extDir, iconThemeFss, iconThemeBasePath });
+      // Load language contributions
+      const languages = manifest.contributes?.languages;
+
+      // Load grammar contributions
+      let grammars: LoadedGrammar[] | undefined;
+      if (manifest.contributes?.grammars?.length) {
+        grammars = [];
+        for (const grammarContrib of manifest.contributes.grammars) {
+          try {
+            const grammarPath = join(extDir, grammarContrib.path);
+            const grammarText = await readTextFile(grammarPath);
+            const grammarContent = JSON.parse(grammarText);
+            grammars.push({ contribution: grammarContrib, content: grammarContent });
+          } catch {
+            // Skip grammars that fail to load
+          }
+        }
+      }
+
+      // Load extension icon
+      let iconUrl: string | undefined;
+      if (manifest.icon) {
+        try {
+          const iconPath = join(extDir, manifest.icon);
+          const iconHandle = new FileHandle(iconPath, manifest.icon.split('/').pop() ?? manifest.icon);
+          const iconFile = await iconHandle.getFile();
+          const buf = await iconFile.arrayBuffer();
+          const ext = manifest.icon.split('.').pop()?.toLowerCase() ?? '';
+          const mime = ext === 'svg' ? 'image/svg+xml'
+            : ext === 'png' ? 'image/png'
+            : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+            : ext === 'webp' ? 'image/webp'
+            : 'application/octet-stream';
+          iconUrl = URL.createObjectURL(new Blob([buf], { type: mime }));
+        } catch {
+          // Icon file not found — ignore
+        }
+      }
+
+      loaded.push({ ref, manifest, dirPath: extDir, iconUrl, iconThemeFss, iconThemeBasePath, languages, grammars });
     } catch {
       continue;
     }

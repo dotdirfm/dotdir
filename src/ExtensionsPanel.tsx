@@ -170,7 +170,9 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
               return (
                 <div key={ext.id} className="ext-item">
                   <div className="ext-icon">
-                    {ext.display_name[0]?.toUpperCase() ?? '?'}
+                    {ext.icon_url
+                      ? <img src={ext.icon_url} width={36} height={36} alt="" />
+                      : ext.display_name[0]?.toUpperCase() ?? '?'}
                   </div>
                   <div className="ext-info">
                     <div className="ext-name">{ext.display_name}</div>
@@ -213,7 +215,9 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
               return (
                 <div key={key} className="ext-item">
                   <div className="ext-icon">
-                    {(ext.manifest.displayName || ext.manifest.name)[0]?.toUpperCase() ?? '?'}
+                    {ext.iconUrl
+                      ? <img src={ext.iconUrl} width={36} height={36} alt="" />
+                      : (ext.manifest.displayName || ext.manifest.name)[0]?.toUpperCase() ?? '?'}
                   </div>
                   <div className="ext-info">
                     <div className="ext-name">{ext.manifest.displayName || ext.manifest.name}</div>
@@ -224,6 +228,16 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
                       {themeId && (
                         <span className={`ext-theme-badge${isActiveTheme ? ' active' : ''}`}>
                           {isActiveTheme ? '● Active theme' : 'Icon theme'}
+                        </span>
+                      )}
+                      {ext.languages && ext.languages.length > 0 && (
+                        <span className="ext-theme-badge">
+                          {ext.languages.length} language{ext.languages.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {ext.grammars && ext.grammars.length > 0 && (
+                        <span className="ext-theme-badge">
+                          {ext.grammars.length} grammar{ext.grammars.length > 1 ? 's' : ''}
                         </span>
                       )}
                     </div>

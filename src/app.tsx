@@ -17,7 +17,8 @@ import { ExtensionsPanel } from './ExtensionsPanel';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
-import { readSettings } from './extensions';
+import { readSettings, type LoadedExtension } from './extensions';
+import { languageRegistry } from './languageRegistry';
 import { basename, dirname, isRootPath, join } from './path';
 
 function buildParentChain(dirPath: string): FsNode | undefined {
@@ -364,13 +365,32 @@ export function App() {
     }
   }, []);
 
-  const latestExtensionsRef = useRef<import('./extensions').LoadedExtension[]>([]);
+  const latestExtensionsRef = useRef<LoadedExtension[]>([]);
 
   // Start Extension Host lazily — re-navigate panels when extensions load
   useEffect(() => {
+    languageRegistry.initialize();
+
+    const registerLanguages = async (exts: LoadedExtension[]) => {
+      languageRegistry.clear();
+      for (const ext of exts) {
+        if (ext.languages) {
+          for (const lang of ext.languages) {
+            languageRegistry.registerLanguage(lang);
+          }
+        }
+        if (ext.grammars) {
+          for (const grammar of ext.grammars) {
+            await languageRegistry.registerGrammar(grammar);
+          }
+        }
+      }
+    };
+
     const unsub = extensionHost.onLoaded((exts) => {
       latestExtensionsRef.current = exts;
       setExtensionLayers(exts, activeIconThemeRef.current);
+      registerLanguages(exts);
       if (leftPathRef.current) left.navigateTo(leftPathRef.current);
       if (rightPathRef.current) right.navigateTo(rightPathRef.current);
     });

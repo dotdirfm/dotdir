@@ -24,8 +24,30 @@ interface ExtensionIconTheme {
   path: string;
 }
 
+interface ExtensionLanguage {
+  id: string;
+  aliases?: string[];
+  extensions?: string[];
+  filenames?: string[];
+  configuration?: string;
+}
+
+interface ExtensionGrammar {
+  language: string;
+  scopeName: string;
+  path: string;
+  embeddedLanguages?: Record<string, string>;
+}
+
+interface LoadedGrammar {
+  contribution: ExtensionGrammar;
+  content: object;
+}
+
 interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme;
+  languages?: ExtensionLanguage[];
+  grammars?: ExtensionGrammar[];
 }
 
 interface ExtensionManifest {
@@ -49,6 +71,8 @@ export interface WorkerLoadedExtension {
   dirPath: string;
   iconThemeFss?: string;
   iconThemeBasePath?: string;
+  languages?: ExtensionLanguage[];
+  grammars?: LoadedGrammar[];
 }
 
 // ── File reading via RPC to main thread ─────────────────────────────
@@ -104,7 +128,28 @@ async function loadExtensions(homePath: string): Promise<WorkerLoadedExtension[]
         }
       }
 
-      loaded.push({ ref, manifest, dirPath: extDir, iconThemeFss, iconThemeBasePath });
+      // Load language contributions
+      const languages = manifest.contributes?.languages;
+
+      // Load grammar contributions
+      let grammars: LoadedGrammar[] | undefined;
+      if (manifest.contributes?.grammars?.length) {
+        grammars = [];
+        for (const grammarContrib of manifest.contributes.grammars) {
+          try {
+            const grammarPath = join(extDir, grammarContrib.path);
+            const grammarText = await readTextFile(grammarPath);
+            if (grammarText !== null) {
+              const grammarContent = JSON.parse(grammarText);
+              grammars.push({ contribution: grammarContrib, content: grammarContent });
+            }
+          } catch {
+            // Skip grammars that fail to load
+          }
+        }
+      }
+
+      loaded.push({ ref, manifest, dirPath: extDir, iconThemeFss, iconThemeBasePath, languages, grammars });
     } catch {
       continue;
     }

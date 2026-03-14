@@ -9,6 +9,14 @@ export default defineConfig(({ command }) => ({
   plugins: [react()],
   base: "/",
 
+  // Use Monaco's core ESM build without built-in language contributions.
+  // Languages and grammars are provided exclusively by extensions.
+  resolve: {
+    alias: [
+      { find: /^monaco-editor$/, replacement: "monaco-editor/esm/vs/editor/editor.api" },
+    ],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

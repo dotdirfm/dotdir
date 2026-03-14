@@ -30,7 +30,7 @@ No test suite or linter is configured.
 
 - **Frontend**: React 19, TypeScript 5.9 (strict), Vite 7, pnpm
 - **Backend**: Rust (edition 2021), Tauri 2, axum, portable-pty
-- **Editor**: CodeMirror 6 | **Terminal**: xterm.js 6
+- **Editor**: Monaco Editor (no built-in languages) | **Terminal**: xterm.js 6
 - **Targets**: macOS, Linux, Windows
 - **Prerequisites**: Node.js 22+, Rust stable toolchain
 
