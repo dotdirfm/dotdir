@@ -101,6 +101,11 @@ export function resolveEntryStyle(resolver: LayeredResolver, node: FsNode): Reso
   return {
     color: style.color != null ? String(style.color) : undefined,
     opacity: style.opacity != null ? Number(style.opacity) : undefined,
+    fontWeight: style['font-weight'] != null ? style['font-weight'] as string | number : undefined,
+    fontStyle: style['font-style'] != null ? String(style['font-style']) : undefined,
+    fontStretch: style['font-stretch'] != null ? String(style['font-stretch']) : undefined,
+    fontVariant: style['font-variant'] != null ? String(style['font-variant']) : undefined,
+    textDecoration: style['text-decoration'] != null ? String(style['text-decoration']) : undefined,
     icon: parseIconName(style.icon as string | undefined),
     sortPriority: typeof sorting.priority === 'number' ? sorting.priority : 0,
     groupFirst: sorting['group-first'] === true,

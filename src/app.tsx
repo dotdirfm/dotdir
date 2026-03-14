@@ -133,12 +133,10 @@ function usePanel(theme: ThemeKind, showError: (message: string) => void) {
   }, []);
 
   const navigateTo = useCallback(
-    async (path: string) => {
+    async (path: string, force = false) => {
       // Skip if already navigating to this path
-      if (currentPathRef.current === path && navAbortRef.current) {
-        return;
-      }
-      
+      if (!force && currentPathRef.current === path && navAbortRef.current) return;
+
       navAbortRef.current?.abort();
       const abort = new AbortController();
       navAbortRef.current = abort;
@@ -650,6 +648,10 @@ export function App() {
   leftPathRef.current = left.currentPath;
   const rightPathRef = useRef(right.currentPath);
   rightPathRef.current = right.currentPath;
+  const leftRef = useRef(left);
+  leftRef.current = left;
+  const rightRef = useRef(right);
+  rightRef.current = right;
 
   // Navigate panels using persisted state or defaults
   useEffect(() => {
@@ -781,8 +783,9 @@ export function App() {
       updateIconTheme(exts, activeIconThemeRef.current);
       registerLanguages(exts);
       registerExtensionCommands(exts);
-      if (leftPathRef.current) left.navigateTo(leftPathRef.current);
-      if (rightPathRef.current) right.navigateTo(rightPathRef.current);
+      // Force re-navigation to sync FSS layers with the new extension layers
+      if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
+      if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
     });
     extensionHost.start();
     return () => {
@@ -802,8 +805,8 @@ export function App() {
   useEffect(() => {
     if (bridge.onReconnect) {
       return bridge.onReconnect(() => {
-        left.navigateTo(leftPathRef.current);
-        right.navigateTo(rightPathRef.current);
+        leftRef.current.navigateTo(leftPathRef.current);
+        rightRef.current.navigateTo(rightPathRef.current);
       });
     }
   }, []);
@@ -907,8 +910,8 @@ export function App() {
                 setIconTheme('none');
               }
             }
-            if (leftPathRef.current) left.navigateTo(leftPathRef.current);
-            if (rightPathRef.current) right.navigateTo(rightPathRef.current);
+            if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
+            if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
           }}
         />
       )}
