@@ -653,6 +653,16 @@ export function App() {
   const rightRef = useRef(right);
   rightRef.current = right;
 
+  // Re-navigate when theme changes to refresh FSS styles
+  const prevThemeRef = useRef(theme);
+  useEffect(() => {
+    if (prevThemeRef.current !== theme) {
+      prevThemeRef.current = theme;
+      if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
+      if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
+    }
+  }, [theme]);
+
   // Navigate panels using persisted state or defaults
   useEffect(() => {
     const urlPath = isBrowser ? decodeURIComponent(window.location.pathname) : '';

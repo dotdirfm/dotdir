@@ -5,6 +5,8 @@ import { DirectoryHandle } from './fsa';
 import { basename, dirname, join } from './path';
 
 const defaultFss = `
+folder { font-weight: bold; }
+
 @sorting {
   folder { group-first: true; }
   file[executable] { priority: 1; }
