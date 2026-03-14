@@ -288,6 +288,7 @@ export function App() {
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
   const expectedTerminalCwdsRef = useRef<Map<string, number>>(new Map());
+  const requestedTerminalCwdRef = useRef<string | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
   const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
   const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
@@ -339,6 +340,7 @@ export function App() {
   const rememberExpectedTerminalCwd = useCallback((path: string) => {
     const normalized = normalizeTerminalPath(path);
     expectedTerminalCwdsRef.current.set(normalized, Date.now() + 5000);
+    requestedTerminalCwdRef.current = normalized;
   }, []);
 
   const viewerPanelEntries = viewerFile ? (viewerFile.panel === 'left' ? left.entries : right.entries) : [];
@@ -430,8 +432,9 @@ export function App() {
       }
     }
 
-    if (expectedTerminalCwdsRef.current.has(normalizedPath)) {
-      expectedTerminalCwdsRef.current.delete(normalizedPath);
+    const expectedExpiry = expectedTerminalCwdsRef.current.get(normalizedPath);
+    if (expectedExpiry && expectedExpiry > now) {
+      requestedTerminalCwdRef.current = null;
       return;
     }
 
@@ -447,6 +450,7 @@ export function App() {
     if (normalizedPath !== panel.currentPath) {
       panel.navigateTo(normalizedPath);
     }
+    requestedTerminalCwdRef.current = null;
   }, [activePanel, left, right]);
 
   // Debounced prompt active handler - delay hiding panels to avoid flashing on fast commands
@@ -849,7 +853,7 @@ export function App() {
 
   const actionBarHeight = 24;
   const collapsedTerminalVisibleHeight = 40;
-  const activeCwd = activePanel === 'left' ? left.currentPath : right.currentPath;
+  const activeCwd = requestedTerminalCwdRef.current ?? (activePanel === 'left' ? left.currentPath : right.currentPath);
 
   return (
     <div className="app">
@@ -873,6 +877,7 @@ export function App() {
             parentNode={left.parentNode}
             entries={showHidden ? left.entries : left.entries.filter((e) => !e.meta.hidden)}
             onNavigate={(path) => {
+              setActivePanel('left');
               rememberExpectedTerminalCwd(path);
               return left.navigateTo(path);
             }}
@@ -893,6 +898,7 @@ export function App() {
             parentNode={right.parentNode}
             entries={showHidden ? right.entries : right.entries.filter((e) => !e.meta.hidden)}
             onNavigate={(path) => {
+              setActivePanel('right');
               rememberExpectedTerminalCwd(path);
               return right.navigateTo(path);
             }}

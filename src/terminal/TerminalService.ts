@@ -1,5 +1,6 @@
 import type { TerminalProfile } from '../bridge';
 import { TerminalSession } from './TerminalSession';
+import { normalizeTerminalPath } from './path';
 import type { TerminalSessionStatus } from './types';
 
 const TERMINAL_STATE_STORAGE_KEY = 'faraday.terminalSessions';
@@ -108,10 +109,11 @@ export class TerminalService {
   }
 
   syncActiveCwd(cwd: string): void {
-    this.currentCwd = cwd;
+    this.currentCwd = normalizeTerminalPath(cwd);
     const active = this.getActiveSession();
     if (!active) return;
-    void active.session.syncToCwd(cwd);
+    if (normalizeTerminalPath(active.cwd) === this.currentCwd) return;
+    void active.session.syncToCwd(this.currentCwd);
   }
 
   createSession(profileId?: string): void {
@@ -205,20 +207,20 @@ export class TerminalService {
       session,
       profileId: profile?.id ?? profileId,
       profileLabel: profile?.label ?? profileId,
-      cwd,
+      cwd: normalizeTerminalPath(cwd),
       status: 'idle',
     };
 
     session.subscribe((event) => {
       if (event.type === 'cwd') {
-        managed.cwd = event.cwd;
+        managed.cwd = normalizeTerminalPath(event.cwd);
       } else if (event.type === 'status') {
         managed.status = event.status;
         managed.error = event.error;
       } else if (event.type === 'launch') {
         managed.profileId = event.launch.profileId;
         managed.profileLabel = event.launch.profileLabel;
-        managed.cwd = event.launch.cwd;
+        managed.cwd = normalizeTerminalPath(event.launch.cwd);
       }
       this.emit();
     });

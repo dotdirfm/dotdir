@@ -2,12 +2,15 @@ import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { focusContext } from '../focusContext';
 import type { TerminalSession } from './TerminalSession';
 
 interface TerminalViewProps {
   session: TerminalSession;
   expanded?: boolean;
 }
+
+type DebugWindow = Window & typeof globalThis & { __terminalDebugLogs?: string[] };
 
 function resolveTerminalTheme() {
   return {
@@ -23,6 +26,9 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
   const fitFrameRef = useRef<number | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const hasTerminalFocusRef = useRef(false);
+  const replayFrameRef = useRef<number | null>(null);
+  const syncInFlightRef = useRef(false);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -62,20 +68,61 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
       });
     };
 
+    const renderReplay = () => {
+      const replay = session.getReplayData();
+      term.reset();
+      if (!replay) return;
+      term.write(replay);
+    };
+
+    const scheduleReplayRender = () => {
+      if (replayFrameRef.current !== null) cancelAnimationFrame(replayFrameRef.current);
+      replayFrameRef.current = requestAnimationFrame(() => {
+        replayFrameRef.current = null;
+        const replay = session.getReplayData();
+        const debugWindow = window as DebugWindow;
+        debugWindow.__terminalDebugLogs ??= [];
+        debugWindow.__terminalDebugLogs.push(replay);
+        renderReplay();
+        term.scrollToBottom();
+        scheduleLayout();
+      });
+    };
+
     term.loadAddon(fit);
     term.open(container);
     termRef.current = term;
     fitRef.current = fit;
+    const setTerminalFocus = () => {
+      if (hasTerminalFocusRef.current) return;
+      hasTerminalFocusRef.current = true;
+      focusContext.push('terminal');
+    };
+    const clearTerminalFocus = () => {
+      if (!hasTerminalFocusRef.current) return;
+      hasTerminalFocusRef.current = false;
+      focusContext.pop('terminal');
+    };
     term.attachCustomKeyEventHandler((event) => {
+      setTerminalFocus();
       if (event.key.toLowerCase() === 'o' && event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
         return false;
       }
       return true;
     });
     scheduleLayout();
+    renderReplay();
 
     const cleanupSession = session.subscribe((event) => {
-      if (event.type === 'data') {
+      if (event.type === 'sync-start') {
+        syncInFlightRef.current = true;
+      } else if (event.type === 'sync-complete') {
+        syncInFlightRef.current = false;
+        scheduleReplayRender();
+      } else if (event.type === 'data') {
+        if (syncInFlightRef.current) {
+          return;
+        }
         term.write(event.data);
         term.scrollToBottom();
         scheduleLayout();
@@ -106,20 +153,36 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
     });
     resizeObserver.observe(container.parentElement ?? container);
     const handlePointerDown = () => {
+      setTerminalFocus();
       term.focus();
     };
+    const handleFocusIn = () => {
+      setTerminalFocus();
+    };
+    const handleFocusOut = (event: FocusEvent) => {
+      const nextTarget = event.relatedTarget;
+      if (nextTarget instanceof Node && container.contains(nextTarget)) return;
+      clearTerminalFocus();
+    };
     container.addEventListener('pointerdown', handlePointerDown);
+    container.addEventListener('focusin', handleFocusIn);
+    container.addEventListener('focusout', handleFocusOut);
     scheduleLayout();
 
     return () => {
       container.removeEventListener('pointerdown', handlePointerDown);
+      container.removeEventListener('focusin', handleFocusIn);
+      container.removeEventListener('focusout', handleFocusOut);
+      clearTerminalFocus();
       resizeObserver.disconnect();
       resizeDisposable.dispose();
       dataDisposable.dispose();
       cleanupSession();
       if (fitFrameRef.current !== null) cancelAnimationFrame(fitFrameRef.current);
+      if (replayFrameRef.current !== null) cancelAnimationFrame(replayFrameRef.current);
       termRef.current = null;
       fitRef.current = null;
+      syncInFlightRef.current = false;
       term.dispose();
     };
   }, [session]);
@@ -132,10 +195,19 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
     if (fitFrameRef.current !== null) cancelAnimationFrame(fitFrameRef.current);
     fitFrameRef.current = requestAnimationFrame(() => {
       fitFrameRef.current = null;
+      const replay = session.getReplayData();
+      if (replay) {
+        term.clear();
+        term.write(replay);
+      }
       fit.fit();
       void session.resize(Math.max(2, term.cols), Math.max(1, term.rows));
       if (expanded) {
         term.scrollToBottom();
+      }
+      if (!hasTerminalFocusRef.current) {
+        hasTerminalFocusRef.current = true;
+        focusContext.push('terminal');
       }
       term.focus();
     });

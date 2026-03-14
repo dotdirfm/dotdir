@@ -23,7 +23,7 @@ export function buildCdCommand(path: string, shellType: TerminalShellType): stri
 
   if (isWindowsPath(path) || shellType === 'cmd') {
     const cmdPath = path.replace(/\//g, '\\').replace(/"/g, '""');
-    return `cd /d "${cmdPath}"\r`;
+    return `@cd /d "${cmdPath}"\r`;
   }
   return ` cd ${shellQuote(path)}\n`;
 }

@@ -24,6 +24,8 @@ export type TerminalSessionEvent =
   | { type: 'data'; data: string }
   | { type: 'launch'; launch: PtyLaunchInfo }
   | { type: 'cwd'; cwd: string }
+  | { type: 'sync-start'; cwd: string }
+  | { type: 'sync-complete'; cwd: string | null }
   | { type: 'status'; status: TerminalSessionStatus; error?: string }
   | { type: 'capabilities'; capabilities: TerminalCapabilities }
   | { type: 'command-start'; command: string }
