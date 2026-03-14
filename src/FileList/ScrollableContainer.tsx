@@ -1,5 +1,5 @@
 import type React from 'react';
-import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
 
 interface ScrollableContainerProps {
   children: ReactNode;
@@ -28,6 +28,7 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
   const scrollPaneRef = useRef<HTMLDivElement>(null);
   const scrollTopRef = useRef(scrollTop);
   const onScrollRef = useRef(onScroll);
+  const [scrollbarWidth, setScrollbarWidth] = useState(0);
 
   scrollTopRef.current = scrollTop;
   onScrollRef.current = onScroll;
@@ -35,6 +36,25 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
   if (scrollPaneRef.current) {
     scrollPaneRef.current.scrollTop = scrollTop;
   }
+
+  useEffect(() => {
+    const scrollPane = scrollPaneRef.current;
+    if (!scrollPane) return;
+
+    const updateScrollbarWidth = () => {
+      setScrollbarWidth(Math.max(0, scrollPane.offsetWidth - scrollPane.clientWidth));
+    };
+
+    updateScrollbarWidth();
+    const resizeObserver = new ResizeObserver(updateScrollbarWidth);
+    resizeObserver.observe(scrollPane);
+    window.addEventListener('resize', updateScrollbarWidth);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateScrollbarWidth);
+    };
+  }, []);
 
   useEffect(() => {
     const scrollPane = scrollPaneRef.current;
@@ -138,7 +158,12 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
       </div>
       <div
         ref={containerRef}
-        style={{ position: 'absolute', pointerEvents: 'auto', ...innerContainerStyle }}
+        style={{
+          position: 'absolute',
+          pointerEvents: 'auto',
+          ...innerContainerStyle,
+          width: `calc(100% - ${scrollbarWidth}px)`,
+        }}
       >
         {children}
       </div>

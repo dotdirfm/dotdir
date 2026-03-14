@@ -8,6 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "serve:web": "pnpm build && cargo run --manifest-path src-tauri/Cargo.toml -- serve --host 127.0.0.1 --port 3001",
+    "serve:web:release": "pnpm build && cargo run --release --manifest-path src-tauri/Cargo.toml -- serve --host 127.0.0.1 --port 3001",
     "build:rust": "cd src-tauri && cargo build --release",
     "build:rust:dev": "cd src-tauri && cargo build"
   },

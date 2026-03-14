@@ -1,9 +1,9 @@
-/// Browser-side bridge over WebSocket — connects to the faraday-server headless backend.
+/// Browser-side bridge over WebSocket - connects to the faraday-server headless backend.
 ///
 /// Implements the same Bridge interface as tauriBridge.ts, using JSON-RPC 2.0
 /// over WebSocket. Binary frames are used for fs.read responses.
 /// Automatically reconnects on disconnection with exponential backoff.
-import type { Bridge } from './bridge';
+import type { Bridge, PtyLaunchInfo, TerminalProfile } from './bridge';
 import type { FsaRawEntry, FsChangeEvent, FsChangeType } from './types';
 
 type Pending = {
@@ -25,7 +25,6 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
   const ptyExitListeners = new Set<PtyExitCallback>();
   const reconnectCallbacks = new Set<() => void>();
 
-  // Connection readiness gate — rpc() awaits this before sending
   let wsReady: Promise<void>;
   let resolveReady: () => void = () => {};
   let reconnectDelay = 1000;
@@ -47,8 +46,6 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
 
   function handleText(text: string): void {
     const msg = JSON.parse(text);
-
-    // JSON-RPC notifications
     if (!('id' in msg)) {
       if (msg.method === 'fs.change') {
         const event: FsChangeEvent = {
@@ -63,7 +60,6 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       return;
     }
 
-    // JSON-RPC response
     const p = pending.get(msg.id);
     if (!p) return;
     pending.delete(msg.id);
@@ -108,7 +104,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
     stopHeartbeat();
     heartbeatTimer = setInterval(() => {
       const timeout = setTimeout(() => {
-        ws.close(); // force close → triggers reconnect
+        ws.close();
       }, 5000);
       rpc('ping', {})
         .then(() => clearTimeout(timeout))
@@ -140,9 +136,8 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       }, { once: true });
 
       socket.addEventListener('message', handleMessage);
-
       socket.addEventListener('close', () => {
-        if (!opened) return; // connect() rejection handles this
+        if (!opened) return;
         stopHeartbeat();
         rejectPending();
         newReadyPromise();
@@ -169,20 +164,18 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
 
   function rpc(method: string, params: Record<string, unknown>): Promise<unknown> {
     return wsReady.then(
-      () =>
-        new Promise((resolve, reject) => {
-          if (ws.readyState !== WebSocket.OPEN) {
-            reject(new Error('WebSocket is not connected'));
-            return;
-          }
-          const id = nextId++;
-          pending.set(id, { resolve, reject });
-          ws.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
-        }),
+      () => new Promise((resolve, reject) => {
+        if (ws.readyState !== WebSocket.OPEN) {
+          reject(new Error('WebSocket is not connected'));
+          return;
+        }
+        const id = nextId++;
+        pending.set(id, { resolve, reject });
+        ws.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
+      }),
     );
   }
 
-  // Initial connection
   newReadyPromise();
   await connect();
   resolveReady();
@@ -190,20 +183,16 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
 
   return {
     fsa: {
-      entries: (dirPath: string) =>
-        rpc('fs.entries', { path: dirPath }) as Promise<FsaRawEntry[]>,
-      stat: (filePath: string) =>
-        rpc('fs.stat', { path: filePath }) as Promise<{ size: number; mtimeMs: number }>,
+      entries: (dirPath: string) => rpc('fs.entries', { path: dirPath }) as Promise<FsaRawEntry[]>,
+      stat: (filePath: string) => rpc('fs.stat', { path: filePath }) as Promise<{ size: number; mtimeMs: number }>,
       exists: (filePath: string) => rpc('fs.exists', { path: filePath }) as Promise<boolean>,
       open: (filePath: string) => rpc('fs.open', { path: filePath }) as Promise<number>,
       read: (fd: number, offset: number, length: number) =>
         rpc('fs.read', { handle: fd, offset, length }) as Promise<ArrayBuffer>,
       close: (fd: number) => rpc('fs.close', { handle: fd }) as Promise<void>,
-      watch: (watchId: string, dirPath: string) =>
-        rpc('fs.watch', { watchId, path: dirPath }) as Promise<boolean>,
+      watch: (watchId: string, dirPath: string) => rpc('fs.watch', { watchId, path: dirPath }) as Promise<boolean>,
       unwatch: (watchId: string) => rpc('fs.unwatch', { watchId }) as Promise<void>,
-      writeFile: (filePath: string, data: string) =>
-        rpc('fs.writeFile', { path: filePath, data }) as Promise<void>,
+      writeFile: (filePath: string, data: string) => rpc('fs.writeFile', { path: filePath, data }) as Promise<void>,
       onFsChange(callback: (event: FsChangeEvent) => void): () => void {
         changeListeners.add(callback);
         return () => {
@@ -212,12 +201,14 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       },
     },
     pty: {
-      spawn: (cwd: string, cols?: number, rows?: number) =>
-        rpc('pty.spawn', { cwd, ...(cols != null && rows != null ? { cols, rows } : {}) }) as Promise<number>,
-      write: (ptyId: number, data: string) =>
-        rpc('pty.write', { ptyId, data }) as Promise<void>,
+      spawn: (cwd: string, profileId?: string) => rpc('pty.spawn', { cwd, profileId }) as Promise<PtyLaunchInfo>,
+      write: (ptyId: number, data: string) => rpc('pty.write', { ptyId, data }) as Promise<void>,
       resize: (ptyId: number, cols: number, rows: number) =>
-        rpc('pty.resize', { ptyId, cols: Math.floor(cols), rows: Math.floor(rows) }) as Promise<void>,
+        rpc('pty.resize', {
+          ptyId,
+          cols: Math.max(2, Math.floor(cols)),
+          rows: Math.max(1, Math.floor(rows)),
+        }) as Promise<void>,
       close: (ptyId: number) => rpc('pty.close', { ptyId }) as Promise<void>,
       onData(callback: PtyDataCallback): () => void {
         ptyDataListeners.add(callback);
@@ -231,16 +222,13 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
     utils: {
       getHomePath: () => rpc('utils.getHomePath', {}) as Promise<string>,
       getIconsPath: () => rpc('utils.getIconsPath', {}) as Promise<string>,
+      getTerminalProfiles: () => rpc('utils.getTerminalProfiles', {}) as Promise<TerminalProfile[]>,
     },
     theme: {
-      get: () =>
-        Promise.resolve(
-          window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
-        ),
+      get: () => Promise.resolve(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
       onChange(callback: (theme: string) => void): () => void {
         const mq = window.matchMedia('(prefers-color-scheme: dark)');
-        const handler = (e: MediaQueryListEvent) =>
-          callback(e.matches ? 'dark' : 'light');
+        const handler = (e: MediaQueryListEvent) => callback(e.matches ? 'dark' : 'light');
         mq.addEventListener('change', handler);
         return () => mq.removeEventListener('change', handler);
       },

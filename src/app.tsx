@@ -24,6 +24,7 @@ import { initUserSettings, onSettingsChange, updateSettings } from './userSettin
 import { languageRegistry } from './languageRegistry';
 import { setIconTheme, setIconThemeKind } from './iconResolver';
 import { basename, dirname, isRootPath, join } from './path';
+import { normalizeTerminalPath } from './terminal/path';
 import { initUserKeybindings } from './userKeybindings';
 
 function buildParentChain(dirPath: string): FsNode | undefined {
@@ -135,8 +136,9 @@ function usePanel(theme: ThemeKind, showError: (message: string) => void) {
   const navigateTo = useCallback(
     async (path: string, force = false) => {
       // Skip if already navigating to this path
-      if (!force && currentPathRef.current === path && navAbortRef.current) return;
-
+      if (!force && currentPathRef.current === path && navAbortRef.current) {
+        return;
+      }
       navAbortRef.current?.abort();
       const abort = new AbortController();
       navAbortRef.current = abort;
@@ -284,9 +286,11 @@ export function App() {
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [promptActive, setPromptActive] = useState(true);
   const promptHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [terminalVisibleHeight, setTerminalVisibleHeight] = useState(20);
+  const [terminalVisibleHeight, setTerminalVisibleHeight] = useState(40);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
+  const expectedTerminalCwdsRef = useRef<Map<string, number>>(new Map());
+  const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
   const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
   const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
@@ -333,6 +337,12 @@ export function App() {
 
   const handleEditFile = useCallback((filePath: string, fileName: string, fileSize: number, langId: string) => {
     setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
+  }, []);
+
+  const rememberExpectedTerminalCwd = useCallback((path: string) => {
+    const normalized = normalizeTerminalPath(path);
+    expectedTerminalCwdsRef.current.set(normalized, Date.now() + 5000);
+    setRequestedTerminalCwd(normalized);
   }, []);
 
   const viewerPanelEntries = viewerFile ? (viewerFile.panel === 'left' ? left.entries : right.entries) : [];
@@ -416,11 +426,42 @@ export function App() {
   }, [activePanel]);
 
   const handleTerminalCwd = useCallback((path: string) => {
-    const panel = activePanel === 'left' ? left : right;
-    if (path !== panel.currentPath) {
-      panel.navigateTo(path);
+    const normalizedPath = normalizeTerminalPath(path);
+    const now = Date.now();
+    for (const [expectedPath, expiresAt] of expectedTerminalCwdsRef.current) {
+      if (expiresAt <= now) {
+        expectedTerminalCwdsRef.current.delete(expectedPath);
+      }
     }
+
+    const expectedExpiry = expectedTerminalCwdsRef.current.get(normalizedPath);
+    if (expectedExpiry && expectedExpiry > now) {
+      return;
+    }
+
+    const panel = activePanel === 'left' ? left : right;
+    if (normalizedPath === normalizeTerminalPath(panel.currentPath)) {
+      return;
+    }
+
+    if (normalizedPath === normalizeTerminalPath(left.currentPath) || normalizedPath === normalizeTerminalPath(right.currentPath)) {
+      return;
+    }
+
+    if (normalizedPath !== panel.currentPath) {
+      panel.navigateTo(normalizedPath);
+    }
+    setRequestedTerminalCwd(null);
   }, [activePanel, left, right]);
+
+  useEffect(() => {
+    if (!requestedTerminalCwd) return;
+    const activePath = normalizeTerminalPath(activePanel === 'left' ? left.currentPath : right.currentPath);
+    if (activePath === requestedTerminalCwd) {
+      setRequestedTerminalCwd(null);
+      expectedTerminalCwdsRef.current.delete(requestedTerminalCwd);
+    }
+  }, [activePanel, left.currentPath, requestedTerminalCwd, right.currentPath]);
 
   // Debounced prompt active handler - delay hiding panels to avoid flashing on fast commands
   const handlePromptActive = useCallback((active: boolean) => {
@@ -665,8 +706,16 @@ export function App() {
 
   // Navigate panels using persisted state or defaults
   useEffect(() => {
-    const urlPath = isBrowser ? decodeURIComponent(window.location.pathname) : '';
-    const hasUrlPath = urlPath.length > 1; // not just "/"
+    const browserPath = (() => {
+      if (!isBrowser) return '';
+      const url = new URL(window.location.href);
+      const queryPath = url.searchParams.get('path');
+      if (queryPath) return queryPath;
+      const pathName = decodeURIComponent(url.pathname);
+      return pathName.length > 1 ? pathName : '';
+    })();
+
+    const hasUrlPath = browserPath.length > 0;
 
     const navigatePanel = async (
       panel: typeof left,
@@ -690,14 +739,13 @@ export function App() {
     };
 
     if (hasUrlPath) {
-      // URL path takes priority for left panel
-      bridge.fsa.exists(urlPath).then(async (exists) => {
+      bridge.fsa.exists(browserPath).then(async (exists) => {
         if (exists) {
-          left.navigateTo(urlPath);
+          left.navigateTo(browserPath);
         } else {
-          const parent = await findExistingParent(urlPath);
+          const parent = await findExistingParent(browserPath);
           left.navigateTo(parent);
-          showError(`Directory not found: ${urlPath}`);
+          showError(`Directory not found: ${browserPath}`);
         }
       });
       navigatePanel(right, initialRightPanel);
@@ -804,11 +852,13 @@ export function App() {
     };
   }, []);
 
-  // Sync active panel path to URL (browser mode only)
   const activePath = activePanel === 'left' ? left.currentPath : right.currentPath;
   useEffect(() => {
     if (isBrowser && activePath) {
-      history.replaceState(null, '', activePath);
+      const url = new URL(window.location.href);
+      url.pathname = '/';
+      url.search = `?path=${encodeURIComponent(activePath)}`;
+      history.replaceState(null, '', url.toString());
     }
   }, [activePath]);
 
@@ -822,22 +872,28 @@ export function App() {
   }, []);
 
 
-
   if (!left.currentPath || !right.currentPath) {
     return <div className="loading">Loading...</div>;
   }
 
-  const activeCwd = activePanel === 'left' ? left.currentPath : right.currentPath;
-  const ACTION_BAR_HEIGHT = 24;
+  const actionBarHeight = 24;
+  const collapsedTerminalVisibleHeight = 40;
+  const activeCwd = requestedTerminalCwd ?? (activePanel === 'left' ? left.currentPath : right.currentPath);
 
   return (
     <div className="app">
-      <div className="terminal-background">
-        <TerminalPanel cwd={activeCwd} onCwdChange={handleTerminalCwd} onVisibleHeight={setTerminalVisibleHeight} onPromptActive={handlePromptActive} />
+      <div className={`terminal-background${panelsVisible ? '' : ' expanded'}`}>
+        <TerminalPanel
+          cwd={activeCwd}
+          expanded={!panelsVisible}
+          onCwdChange={handleTerminalCwd}
+          onVisibleHeight={setTerminalVisibleHeight}
+          onPromptActive={handlePromptActive}
+        />
       </div>
       <div
         className={`panels-overlay${panelsVisible && promptActive ? '' : ' hidden'}`}
-        style={{ bottom: `${terminalVisibleHeight + ACTION_BAR_HEIGHT}px` }}
+        style={{ bottom: `${Math.max(collapsedTerminalVisibleHeight, terminalVisibleHeight) + actionBarHeight}px` }}
       >
         <div className={`panel ${activePanel === 'left' ? 'active' : ''}`} onClick={() => setActivePanel('left')}>
           {left.navigating && <div className="panel-progress" />}
@@ -845,7 +901,11 @@ export function App() {
             currentPath={left.currentPath}
             parentNode={left.parentNode}
             entries={showHidden ? left.entries : left.entries.filter((e) => !e.meta.hidden)}
-            onNavigate={left.navigateTo}
+            onNavigate={(path) => {
+              setActivePanel('left');
+              rememberExpectedTerminalCwd(path);
+              return left.navigateTo(path);
+            }}
             onViewFile={handleViewFile}
             onEditFile={handleEditFile}
             editorFileSizeLimit={editorFileSizeLimit}
@@ -862,7 +922,11 @@ export function App() {
             currentPath={right.currentPath}
             parentNode={right.parentNode}
             entries={showHidden ? right.entries : right.entries.filter((e) => !e.meta.hidden)}
-            onNavigate={right.navigateTo}
+            onNavigate={(path) => {
+              setActivePanel('right');
+              rememberExpectedTerminalCwd(path);
+              return right.navigateTo(path);
+            }}
             onViewFile={handleViewFile}
             onEditFile={handleEditFile}
             editorFileSizeLimit={editorFileSizeLimit}
@@ -930,4 +994,3 @@ export function App() {
     </div>
   );
 }
-
