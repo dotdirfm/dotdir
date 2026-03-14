@@ -18,10 +18,12 @@ import { commandRegistry } from './commands';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
-import { readSettings, DEFAULT_EDITOR_FILE_SIZE_LIMIT, type LoadedExtension } from './extensions';
+import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type LoadedExtension } from './extensions';
+import { initUserSettings, onSettingsChange } from './userSettings';
 import { languageRegistry } from './languageRegistry';
 import { setIconTheme, setIconThemeKind } from './iconResolver';
 import { basename, dirname, isRootPath, join } from './path';
+import { initUserKeybindings } from './userKeybindings';
 
 function buildParentChain(dirPath: string): FsNode | undefined {
   if (dirname(dirPath) === dirPath) return undefined;
@@ -288,10 +290,21 @@ export function App() {
   const commandPalette = useCommandPalette();
 
   useEffect(() => {
-    readSettings().then((s) => {
+    // Initialize settings with watch
+    initUserSettings().then((s) => {
       if (s.iconTheme) setActiveIconTheme(s.iconTheme);
       if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
     });
+    
+    // Listen for settings changes
+    const unsubscribe = onSettingsChange((s) => {
+      if (s.iconTheme) setActiveIconTheme(s.iconTheme);
+      if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
+    });
+    
+    initUserKeybindings();
+    
+    return unsubscribe;
   }, []);
 
   const activePanelRef = useRef(activePanel);

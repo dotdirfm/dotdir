@@ -3,9 +3,14 @@
  * 
  * VS Code compatible command registry with support for:
  * - Command registration and execution
- * - Keyboard shortcuts (keybindings)
+ * - Keyboard shortcuts (keybindings) with layered override system
  * - Extension-contributed commands
  * - Command palette integration
+ * 
+ * Keybinding layers (later layers override earlier ones):
+ * 1. Default (Faraday built-in)
+ * 2. Extensions
+ * 3. User (from ~/.faraday/keybindings.json)
  */
 
 import { focusContext } from './focusContext';
@@ -40,12 +45,18 @@ export interface KeybindingContribution {
   when?: string;
 }
 
+export type KeybindingLayer = 'default' | 'extension' | 'user';
+
 type CommandHandler = (...args: unknown[]) => void | Promise<void>;
 type ContextGetter = () => Record<string, unknown>;
 
 class CommandRegistry {
   private commands = new Map<string, Command>();
-  private keybindings: Keybinding[] = [];
+  private keybindingLayers: Record<KeybindingLayer, Keybinding[]> = {
+    default: [],
+    extension: [],
+    user: [],
+  };
   private contextGetter: ContextGetter = () => ({});
   private contextValues: Record<string, unknown> = {};
   private listeners = new Set<() => void>();
@@ -76,14 +87,25 @@ class CommandRegistry {
     };
   }
 
-  registerKeybinding(binding: Keybinding): () => void {
-    this.keybindings.push(binding);
+  registerKeybinding(binding: Keybinding, layer: KeybindingLayer = 'default'): () => void {
+    this.keybindingLayers[layer].push(binding);
     this.notifyListeners();
     return () => {
-      const idx = this.keybindings.indexOf(binding);
-      if (idx >= 0) this.keybindings.splice(idx, 1);
+      const layerBindings = this.keybindingLayers[layer];
+      const idx = layerBindings.indexOf(binding);
+      if (idx >= 0) layerBindings.splice(idx, 1);
       this.notifyListeners();
     };
+  }
+
+  setLayerKeybindings(layer: KeybindingLayer, bindings: Keybinding[]): void {
+    this.keybindingLayers[layer] = bindings;
+    this.notifyListeners();
+  }
+
+  clearLayerKeybindings(layer: KeybindingLayer): void {
+    this.keybindingLayers[layer] = [];
+    this.notifyListeners();
   }
 
   setContextGetter(getter: ContextGetter): void {
@@ -148,11 +170,28 @@ class CommandRegistry {
   }
 
   getKeybindings(): Keybinding[] {
-    return [...this.keybindings];
+    // Merge layers: later layers override earlier ones for the same key
+    const merged = new Map<string, Keybinding>();
+    const layers: KeybindingLayer[] = ['default', 'extension', 'user'];
+    
+    for (const layer of layers) {
+      for (const binding of this.keybindingLayers[layer]) {
+        const normalizedKey = this.normalizeKey(this.isMac() ? (binding.mac ?? binding.key) : binding.key);
+        // Use key + when as the unique identifier for overriding
+        const id = `${normalizedKey}|${binding.when ?? ''}`;
+        merged.set(id, binding);
+      }
+    }
+    
+    return Array.from(merged.values());
+  }
+
+  getKeybindingsForLayer(layer: KeybindingLayer): Keybinding[] {
+    return [...this.keybindingLayers[layer]];
   }
 
   getKeybindingForCommand(commandId: string): Keybinding | undefined {
-    return this.keybindings.find(k => k.command === commandId);
+    return this.getKeybindings().find((k: Keybinding) => k.command === commandId);
   }
 
   evaluateWhen(when: string | undefined): boolean {
@@ -186,7 +225,8 @@ class CommandRegistry {
     const keyCombo = this.eventToKeyCombo(e);
     if (!keyCombo) return false;
 
-    for (const binding of this.keybindings) {
+    const keybindings = this.getKeybindings();
+    for (const binding of keybindings) {
       const bindingKey = this.normalizeKey(this.isMac() ? (binding.mac ?? binding.key) : binding.key);
       if (bindingKey === keyCombo && this.evaluateWhen(binding.when)) {
         e.preventDefault();

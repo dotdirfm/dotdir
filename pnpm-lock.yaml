@@ -26,6 +26,9 @@ importers:
       fss-lang:
         specifier: ^0.0.5
         version: 0.0.5
+      jsonc-parser:
+        specifier: ^3.3.1
+        version: 3.3.1
       monaco-editor:
         specifier: ^0.55.1
         version: 0.55.1
@@ -870,6 +873,9 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
+  jsonc-parser@3.3.1:
+    resolution: {integrity: sha512-HUgH65KyejrUFPvHFPbqOY0rsFip3Bo5wb4ngvdi1EpCYWUQDC5V+Y7mZws+DLkr4M//zQJoanu1SP+87Dv1oQ==}
+
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
 
@@ -1702,6 +1708,8 @@ snapshots:
   jsesc@3.1.0: {}
 
   json5@2.2.3: {}
+
+  jsonc-parser@3.3.1: {}
 
   lru-cache@5.1.1:
     dependencies:

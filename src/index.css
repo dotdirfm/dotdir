@@ -1077,7 +1077,8 @@ body {
   border: none;
   padding: 0;
   background: transparent;
-  max-width: none;
+  width: 800px;
+  max-width: 90vw;
   max-height: none;
   overflow: visible;
 }
