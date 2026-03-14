@@ -124,6 +124,10 @@ pub fn spawn(cwd: &str, cols: u16, rows: u16) -> io::Result<PtyHandle> {
     {
         cmd.env("TERM", "xterm-256color");
         cmd.env("HISTCONTROL", "ignoreboth");
+        // Ensure UTF-8 locale for proper handling of non-ASCII characters
+        let lang = std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".to_string());
+        cmd.env("LANG", &lang);
+        cmd.env("LC_CTYPE", "UTF-8");
     }
 
     let child = pair

@@ -81,6 +81,8 @@ body {
   min-width: 0;
   border: 1px solid var(--border);
   background: var(--bg);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .panel + .panel {
