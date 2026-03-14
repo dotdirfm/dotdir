@@ -3,20 +3,29 @@ import type { LayeredResolver, ThemeKind } from 'fss-lang';
 import { createFsNode } from 'fss-lang/helpers';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri as isTauriApp } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { FsChangeType } from './types';
 import { bridge } from './bridge';
-import { detectLang } from './langDetect';
-import { actionQueue } from './actionQueue';
 import { FileList } from './FileList';
 import { FileViewer } from './FileViewer';
 import { FileEditor } from './FileEditor';
 import { ImageViewer, isMediaFile, type MediaFileEntry } from './ImageViewer';
 import { ModalDialog, type ModalDialogProps } from './ModalDialog';
 import { TerminalPanel } from './Terminal';
+import { ActionBar } from './ActionBar';
+import { ExtensionsPanel } from './ExtensionsPanel';
+import { CommandPalette, useCommandPalette } from './CommandPalette';
+import { commandRegistry } from './commands';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
-import { createPanelResolver, invalidateFssCache, syncLayers } from './fss';
+import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
+import { extensionHost } from './extensionHostClient';
+import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type LoadedExtension, type PanelPersistedState } from './extensions';
+import { initUserSettings, onSettingsChange, updateSettings } from './userSettings';
+import { languageRegistry } from './languageRegistry';
+import { setIconTheme, setIconThemeKind } from './iconResolver';
 import { basename, dirname, isRootPath, join } from './path';
 import { normalizeTerminalPath } from './terminal/path';
+import { initUserKeybindings } from './userKeybindings';
 
 function buildParentChain(dirPath: string): FsNode | undefined {
   if (dirname(dirPath) === dirPath) return undefined;
@@ -48,7 +57,7 @@ function handleToFsNode(handle: FileSystemHandle & { meta?: HandleMeta }, dirPat
   return createFsNode({
     name: handle.name,
     type: isDir ? 'folder' : 'file',
-    lang: isDir ? '' : detectLang(handle.name),
+    lang: isDir ? '' : languageRegistry.detectLanguage(handle.name),
     meta: {
       size: handle.meta?.size ?? 0,
       mtimeMs: handle.meta?.mtimeMs ?? 0,
@@ -274,12 +283,50 @@ export function App() {
   const [activePanel, setActivePanel] = useState<PanelSide>('left');
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [promptActive, setPromptActive] = useState(true);
+  const promptHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [terminalVisibleHeight, setTerminalVisibleHeight] = useState(40);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
   const expectedTerminalCwdsRef = useRef<Map<string, number>>(new Map());
+  const [showExtensions, setShowExtensions] = useState(false);
+  const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
+  const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
+  const [initialLeftPanel, setInitialLeftPanel] = useState<PanelPersistedState | undefined>(undefined);
+  const [initialRightPanel, setInitialRightPanel] = useState<PanelPersistedState | undefined>(undefined);
+  const [initialActivePanel, setInitialActivePanel] = useState<PanelSide | undefined>(undefined);
+  const activeIconThemeRef = useRef(activeIconTheme);
+  activeIconThemeRef.current = activeIconTheme;
+  const commandPalette = useCommandPalette();
+
+  useEffect(() => {
+    // Initialize settings with watch
+    initUserSettings().then((s) => {
+      if (s.iconTheme) setActiveIconTheme(s.iconTheme);
+      if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
+      if (s.leftPanel) setInitialLeftPanel(s.leftPanel);
+      if (s.rightPanel) setInitialRightPanel(s.rightPanel);
+      if (s.activePanel) setInitialActivePanel(s.activePanel);
+    });
+    
+    // Listen for settings changes (but don't update panel state from external changes)
+    const unsubscribe = onSettingsChange((s) => {
+      if (s.iconTheme) setActiveIconTheme(s.iconTheme);
+      if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
+    });
+    
+    initUserKeybindings();
+    
+    return unsubscribe;
+  }, []);
 
   const activePanelRef = useRef(activePanel);
   activePanelRef.current = activePanel;
+
+  // Set context for which panel is active
+  useEffect(() => {
+    commandRegistry.setContext('leftPanelActive', activePanel === 'left');
+    commandRegistry.setContext('rightPanelActive', activePanel === 'right');
+  }, [activePanel]);
 
   const handleViewFile = useCallback((filePath: string, fileName: string, fileSize: number) => {
     setViewerFile({ path: filePath, name: fileName, size: fileSize, panel: activePanelRef.current });
@@ -312,6 +359,68 @@ export function App() {
   const leftRequestedCursor = viewerFile?.panel === 'left' ? viewerActiveName : undefined;
   const rightRequestedCursor = viewerFile?.panel === 'right' ? viewerActiveName : undefined;
 
+  // Panel state persistence with long debounce (10s) to avoid excessive writes
+  const panelStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPanelStateRef = useRef<{
+    leftPanel?: { currentPath: string; selectedName?: string; topmostName?: string };
+    rightPanel?: { currentPath: string; selectedName?: string; topmostName?: string };
+  }>({});
+
+  const flushPanelState = useCallback(() => {
+    if (panelStateSaveTimerRef.current) {
+      clearTimeout(panelStateSaveTimerRef.current);
+      panelStateSaveTimerRef.current = null;
+    }
+    const pending = pendingPanelStateRef.current;
+    if (pending.leftPanel || pending.rightPanel) {
+      updateSettings(pending);
+      pendingPanelStateRef.current = {};
+    }
+  }, []);
+
+  const savePanelStateDebounced = useCallback(() => {
+    if (panelStateSaveTimerRef.current) {
+      clearTimeout(panelStateSaveTimerRef.current);
+    }
+    panelStateSaveTimerRef.current = setTimeout(() => {
+      panelStateSaveTimerRef.current = null;
+      updateSettings(pendingPanelStateRef.current);
+      pendingPanelStateRef.current = {};
+    }, 10000); // 10 second debounce
+  }, []);
+
+  // Flush panel state on window close
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      flushPanelState();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [flushPanelState]);
+
+  const handleLeftStateChange = useCallback((selectedName: string | undefined, topmostName: string | undefined) => {
+    pendingPanelStateRef.current.leftPanel = {
+      currentPath: left.currentPath,
+      selectedName,
+      topmostName,
+    };
+    savePanelStateDebounced();
+  }, [left.currentPath, savePanelStateDebounced]);
+
+  const handleRightStateChange = useCallback((selectedName: string | undefined, topmostName: string | undefined) => {
+    pendingPanelStateRef.current.rightPanel = {
+      currentPath: right.currentPath,
+      selectedName,
+      topmostName,
+    };
+    savePanelStateDebounced();
+  }, [right.currentPath, savePanelStateDebounced]);
+
+  // Save active panel when it changes
+  useEffect(() => {
+    updateSettings({ activePanel });
+  }, [activePanel]);
+
   const handleTerminalCwd = useCallback((path: string) => {
     const normalizedPath = normalizeTerminalPath(path);
     const now = Date.now();
@@ -340,6 +449,23 @@ export function App() {
     }
   }, [activePanel, left, right]);
 
+  // Debounced prompt active handler - delay hiding panels to avoid flashing on fast commands
+  const handlePromptActive = useCallback((active: boolean) => {
+    if (promptHideTimerRef.current) {
+      clearTimeout(promptHideTimerRef.current);
+      promptHideTimerRef.current = null;
+    }
+    if (active) {
+      // Show panels immediately when command finishes
+      setPromptActive(true);
+    } else {
+      // Delay hiding panels by 60ms to avoid flashing on fast commands
+      promptHideTimerRef.current = setTimeout(() => {
+        setPromptActive(false);
+      }, 60);
+    }
+  }, []);
+
   useEffect(() => {
     bridge.theme.get().then((t) => setTheme(t as ThemeKind));
     return bridge.theme.onChange((t) => setTheme(t as ThemeKind));
@@ -347,10 +473,210 @@ export function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    setIconThemeKind(theme === 'light' || theme === 'high-contrast-light' ? 'light' : 'dark');
   }, [theme]);
+
+  // Register built-in commands
+  useEffect(() => {
+    const disposables: (() => void)[] = [];
+
+    // View commands
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.toggleHiddenFiles',
+      'Toggle Hidden Files',
+      () => setShowHidden(h => !h),
+      { category: 'View' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.toggleHiddenFiles',
+      key: 'ctrl+.',
+      mac: 'cmd+.',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.togglePanels',
+      'Toggle Panels',
+      () => setPanelsVisible(v => !v),
+      { category: 'View' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.togglePanels',
+      key: 'ctrl+o',
+      mac: 'cmd+o',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.showExtensions',
+      'Show Extensions',
+      () => setShowExtensions(true),
+      { category: 'View' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.showExtensions',
+      key: 'f11',
+    }));
+
+    // Navigation commands
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.switchPanel',
+      'Switch Panel',
+      () => setActivePanel(s => s === 'left' ? 'right' : 'left'),
+      { category: 'Navigation', when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.switchPanel',
+      key: 'tab',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.focusLeftPanel',
+      'Focus Left Panel',
+      () => setActivePanel('left'),
+      { category: 'Navigation', when: 'focusPanel && !leftPanelActive' }
+    ));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.focusRightPanel',
+      'Focus Right Panel',
+      () => setActivePanel('right'),
+      { category: 'Navigation', when: 'focusPanel && !rightPanelActive' }
+    ));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.cancelNavigation',
+      'Cancel Navigation',
+      () => {
+        left.cancelNavigation();
+        right.cancelNavigation();
+      },
+      { category: 'Navigation', when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.cancelNavigation',
+      key: 'escape',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.goToParent',
+      'Go to Parent Directory',
+      () => {
+        const panel = activePanelRef.current === 'left' ? left : right;
+        const parent = dirname(panel.currentPath);
+        if (parent !== panel.currentPath) {
+          panel.navigateTo(parent);
+        }
+      },
+      { category: 'Navigation', when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.goToParent',
+      key: 'backspace',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.goHome',
+      'Go to Home Directory',
+      async () => {
+        const home = await bridge.utils.getHomePath();
+        const panel = activePanelRef.current === 'left' ? left : right;
+        panel.navigateTo(home);
+      },
+      { category: 'Navigation', when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.goHome',
+      key: 'ctrl+home',
+      mac: 'cmd+home',
+    }));
+
+    // File commands
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.refresh',
+      'Refresh',
+      () => {
+        const panel = activePanelRef.current === 'left' ? left : right;
+        panel.navigateTo(panel.currentPath);
+      },
+      { category: 'File', when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.refresh',
+      key: 'ctrl+r',
+      mac: 'cmd+r',
+      when: 'focusPanel',
+    }));
+
+    // Command palette
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.showCommandPalette',
+      'Show All Commands',
+      () => commandPalette.setOpen(true),
+      { category: 'View' }
+    ));
+
+    // Close viewer/editor commands
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.closeViewer',
+      'Close Viewer',
+      () => setViewerFile(null),
+      { category: 'View', when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.closeViewer',
+      key: 'escape',
+      when: 'focusViewer',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.closeEditor',
+      'Close Editor',
+      () => setEditorFile(null),
+      { category: 'View', when: 'focusEditor' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.closeEditor',
+      key: 'escape',
+      when: 'focusEditor',
+    }));
+
+    // Exit command
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.exit',
+      'Exit',
+      async () => {
+        if (isTauriApp()) {
+          await getCurrentWindow().close();
+        } else {
+          window.close();
+        }
+      },
+      { category: 'Application' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.exit',
+      key: 'f10',
+    }));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.exit',
+      key: 'cmd+q',
+      mac: 'cmd+q',
+    }));
+
+    return () => {
+      for (const dispose of disposables) dispose();
+    };
+  }, [left, right, commandPalette]);
 
   const isBrowser = !isTauriApp();
 
+  const leftPathRef = useRef(left.currentPath);
+  leftPathRef.current = left.currentPath;
+  const rightPathRef = useRef(right.currentPath);
+  rightPathRef.current = right.currentPath;
+
+  // Navigate panels using persisted state or defaults
   useEffect(() => {
     const browserPath = (() => {
       if (!isBrowser) return '';
@@ -363,6 +689,27 @@ export function App() {
 
     const hasUrlPath = browserPath.length > 0;
 
+    const navigatePanel = async (
+      panel: typeof left,
+      persistedState: PanelPersistedState | undefined,
+      fallbackPath?: string
+    ) => {
+      let targetPath = persistedState?.currentPath ?? fallbackPath;
+      
+      if (targetPath) {
+        const exists = await bridge.fsa.exists(targetPath);
+        if (!exists) {
+          targetPath = await findExistingParent(targetPath);
+        }
+      }
+      
+      if (!targetPath) {
+        targetPath = await bridge.utils.getHomePath();
+      }
+      
+      await panel.navigateTo(targetPath);
+    };
+
     if (hasUrlPath) {
       bridge.fsa.exists(browserPath).then(async (exists) => {
         if (exists) {
@@ -373,13 +720,107 @@ export function App() {
           showError(`Directory not found: ${browserPath}`);
         }
       });
-      bridge.utils.getHomePath().then((home) => right.navigateTo(home));
+      navigatePanel(right, initialRightPanel);
     } else {
-      bridge.utils.getHomePath().then((home) => {
-        left.navigateTo(home);
-        right.navigateTo(home);
-      });
+      // Use persisted state
+      navigatePanel(left, initialLeftPanel);
+      navigatePanel(right, initialRightPanel);
+      if (initialActivePanel) {
+        setActivePanel(initialActivePanel);
+      }
     }
+    
+    // Clear initial state after first navigation to prevent cursor jumping
+    // when viewer is closed (was falling back to initial selectedName)
+    setTimeout(() => {
+      setInitialLeftPanel(undefined);
+      setInitialRightPanel(undefined);
+      setInitialActivePanel(undefined);
+    }, 500);
+  }, [initialLeftPanel, initialRightPanel, initialActivePanel]);
+
+  const latestExtensionsRef = useRef<LoadedExtension[]>([]);
+
+  // Start Extension Host lazily — re-navigate panels when extensions load
+  useEffect(() => {
+    languageRegistry.initialize();
+
+    const registerLanguages = async (exts: LoadedExtension[]) => {
+      languageRegistry.clear();
+      // First pass: register all languages and grammar contents
+      for (const ext of exts) {
+        if (ext.languages) {
+          for (const lang of ext.languages) {
+            languageRegistry.registerLanguage(lang);
+          }
+        }
+        if (ext.grammars) {
+          for (const grammar of ext.grammars) {
+            languageRegistry.registerGrammar(grammar);
+          }
+        }
+      }
+      // Second pass: activate tokenization (after all grammars are available for cross-references)
+      await languageRegistry.activateGrammars();
+    };
+
+    const updateIconTheme = (exts: LoadedExtension[], themeId: string | undefined) => {
+      if (!themeId) {
+        setIconTheme('fss');
+        return;
+      }
+      const ext = exts.find(e => `${e.ref.publisher}.${e.ref.name}` === themeId);
+      if (ext?.vscodeIconThemePath) {
+        setIconTheme('vscode', ext.vscodeIconThemePath);
+      } else if (ext?.iconThemeFss) {
+        setIconTheme('fss');
+      } else {
+        setIconTheme('none');
+      }
+    };
+
+    // Register extension commands and keybindings
+    const registerExtensionCommands = (exts: LoadedExtension[]) => {
+      for (const ext of exts) {
+        if (ext.commands) {
+          for (const cmd of ext.commands) {
+            commandRegistry.registerCommand(
+              cmd.command,
+              cmd.title,
+              () => {
+                console.log(`Extension command not implemented: ${cmd.command}`);
+              },
+              { category: cmd.category, icon: cmd.icon }
+            );
+          }
+        }
+        if (ext.keybindings) {
+          for (const kb of ext.keybindings) {
+            commandRegistry.registerKeybinding({
+              command: kb.command,
+              key: kb.key,
+              mac: kb.mac,
+              when: kb.when,
+            });
+          }
+        }
+      }
+    };
+
+    const unsub = extensionHost.onLoaded((exts) => {
+      latestExtensionsRef.current = exts;
+      setExtensionLayers(exts, activeIconThemeRef.current);
+      updateIconTheme(exts, activeIconThemeRef.current);
+      registerLanguages(exts);
+      registerExtensionCommands(exts);
+      if (leftPathRef.current) left.navigateTo(leftPathRef.current);
+      if (rightPathRef.current) right.navigateTo(rightPathRef.current);
+    });
+    extensionHost.start();
+    return () => {
+      unsub();
+      extensionHost.dispose();
+    };
   }, []);
 
   const activePath = activePanel === 'left' ? left.currentPath : right.currentPath;
@@ -392,11 +833,6 @@ export function App() {
     }
   }, [activePath]);
 
-  const leftPathRef = useRef(left.currentPath);
-  leftPathRef.current = left.currentPath;
-  const rightPathRef = useRef(right.currentPath);
-  rightPathRef.current = right.currentPath;
-
   useEffect(() => {
     if (bridge.onReconnect) {
       return bridge.onReconnect(() => {
@@ -406,25 +842,6 @@ export function App() {
     }
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        actionQueue.enqueue(() => setActivePanel((s) => (s === 'left' ? 'right' : 'left')));
-      } else if (e.key === 'Escape') {
-        left.cancelNavigation();
-        right.cancelNavigation();
-      } else if (e.key === '.' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        setShowHidden((s) => !s);
-      } else if (e.key === 'o' && e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
-        e.preventDefault();
-        setPanelsVisible((s) => !s);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   if (!left.currentPath || !right.currentPath) {
     return <div className="loading">Loading...</div>;
@@ -441,12 +858,13 @@ export function App() {
           cwd={activeCwd}
           expanded={!panelsVisible}
           onCwdChange={handleTerminalCwd}
-          onPromptActive={setPromptActive}
+          onVisibleHeight={setTerminalVisibleHeight}
+          onPromptActive={handlePromptActive}
         />
       </div>
       <div
         className={`panels-overlay${panelsVisible && promptActive ? '' : ' hidden'}`}
-        style={{ bottom: `${collapsedTerminalVisibleHeight + actionBarHeight}px` }}
+        style={{ bottom: `${Math.max(collapsedTerminalVisibleHeight, terminalVisibleHeight) + actionBarHeight}px` }}
       >
         <div className={`panel ${activePanel === 'left' ? 'active' : ''}`} onClick={() => setActivePanel('left')}>
           {left.navigating && <div className="panel-progress" />}
@@ -460,9 +878,12 @@ export function App() {
             }}
             onViewFile={handleViewFile}
             onEditFile={handleEditFile}
+            editorFileSizeLimit={editorFileSizeLimit}
             active={activePanel === 'left'}
             resolver={left.resolver}
-            requestedActiveName={leftRequestedCursor}
+            requestedActiveName={leftRequestedCursor ?? initialLeftPanel?.selectedName}
+            requestedTopmostName={initialLeftPanel?.topmostName}
+            onStateChange={handleLeftStateChange}
           />
         </div>
         <div className={`panel ${activePanel === 'right' ? 'active' : ''}`} onClick={() => setActivePanel('right')}>
@@ -477,26 +898,16 @@ export function App() {
             }}
             onViewFile={handleViewFile}
             onEditFile={handleEditFile}
+            editorFileSizeLimit={editorFileSizeLimit}
             active={activePanel === 'right'}
             resolver={right.resolver}
-            requestedActiveName={rightRequestedCursor}
+            requestedActiveName={rightRequestedCursor ?? initialRightPanel?.selectedName}
+            requestedTopmostName={initialRightPanel?.topmostName}
+            onStateChange={handleRightStateChange}
           />
         </div>
       </div>
-      <div className="action-bar">
-        <div className="action-bar-item"><span className="action-bar-key">1</span><span className="action-bar-label">Help</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">2</span><span className="action-bar-label">Menu</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">3</span><span className="action-bar-label">View</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">4</span><span className="action-bar-label">Edit</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">5</span><span className="action-bar-label">Copy</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">6</span><span className="action-bar-label">Move</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">7</span><span className="action-bar-label">MkDir</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">8</span><span className="action-bar-label">Delete</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">9</span><span className="action-bar-label">PullDn</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">10</span><span className="action-bar-label">Quit</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">11</span><span className="action-bar-label">Plugin</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">12</span><span className="action-bar-label">Screen</span></div>
-      </div>
+      <ActionBar />
       {viewerFile &&
         (isMediaFile(viewerFile.name) ? (
           <ImageViewer
@@ -518,7 +929,37 @@ export function App() {
           onClose={() => setEditorFile(null)}
         />
       )}
+      {showExtensions && (
+        <ExtensionsPanel
+          onClose={() => setShowExtensions(false)}
+          onExtensionsChanged={() => {
+            extensionHost.restart();
+          }}
+          activeIconTheme={activeIconTheme}
+          onIconThemeChange={(themeId) => {
+            setActiveIconTheme(themeId);
+            activeIconThemeRef.current = themeId;
+            setExtensionLayers(latestExtensionsRef.current, themeId);
+            // Update icon resolver
+            if (!themeId) {
+              setIconTheme('fss');
+            } else {
+              const ext = latestExtensionsRef.current.find(e => `${e.ref.publisher}.${e.ref.name}` === themeId);
+              if (ext?.vscodeIconThemePath) {
+                setIconTheme('vscode', ext.vscodeIconThemePath);
+              } else if (ext?.iconThemeFss) {
+                setIconTheme('fss');
+              } else {
+                setIconTheme('none');
+              }
+            }
+            if (leftPathRef.current) left.navigateTo(leftPathRef.current);
+            if (rightPathRef.current) right.navigateTo(rightPathRef.current);
+          }}
+        />
+      )}
       {dialog && <ModalDialog {...dialog} onClose={() => setDialog(null)} />}
+      <CommandPalette open={commandPalette.open} onOpenChange={commandPalette.setOpen} />
     </div>
   );
 }

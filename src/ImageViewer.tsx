@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { commandRegistry } from './commands';
 import { FileHandle } from './fsa';
+import { focusContext } from './focusContext';
 import { basename } from './path';
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'ico', 'svg', 'avif', 'tiff', 'tif']);
@@ -98,9 +100,13 @@ export function ImageViewer({ filePath, fileName, fileSize, mediaFiles, onClose,
   useEffect(() => {
     const dialog = dialogRef.current!;
     dialog.showModal();
+    focusContext.push('viewer');
     const handleClose = () => onClose();
     dialog.addEventListener('close', handleClose);
-    return () => dialog.removeEventListener('close', handleClose);
+    return () => {
+      dialog.removeEventListener('close', handleClose);
+      focusContext.pop('viewer');
+    };
   }, [onClose]);
 
   useEffect(() => {
@@ -261,46 +267,120 @@ export function ImageViewer({ filePath, fileName, fileSize, mediaFiles, onClose,
   const onNavigateMediaRef = useRef(onNavigateMedia);
   onNavigateMediaRef.current = onNavigateMedia;
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    e.stopPropagation();
+  // Register media viewer commands
+  useEffect(() => {
+    const disposables: (() => void)[] = [];
 
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      const idx = currentIndexRef.current;
-      const files = mediaFilesRef.current;
-      if (idx > 0) onNavigateMediaRef.current(files[idx - 1]);
-      return;
-    }
-    if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      const idx = currentIndexRef.current;
-      const files = mediaFilesRef.current;
-      if (idx >= 0 && idx < files.length - 1) onNavigateMediaRef.current(files[idx + 1]);
-      return;
-    }
+    disposables.push(commandRegistry.registerCommand(
+      'media.previousFile',
+      'Previous File',
+      () => {
+        const idx = currentIndexRef.current;
+        const files = mediaFilesRef.current;
+        if (idx > 0) onNavigateMediaRef.current(files[idx - 1]);
+      },
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'media.previousFile',
+      key: 'left',
+      when: 'focusViewer',
+    }));
 
-    if (isVideoRef.current) {
-      if (e.key === ' ') {
-        e.preventDefault();
-        togglePlayPauseRef.current();
-      } else if (e.key === '+' || e.key === '=') {
-        setVolume((v) => Math.min(1, +(v + 0.1).toFixed(1)));
-      } else if (e.key === '-') {
-        setVolume((v) => Math.max(0, +(v - 0.1).toFixed(1)));
-      } else if (e.key === '0') {
-        setIsMuted((m) => !m);
-      }
-    } else {
-      if (e.key === '+' || e.key === '=') {
-        setZoom((z) => Math.min(20, z * 1.2));
-      } else if (e.key === '-') {
-        setZoom((z) => Math.max(0.05, z / 1.2));
-      } else if (e.key === '0') {
-        setZoom(1);
-        setPanX(0);
-        setPanY(0);
-      }
-    }
+    disposables.push(commandRegistry.registerCommand(
+      'media.nextFile',
+      'Next File',
+      () => {
+        const idx = currentIndexRef.current;
+        const files = mediaFilesRef.current;
+        if (idx >= 0 && idx < files.length - 1) onNavigateMediaRef.current(files[idx + 1]);
+      },
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'media.nextFile',
+      key: 'right',
+      when: 'focusViewer',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'media.togglePlayPause',
+      'Play/Pause',
+      () => {
+        if (isVideoRef.current) togglePlayPauseRef.current();
+      },
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'media.togglePlayPause',
+      key: 'space',
+      when: 'focusViewer',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'media.zoomIn',
+      'Zoom In / Volume Up',
+      () => {
+        if (isVideoRef.current) {
+          setVolume((v) => Math.min(1, +(v + 0.1).toFixed(1)));
+        } else {
+          setZoom((z) => Math.min(20, z * 1.2));
+        }
+      },
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'media.zoomIn',
+      key: '+',
+      when: 'focusViewer',
+    }));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'media.zoomIn',
+      key: '=',
+      when: 'focusViewer',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'media.zoomOut',
+      'Zoom Out / Volume Down',
+      () => {
+        if (isVideoRef.current) {
+          setVolume((v) => Math.max(0, +(v - 0.1).toFixed(1)));
+        } else {
+          setZoom((z) => Math.max(0.05, z / 1.2));
+        }
+      },
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'media.zoomOut',
+      key: '-',
+      when: 'focusViewer',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'media.resetZoom',
+      'Reset Zoom / Toggle Mute',
+      () => {
+        if (isVideoRef.current) {
+          setIsMuted((m) => !m);
+        } else {
+          setZoom(1);
+          setPanX(0);
+          setPanY(0);
+        }
+      },
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'media.resetZoom',
+      key: '0',
+      when: 'focusViewer',
+    }));
+
+    return () => {
+      for (const dispose of disposables) dispose();
+    };
   }, []);
 
   // ── Render ────────────────────────────────────────────────────────
@@ -308,9 +388,16 @@ export function ImageViewer({ filePath, fileName, fileSize, mediaFiles, onClose,
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <dialog ref={dialogRef} className="file-viewer" onKeyDown={handleKeyDown}>
+    <dialog ref={dialogRef} className="file-viewer">
       <div className="file-viewer-header">
         <span style={{ flex: 1 }}>{fileName}</span>
+        <button
+          className="dialog-close-btn"
+          onClick={() => dialogRef.current?.close()}
+          title="Close (Esc)"
+        >
+          ×
+        </button>
       </div>
 
       {error ? (

@@ -1,26 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { EditorState, type Extension } from '@codemirror/state';
-import { EditorView, keymap, drawSelection, highlightActiveLine } from '@codemirror/view';
-import { history, historyKeymap } from '@codemirror/commands';
-import { defaultHighlightStyle, syntaxHighlighting, indentOnInput } from '@codemirror/language';
-import { lineNumbers } from '@codemirror/view';
-import { bracketMatching } from '@codemirror/language';
-import { highlightActiveLineGutter } from '@codemirror/view';
-import { defaultKeymap } from '@codemirror/commands';
-import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
-import { indentWithTab } from '@codemirror/commands';
-import { javascript } from '@codemirror/lang-javascript';
-import { html } from '@codemirror/lang-html';
-import { css } from '@codemirror/lang-css';
-import { json } from '@codemirror/lang-json';
-import { markdown } from '@codemirror/lang-markdown';
-import { python } from '@codemirror/lang-python';
-import { rust } from '@codemirror/lang-rust';
-import { sql } from '@codemirror/lang-sql';
-import { yaml } from '@codemirror/lang-yaml';
-import { xml } from '@codemirror/lang-xml';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import * as monaco from 'monaco-editor';
 import { FileHandle } from './fsa';
 import { bridge } from './bridge';
+import { focusContext } from './focusContext';
+import { languageRegistry } from './languageRegistry';
+
+function getAvailableLanguages(): { id: string; name: string }[] {
+  const langs = monaco.languages.getLanguages();
+  return langs
+    .map(l => ({ id: l.id, name: l.aliases?.[0] ?? l.id }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Configure Monaco editor worker
+(self as unknown as Record<string, unknown>).MonacoEnvironment = {
+  getWorker: () =>
+    new Worker(
+      new URL('monaco-editor/esm/vs/editor/editor.worker.js', import.meta.url),
+      { type: 'module' },
+    ),
+};
 
 interface FileEditorProps {
   filePath: string;
@@ -29,53 +28,25 @@ interface FileEditorProps {
   onClose: () => void;
 }
 
-function getLanguageExtensions(langId: string): Extension | null {
-  switch (langId) {
-    case 'javascript':
-    case 'javascriptreact':
-      return javascript({ jsx: true, typescript: false });
-    case 'typescript':
-    case 'typescriptreact':
-      return javascript({ jsx: true, typescript: true });
-    case 'json':
-    case 'jsonc':
-    case 'json5':
-      return json();
-    case 'html':
-      return html();
-    case 'css':
-    case 'scss':
-    case 'sass':
-    case 'less':
-      return css();
-    case 'markdown':
-      return markdown();
-    case 'python':
-      return python();
-    case 'rust':
-      return rust();
-    case 'sql':
-    case 'kql':
-      return sql();
-    case 'yaml':
-      return yaml();
-    case 'xml':
-    case 'xsl':
-    case 'xquery':
-      return xml();
-    default:
-      return null;
-  }
-}
-
 export function FileEditor({ filePath, fileName, langId, onClose }: FileEditorProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const editorHostRef = useRef<HTMLDivElement | null>(null);
-  const viewRef = useRef<EditorView | null>(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const [content, setContent] = useState<string | null>(null);
+  const [currentLangId, setCurrentLangId] = useState(langId);
+  const [showLangPicker, setShowLangPicker] = useState(false);
   const dirtyRef = useRef(false);
 
-  const languageExtension = useMemo<Extension | null>(() => getLanguageExtensions(langId), [langId]);
+  const handleLanguageChange = useCallback((newLangId: string) => {
+    setCurrentLangId(newLangId);
+    setShowLangPicker(false);
+    if (editorRef.current) {
+      const model = editorRef.current.getModel();
+      if (model) {
+        monaco.editor.setModelLanguage(model, newLangId);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const handle = new FileHandle(filePath, fileName);
@@ -94,25 +65,63 @@ export function FileEditor({ filePath, fileName, langId, onClose }: FileEditorPr
     const dialog = dialogRef.current;
     if (!dialog) return;
     dialog.showModal();
+    focusContext.push('editor');
     const handleClose = () => onClose();
     dialog.addEventListener('close', handleClose);
-    return () => dialog.removeEventListener('close', handleClose);
+    return () => {
+      dialog.removeEventListener('close', handleClose);
+      focusContext.pop('editor');
+    };
   }, [onClose]);
 
   useEffect(() => {
     if (content === null) return;
     if (!editorHostRef.current) return;
 
-    if (viewRef.current) {
-      viewRef.current.destroy();
-      viewRef.current = null;
+    if (editorRef.current) {
+      editorRef.current.dispose();
+      editorRef.current = null;
     }
 
+    const isDark =
+      typeof document !== 'undefined' ? document.documentElement.dataset.theme !== 'light' : true;
+
+    // Use the currentLangId; Monaco will only highlight if a grammar is registered
+    const monacoLangId = languageRegistry.hasGrammar(currentLangId) ? currentLangId : currentLangId;
+
+    const editor = monaco.editor.create(editorHostRef.current, {
+      value: content,
+      language: monacoLangId,
+      theme: isDark ? 'faraday-dark' : 'faraday-light',
+      automaticLayout: true,
+      minimap: { enabled: false },
+      fontSize: 13,
+      fontFamily: 'monospace',
+      lineNumbers: 'on',
+      renderLineHighlight: 'line',
+      scrollBeyondLastLine: false,
+      wordWrap: 'off',
+      tabSize: 4,
+      insertSpaces: true,
+      overviewRulerLanes: 0,
+      hideCursorInOverviewRuler: true,
+      overviewRulerBorder: false,
+      scrollbar: {
+        verticalScrollbarSize: 14,
+        horizontalScrollbarSize: 14,
+      },
+    });
+
+    editorRef.current = editor;
+
+    // Track dirty state
+    editor.onDidChangeModelContent(() => {
+      dirtyRef.current = true;
+    });
+
     const save = async (): Promise<boolean> => {
-      const view = viewRef.current;
-      if (!view) return false;
       try {
-        const text = view.state.doc.toString();
+        const text = editor.getValue();
         await bridge.fsa.writeFile(filePath, text);
         dirtyRef.current = false;
         return true;
@@ -122,123 +131,79 @@ export function FileEditor({ filePath, fileName, langId, onClose }: FileEditorPr
       }
     };
 
-    const isDark =
-      typeof document !== 'undefined' ? document.documentElement.dataset.theme !== 'light' : true;
+    // F2 to save
+    editor.addAction({
+      id: 'faraday.save',
+      label: 'Save File',
+      keybindings: [monaco.KeyCode.F2],
+      run: () => { void save(); },
+    });
 
-    const extensions: Extension[] = [
-      lineNumbers(),
-      highlightActiveLineGutter(),
-      history(),
-      drawSelection(),
-      indentOnInput(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-      highlightActiveLine(),
-      highlightSelectionMatches(),
-      EditorView.updateListener.of((update) => {
-        if (update.docChanged) {
-          dirtyRef.current = true;
+    // Escape to close (with dirty check)
+    editor.addAction({
+      id: 'faraday.close',
+      label: 'Close Editor',
+      keybindings: [monaco.KeyCode.Escape],
+      run: () => {
+        if (!dirtyRef.current) {
+          dialogRef.current?.close();
+          return;
         }
-      }),
-      keymap.of([
-        {
-          key: 'F2',
-          run: () => {
-            void save();
-            return true;
-          },
-        },
-        {
-          key: 'Escape',
-          run: () => {
-            if (!dirtyRef.current) {
-              dialogRef.current?.close();
-              return true;
-            }
-            const shouldSave = window.confirm('Save changes before closing?');
-            if (shouldSave) {
-              void save().then((ok) => {
-                if (ok) dialogRef.current?.close();
-              });
-            } else {
-              dialogRef.current?.close();
-            }
-            return true;
-          },
-        },
-        indentWithTab,
-        ...defaultKeymap,
-        ...historyKeymap,
-        ...searchKeymap,
-      ]),
-      EditorView.theme(
-        {
-          '&': {
-            backgroundColor: 'var(--bg)',
-            color: 'var(--fg)',
-            height: '100%',
-          },
-          '.cm-scroller': {
-            fontFamily: 'monospace',
-            fontSize: '13px',
-          },
-          '.cm-content': {
-            caretColor: 'var(--fg)',
-          },
-          '.cm-cursor': {
-            borderLeftColor: 'var(--fg)',
-          },
-          '&.cm-focused .cm-cursor': {
-            borderLeftColor: 'var(--fg)',
-          },
-          '.cm-gutters': {
-            backgroundColor: 'var(--bg-secondary)',
-            borderRight: '1px solid var(--border)',
-            color: 'var(--fg-secondary)',
-          },
-          '.cm-selectionBackground': {
-            backgroundColor: isDark ? 'rgba(148, 163, 184, 0.35)' : 'rgba(37, 99, 235, 0.25)',
-          },
-          '&.cm-focused .cm-selectionBackground': {
-            backgroundColor: isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(37, 99, 235, 0.35)',
-          },
-        },
-        { dark: isDark },
-      ),
-      bracketMatching(),
-    ];
-
-    if (languageExtension) {
-      extensions.push(languageExtension);
-    }
-
-    const state = EditorState.create({
-      doc: content,
-      extensions,
+        const shouldSave = window.confirm('Save changes before closing?');
+        if (shouldSave) {
+          void save().then((ok) => {
+            if (ok) dialogRef.current?.close();
+          });
+        } else {
+          dialogRef.current?.close();
+        }
+      },
     });
 
-    const view = new EditorView({
-      state,
-      parent: editorHostRef.current,
-    });
-
-    viewRef.current = view;
-    view.focus();
+    editor.focus();
 
     return () => {
-      view.destroy();
-      viewRef.current = null;
+      editor.dispose();
+      editorRef.current = null;
     };
-  }, [content, languageExtension]);
+  }, [content, currentLangId, filePath]);
+
+  const availableLanguages = getAvailableLanguages();
 
   return (
     <dialog
       ref={dialogRef}
       className="file-editor"
-      onKeyDown={(e) => e.stopPropagation()}
     >
       <div className="file-editor-header">
         <span style={{ flex: 1 }}>{fileName}</span>
-        {langId && <span style={{ marginLeft: 12 }}>{langId}</span>}
+        <button
+          className="lang-picker-btn"
+          onClick={() => setShowLangPicker(!showLangPicker)}
+          title="Change language"
+        >
+          {currentLangId}
+        </button>
+        {showLangPicker && (
+          <div className="lang-picker-dropdown">
+            {availableLanguages.map(lang => (
+              <div
+                key={lang.id}
+                className={`lang-picker-item${lang.id === currentLangId ? ' active' : ''}`}
+                onClick={() => handleLanguageChange(lang.id)}
+              >
+                {lang.name}
+              </div>
+            ))}
+          </div>
+        )}
+        <button
+          className="dialog-close-btn"
+          onClick={() => dialogRef.current?.close()}
+          title="Close (Esc)"
+        >
+          ×
+        </button>
       </div>
       <div className="file-editor-body">
         <div ref={editorHostRef} className="file-editor-editor" />
@@ -246,4 +211,3 @@ export function FileEditor({ filePath, fileName, langId, onClose }: FileEditorPr
     </dialog>
   );
 }
-

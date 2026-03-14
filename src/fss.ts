@@ -1,10 +1,42 @@
 import { createLayer, FsNode, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from 'fss-lang';
 import type { ResolvedEntryStyle } from './types';
+import type { LoadedExtension } from './extensions';
 import { DirectoryHandle } from './fsa';
-import fssSource from './material-icons.fs.css?raw';
 import { basename, dirname, join } from './path';
 
-const baseLayer = createLayer(fssSource, '/', LayerPriority.GLOBAL);
+const defaultFss = `
+@sorting {
+  folder { group-first: true; }
+  file[executable] { priority: 1; }
+}
+`;
+
+const baseLayer = createLayer(defaultFss, '/', LayerPriority.GLOBAL);
+
+let extensionLayers: StyleLayer[] = [];
+
+/**
+ * Resolve relative url() paths in FSS source against a base directory.
+ * `url(./icons/file.svg)` with basePath `/home/user/.faraday/ext` becomes
+ * `url(/home/user/.faraday/ext/icons/file.svg)`.
+ * Already-absolute paths are left unchanged.
+ */
+function resolveIconUrls(source: string, basePath: string): string {
+  return source.replace(/url\(([^)]+)\)/g, (_match, rawUrl: string) => {
+    const url = rawUrl.trim();
+    if (url.startsWith('/') || /^[A-Za-z]:/.test(url)) return _match;
+    const cleaned = url.replace(/^\.\//, '');
+    return `url(${join(basePath, cleaned)})`;
+  });
+}
+
+export function setExtensionLayers(extensions: LoadedExtension[], activeIconTheme?: string): void {
+  extensionLayers = extensions
+    .filter((ext): ext is LoadedExtension & { iconThemeFss: string; iconThemeBasePath: string } =>
+      ext.iconThemeFss != null && ext.iconThemeBasePath != null)
+    .filter((ext) => !activeIconTheme || `${ext.ref.publisher}.${ext.ref.name}` === activeIconTheme)
+    .map((ext) => createLayer(resolveIconUrls(ext.iconThemeFss, ext.iconThemeBasePath), '/', LayerPriority.USER));
+}
 
 const fssSourceCache = new Map<string, string | null>();
 
@@ -43,12 +75,13 @@ export async function syncLayers(resolver: LayeredResolver, dirPath: string): Pr
     }
   }
 
-  const layers: StyleLayer[] = [baseLayer];
+  const layers: StyleLayer[] = [baseLayer, ...extensionLayers];
   for (const p of ancestors) {
     const source = fssSourceCache.get(p);
     if (source != null) {
       const depth = p === '/' ? 0 : p.split('/').filter(Boolean).length;
-      layers.push(createLayer(source, p, LayerPriority.nestedPriority(depth)));
+      const fssDir = join(p, '.faraday');
+      layers.push(createLayer(resolveIconUrls(source, fssDir), p, LayerPriority.nestedPriority(depth)));
     }
   }
 

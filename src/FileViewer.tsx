@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { commandRegistry } from './commands';
 import { DirectoryHandle, FileHandle, FileSystemObserver } from './fsa';
+import { focusContext } from './focusContext';
 import { basename, dirname } from './path';
 
 const LINE_HEIGHT = 20;
@@ -384,9 +386,13 @@ export function FileViewer({ filePath, fileName, fileSize, onClose }: FileViewer
   useEffect(() => {
     const dialog = dialogRef.current!;
     dialog.showModal();
+    focusContext.push('viewer');
     const handleClose = () => onClose();
     dialog.addEventListener('close', handleClose);
-    return () => dialog.removeEventListener('close', handleClose);
+    return () => {
+      dialog.removeEventListener('close', handleClose);
+      focusContext.pop('viewer');
+    };
   }, [onClose]);
 
   useEffect(() => {
@@ -454,34 +460,94 @@ export function FileViewer({ filePath, fileName, fileSize, onClose }: FileViewer
     };
   }, [filePath, fillScreen, findPrevLineStart, commitScreen]);
 
-  const onKeyDown = useCallback(async (e: React.KeyboardEvent) => {
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        await scrollDown(1);
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        await scrollUp(1);
-        break;
-      case 'PageDown':
-        e.preventDefault();
-        await scrollDown(viewportRowsRef.current);
-        break;
-      case 'PageUp':
-        e.preventDefault();
-        await scrollUp(viewportRowsRef.current);
-        break;
-      case 'Home':
-        e.preventDefault();
-        await seekTo(0);
-        break;
-      case 'End':
-        e.preventDefault();
-        await seekTo(fileSizeRef.current);
-        break;
-      case 'F2':
-        e.preventDefault();
+  // Keep refs to functions for command handlers
+  const scrollDownRef = useRef(scrollDown);
+  scrollDownRef.current = scrollDown;
+  const scrollUpRef = useRef(scrollUp);
+  scrollUpRef.current = scrollUp;
+  const seekToRef = useRef(seekTo);
+  seekToRef.current = seekTo;
+
+  // Register viewer commands
+  useEffect(() => {
+    const disposables: (() => void)[] = [];
+
+    disposables.push(commandRegistry.registerCommand(
+      'viewer.scrollDown',
+      'Scroll Down',
+      () => scrollDownRef.current(1),
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'viewer.scrollDown',
+      key: 'down',
+      when: 'focusViewer',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'viewer.scrollUp',
+      'Scroll Up',
+      () => scrollUpRef.current(1),
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'viewer.scrollUp',
+      key: 'up',
+      when: 'focusViewer',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'viewer.scrollPageDown',
+      'Scroll Page Down',
+      () => scrollDownRef.current(viewportRowsRef.current),
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'viewer.scrollPageDown',
+      key: 'pagedown',
+      when: 'focusViewer',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'viewer.scrollPageUp',
+      'Scroll Page Up',
+      () => scrollUpRef.current(viewportRowsRef.current),
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'viewer.scrollPageUp',
+      key: 'pageup',
+      when: 'focusViewer',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'viewer.scrollToTop',
+      'Scroll to Top',
+      () => seekToRef.current(0),
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'viewer.scrollToTop',
+      key: 'home',
+      when: 'focusViewer',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'viewer.scrollToBottom',
+      'Scroll to Bottom',
+      () => seekToRef.current(fileSizeRef.current),
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'viewer.scrollToBottom',
+      key: 'end',
+      when: 'focusViewer',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'viewer.toggleWrap',
+      'Toggle Word Wrap',
+      () => {
         setWrap(prev => {
           const next = !prev;
           wrapRef.current = next;
@@ -494,9 +560,19 @@ export function FileViewer({ filePath, fileName, fileSize, onClose }: FileViewer
           }
           return next;
         });
-        break;
-    }
-  }, [scrollDown, scrollUp, seekTo, fillScreen, commitScreen, measureViewport]);
+      },
+      { when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'viewer.toggleWrap',
+      key: 'f2',
+      when: 'focusViewer',
+    }));
+
+    return () => {
+      for (const dispose of disposables) dispose();
+    };
+  }, [fillScreen, commitScreen, measureViewport]);
 
   const onWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -559,19 +635,24 @@ export function FileViewer({ filePath, fileName, fileSize, onClose }: FileViewer
     <dialog
       ref={dialogRef}
       className="file-viewer"
-      onKeyDown={(e) => e.stopPropagation()}
     >
       <div className="file-viewer-header">
         <span style={{ flex: 1 }}>{fileName}</span>
         {wrap && <span style={{ marginLeft: 12 }}>Wrap</span>}
         <span style={{ marginLeft: 12 }}>{displayedSize > 0 ? formatBytes(displayedSize) : '0 B'}</span>
+        <button
+          className="dialog-close-btn"
+          onClick={() => dialogRef.current?.close()}
+          title="Close (Esc)"
+        >
+          ×
+        </button>
       </div>
       <div className="file-viewer-body">
         <div
           className="file-viewer-text"
           ref={bodyRef}
           tabIndex={0}
-          onKeyDown={onKeyDown}
           onWheel={onWheel}
         >
           <span

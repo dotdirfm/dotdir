@@ -2,9 +2,10 @@ import { FsNode } from 'fss-lang';
 import type { LayeredResolver } from 'fss-lang';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { actionQueue } from '../actionQueue';
+import { commandRegistry } from '../commands';
 import { resolveEntryStyle } from '../fss';
-import { getCachedIconUrl, loadIcons } from '../iconCache';
-import { dirname, isRootPath, join } from '../path';
+import { resolveIcon, loadIconsForPaths, getCachedIcon, onIconThemeChange } from '../iconResolver';
+import { dirname, join } from '../path';
 import { ColumnsScroller, type ColumnsScrollerProps } from './ColumnsScroller';
 import { useElementSize } from './useElementSize';
 
@@ -18,14 +19,25 @@ interface FileListProps {
   onNavigate: (path: string) => Promise<void>;
   onViewFile?: (filePath: string, fileName: string, fileSize: number) => void;
   onEditFile?: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
+  editorFileSizeLimit?: number;
   active: boolean;
   resolver: LayeredResolver;
   requestedActiveName?: string;
+  requestedTopmostName?: string;
+  onStateChange?: (selectedName: string | undefined, topmostName: string | undefined) => void;
+}
+
+interface NavigationState {
+  path: string;
+  selectedName: string;
+  topmostName: string;
 }
 
 interface DisplayEntry {
   entry: FsNode;
   style: { color?: string; opacity?: number; icon: string | null; sortPriority: number; groupFirst: boolean };
+  iconPath: string | null;
+  iconFallbackUrl: string;
 }
 
 function formatSize(sizeValue: unknown): string {
@@ -46,12 +58,11 @@ function formatDate(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function getIconUrl(iconName: string | null, isDirectory: boolean): string | undefined {
-  if (iconName) {
-    const url = getCachedIconUrl(iconName);
-    if (url) return url;
+function getIconUrl(iconPath: string | null): string | undefined {
+  if (iconPath) {
+    return getCachedIcon(iconPath) ?? undefined;
   }
-  return getCachedIconUrl(isDirectory ? 'folder.svg' : 'file.svg');
+  return undefined;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -65,9 +76,12 @@ export const FileList = memo(function FileList({
   onNavigate,
   onViewFile,
   onEditFile,
+  editorFileSizeLimit = 1024 * 1024,
   active,
   resolver,
   requestedActiveName,
+  requestedTopmostName,
+  onStateChange,
 }: FileListProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [topmostIndex, setTopmostIndex] = useState(0);
@@ -75,6 +89,7 @@ export const FileList = memo(function FileList({
   const [iconsVersion, setIconsVersion] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const prevPathRef = useRef(currentPath);
+  const navStackRef = useRef<NavigationState[]>([]);
   const { width } = useElementSize(rootRef);
 
   const columnCount = Math.max(1, width ? Math.ceil(width / COLUMN_WIDTH) : 1);
@@ -91,11 +106,16 @@ export const FileList = memo(function FileList({
   onViewFileRef.current = onViewFile;
   const onEditFileRef = useRef(onEditFile);
   onEditFileRef.current = onEditFile;
+  const editorFileSizeLimitRef = useRef(editorFileSizeLimit);
+  editorFileSizeLimitRef.current = editorFileSizeLimit;
 
   const sorted = useMemo(() => {
     const withStyle = entries.map((entry) => {
       entry = { ...entry, parent: parentNode };
-      return { entry, style: resolveEntryStyle(resolver, entry) };
+      const style = resolveEntryStyle(resolver, entry);
+      const isDir = entry.type === 'folder';
+      const resolved = resolveIcon(entry.name, isDir, false, false, entry.lang, style.icon);
+      return { entry, style, iconPath: resolved.path, iconFallbackUrl: resolved.fallbackUrl };
     });
     withStyle.sort((a, b) => {
       if (a.style.groupFirst !== b.style.groupFirst) return a.style.groupFirst ? -1 : 1;
@@ -109,7 +129,9 @@ export const FileList = memo(function FileList({
     const result: DisplayEntry[] = [];
     if (parentNode) {
       const expandedParentNode = { ...parentNode, stateFlags: 1 };
-      result.push({ entry: { ...expandedParentNode, name: '..' }, style: resolveEntryStyle(resolver, expandedParentNode) });
+      const style = resolveEntryStyle(resolver, expandedParentNode);
+      const resolved = resolveIcon('..', true, true, false, '', style.icon);
+      result.push({ entry: { ...expandedParentNode, name: '..' }, style, iconPath: resolved.path, iconFallbackUrl: resolved.fallbackUrl });
     }
     for (const item of sorted) result.push(item);
     return result;
@@ -119,22 +141,29 @@ export const FileList = memo(function FileList({
   displayEntriesRef.current = displayEntries;
 
   const neededIcons = useMemo(() => {
-    const names = new Set(['file.svg', 'folder.svg', 'folder-open.svg']);
-    for (const { style } of displayEntries) {
-      if (style.icon) names.add(style.icon);
+    const paths = new Set<string>();
+    for (const { iconPath } of displayEntries) {
+      if (iconPath) paths.add(iconPath);
     }
-    return [...names];
+    return [...paths];
   }, [displayEntries]);
 
   useEffect(() => {
     let cancelled = false;
-    loadIcons(neededIcons).then(() => {
+    loadIconsForPaths(neededIcons).then(() => {
       if (!cancelled) setIconsVersion((n) => n + 1);
     });
     return () => {
       cancelled = true;
     };
   }, [neededIcons]);
+
+  // Re-render when icon theme changes
+  useEffect(() => {
+    return onIconThemeChange(() => {
+      setIconsVersion((n) => n + 1);
+    });
+  }, []);
 
   useEffect(() => {
     const prevPath = prevPathRef.current;
@@ -144,18 +173,38 @@ export const FileList = memo(function FileList({
       setActiveIndex((i) => Math.min(i, displayEntries.length - 1));
       return;
     }
+    
+    // Navigating to parent - check if we have stored state
     if (prevPath.startsWith(currentPath)) {
+      const stack = navStackRef.current;
+      // Pop states until we find one for current path or stack is empty
+      while (stack.length > 0 && stack[stack.length - 1].path !== currentPath) {
+        stack.pop();
+      }
+      const savedState = stack.pop();
+      
+      if (savedState) {
+        // Restore from stack
+        const selectedIdx = displayEntries.findIndex(d => d.entry.name === savedState.selectedName);
+        const topmostIdx = displayEntries.findIndex(d => d.entry.name === savedState.topmostName);
+        setActiveIndex(selectedIdx >= 0 ? selectedIdx : 0);
+        setTopmostIndex(topmostIdx >= 0 ? topmostIdx : 0);
+        return;
+      }
+      
+      // Fallback: select the child folder we came from
       const remainder = prevPath.slice(currentPath.length).replace(/^\//, '');
       const childName = remainder.split('/')[0];
       if (childName) {
         const idx = displayEntries.findIndex((d) => d.entry.name === childName);
         if (idx >= 0) {
           setActiveIndex(idx);
-          setTopmostIndex(0);
+          setTopmostIndex(Math.max(0, idx - 5)); // Show some context above
           return;
         }
       }
     }
+    
     setActiveIndex(0);
     setTopmostIndex(0);
   }, [currentPath, displayEntries]);
@@ -167,10 +216,38 @@ export const FileList = memo(function FileList({
     if (idx >= 0) setActiveIndex(idx);
   }, [requestedActiveName]);
 
+  useEffect(() => {
+    if (!requestedTopmostName) return;
+    const entries = displayEntriesRef.current;
+    const idx = entries.findIndex(d => d.entry.name === requestedTopmostName);
+    if (idx >= 0) setTopmostIndex(idx);
+  }, [requestedTopmostName]);
+
+  const onStateChangeRef = useRef(onStateChange);
+  onStateChangeRef.current = onStateChange;
+
+  // Report state changes to parent
+  useEffect(() => {
+    if (!onStateChangeRef.current) return;
+    const selectedName = displayEntries[activeIndex]?.entry.name;
+    const topmostName = displayEntries[topmostIndex]?.entry.name;
+    onStateChangeRef.current(selectedName, topmostName);
+  }, [activeIndex, topmostIndex, displayEntries]);
+
   const navigateToEntry = useCallback(async (entry: FsNode): Promise<void> => {
     if (entry.name === '..') {
       await onNavigateRef.current(dirname(currentPathRef.current));
     } else if (entry.type === 'folder') {
+      // Save current state to navigation stack before entering folder
+      const selectedName = displayEntriesRef.current[activeIndexRef.current]?.entry.name;
+      const topmostName = displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
+      if (selectedName) {
+        navStackRef.current.push({
+          path: currentPathRef.current,
+          selectedName,
+          topmostName: topmostName ?? selectedName,
+        });
+      }
       await onNavigateRef.current(join(currentPathRef.current, entry.name));
     } else if (entry.type === 'file' && onViewFileRef.current) {
       onViewFileRef.current(entry.path as string, entry.name, Number(entry.meta.size));
@@ -192,94 +269,180 @@ export const FileList = memo(function FileList({
     });
   }, [activeIndex, maxItemsPerColumn, columnCount]);
 
+  // Update context when selection changes
+  useEffect(() => {
+    if (!active) return;
+    const item = displayEntries[activeIndex];
+    const isFile = item?.entry.type === 'file';
+    commandRegistry.setContext('listItemIsFile', isFile);
+    commandRegistry.setContext('listItemIsFolder', !isFile && item != null);
+  }, [active, activeIndex, displayEntries]);
+
+  // Register navigation commands when panel is active
   useEffect(() => {
     if (!active) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'ArrowUp':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - 1)));
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + 1)));
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - maxItemsPerColumnRef.current)));
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + maxItemsPerColumnRef.current)));
-          break;
-        case 'Home':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex(0));
-          break;
-        case 'End':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex(displayEntriesRef.current.length - 1));
-          break;
-        case 'PageUp':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - displayedItemsRef.current + 1)));
-          break;
-        case 'PageDown':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + displayedItemsRef.current - 1)));
-          break;
-        case 'Enter':
-          e.preventDefault();
-          actionQueue.enqueue(async () => {
-            const item = displayEntriesRef.current[activeIndexRef.current];
-            if (item) await navigateToEntry(item.entry);
-          });
-          break;
-        case 'Backspace':
-          e.preventDefault();
-          actionQueue.enqueue(async () => {
-            if (!isRootPath(currentPathRef.current)) {
-              await onNavigateRef.current(dirname(currentPathRef.current));
-            }
-          });
-          break;
-        case 'F3': {
-          e.preventDefault();
-          actionQueue.enqueue(() => {
-            const item = displayEntriesRef.current[activeIndexRef.current];
-            if (item && item.entry.type === 'file' && onViewFileRef.current) {
-              onViewFileRef.current(item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
-            }
-          });
-          break;
-        }
-        case 'F4': {
-          e.preventDefault();
-          actionQueue.enqueue(() => {
-            const item = displayEntriesRef.current[activeIndexRef.current];
-            if (
-              item &&
-              item.entry.type === 'file' &&
-              typeof item.entry.lang === 'string' &&
-              item.entry.lang &&
-              onEditFileRef.current
-            ) {
-              onEditFileRef.current(
-                item.entry.path as string,
-                item.entry.name,
-                Number(item.entry.meta.size),
-                item.entry.lang,
-              );
-            }
-          });
-          break;
-        }
-      }
-    };
+    const disposables: (() => void)[] = [];
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorUp',
+      'Cursor Up',
+      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - 1))),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorUp',
+      key: 'up',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorDown',
+      'Cursor Down',
+      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + 1))),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorDown',
+      key: 'down',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorLeft',
+      'Cursor Left (Previous Column)',
+      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - maxItemsPerColumnRef.current))),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorLeft',
+      key: 'left',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorRight',
+      'Cursor Right (Next Column)',
+      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + maxItemsPerColumnRef.current))),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorRight',
+      key: 'right',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorHome',
+      'Cursor to First',
+      () => actionQueue.enqueue(() => setActiveIndex(0)),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorHome',
+      key: 'home',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorEnd',
+      'Cursor to Last',
+      () => actionQueue.enqueue(() => setActiveIndex(displayEntriesRef.current.length - 1)),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorEnd',
+      key: 'end',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorPageUp',
+      'Cursor Page Up',
+      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - displayedItemsRef.current + 1))),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorPageUp',
+      key: 'pageup',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorPageDown',
+      'Cursor Page Down',
+      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + displayedItemsRef.current - 1))),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorPageDown',
+      key: 'pagedown',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.open',
+      'Open',
+      () => actionQueue.enqueue(async () => {
+        const item = displayEntriesRef.current[activeIndexRef.current];
+        if (item) await navigateToEntry(item.entry);
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.open',
+      key: 'enter',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.viewFile',
+      'View File',
+      () => actionQueue.enqueue(() => {
+        const item = displayEntriesRef.current[activeIndexRef.current];
+        if (item && item.entry.type === 'file' && onViewFileRef.current) {
+          onViewFileRef.current(item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
+        }
+      }),
+      { when: 'focusPanel && listItemIsFile' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.viewFile',
+      key: 'f3',
+      when: 'focusPanel && listItemIsFile',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.editFile',
+      'Edit File',
+      () => actionQueue.enqueue(() => {
+        const item = displayEntriesRef.current[activeIndexRef.current];
+        if (item && item.entry.type === 'file' && onEditFileRef.current) {
+          const fileSize = Number(item.entry.meta.size);
+          if (fileSize <= editorFileSizeLimitRef.current) {
+            const langId = typeof item.entry.lang === 'string' && item.entry.lang
+              ? item.entry.lang
+              : 'plaintext';
+            onEditFileRef.current(
+              item.entry.path as string,
+              item.entry.name,
+              fileSize,
+              langId,
+            );
+          }
+        }
+      }),
+      { when: 'focusPanel && listItemIsFile' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.editFile',
+      key: 'f4',
+      when: 'focusPanel && listItemIsFile',
+    }));
+
+    return () => {
+      for (const dispose of disposables) dispose();
+    };
   }, [active, navigateToEntry]);
 
   const columnCountRef = useRef(columnCount);
@@ -302,10 +465,9 @@ export const FileList = memo(function FileList({
     (index: number) => {
       const item = displayEntriesRef.current[index];
       if (!item) return null;
-      const { entry, style } = item;
+      const { entry, style, iconPath, iconFallbackUrl } = item;
       const isActive = index === activeIndex;
-      const isDir = entry.type === 'folder';
-      const iconUrl = getIconUrl(style.icon, isDir);
+      const iconUrl = getIconUrl(iconPath) ?? iconFallbackUrl;
 
       return (
         <div
@@ -323,7 +485,7 @@ export const FileList = memo(function FileList({
             }
           }}
         >
-          <span className="entry-icon">{iconUrl && <img src={iconUrl} width={16} height={16} alt="" />}</span>
+          <span className="entry-icon"><img src={iconUrl} width={16} height={16} alt="" /></span>
           <span className="entry-name" style={style.color ? { color: style.color } : undefined}>
             {entry.name}
           </span>

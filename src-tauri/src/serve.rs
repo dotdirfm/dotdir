@@ -31,10 +31,6 @@ use tokio::sync::mpsc;
 #[folder = "../dist"]
 struct EmbeddedAssets;
 
-#[derive(RustEmbed)]
-#[folder = "icons-bundle"]
-struct EmbeddedIcons;
-
 // ── JSON entry for the wire ─────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -239,8 +235,12 @@ fn handle_pty_spawn(
     std::thread::spawn(move || {
         let pty_id_bytes = pty_id.to_le_bytes();
         let mut buf = [0u8; 4096];
+        let mut leftover = Vec::new(); // incomplete UTF-8 bytes from previous read
         loop {
-            match pty::read_blocking(&reader, &mut buf) {
+            let offset = leftover.len();
+            buf[..offset].copy_from_slice(&leftover);
+            leftover.clear();
+            match pty::read_blocking(&reader, &mut buf[offset..]) {
                 Ok(0) | Err(_) => {
                     let n = json!({
                         "jsonrpc": "2.0",
@@ -251,11 +251,23 @@ fn handle_pty_spawn(
                     break;
                 }
                 Ok(n) => {
-                    // Binary frame: [0x01][pty_id: u32 LE][raw bytes]
-                    let mut frame = Vec::with_capacity(1 + 4 + n);
+                    let total = offset + n;
+                    // Find valid UTF-8 boundary
+                    let valid_up_to = match std::str::from_utf8(&buf[..total]) {
+                        Ok(_) => total,
+                        Err(e) => e.valid_up_to(),
+                    };
+                    if valid_up_to < total {
+                        leftover.extend_from_slice(&buf[valid_up_to..total]);
+                    }
+                    if valid_up_to == 0 {
+                        continue;
+                    }
+                    // Binary frame: [0x01][pty_id: u32 LE][valid UTF-8 bytes]
+                    let mut frame = Vec::with_capacity(1 + 4 + valid_up_to);
                     frame.push(0x01); // type: PTY data
                     frame.extend_from_slice(&pty_id_bytes);
-                    frame.extend_from_slice(&buf[..n]);
+                    frame.extend_from_slice(&buf[..valid_up_to]);
                     if tx_pty.send(Message::Binary(frame)).is_err() {
                         break;
                     }
@@ -351,38 +363,6 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
         "utils.getIconsPath" => Ok(json!(session.icons_dir.as_deref().unwrap_or(""))),
         "utils.getTerminalProfiles" => Ok(serde_json::to_value(pty::list_profiles()).unwrap()),
         _ => Err(FsError::InvalidInput),
-    }
-}
-
-// ── Icon serving ───────────────────────────────────────────────────
-
-async fn icon_handler(
-    State(state): State<ServerState>,
-    Path(name): Path<String>,
-) -> Response {
-    // Disk override via --icons-dir
-    if let Some(ref dir) = *state.icons_dir {
-        let path = PathBuf::from(dir).join(&name);
-        if let Ok(bytes) = tokio::fs::read(&path).await {
-            return Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, "image/svg+xml")
-                .body(Body::from(bytes))
-                .unwrap();
-        }
-    }
-
-    // Embedded fallback
-    match EmbeddedIcons::get(&name) {
-        Some(file) => Response::builder()
-            .status(StatusCode::OK)
-            .header(header::CONTENT_TYPE, "image/svg+xml")
-            .body(Body::from(file.data.into_owned()))
-            .unwrap(),
-        None => Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::empty())
-            .unwrap(),
     }
 }
 
@@ -531,7 +511,6 @@ pub fn run(args: &[String]) {
 
         let app = Router::new()
             .route("/ws", get(ws_handler))
-            .route("/icons/:name", get(icon_handler))
             .with_state(state);
 
         let app = if let Some(dir) = config.static_dir {

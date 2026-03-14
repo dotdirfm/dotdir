@@ -39,6 +39,5 @@ Faraday is a dual-pane file manager built with a React/Vite frontend and a Rust/
 
 ## Notable Findings
 
-- The repository includes a very large bundled icon set under `src-tauri/icons-bundle`.
 - The README describes some scripts and headless workflows that do not exactly match the current `package.json`.
 - Windows behavior is sensitive to path normalization because the frontend currently assumes POSIX-style paths in several places.
