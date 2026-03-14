@@ -11,6 +11,7 @@
 import * as monaco from 'monaco-editor';
 import { Registry as TMRegistry, INITIAL, type IGrammar, type StateStack } from 'vscode-textmate';
 import { createOnigScanner, createOnigString, loadWASM } from 'vscode-oniguruma';
+import { detectLang as detectLangFallback } from './langDetect';
 
 export interface LanguageContribution {
   id: string;
@@ -52,6 +53,10 @@ class LanguageRegistry {
   private onigurumaLoaded = false;
   private initPromise: Promise<void> | null = null;
 
+  // Extension-based language detection (independent of Monaco)
+  private extToLang = new Map<string, string>();      // ".ts" → "typescript"
+  private filenameToLang = new Map<string, string>(); // "Makefile" → "makefile"
+
   /** Initialize the oniguruma WASM engine. Call once at app startup. */
   async initialize(): Promise<void> {
     if (this.initPromise) return this.initPromise;
@@ -83,6 +88,19 @@ class LanguageRegistry {
 
   /** Register a language contributed by an extension. */
   registerLanguage(lang: LanguageContribution): void {
+    // Build local detection maps (always, even if already registered with Monaco)
+    if (lang.extensions) {
+      for (const ext of lang.extensions) {
+        this.extToLang.set(ext.toLowerCase(), lang.id);
+      }
+    }
+    if (lang.filenames) {
+      for (const fn of lang.filenames) {
+        this.filenameToLang.set(fn, lang.id);
+        this.filenameToLang.set(fn.toLowerCase(), lang.id);
+      }
+    }
+
     if (this.registeredLanguages.has(lang.id)) return;
     this.registeredLanguages.add(lang.id);
 
@@ -114,6 +132,8 @@ class LanguageRegistry {
   clear(): void {
     this.grammarContents.clear();
     this.languageToScope.clear();
+    this.extToLang.clear();
+    this.filenameToLang.clear();
     // Note: Monaco doesn't support un-registering languages, so registeredLanguages
     // is kept to avoid double-registration. Tokenization providers will be overwritten.
   }
@@ -121,6 +141,27 @@ class LanguageRegistry {
   /** Check if a grammar is registered for a language. */
   hasGrammar(langId: string): boolean {
     return this.languageToScope.has(langId);
+  }
+
+  /**
+   * Detect language ID from filename using extension contributions,
+   * falling back to built-in langDetect mappings.
+   */
+  detectLanguage(filename: string): string {
+    // 1. Exact filename match from extensions
+    const byName = this.filenameToLang.get(filename) ?? this.filenameToLang.get(filename.toLowerCase());
+    if (byName) return byName;
+
+    // 2. Extension match from extensions (try longest match first)
+    const dotIndex = filename.lastIndexOf('.');
+    if (dotIndex >= 0) {
+      const ext = filename.slice(dotIndex).toLowerCase();
+      const byExt = this.extToLang.get(ext);
+      if (byExt) return byExt;
+    }
+
+    // 3. Fall back to built-in detection
+    return detectLangFallback(filename);
   }
 
   /** Get the Monaco language ID for a filename, or 'plaintext' if none matched. */

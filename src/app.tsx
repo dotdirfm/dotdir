@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import type { FsChangeType } from './types';
 import { bridge } from './bridge';
-import { detectLang } from './langDetect';
 import { actionQueue } from './actionQueue';
 import { FileList } from './FileList';
 import { FileViewer } from './FileViewer';
@@ -51,7 +50,7 @@ function handleToFsNode(handle: FileSystemHandle & { meta?: HandleMeta }, dirPat
   return createFsNode({
     name: handle.name,
     type: isDir ? 'folder' : 'file',
-    lang: isDir ? '' : detectLang(handle.name),
+    lang: isDir ? '' : languageRegistry.detectLanguage(handle.name),
     meta: {
       size: handle.meta?.size ?? 0,
       mtimeMs: handle.meta?.mtimeMs ?? 0,

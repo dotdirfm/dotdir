@@ -2,10 +2,16 @@ import { createLayer, FsNode, LayeredResolver, LayerPriority, type StyleLayer, t
 import type { ResolvedEntryStyle } from './types';
 import type { LoadedExtension } from './extensions';
 import { DirectoryHandle } from './fsa';
-import fssSource from './material-icons.fs.css?raw';
 import { basename, dirname, join } from './path';
 
-const baseLayer = createLayer(fssSource, '/', LayerPriority.GLOBAL);
+const defaultFss = `
+@sorting {
+  folder { group-first: true; }
+  file[executable] { priority: 1; }
+}
+`;
+
+const baseLayer = createLayer(defaultFss, '/', LayerPriority.GLOBAL);
 
 let extensionLayers: StyleLayer[] = [];
 
