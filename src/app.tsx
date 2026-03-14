@@ -280,6 +280,7 @@ export function App() {
   const [activePanel, setActivePanel] = useState<PanelSide>('left');
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [promptActive, setPromptActive] = useState(true);
+  const promptHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [terminalVisibleHeight, setTerminalVisibleHeight] = useState(20);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
@@ -349,26 +350,62 @@ export function App() {
   const leftRequestedCursor = viewerFile?.panel === 'left' ? viewerActiveName : undefined;
   const rightRequestedCursor = viewerFile?.panel === 'right' ? viewerActiveName : undefined;
 
-  // Panel state persistence
+  // Panel state persistence with long debounce (10s) to avoid excessive writes
+  const panelStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPanelStateRef = useRef<{
+    leftPanel?: { currentPath: string; selectedName?: string; topmostName?: string };
+    rightPanel?: { currentPath: string; selectedName?: string; topmostName?: string };
+  }>({});
+
+  const flushPanelState = useCallback(() => {
+    if (panelStateSaveTimerRef.current) {
+      clearTimeout(panelStateSaveTimerRef.current);
+      panelStateSaveTimerRef.current = null;
+    }
+    const pending = pendingPanelStateRef.current;
+    if (pending.leftPanel || pending.rightPanel) {
+      updateSettings(pending);
+      pendingPanelStateRef.current = {};
+    }
+  }, []);
+
+  const savePanelStateDebounced = useCallback(() => {
+    if (panelStateSaveTimerRef.current) {
+      clearTimeout(panelStateSaveTimerRef.current);
+    }
+    panelStateSaveTimerRef.current = setTimeout(() => {
+      panelStateSaveTimerRef.current = null;
+      updateSettings(pendingPanelStateRef.current);
+      pendingPanelStateRef.current = {};
+    }, 10000); // 10 second debounce
+  }, []);
+
+  // Flush panel state on window close
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      flushPanelState();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [flushPanelState]);
+
   const handleLeftStateChange = useCallback((selectedName: string | undefined, topmostName: string | undefined) => {
-    updateSettings({
-      leftPanel: {
-        currentPath: left.currentPath,
-        selectedName,
-        topmostName,
-      },
-    });
-  }, [left.currentPath]);
+    pendingPanelStateRef.current.leftPanel = {
+      currentPath: left.currentPath,
+      selectedName,
+      topmostName,
+    };
+    savePanelStateDebounced();
+  }, [left.currentPath, savePanelStateDebounced]);
 
   const handleRightStateChange = useCallback((selectedName: string | undefined, topmostName: string | undefined) => {
-    updateSettings({
-      rightPanel: {
-        currentPath: right.currentPath,
-        selectedName,
-        topmostName,
-      },
-    });
-  }, [right.currentPath]);
+    pendingPanelStateRef.current.rightPanel = {
+      currentPath: right.currentPath,
+      selectedName,
+      topmostName,
+    };
+    savePanelStateDebounced();
+  }, [right.currentPath, savePanelStateDebounced]);
 
   // Save active panel when it changes
   useEffect(() => {
@@ -381,6 +418,23 @@ export function App() {
       panel.navigateTo(path);
     }
   }, [activePanel, left, right]);
+
+  // Debounced prompt active handler - delay hiding panels to avoid flashing on fast commands
+  const handlePromptActive = useCallback((active: boolean) => {
+    if (promptHideTimerRef.current) {
+      clearTimeout(promptHideTimerRef.current);
+      promptHideTimerRef.current = null;
+    }
+    if (active) {
+      // Show panels immediately when command finishes
+      setPromptActive(true);
+    } else {
+      // Delay hiding panels by 60ms to avoid flashing on fast commands
+      promptHideTimerRef.current = setTimeout(() => {
+        setPromptActive(false);
+      }, 60);
+    }
+  }, []);
 
   useEffect(() => {
     bridge.theme.get().then((t) => setTheme(t as ThemeKind));
@@ -753,7 +807,7 @@ export function App() {
   return (
     <div className="app">
       <div className="terminal-background">
-        <TerminalPanel cwd={activeCwd} onCwdChange={handleTerminalCwd} onVisibleHeight={setTerminalVisibleHeight} onPromptActive={setPromptActive} />
+        <TerminalPanel cwd={activeCwd} onCwdChange={handleTerminalCwd} onVisibleHeight={setTerminalVisibleHeight} onPromptActive={handlePromptActive} />
       </div>
       <div
         className={`panels-overlay${panelsVisible && promptActive ? '' : ' hidden'}`}

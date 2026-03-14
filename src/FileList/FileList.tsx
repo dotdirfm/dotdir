@@ -37,6 +37,7 @@ interface DisplayEntry {
   entry: FsNode;
   style: { color?: string; opacity?: number; icon: string | null; sortPriority: number; groupFirst: boolean };
   iconPath: string | null;
+  iconFallbackUrl: string;
 }
 
 function formatSize(sizeValue: unknown): string {
@@ -114,7 +115,7 @@ export const FileList = memo(function FileList({
       const style = resolveEntryStyle(resolver, entry);
       const isDir = entry.type === 'folder';
       const resolved = resolveIcon(entry.name, isDir, false, false, entry.lang, style.icon);
-      return { entry, style, iconPath: resolved?.path ?? null };
+      return { entry, style, iconPath: resolved.path, iconFallbackUrl: resolved.fallbackUrl };
     });
     withStyle.sort((a, b) => {
       if (a.style.groupFirst !== b.style.groupFirst) return a.style.groupFirst ? -1 : 1;
@@ -130,7 +131,7 @@ export const FileList = memo(function FileList({
       const expandedParentNode = { ...parentNode, stateFlags: 1 };
       const style = resolveEntryStyle(resolver, expandedParentNode);
       const resolved = resolveIcon('..', true, true, false, '', style.icon);
-      result.push({ entry: { ...expandedParentNode, name: '..' }, style, iconPath: resolved?.path ?? null });
+      result.push({ entry: { ...expandedParentNode, name: '..' }, style, iconPath: resolved.path, iconFallbackUrl: resolved.fallbackUrl });
     }
     for (const item of sorted) result.push(item);
     return result;
@@ -464,9 +465,9 @@ export const FileList = memo(function FileList({
     (index: number) => {
       const item = displayEntriesRef.current[index];
       if (!item) return null;
-      const { entry, style, iconPath } = item;
+      const { entry, style, iconPath, iconFallbackUrl } = item;
       const isActive = index === activeIndex;
-      const iconUrl = getIconUrl(iconPath);
+      const iconUrl = getIconUrl(iconPath) ?? iconFallbackUrl;
 
       return (
         <div
@@ -484,7 +485,7 @@ export const FileList = memo(function FileList({
             }
           }}
         >
-          <span className="entry-icon">{iconUrl && <img src={iconUrl} width={16} height={16} alt="" />}</span>
+          <span className="entry-icon"><img src={iconUrl} width={16} height={16} alt="" /></span>
           <span className="entry-name" style={style.color ? { color: style.color } : undefined}>
             {entry.name}
           </span>
