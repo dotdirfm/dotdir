@@ -455,6 +455,7 @@ body.terminal-resizing {
 }
 
 .path-bar {
+  position: relative;
   padding: 8px 12px;
   background: var(--bg-secondary);
   color: var(--fg-secondary);
@@ -463,6 +464,96 @@ body.terminal-resizing {
   border-bottom: 1px solid var(--border);
   user-select: none;
   flex-shrink: 0;
+  overflow: visible;
+}
+
+/* Breadcrumbs: single line, left-aligned, proportional shrink, hover expand, gradient when truncated */
+.breadcrumbs {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.breadcrumbs .breadcrumb-copied-tooltip {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+.breadcrumb-segment {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: 4px;
+  transition: min-width 0.15s ease-out, background-color 0.1s ease;
+}
+
+.breadcrumb-segment:hover {
+  background: var(--entry-hover, rgba(255, 255, 255, 0.06));
+}
+
+.breadcrumb-segment-measure {
+  position: absolute;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+  height: 0;
+  overflow: hidden;
+}
+
+.breadcrumb-segment-text {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Fade out truncated text at the right edge using mask; animate mask on hover via @property */
+@property --breadcrumb-fade {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 24px;
+}
+
+.breadcrumb-segment.is-truncated .breadcrumb-segment-text {
+  padding-right: 4px; /* avoid last letter being clipped */
+  --breadcrumb-fade: 24px;
+  transition: --breadcrumb-fade 0.15s ease;
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - var(--breadcrumb-fade)), transparent 100%);
+  mask-image: linear-gradient(to right, black calc(100% - var(--breadcrumb-fade)), transparent 100%);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+.breadcrumb-segment.is-truncated:hover .breadcrumb-segment-text {
+  --breadcrumb-fade: 0px;
+}
+
+.breadcrumb-separator {
+  flex-shrink: 0;
+  opacity: 0.6;
+  pointer-events: none;
+  user-select: none;
 }
 
 .file-list-body {

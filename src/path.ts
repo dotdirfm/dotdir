@@ -86,3 +86,65 @@ export function basename(path: string): string {
   const index = trimmed.lastIndexOf('/');
   return index < 0 ? trimmed : trimmed.slice(index + 1);
 }
+
+/**
+ * Returns breadcrumb segments for a path. On Windows, first segment is the drive (e.g. "C:\").
+ * Each segment has a display label and the full path up to that segment (for navigation).
+ */
+export function getBreadcrumbSegments(path: string): { label: string; path: string }[] {
+  const normalized = normalizePath(path);
+  if (!normalized) return [];
+
+  const segments: { label: string; path: string }[] = [];
+
+  // Windows: drive root as first segment
+  if (/^[A-Za-z]:\//.test(normalized)) {
+    const driveRoot = normalized.slice(0, 3); // "C:/"
+    segments.push({ label: driveRoot.replace('/', '\\'), path: driveRoot });
+    const rest = normalized.slice(3);
+    if (!rest) return segments;
+    const names = rest.split('/').filter(Boolean);
+    let acc = driveRoot;
+    for (const name of names) {
+      acc = acc.replace(/\/?$/, '') + '/' + name;
+      segments.push({ label: name, path: acc });
+    }
+    return segments;
+  }
+
+  // UNC: //host/share/...
+  if (isUncPath(normalized)) {
+    const afterSlash = normalized.slice(2).replace(/\/+$/, '');
+    const parts = afterSlash.split('/').filter(Boolean);
+    if (parts.length >= 2) {
+      segments.push({ label: '\\\\' + parts[0] + '\\' + parts[1], path: '//' + parts[0] + '/' + parts[1] });
+      let acc = '//' + parts[0] + '/' + parts[1];
+      for (let i = 2; i < parts.length; i++) {
+        acc = acc + '/' + parts[i];
+        segments.push({ label: parts[i], path: acc });
+      }
+    }
+    return segments;
+  }
+
+  // Unix absolute
+  if (normalized.startsWith('/')) {
+    segments.push({ label: '/', path: '/' });
+    const names = normalized.slice(1).split('/').filter(Boolean);
+    let acc = '/';
+    for (const name of names) {
+      acc = acc.replace(/\/?$/, '') + '/' + name;
+      segments.push({ label: name, path: acc });
+    }
+    return segments;
+  }
+
+  // Relative path
+  const names = normalized.split('/').filter(Boolean);
+  let acc = '';
+  for (const name of names) {
+    acc = acc ? acc + '/' + name : name;
+    segments.push({ label: name, path: acc });
+  }
+  return segments;
+}

@@ -7,6 +7,7 @@ import { resolveEntryStyle } from '../fss';
 import type { ResolvedEntryStyle } from '../types';
 import { resolveIcon, loadIconsForPaths, getCachedIcon, onIconThemeChange } from '../iconResolver';
 import { dirname, join } from '../path';
+import { Breadcrumbs } from './Breadcrumbs';
 import { ColumnsScroller, type ColumnsScrollerProps } from './ColumnsScroller';
 import { useElementSize } from './useElementSize';
 
@@ -633,7 +634,9 @@ export const FileList = memo(function FileList({
 
   return (
     <div className="file-list">
-      <div className="path-bar">{currentPath}</div>
+      <div className="path-bar">
+        <Breadcrumbs currentPath={currentPath} onNavigate={(path) => { void onNavigate(path); }} />
+      </div>
       <div className="file-list-body" ref={rootRef}>
         <ColumnsScroller
           topmostIndex={topmostIndex}
