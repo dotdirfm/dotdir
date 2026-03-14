@@ -5,7 +5,7 @@ import { actionQueue } from '../actionQueue';
 import { commandRegistry } from '../commands';
 import { resolveEntryStyle } from '../fss';
 import { resolveIcon, loadIconsForPaths, getCachedIcon, onIconThemeChange } from '../iconResolver';
-import { dirname, isRootPath, join } from '../path';
+import { dirname, join } from '../path';
 import { ColumnsScroller, type ColumnsScrollerProps } from './ColumnsScroller';
 import { useElementSize } from './useElementSize';
 
