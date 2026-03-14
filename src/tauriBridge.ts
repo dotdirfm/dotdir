@@ -1,13 +1,13 @@
-/// Tauri IPC bridge — replaces window.electron from the Electron version.
+/// Tauri IPC bridge - replaces window.electron from the Electron version.
 ///
 /// Provides the same interface so renderer components need minimal changes.
 /// Uses Tauri's invoke() for commands and listen() for events.
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { PtyLaunchInfo, TerminalProfile } from './bridge';
 import type { FsaRawEntry, FsChangeEvent } from './types';
 import { normalizePath } from './path';
 
-// Rust returns snake_case fields — map to camelCase
 interface RustFsEntry {
   name: string;
   kind: string;
@@ -23,6 +23,20 @@ interface RustFsChangeEvent {
   watch_id: string;
   kind: string;
   name: string | null;
+}
+
+interface RustPtyLaunchInfo {
+  pty_id: number;
+  cwd: string;
+  shell: string;
+  profile_id: string;
+  profile_label: string;
+}
+
+interface RustTerminalProfile {
+  id: string;
+  label: string;
+  shell: string;
 }
 
 function mapEntry(e: RustFsEntry): FsaRawEntry {
@@ -83,14 +97,25 @@ export const tauriBridge = {
     },
   },
   pty: {
-    async spawn(cwd: string, cols?: number, rows?: number): Promise<number> {
-      return invoke<number>('pty_spawn', { cwd, cols, rows });
+    async spawn(cwd: string, profileId?: string): Promise<PtyLaunchInfo> {
+      const raw = await invoke<RustPtyLaunchInfo>('pty_spawn', { cwd, profileId });
+      return {
+        ptyId: raw.pty_id,
+        cwd: normalizePath(raw.cwd),
+        shell: raw.shell,
+        profileId: raw.profile_id,
+        profileLabel: raw.profile_label,
+      };
     },
     async write(ptyId: number, data: string): Promise<void> {
       return invoke<void>('pty_write', { ptyId, data });
     },
     async resize(ptyId: number, cols: number, rows: number): Promise<void> {
-      return invoke<void>('pty_resize', { ptyId, cols: Math.floor(cols), rows: Math.floor(rows) });
+      return invoke<void>('pty_resize', {
+        ptyId,
+        cols: Math.max(2, Math.floor(cols)),
+        rows: Math.max(1, Math.floor(rows)),
+      });
     },
     async close(ptyId: number): Promise<void> {
       return invoke<void>('pty_close', { ptyId });
@@ -117,14 +142,15 @@ export const tauriBridge = {
     async getIconsPath(): Promise<string> {
       return normalizePath(await invoke<string>('get_icons_path'));
     },
+    async getTerminalProfiles(): Promise<TerminalProfile[]> {
+      return invoke<RustTerminalProfile[]>('get_terminal_profiles');
+    },
   },
   theme: {
     async get(): Promise<string> {
       return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     },
     onChange(callback: (theme: string) => void): () => void {
-      // Tauri v2 doesn't have a native theme change event yet.
-      // Use CSS prefers-color-scheme media query listener instead.
       const mq = window.matchMedia('(prefers-color-scheme: dark)');
       const handler = (e: MediaQueryListEvent) => callback(e.matches ? 'dark' : 'light');
       mq.addEventListener('change', handler);

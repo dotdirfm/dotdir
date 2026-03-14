@@ -1,4 +1,4 @@
-/// Dynamic bridge provider � detects Tauri vs browser and loads the right backend.
+/// Dynamic bridge provider - detects Tauri vs browser and loads the right backend.
 ///
 /// Uses ES module live bindings: importers of `bridge` always see the current value.
 /// Must call `initBridge()` before rendering (from main.tsx).
@@ -6,6 +6,20 @@ import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import type { FsaRawEntry, FsChangeEvent } from './types';
 import { tauriBridge } from './tauriBridge';
 import { createWsBridge } from './wsBridge';
+
+export interface PtyLaunchInfo {
+  ptyId: number;
+  cwd: string;
+  shell: string;
+  profileId: string;
+  profileLabel: string;
+}
+
+export interface TerminalProfile {
+  id: string;
+  label: string;
+  shell: string;
+}
 
 export interface Bridge {
   fsa: {
@@ -21,7 +35,7 @@ export interface Bridge {
     writeFile(filePath: string, data: string): Promise<void>;
   };
   pty: {
-    spawn(cwd: string, cols?: number, rows?: number): Promise<number>;
+    spawn(cwd: string, profileId?: string): Promise<PtyLaunchInfo>;
     write(ptyId: number, data: string): Promise<void>;
     resize(ptyId: number, cols: number, rows: number): Promise<void>;
     close(ptyId: number): Promise<void>;
@@ -31,6 +45,7 @@ export interface Bridge {
   utils: {
     getHomePath(): Promise<string>;
     getIconsPath(): Promise<string>;
+    getTerminalProfiles(): Promise<TerminalProfile[]>;
   };
   theme: {
     get(): Promise<string>;
