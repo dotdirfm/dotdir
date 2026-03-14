@@ -4,6 +4,7 @@ import {
   type MarketplaceExtension,
   searchMarketplace,
   installExtension,
+  installVSCodeExtension,
   uninstallExtension,
   loadExtensions,
   type LoadedExtension,
@@ -11,6 +12,14 @@ import {
   readSettings,
   writeSettings,
 } from './extensions';
+import {
+  searchVSCodeMarketplace,
+  type VSCodeExtension,
+  getVSCodeInstallCount,
+  getVSCodeLatestVersion,
+  getVSCodeDownloadUrl,
+  getVSCodeIconUrl,
+} from './vscodeMarketplace';
 
 interface Props {
   onClose: () => void;
@@ -20,12 +29,15 @@ interface Props {
 }
 
 type Tab = 'marketplace' | 'installed';
+type MarketplaceSource = 'faraday' | 'vscode';
 
 export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme, onIconThemeChange }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<Tab>('marketplace');
+  const [marketplaceSource, setMarketplaceSource] = useState<MarketplaceSource>('vscode');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<MarketplaceExtension[]>([]);
+  const [vscodeResults, setVscodeResults] = useState<VSCodeExtension[]>([]);
   const [installed, setInstalled] = useState<LoadedExtension[]>([]);
   const [loading, setLoading] = useState(false);
   const [installing, setInstalling] = useState<string | null>(null);
@@ -50,24 +62,47 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
 
   useEffect(() => { refreshInstalled(); }, [refreshInstalled]);
 
-  const doSearch = useCallback(async (q: string) => {
+  const doSearch = useCallback(async (q: string, source: MarketplaceSource) => {
     setLoading(true);
     setError('');
     try {
-      const data = await searchMarketplace(q);
-      setResults(data.extensions);
+      if (source === 'vscode') {
+        const data = await searchVSCodeMarketplace(q);
+        setVscodeResults(data.extensions);
+        setResults([]);
+      } else {
+        const data = await searchMarketplace(q);
+        setResults(data.extensions);
+        setVscodeResults([]);
+      }
     } catch {
-      setError('Could not reach marketplace');
+      setError(`Could not reach ${source === 'vscode' ? 'VS Code' : 'Faraday'} marketplace`);
     }
     setLoading(false);
   }, []);
 
-  useEffect(() => { doSearch(''); }, [doSearch]);
+  useEffect(() => { doSearch('', marketplaceSource); }, [doSearch, marketplaceSource]);
 
   const handleSearchInput = (value: string) => {
     setQuery(value);
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => doSearch(value), 300);
+    searchTimer.current = setTimeout(() => doSearch(value, marketplaceSource), 300);
+  };
+
+  const handleVSCodeInstall = async (ext: VSCodeExtension) => {
+    const downloadUrl = getVSCodeDownloadUrl(ext);
+    if (!downloadUrl) return;
+    const key = `${ext.publisher.publisherName}.${ext.extensionName}`;
+    setInstalling(key);
+    setError('');
+    try {
+      await installVSCodeExtension(ext.publisher.publisherName, ext.extensionName, downloadUrl);
+      await refreshInstalled();
+      onExtensionsChanged();
+    } catch (err) {
+      setError(`Install failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    setInstalling(null);
   };
 
   const installedSet = new Set(installed.map(e => `${e.ref.publisher}.${e.ref.name}`));
@@ -145,6 +180,20 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
 
       {tab === 'marketplace' && (
         <div className="ext-search">
+          <div className="ext-source-selector">
+            <button
+              className={`ext-source-btn ${marketplaceSource === 'vscode' ? 'active' : ''}`}
+              onClick={() => { setMarketplaceSource('vscode'); setQuery(''); }}
+            >
+              VS Code
+            </button>
+            <button
+              className={`ext-source-btn ${marketplaceSource === 'faraday' ? 'active' : ''}`}
+              onClick={() => { setMarketplaceSource('faraday'); setQuery(''); }}
+            >
+              Faraday
+            </button>
+          </div>
           <input
             type="text"
             placeholder="Search extensions..."
@@ -158,7 +207,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
       {error && <div className="ext-error">{error}</div>}
 
       <div className="ext-list">
-        {tab === 'marketplace' && (
+        {tab === 'marketplace' && marketplaceSource === 'faraday' && (
           loading ? (
             <div className="ext-empty">Searching...</div>
           ) : results.length === 0 ? (
@@ -193,6 +242,54 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
                         className="ext-btn install"
                         disabled={isBusy || !ext.latest_version}
                         onClick={() => handleInstall(ext)}
+                      >
+                        {isBusy ? 'Installing...' : 'Install'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )
+        )}
+
+        {tab === 'marketplace' && marketplaceSource === 'vscode' && (
+          loading ? (
+            <div className="ext-empty">Searching...</div>
+          ) : vscodeResults.length === 0 ? (
+            <div className="ext-empty">No extensions found</div>
+          ) : (
+            vscodeResults.map((ext) => {
+              const key = `${ext.publisher.publisherName}.${ext.extensionName}`;
+              const isInstalled = installedSet.has(key);
+              const isBusy = installing === key;
+              const version = getVSCodeLatestVersion(ext);
+              const iconUrl = getVSCodeIconUrl(ext);
+              const installs = getVSCodeInstallCount(ext);
+              return (
+                <div key={key} className="ext-item">
+                  <div className="ext-icon">
+                    {iconUrl
+                      ? <img src={iconUrl} width={36} height={36} alt="" />
+                      : ext.displayName[0]?.toUpperCase() ?? '?'}
+                  </div>
+                  <div className="ext-info">
+                    <div className="ext-name">{ext.displayName}</div>
+                    <div className="ext-publisher">{ext.publisher.displayName || ext.publisher.publisherName}</div>
+                    <div className="ext-desc">{ext.shortDescription}</div>
+                    <div className="ext-meta">
+                      {version && <span>v{version}</span>}
+                      <span>↓ {installs.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="ext-actions">
+                    {isInstalled ? (
+                      <button className="ext-btn installed" disabled>Installed</button>
+                    ) : (
+                      <button
+                        className="ext-btn install"
+                        disabled={isBusy || !version}
+                        onClick={() => handleVSCodeInstall(ext)}
                       >
                         {isBusy ? 'Installing...' : 'Install'}
                       </button>

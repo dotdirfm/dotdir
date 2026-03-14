@@ -18,6 +18,7 @@ import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers
 import { extensionHost } from './extensionHostClient';
 import { readSettings, type LoadedExtension } from './extensions';
 import { languageRegistry } from './languageRegistry';
+import { setIconTheme, setIconThemeKind } from './iconResolver';
 import { basename, dirname, isRootPath, join } from './path';
 
 function buildParentChain(dirPath: string): FsNode | undefined {
@@ -331,6 +332,7 @@ export function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    setIconThemeKind(theme === 'light' || theme === 'high-contrast-light' ? 'light' : 'dark');
   }, [theme]);
 
   const isBrowser = !isTauriApp();
@@ -386,9 +388,25 @@ export function App() {
       }
     };
 
+    const updateIconTheme = (exts: LoadedExtension[], themeId: string | undefined) => {
+      if (!themeId) {
+        setIconTheme('fss');
+        return;
+      }
+      const ext = exts.find(e => `${e.ref.publisher}.${e.ref.name}` === themeId);
+      if (ext?.vscodeIconThemePath) {
+        setIconTheme('vscode', ext.vscodeIconThemePath);
+      } else if (ext?.iconThemeFss) {
+        setIconTheme('fss');
+      } else {
+        setIconTheme('none');
+      }
+    };
+
     const unsub = extensionHost.onLoaded((exts) => {
       latestExtensionsRef.current = exts;
       setExtensionLayers(exts, activeIconThemeRef.current);
+      updateIconTheme(exts, activeIconThemeRef.current);
       registerLanguages(exts);
       if (leftPathRef.current) left.navigateTo(leftPathRef.current);
       if (rightPathRef.current) right.navigateTo(rightPathRef.current);
@@ -532,6 +550,19 @@ export function App() {
             setActiveIconTheme(themeId);
             activeIconThemeRef.current = themeId;
             setExtensionLayers(latestExtensionsRef.current, themeId);
+            // Update icon resolver
+            if (!themeId) {
+              setIconTheme('fss');
+            } else {
+              const ext = latestExtensionsRef.current.find(e => `${e.ref.publisher}.${e.ref.name}` === themeId);
+              if (ext?.vscodeIconThemePath) {
+                setIconTheme('vscode', ext.vscodeIconThemePath);
+              } else if (ext?.iconThemeFss) {
+                setIconTheme('fss');
+              } else {
+                setIconTheme('none');
+              }
+            }
             if (leftPathRef.current) left.navigateTo(leftPathRef.current);
             if (rightPathRef.current) right.navigateTo(rightPathRef.current);
           }}

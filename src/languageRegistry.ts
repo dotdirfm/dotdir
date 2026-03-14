@@ -104,10 +104,13 @@ class LanguageRegistry {
     if (this.registeredLanguages.has(lang.id)) return;
     this.registeredLanguages.add(lang.id);
 
+    // Filter out any undefined/null aliases before passing to Monaco
+    const safeAliases = lang.aliases?.filter((a): a is string => typeof a === 'string' && a.length > 0);
+
     monaco.languages.register({
       id: lang.id,
       extensions: lang.extensions,
-      aliases: lang.aliases,
+      aliases: safeAliases && safeAliases.length > 0 ? safeAliases : undefined,
       filenames: lang.filenames,
     });
   }
@@ -116,6 +119,12 @@ class LanguageRegistry {
   async registerGrammar(data: GrammarData): Promise<void> {
     const { contribution, content } = data;
     this.grammarContents.set(contribution.scopeName, content);
+
+    // Injection grammars don't have a language field - they're embedded into other grammars
+    if (!contribution.language) {
+      return;
+    }
+
     this.languageToScope.set(contribution.language, contribution.scopeName);
 
     // Ensure the language is registered

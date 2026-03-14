@@ -3,7 +3,7 @@ import type { LayeredResolver } from 'fss-lang';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { actionQueue } from '../actionQueue';
 import { resolveEntryStyle } from '../fss';
-import { getCachedIconUrl, loadIcons } from '../iconCache';
+import { resolveIcon, loadIconsForPaths, getCachedIcon, onIconThemeChange } from '../iconResolver';
 import { dirname, isRootPath, join } from '../path';
 import { ColumnsScroller, type ColumnsScrollerProps } from './ColumnsScroller';
 import { useElementSize } from './useElementSize';
@@ -26,6 +26,7 @@ interface FileListProps {
 interface DisplayEntry {
   entry: FsNode;
   style: { color?: string; opacity?: number; icon: string | null; sortPriority: number; groupFirst: boolean };
+  iconPath: string | null;
 }
 
 function formatSize(sizeValue: unknown): string {
@@ -46,12 +47,11 @@ function formatDate(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function getIconUrl(iconName: string | null, isDirectory: boolean): string | undefined {
-  if (iconName) {
-    const url = getCachedIconUrl(iconName);
-    if (url) return url;
+function getIconUrl(iconPath: string | null): string | undefined {
+  if (iconPath) {
+    return getCachedIcon(iconPath) ?? undefined;
   }
-  return getCachedIconUrl(isDirectory ? 'folder.svg' : 'file.svg');
+  return undefined;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -95,7 +95,10 @@ export const FileList = memo(function FileList({
   const sorted = useMemo(() => {
     const withStyle = entries.map((entry) => {
       entry = { ...entry, parent: parentNode };
-      return { entry, style: resolveEntryStyle(resolver, entry) };
+      const style = resolveEntryStyle(resolver, entry);
+      const isDir = entry.type === 'folder';
+      const resolved = resolveIcon(entry.name, isDir, false, false, entry.lang, style.icon);
+      return { entry, style, iconPath: resolved?.path ?? null };
     });
     withStyle.sort((a, b) => {
       if (a.style.groupFirst !== b.style.groupFirst) return a.style.groupFirst ? -1 : 1;
@@ -109,7 +112,9 @@ export const FileList = memo(function FileList({
     const result: DisplayEntry[] = [];
     if (parentNode) {
       const expandedParentNode = { ...parentNode, stateFlags: 1 };
-      result.push({ entry: { ...expandedParentNode, name: '..' }, style: resolveEntryStyle(resolver, expandedParentNode) });
+      const style = resolveEntryStyle(resolver, expandedParentNode);
+      const resolved = resolveIcon('..', true, true, false, '', style.icon);
+      result.push({ entry: { ...expandedParentNode, name: '..' }, style, iconPath: resolved?.path ?? null });
     }
     for (const item of sorted) result.push(item);
     return result;
@@ -119,22 +124,29 @@ export const FileList = memo(function FileList({
   displayEntriesRef.current = displayEntries;
 
   const neededIcons = useMemo(() => {
-    const names = new Set(['file.svg', 'folder.svg', 'folder-open.svg']);
-    for (const { style } of displayEntries) {
-      if (style.icon) names.add(style.icon);
+    const paths = new Set<string>();
+    for (const { iconPath } of displayEntries) {
+      if (iconPath) paths.add(iconPath);
     }
-    return [...names];
+    return [...paths];
   }, [displayEntries]);
 
   useEffect(() => {
     let cancelled = false;
-    loadIcons(neededIcons).then(() => {
+    loadIconsForPaths(neededIcons).then(() => {
       if (!cancelled) setIconsVersion((n) => n + 1);
     });
     return () => {
       cancelled = true;
     };
   }, [neededIcons]);
+
+  // Re-render when icon theme changes
+  useEffect(() => {
+    return onIconThemeChange(() => {
+      setIconsVersion((n) => n + 1);
+    });
+  }, []);
 
   useEffect(() => {
     const prevPath = prevPathRef.current;
@@ -302,10 +314,9 @@ export const FileList = memo(function FileList({
     (index: number) => {
       const item = displayEntriesRef.current[index];
       if (!item) return null;
-      const { entry, style } = item;
+      const { entry, style, iconPath } = item;
       const isActive = index === activeIndex;
-      const isDir = entry.type === 'folder';
-      const iconUrl = getIconUrl(style.icon, isDir);
+      const iconUrl = getIconUrl(iconPath);
 
       return (
         <div

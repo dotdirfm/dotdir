@@ -788,6 +788,33 @@ body {
   flex-shrink: 0;
 }
 
+.ext-source-selector {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.ext-source-btn {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-secondary);
+  color: var(--fg-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ext-source-btn:hover {
+  background: var(--bg-hover);
+}
+
+.ext-source-btn.active {
+  background: var(--border-active);
+  border-color: var(--border-active);
+  color: var(--bg);
+}
+
 .ext-search input {
   width: 100%;
   padding: 5px 8px;
