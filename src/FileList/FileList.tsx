@@ -20,6 +20,8 @@ interface FileListProps {
   onNavigate: (path: string) => Promise<void>;
   onViewFile?: (filePath: string, fileName: string, fileSize: number) => void;
   onEditFile?: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
+  /** Run executable in terminal: receives (command) and should write command + newline to terminal. */
+  onExecuteInTerminal?: (command: string) => Promise<void>;
   editorFileSizeLimit?: number;
   active: boolean;
   resolver: LayeredResolver;
@@ -77,6 +79,7 @@ export const FileList = memo(function FileList({
   onNavigate,
   onViewFile,
   onEditFile,
+  onExecuteInTerminal,
   editorFileSizeLimit = 1024 * 1024,
   active,
   resolver,
@@ -107,6 +110,8 @@ export const FileList = memo(function FileList({
   onViewFileRef.current = onViewFile;
   const onEditFileRef = useRef(onEditFile);
   onEditFileRef.current = onEditFile;
+  const onExecuteInTerminalRef = useRef(onExecuteInTerminal);
+  onExecuteInTerminalRef.current = onExecuteInTerminal;
   const editorFileSizeLimitRef = useRef(editorFileSizeLimit);
   editorFileSizeLimitRef.current = editorFileSizeLimit;
 
@@ -275,8 +280,10 @@ export const FileList = memo(function FileList({
     if (!active) return;
     const item = displayEntries[activeIndex];
     const isFile = item?.entry.type === 'file';
+    const isExecutable = isFile && item != null && !!(item.entry.meta as { executable?: boolean }).executable;
     commandRegistry.setContext('listItemIsFile', isFile);
     commandRegistry.setContext('listItemIsFolder', !isFile && item != null);
+    commandRegistry.setContext('listItemIsExecutable', isExecutable);
   }, [active, activeIndex, displayEntries]);
 
   // Register navigation commands when panel is active
@@ -382,6 +389,27 @@ export const FileList = memo(function FileList({
     }));
 
     disposables.push(commandRegistry.registerCommand(
+      'list.execute',
+      'Execute in Terminal',
+      () => actionQueue.enqueue(async () => {
+        const item = displayEntriesRef.current[activeIndexRef.current];
+        const write = onExecuteInTerminalRef.current;
+        if (!item || item.entry.type !== 'file' || !write) return;
+        const executable = (item.entry.meta as { executable?: boolean }).executable;
+        if (!executable) return;
+        const name = item.entry.name;
+        const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? `./${name}` : `./${JSON.stringify(name)}`;
+        await write(`${arg}\r`);
+      }),
+      { when: 'focusPanel && listItemIsExecutable' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.execute',
+      key: 'enter',
+      when: 'focusPanel && listItemIsExecutable',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
       'list.open',
       'Open',
       () => actionQueue.enqueue(async () => {
@@ -393,7 +421,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.open',
       key: 'enter',
-      when: 'focusPanel',
+      when: 'focusPanel && !listItemIsExecutable',
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -441,10 +469,48 @@ export const FileList = memo(function FileList({
       when: 'focusPanel && listItemIsFile',
     }));
 
+    disposables.push(commandRegistry.registerCommand(
+      'list.pasteFilename',
+      'Paste Filename to Terminal',
+      () => actionQueue.enqueue(async () => {
+        const item = displayEntriesRef.current[activeIndexRef.current];
+        const write = onExecuteInTerminalRef.current;
+        if (!item || !write) return;
+        const name = item.entry.name;
+        const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? name : JSON.stringify(name);
+        await write(arg);
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.pasteFilename',
+      key: 'ctrl+enter',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.pastePath',
+      'Paste Path to Terminal',
+      () => actionQueue.enqueue(async () => {
+        const item = displayEntriesRef.current[activeIndexRef.current];
+        const write = onExecuteInTerminalRef.current;
+        if (!item || !write) return;
+        const path = (item.entry.path as string) ?? '';
+        const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
+        await write(arg);
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.pastePath',
+      key: 'ctrl+f',
+      when: 'focusPanel',
+    }));
+
     return () => {
       for (const dispose of disposables) dispose();
     };
-  }, [active, navigateToEntry]);
+  }, [active, navigateToEntry, onExecuteInTerminal]);
 
   const columnCountRef = useRef(columnCount);
   columnCountRef.current = columnCount;
@@ -470,6 +536,7 @@ export const FileList = memo(function FileList({
       const isActive = index === activeIndex;
       const iconUrl = getIconUrl(iconPath) ?? iconFallbackUrl;
 
+      const isExecutable = entry.type === 'file' && !!(entry.meta as { executable?: boolean }).executable;
       return (
         <div
           className={`entry${isActive ? ' selected' : ''}`}
@@ -479,7 +546,13 @@ export const FileList = memo(function FileList({
             const now = Date.now();
             if (now - lastClickTimeRef.current < 300) {
               lastClickTimeRef.current = 0;
-              actionQueue.enqueue(() => navigateToEntry(entry));
+              if (isExecutable && onExecuteInTerminalRef.current) {
+                const name = entry.name;
+                const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? `./${name}` : `./${JSON.stringify(name)}`;
+                actionQueue.enqueue(() => onExecuteInTerminalRef.current!(`${arg}\r`));
+              } else {
+                actionQueue.enqueue(() => navigateToEntry(entry));
+              }
             } else {
               lastClickTimeRef.current = now;
               actionQueue.enqueue(() => setActiveIndex(index));

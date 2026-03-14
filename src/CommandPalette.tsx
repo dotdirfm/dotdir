@@ -16,6 +16,7 @@ interface CommandItem {
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
   const [commands, setCommands] = useState<CommandType[]>([]);
   const [keybindings, setKeybindings] = useState<Keybinding[]>([]);
@@ -29,6 +30,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       dialog.showModal();
     } else if (!open && dialog.open) {
       dialog.close();
+    }
+  }, [open]);
+
+  // Focus search input when palette opens
+  useEffect(() => {
+    if (open) {
+      const t = requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+      return () => cancelAnimationFrame(t);
     }
   }, [open]);
 
@@ -108,10 +119,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         shouldFilter={true}
       >
         <Command.Input
+          ref={inputRef}
           value={search}
           onValueChange={setSearch}
           placeholder="Type a command or search..."
-          autoFocus
         />
         <Command.List>
           <Command.Empty>No results found.</Command.Empty>

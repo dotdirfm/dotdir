@@ -300,6 +300,7 @@ export function App() {
   const activeIconThemeRef = useRef(activeIconTheme);
   activeIconThemeRef.current = activeIconTheme;
   const commandPalette = useCommandPalette();
+  const writeToTerminalRef = useRef<(data: string) => Promise<void>>(async () => {});
 
   useEffect(() => {
     // Initialize settings with watch
@@ -889,6 +890,7 @@ export function App() {
           onCwdChange={handleTerminalCwd}
           onVisibleHeight={setTerminalVisibleHeight}
           onPromptActive={handlePromptActive}
+          onWriteToTerminal={(write) => { writeToTerminalRef.current = write; }}
         />
       </div>
       <div
@@ -908,6 +910,7 @@ export function App() {
             }}
             onViewFile={handleViewFile}
             onEditFile={handleEditFile}
+            onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
             editorFileSizeLimit={editorFileSizeLimit}
             active={activePanel === 'left'}
             resolver={left.resolver}
@@ -929,6 +932,7 @@ export function App() {
             }}
             onViewFile={handleViewFile}
             onEditFile={handleEditFile}
+            onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
             editorFileSizeLimit={editorFileSizeLimit}
             active={activePanel === 'right'}
             resolver={right.resolver}

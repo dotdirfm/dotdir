@@ -12,6 +12,8 @@ interface TerminalPanelProps {
   onCwdChange?: (path: string) => void;
   onVisibleHeight?: (px: number) => void;
   onPromptActive?: (active: boolean) => void;
+  /** Called with a function that writes to the active terminal (for list.execute). */
+  onWriteToTerminal?: (write: (data: string) => Promise<void>) => void;
 }
 
 const emptySnapshot: TerminalServiceSnapshot = {
@@ -19,7 +21,7 @@ const emptySnapshot: TerminalServiceSnapshot = {
   activeSessionId: null,
 };
 
-export function TerminalPanel({ cwd, expanded = false, onCwdChange, onVisibleHeight, onPromptActive }: TerminalPanelProps) {
+export function TerminalPanel({ cwd, expanded = false, onCwdChange, onVisibleHeight, onPromptActive, onWriteToTerminal }: TerminalPanelProps) {
   const lastReportedCwdRef = useRef<string | null>(null);
   const service = useMemo(() => new TerminalService(), []);
   const [profiles, setProfiles] = useState<TerminalProfile[]>([]);
@@ -70,6 +72,10 @@ export function TerminalPanel({ cwd, expanded = false, onCwdChange, onVisibleHei
   useEffect(() => {
     service.syncActiveCwd(cwd);
   }, [cwd, service]);
+
+  useEffect(() => {
+    onWriteToTerminal?.( (data: string) => service.writeToActiveSession(data) );
+  }, [service, onWriteToTerminal]);
 
   useEffect(() => {
     const active = snapshot.sessions.find((session) => session.id === snapshot.activeSessionId);

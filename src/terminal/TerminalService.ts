@@ -179,6 +179,13 @@ export class TerminalService {
     void active.session.refreshPrompt();
   }
 
+  /** Write text to the active terminal session (e.g. to run a command). */
+  async writeToActiveSession(data: string): Promise<void> {
+    const active = this.getActiveSession();
+    if (!active) return;
+    await active.session.write(data);
+  }
+
   dispose(): void {
     for (const session of this.sessions) {
       void session.session.dispose();
