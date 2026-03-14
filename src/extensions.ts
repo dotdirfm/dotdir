@@ -35,11 +35,37 @@ export interface ExtensionGrammar {
   embeddedLanguages?: Record<string, string>;
 }
 
+export interface ExtensionCommand {
+  command: string;
+  title: string;
+  category?: string;
+  icon?: string;
+}
+
+export interface ExtensionKeybinding {
+  command: string;
+  key: string;
+  mac?: string;
+  when?: string;
+}
+
+export interface ExtensionMenu {
+  command: string;
+  group?: string;
+  when?: string;
+}
+
 export interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme; // FSS format (single)
   iconThemes?: ExtensionIconThemeVSCode[]; // VS Code format (array)
   languages?: ExtensionLanguage[];
   grammars?: ExtensionGrammar[];
+  commands?: ExtensionCommand[];
+  keybindings?: ExtensionKeybinding[];
+  menus?: {
+    commandPalette?: ExtensionMenu[];
+    'explorer/context'?: ExtensionMenu[];
+  };
 }
 
 export interface ExtensionManifest {
@@ -80,6 +106,10 @@ export interface LoadedExtension {
   languages?: ExtensionLanguage[];
   /** Grammar contributions with their loaded content */
   grammars?: LoadedGrammar[];
+  /** Command contributions from this extension */
+  commands?: ExtensionCommand[];
+  /** Keybinding contributions from this extension */
+  keybindings?: ExtensionKeybinding[];
 }
 
 export interface MarketplaceExtension {
@@ -207,6 +237,10 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         }
       }
 
+      // Load command and keybinding contributions
+      const commands = manifest.contributes?.commands;
+      const keybindings = manifest.contributes?.keybindings;
+
       loaded.push({
         ref,
         manifest,
@@ -218,6 +252,8 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         vscodeIconThemeId,
         languages,
         grammars,
+        commands,
+        keybindings,
       });
     } catch {
       continue;

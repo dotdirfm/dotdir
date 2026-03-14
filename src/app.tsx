@@ -13,6 +13,8 @@ import { ImageViewer, isMediaFile, type MediaFileEntry } from './ImageViewer';
 import { ModalDialog, type ModalDialogProps } from './ModalDialog';
 import { TerminalPanel } from './Terminal';
 import { ExtensionsPanel } from './ExtensionsPanel';
+import { CommandPalette, useCommandPalette } from './CommandPalette';
+import { commandRegistry } from './commands';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
@@ -283,6 +285,7 @@ export function App() {
   const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
   const activeIconThemeRef = useRef(activeIconTheme);
   activeIconThemeRef.current = activeIconTheme;
+  const commandPalette = useCommandPalette();
 
   useEffect(() => {
     readSettings().then((s) => {
@@ -336,6 +339,128 @@ export function App() {
     document.documentElement.dataset.theme = theme;
     setIconThemeKind(theme === 'light' || theme === 'high-contrast-light' ? 'light' : 'dark');
   }, [theme]);
+
+  // Register built-in commands
+  useEffect(() => {
+    const disposables: (() => void)[] = [];
+
+    // View commands
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.toggleHiddenFiles',
+      'Toggle Hidden Files',
+      () => setShowHidden(h => !h),
+      { category: 'View' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.toggleHiddenFiles',
+      key: 'ctrl+h',
+      mac: 'cmd+h',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.togglePanels',
+      'Toggle Panels',
+      () => setPanelsVisible(v => !v),
+      { category: 'View' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.togglePanels',
+      key: 'ctrl+o',
+      mac: 'cmd+o',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.showExtensions',
+      'Show Extensions',
+      () => setShowExtensions(true),
+      { category: 'View' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.showExtensions',
+      key: 'f11',
+    }));
+
+    // Navigation commands
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.focusLeftPanel',
+      'Focus Left Panel',
+      () => setActivePanel('left'),
+      { category: 'Navigation' }
+    ));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.focusRightPanel',
+      'Focus Right Panel',
+      () => setActivePanel('right'),
+      { category: 'Navigation' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.focusRightPanel',
+      key: 'tab',
+      when: 'panelFocused',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.goToParent',
+      'Go to Parent Directory',
+      () => {
+        const panel = activePanelRef.current === 'left' ? left : right;
+        const parent = dirname(panel.currentPath);
+        if (parent !== panel.currentPath) {
+          panel.navigateTo(parent);
+        }
+      },
+      { category: 'Navigation' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.goToParent',
+      key: 'backspace',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.goHome',
+      'Go to Home Directory',
+      async () => {
+        const home = await bridge.utils.getHomePath();
+        const panel = activePanelRef.current === 'left' ? left : right;
+        panel.navigateTo(home);
+      },
+      { category: 'Navigation' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.goHome',
+      key: 'ctrl+home',
+      mac: 'cmd+home',
+    }));
+
+    // File commands
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.refresh',
+      'Refresh',
+      () => {
+        const panel = activePanelRef.current === 'left' ? left : right;
+        panel.navigateTo(panel.currentPath);
+      },
+      { category: 'File' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.refresh',
+      key: 'ctrl+r',
+      mac: 'cmd+r',
+    }));
+
+    // Command palette
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.showCommandPalette',
+      'Show All Commands',
+      () => commandPalette.setOpen(true),
+      { category: 'View' }
+    ));
+
+    return () => {
+      for (const dispose of disposables) dispose();
+    };
+  }, [left, right, commandPalette]);
 
   const isBrowser = !isTauriApp();
 
@@ -408,11 +533,40 @@ export function App() {
       }
     };
 
+    // Register extension commands and keybindings
+    const registerExtensionCommands = (exts: LoadedExtension[]) => {
+      for (const ext of exts) {
+        if (ext.commands) {
+          for (const cmd of ext.commands) {
+            commandRegistry.registerCommand(
+              cmd.command,
+              cmd.title,
+              () => {
+                console.log(`Extension command not implemented: ${cmd.command}`);
+              },
+              { category: cmd.category, icon: cmd.icon }
+            );
+          }
+        }
+        if (ext.keybindings) {
+          for (const kb of ext.keybindings) {
+            commandRegistry.registerKeybinding({
+              command: kb.command,
+              key: kb.key,
+              mac: kb.mac,
+              when: kb.when,
+            });
+          }
+        }
+      }
+    };
+
     const unsub = extensionHost.onLoaded((exts) => {
       latestExtensionsRef.current = exts;
       setExtensionLayers(exts, activeIconThemeRef.current);
       updateIconTheme(exts, activeIconThemeRef.current);
       registerLanguages(exts);
+      registerExtensionCommands(exts);
       if (leftPathRef.current) left.navigateTo(leftPathRef.current);
       if (rightPathRef.current) right.navigateTo(rightPathRef.current);
     });
@@ -576,6 +730,7 @@ export function App() {
         />
       )}
       {dialog && <ModalDialog {...dialog} onClose={() => setDialog(null)} />}
+      <CommandPalette open={commandPalette.open} onOpenChange={commandPalette.setOpen} />
     </div>
   );
 }
