@@ -33,8 +33,9 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    dialogRef.current?.showModal();
-    const dialog = dialogRef.current!;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
     const handleClose = () => onClose();
     dialog.addEventListener('close', handleClose);
     return () => dialog.removeEventListener('close', handleClose);
