@@ -134,6 +134,11 @@ function usePanel(theme: ThemeKind, showError: (message: string) => void) {
 
   const navigateTo = useCallback(
     async (path: string) => {
+      // Skip if already navigating to this path
+      if (currentPathRef.current === path && navAbortRef.current) {
+        return;
+      }
+      
       navAbortRef.current?.abort();
       const abort = new AbortController();
       navAbortRef.current = abort;

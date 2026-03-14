@@ -165,6 +165,19 @@ export function useCommandPalette() {
       }
       // Let command registry handle other shortcuts when palette is closed
       if (!open) {
+        const target = e.target as HTMLElement;
+        const inTerminal = target.closest('.terminal-container');
+        
+        // When in terminal, only intercept shortcuts with Ctrl/Cmd modifier
+        // (but not Ctrl+C/D/Z which are terminal control sequences)
+        if (inTerminal) {
+          const hasModifier = e.metaKey || e.ctrlKey;
+          const isTerminalControl = hasModifier && ['c', 'd', 'z', 'v'].includes(e.key.toLowerCase());
+          if (!hasModifier || isTerminalControl) {
+            return;
+          }
+        }
+        
         commandRegistry.handleKeyboardEvent(e);
       }
     };
