@@ -17,6 +17,7 @@ import { ExtensionsPanel } from './ExtensionsPanel';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
+import { readSettings } from './extensions';
 import { basename, dirname, isRootPath, join } from './path';
 
 function buildParentChain(dirPath: string): FsNode | undefined {
@@ -277,6 +278,15 @@ export function App() {
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
+  const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
+  const activeIconThemeRef = useRef(activeIconTheme);
+  activeIconThemeRef.current = activeIconTheme;
+
+  useEffect(() => {
+    readSettings().then((s) => {
+      if (s.iconTheme) setActiveIconTheme(s.iconTheme);
+    });
+  }, []);
 
   const activePanelRef = useRef(activePanel);
   activePanelRef.current = activePanel;
@@ -354,11 +364,13 @@ export function App() {
     }
   }, []);
 
+  const latestExtensionsRef = useRef<import('./extensions').LoadedExtension[]>([]);
+
   // Start Extension Host lazily — re-navigate panels when extensions load
   useEffect(() => {
     const unsub = extensionHost.onLoaded((exts) => {
-      setExtensionLayers(exts);
-      // Re-navigate to recompute styles with new extension layers
+      latestExtensionsRef.current = exts;
+      setExtensionLayers(exts, activeIconThemeRef.current);
       if (leftPathRef.current) left.navigateTo(leftPathRef.current);
       if (rightPathRef.current) right.navigateTo(rightPathRef.current);
     });
@@ -495,6 +507,14 @@ export function App() {
           onClose={() => setShowExtensions(false)}
           onExtensionsChanged={() => {
             extensionHost.restart();
+          }}
+          activeIconTheme={activeIconTheme}
+          onIconThemeChange={(themeId) => {
+            setActiveIconTheme(themeId);
+            activeIconThemeRef.current = themeId;
+            setExtensionLayers(latestExtensionsRef.current, themeId);
+            if (leftPathRef.current) left.navigateTo(leftPathRef.current);
+            if (rightPathRef.current) right.navigateTo(rightPathRef.current);
           }}
         />
       )}

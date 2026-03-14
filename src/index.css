@@ -894,8 +894,21 @@ body {
   font-family: monospace;
 }
 
+.ext-theme-badge {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+.ext-theme-badge.active {
+  color: var(--border-active);
+  font-style: normal;
+  font-weight: 600;
+}
+
 .ext-actions {
   flex-shrink: 0;
+  display: flex;
+  gap: 6px;
   padding-top: 2px;
 }
 

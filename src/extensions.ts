@@ -228,3 +228,32 @@ export async function uninstallExtension(publisherUsername: string, extName: str
   const filtered = refs.filter(r => !(r.publisher === publisherUsername && r.name === extName));
   await writeRefs(filtered);
 }
+
+// ── Settings ────────────────────────────────────────────────────────
+
+export interface FaradaySettings {
+  iconTheme?: string; // "publisher.name" of the active icon theme
+}
+
+async function getSettingsPath(): Promise<string> {
+  const homePath = await bridge.utils.getHomePath();
+  return join(homePath, '.faraday', 'settings.json');
+}
+
+export async function readSettings(): Promise<FaradaySettings> {
+  try {
+    const text = await readTextFile(await getSettingsPath());
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+export async function writeSettings(settings: FaradaySettings): Promise<void> {
+  await bridge.fsa.writeFile(await getSettingsPath(), JSON.stringify(settings, null, 2));
+}
+
+export function extensionIconThemeId(ext: LoadedExtension): string | null {
+  if (!ext.manifest.contributes?.iconTheme) return null;
+  return `${ext.ref.publisher}.${ext.ref.name}`;
+}

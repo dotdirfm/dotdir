@@ -24,10 +24,11 @@ function resolveIconUrls(source: string, basePath: string): string {
   });
 }
 
-export function setExtensionLayers(extensions: LoadedExtension[]): void {
+export function setExtensionLayers(extensions: LoadedExtension[], activeIconTheme?: string): void {
   extensionLayers = extensions
     .filter((ext): ext is LoadedExtension & { iconThemeFss: string; iconThemeBasePath: string } =>
       ext.iconThemeFss != null && ext.iconThemeBasePath != null)
+    .filter((ext) => !activeIconTheme || `${ext.ref.publisher}.${ext.ref.name}` === activeIconTheme)
     .map((ext) => createLayer(resolveIconUrls(ext.iconThemeFss, ext.iconThemeBasePath), '/', LayerPriority.USER));
 }
 

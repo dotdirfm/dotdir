@@ -7,16 +7,21 @@ import {
   uninstallExtension,
   loadExtensions,
   type LoadedExtension,
+  extensionIconThemeId,
+  readSettings,
+  writeSettings,
 } from './extensions';
 
 interface Props {
   onClose: () => void;
   onExtensionsChanged: () => void;
+  activeIconTheme?: string;
+  onIconThemeChange: (themeId: string | undefined) => void;
 }
 
 type Tab = 'marketplace' | 'installed';
 
-export function ExtensionsPanel({ onClose, onExtensionsChanged }: Props) {
+export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme, onIconThemeChange }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<Tab>('marketplace');
   const [query, setQuery] = useState('');
@@ -87,12 +92,32 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged }: Props) {
     setError('');
     try {
       await uninstallExtension(ref.publisher, ref.name);
+      if (activeIconTheme === key) {
+        const settings = await readSettings();
+        delete settings.iconTheme;
+        await writeSettings(settings);
+        onIconThemeChange(undefined);
+      }
       await refreshInstalled();
       onExtensionsChanged();
     } catch (err) {
       setError(`Uninstall failed: ${err instanceof Error ? err.message : String(err)}`);
     }
     setInstalling(null);
+  };
+
+  const handleSetIconTheme = async (ext: LoadedExtension) => {
+    const themeId = extensionIconThemeId(ext);
+    if (!themeId) return;
+    const newId = themeId === activeIconTheme ? undefined : themeId;
+    const settings = await readSettings();
+    if (newId) {
+      settings.iconTheme = newId;
+    } else {
+      delete settings.iconTheme;
+    }
+    await writeSettings(settings);
+    onIconThemeChange(newId);
   };
 
   const formatSize = (bytes: number) => {
@@ -183,6 +208,8 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged }: Props) {
             installed.map((ext) => {
               const key = `${ext.ref.publisher}.${ext.ref.name}`;
               const isBusy = installing === key;
+              const themeId = extensionIconThemeId(ext);
+              const isActiveTheme = themeId != null && themeId === activeIconTheme;
               return (
                 <div key={key} className="ext-item">
                   <div className="ext-icon">
@@ -194,9 +221,22 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged }: Props) {
                     <div className="ext-desc">{ext.manifest.description || ''}</div>
                     <div className="ext-meta">
                       <span>v{ext.ref.version}</span>
+                      {themeId && (
+                        <span className={`ext-theme-badge${isActiveTheme ? ' active' : ''}`}>
+                          {isActiveTheme ? '● Active theme' : 'Icon theme'}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="ext-actions">
+                    {themeId && (
+                      <button
+                        className={`ext-btn ${isActiveTheme ? 'installed' : 'install'}`}
+                        onClick={() => handleSetIconTheme(ext)}
+                      >
+                        {isActiveTheme ? 'Deactivate' : 'Activate'}
+                      </button>
+                    )}
                     <button
                       className="ext-btn uninstall"
                       disabled={isBusy}
