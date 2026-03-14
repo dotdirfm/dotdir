@@ -17,8 +17,8 @@ export function normalizeTerminalPath(raw: string): string {
 
 export function buildCdCommand(path: string, shellType: TerminalShellType): string {
   if (shellType === 'powershell') {
-    const psPath = path.replace(/\//g, '\\').replace(/'/g, "''");
-    return `Set-Location -LiteralPath '${psPath}'\r`;
+    const psPath = path.replace(/\//g, '\\').replace(/`/g, '``').replace(/"/g, '`"');
+    return `cd "${psPath}"\r`;
   }
 
   if (isWindowsPath(path) || shellType === 'cmd') {

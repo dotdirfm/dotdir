@@ -69,7 +69,7 @@ body {
 }
 
 .panels-overlay.hidden {
-  visibility: hidden;
+  display: none;
   pointer-events: none;
 }
 
@@ -128,6 +128,7 @@ body {
 
 .terminal-background {
   position: absolute;
+  top: 0;
   bottom: 24px;
   left: 0;
   right: 0;
@@ -137,6 +138,10 @@ body {
   overflow: hidden;
   background: #11131a;
   border-top: 1px solid var(--border);
+}
+
+.terminal-background.expanded {
+  z-index: 2;
 }
 
 .terminal-panel {
@@ -149,14 +154,29 @@ body {
   background: #11131a;
 }
 
+.terminal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+  overflow: hidden;
+}
+
+.terminal-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
 .terminal-toolbar {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
-  min-height: 24px;
+  min-height: 20px;
   padding: 1px 8px;
-  border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--fg-secondary);
   font-size: 12px;
@@ -271,41 +291,22 @@ body {
   color: var(--error-fg);
 }
 
-.terminal-resize-handle {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  z-index: 3;
-  cursor: row-resize;
-  touch-action: none;
-  background: linear-gradient(to bottom, var(--border-active), var(--border));
-}
-
-.terminal-resize-handle:hover {
-  background: linear-gradient(to bottom, #89b4fa, var(--border-active));
-}
-
-.terminal-container {
-  flex: 1 1 auto;
-  width: 100%;
-  min-height: 20px;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
 .terminal-container .xterm {
   height: 100%;
   padding: 0 0 0 4px;
 }
 
+.terminal-container .xterm-viewport {
+  height: 100% !important;
+  overflow-y: auto !important;
+}
+
 .terminal-container .xterm .xterm-viewport {
-  position: relative !important;
-  top: auto !important;
-  bottom: auto !important;
-  left: auto !important;
-  right: auto !important;
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
 }
 
 .action-bar {
@@ -462,6 +463,12 @@ body.terminal-resizing {
 
 .columns-scroller-content {
   column-fill: auto;
+  position: relative;
+  z-index: 0;
+}
+
+.columns-scroller-content > div {
+  overflow: hidden;
 }
 
 .columns-borders {
@@ -485,12 +492,14 @@ body.terminal-resizing {
 }
 
 .entry {
+  position: relative;
   display: flex;
   align-items: center;
   padding: 0 12px;
   cursor: default;
   user-select: none;
   gap: 8px;
+  overflow: hidden;
 }
 
 .entry:hover {

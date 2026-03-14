@@ -4,10 +4,11 @@ import { bridge, type TerminalProfile } from './bridge';
 import { TerminalView } from './terminal/TerminalView';
 import { TerminalService, type TerminalServiceSnapshot } from './terminal/TerminalService';
 
-const MIN_VISIBLE_HEIGHT = 52;
+const COMPACT_VISIBLE_HEIGHT = 40;
 
 interface TerminalPanelProps {
   cwd: string;
+  expanded?: boolean;
   onCwdChange?: (path: string) => void;
   onVisibleHeight?: (px: number) => void;
   onPromptActive?: (active: boolean) => void;
@@ -18,31 +19,17 @@ const emptySnapshot: TerminalServiceSnapshot = {
   activeSessionId: null,
 };
 
-export function TerminalPanel({ cwd, onCwdChange, onVisibleHeight, onPromptActive }: TerminalPanelProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
+export function TerminalPanel({ cwd, expanded = false, onCwdChange, onVisibleHeight, onPromptActive }: TerminalPanelProps) {
+  const lastReportedCwdRef = useRef<string | null>(null);
   const service = useMemo(() => new TerminalService(), []);
   const [profiles, setProfiles] = useState<TerminalProfile[]>([]);
   const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [snapshot, setSnapshot] = useState<TerminalServiceSnapshot>(emptySnapshot);
 
   useEffect(() => {
-    onVisibleHeight?.(MIN_VISIBLE_HEIGHT);
+    onVisibleHeight?.(COMPACT_VISIBLE_HEIGHT);
     onPromptActive?.(true);
   }, [onPromptActive, onVisibleHeight]);
-
-  useEffect(() => {
-    const panel = panelRef.current;
-    if (!panel) return undefined;
-
-    const reportHeight = () => {
-      onVisibleHeight?.(Math.max(MIN_VISIBLE_HEIGHT, Math.ceil(panel.getBoundingClientRect().height)));
-    };
-
-    reportHeight();
-    const observer = new ResizeObserver(() => reportHeight());
-    observer.observe(panel);
-    return () => observer.disconnect();
-  }, [onVisibleHeight]);
 
   useEffect(() => {
     const cleanup = service.subscribe(() => {
@@ -87,7 +74,10 @@ export function TerminalPanel({ cwd, onCwdChange, onVisibleHeight, onPromptActiv
   useEffect(() => {
     const active = snapshot.sessions.find((session) => session.id === snapshot.activeSessionId);
     if (active?.cwd) {
-      onCwdChange?.(normalizePath(active.cwd));
+      const normalized = normalizePath(active.cwd);
+      if (lastReportedCwdRef.current === normalized) return;
+      lastReportedCwdRef.current = normalized;
+      onCwdChange?.(normalized);
     }
   }, [onCwdChange, snapshot]);
 
@@ -101,7 +91,14 @@ export function TerminalPanel({ cwd, onCwdChange, onVisibleHeight, onPromptActiv
   const activeSession = snapshot.sessions.find((session) => session.id === snapshot.activeSessionId) ?? null;
 
   return (
-    <div ref={panelRef} className="terminal-panel">
+    <div className="terminal-panel">
+      <div className="terminal-body">
+        {activeSession ? (
+          <TerminalView key={activeSession.id} session={activeSession.session} expanded={expanded} />
+        ) : (
+          <div className="terminal-loading">Loading terminal...</div>
+        )}
+      </div>
       <div className="terminal-toolbar">
         <div className="terminal-tabs">
           {snapshot.sessions.map((session) => (
@@ -151,11 +148,6 @@ export function TerminalPanel({ cwd, onCwdChange, onVisibleHeight, onPromptActiv
         {activeSession && <div className="terminal-profile-shell">{profiles.find((profile) => profile.id === activeSession.profileId)?.shell}</div>}
         {activeSession?.error && <div className="terminal-status-error">{activeSession.error}</div>}
       </div>
-      {activeSession ? (
-        <TerminalView key={activeSession.id} session={activeSession.session} />
-      ) : (
-        <div className="terminal-loading">Loading terminal...</div>
-      )}
     </div>
   );
 }

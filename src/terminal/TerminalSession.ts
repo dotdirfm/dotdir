@@ -18,6 +18,7 @@ type SessionListener = (event: TerminalSessionEvent) => void;
 
 export class TerminalSession {
   private static readonly replayLimit = 64 * 1024;
+  private static readonly syncSuppressionTimeoutMs = 5000;
   private readonly listeners = new Set<SessionListener>();
   private readonly decoder = new TextDecoder();
   private readonly initialCwd: string;
@@ -34,6 +35,7 @@ export class TerminalSession {
   private suppressSyncOutput = false;
   private suppressedOutput = '';
   private suppressTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingSyncEchoCleanup = false;
   private readonly profileId?: string;
 
   constructor(initialCwd: string, profileId?: string) {
@@ -118,8 +120,21 @@ export class TerminalSession {
 
   async syncToCwd(nextCwd: string): Promise<void> {
     if (this.ptyId === null || nextCwd === this.currentCwd) return;
+    this.currentCwd = nextCwd;
+    this.capabilities = {
+      ...this.capabilities,
+      cwd: nextCwd,
+    };
+    this.emit({ type: 'cwd', cwd: nextCwd });
+    this.emitCapabilities();
     this.beginSyncSuppression();
     await bridge.pty.write(this.ptyId, buildCdCommand(nextCwd, this.capabilities.shellType));
+  }
+
+  async refreshPrompt(): Promise<void> {
+    if (this.ptyId === null) return;
+    if (this.capabilities.commandRunning) return;
+    await bridge.pty.write(this.ptyId, '\r');
   }
 
   async dispose(): Promise<void> {
@@ -161,6 +176,7 @@ export class TerminalSession {
       const syncOscResult = splitOnFirstOsc7(this.suppressedOutput);
       if (syncOscResult) {
         this.endSyncSuppression();
+        this.pendingSyncEchoCleanup = false;
         this.applyCwdUpdate(syncOscResult.cwd);
         if (syncOscResult.after) {
           this.processVisibleData(`\r\x1b[2K${syncOscResult.after}`);
@@ -169,13 +185,16 @@ export class TerminalSession {
       }
 
       const promptInfo = extractPromptInfo(this.suppressedOutput, this.capabilities.shellType);
-      if (!promptInfo) return;
+      const fallbackPrompt = this.extractSuppressedPrompt(this.suppressedOutput);
+      if (!promptInfo && !fallbackPrompt) return;
 
       this.endSyncSuppression();
-      if (promptInfo.cwd) {
-        this.applyCwdUpdate(promptInfo.cwd);
+      this.pendingSyncEchoCleanup = false;
+      const resolvedPrompt = promptInfo ?? fallbackPrompt;
+      if (resolvedPrompt?.cwd) {
+        this.applyCwdUpdate(resolvedPrompt.cwd);
       }
-      this.processVisibleData(`\r\x1b[2K${promptInfo.prompt}`);
+      this.processVisibleData(`\r\x1b[2K${resolvedPrompt?.prompt ?? ''}`);
       return;
     }
 
@@ -183,21 +202,25 @@ export class TerminalSession {
   }
 
   private processVisibleData(data: string): void {
-    this.replayData = (this.replayData + data).slice(-TerminalSession.replayLimit);
-    this.emit({ type: 'data', data });
+    const visibleData = this.sanitizePendingSyncEcho(data);
+    if (!visibleData) return;
 
-    const cwdUpdates = extractOsc7Cwds(data);
+    this.replayData = (this.replayData + visibleData).slice(-TerminalSession.replayLimit);
+    this.emit({ type: 'data', data: visibleData });
+
+    const cwdUpdates = extractOsc7Cwds(visibleData);
     const latestCwd = cwdUpdates[cwdUpdates.length - 1];
     if (latestCwd) {
       this.applyCwdUpdate(latestCwd);
     } else {
-      const promptInfo = extractPromptInfo(data, this.capabilities.shellType);
+      const promptInfo = extractPromptInfo(visibleData, this.capabilities.shellType);
       if (promptInfo?.cwd) {
         this.applyCwdUpdate(promptInfo.cwd);
       }
     }
 
-    if (detectPrompt(data, this.capabilities.shellType)) {
+    if (detectPrompt(visibleData, this.capabilities.shellType)) {
+      this.pendingSyncEchoCleanup = false;
       if (this.activeCommand) {
         this.emit({ type: 'command-finish', command: this.activeCommand });
       }
@@ -264,6 +287,7 @@ export class TerminalSession {
   private beginSyncSuppression(): void {
     this.suppressSyncOutput = true;
     this.suppressedOutput = '';
+    this.pendingSyncEchoCleanup = true;
     if (this.suppressTimer) {
       clearTimeout(this.suppressTimer);
     }
@@ -272,14 +296,25 @@ export class TerminalSession {
       this.endSyncSuppression();
       if (buffered) {
         const promptInfo = extractPromptInfo(buffered, this.capabilities.shellType);
+        const fallbackPrompt = this.extractSuppressedPrompt(buffered);
         if (promptInfo?.cwd) {
+          this.pendingSyncEchoCleanup = false;
           this.applyCwdUpdate(promptInfo.cwd);
           this.processVisibleData(`\r\x1b[2K${promptInfo.prompt}`);
-        } else {
+        } else if (fallbackPrompt) {
+          this.pendingSyncEchoCleanup = false;
+          if (fallbackPrompt.cwd) {
+            this.applyCwdUpdate(fallbackPrompt.cwd);
+          }
+          this.processVisibleData(`\r\x1b[2K${fallbackPrompt.prompt}`);
+        } else if (!this.looksLikeSuppressedSyncEcho(buffered)) {
+          this.pendingSyncEchoCleanup = false;
           this.processVisibleData(buffered);
+        } else {
+          this.pendingSyncEchoCleanup = false;
         }
       }
-    }, 2000);
+    }, TerminalSession.syncSuppressionTimeoutMs);
   }
 
   private endSyncSuppression(): void {
@@ -289,5 +324,80 @@ export class TerminalSession {
       clearTimeout(this.suppressTimer);
       this.suppressTimer = null;
     }
+  }
+
+  private looksLikeSuppressedSyncEcho(data: string): boolean {
+    const normalized = data.replace(/\r/g, '').trim();
+    if (!normalized) return true;
+
+    if (this.capabilities.shellType === 'powershell') {
+      return normalized.includes('Set-Location -LiteralPath') || normalized.startsWith('cd "') || normalized.includes('\ncd "');
+    }
+
+    if (this.capabilities.shellType === 'cmd') {
+      return normalized.includes('cd /d "');
+    }
+
+    return normalized.startsWith('cd ') || normalized.includes('Set-Location -LiteralPath');
+  }
+
+  private extractSuppressedPrompt(data: string): { prompt: string; cwd: string | null } | null {
+    if (this.capabilities.shellType === 'powershell') {
+      const matches = [...data.matchAll(/PS [^\r\n>]+>\s*/g)];
+      const lastMatch = matches.length > 0 ? matches[matches.length - 1] : undefined;
+      const last = lastMatch?.[0]?.trimEnd();
+      if (!last) return null;
+      const cwdMatch = last.match(/^PS (.+)>\s*$/);
+      return {
+        prompt: last,
+        cwd: cwdMatch?.[1] ?? null,
+      };
+    }
+
+    if (this.capabilities.shellType === 'cmd') {
+      const matches = [...data.matchAll(/[A-Za-z]:\\[^\r\n>]*>\s*/g)];
+      const lastMatch = matches.length > 0 ? matches[matches.length - 1] : undefined;
+      const last = lastMatch?.[0]?.trimEnd();
+      if (!last) return null;
+      const cwdMatch = last.match(/^([A-Za-z]:\\.*)>\s*$/);
+      return {
+        prompt: last,
+        cwd: cwdMatch?.[1] ?? null,
+      };
+    }
+
+    return null;
+  }
+
+  private sanitizePendingSyncEcho(data: string): string {
+    if (!this.pendingSyncEchoCleanup) return data;
+
+    if (this.capabilities.shellType === 'powershell') {
+      const match = data.match(/(?:PS [^\r\n>]+>\s*)?cd(?:\s+|\r?\n)+"([^"]+)"(?:\r?\n)+(PS [^\r\n>]+>\s*)/s);
+      if (match?.[2]) {
+        this.pendingSyncEchoCleanup = false;
+        return `\r\x1b[2K${match[2].trimEnd()}`;
+      }
+      if (/\bcd(?:\s+|\r?\n)+"[^"]*"?/s.test(data)) {
+        return '';
+      }
+    }
+
+    if (this.capabilities.shellType === 'cmd') {
+      const match = data.match(/(?:[A-Za-z]:\\[^\r\n>]*>\s*)?cd \/d "([^"]+)"(?:\r?\n)+([A-Za-z]:\\[^\r\n>]*>\s*)/s);
+      if (match?.[2]) {
+        this.pendingSyncEchoCleanup = false;
+        return `\r\x1b[2K${match[2].trimEnd()}`;
+      }
+      if (/\bcd \/d ".*"?/s.test(data)) {
+        return '';
+      }
+    }
+
+    if (detectPrompt(data, this.capabilities.shellType)) {
+      this.pendingSyncEchoCleanup = false;
+    }
+
+    return data;
   }
 }

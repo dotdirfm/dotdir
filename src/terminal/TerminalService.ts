@@ -171,6 +171,12 @@ export class TerminalService {
     this.persistAndEmit();
   }
 
+  refreshActivePrompt(): void {
+    const active = this.getActiveSession();
+    if (!active) return;
+    void active.session.refreshPrompt();
+  }
+
   dispose(): void {
     for (const session of this.sessions) {
       void session.session.dispose();

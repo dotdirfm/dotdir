@@ -16,6 +16,7 @@ import { TerminalPanel } from './Terminal';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, syncLayers } from './fss';
 import { basename, dirname, isRootPath, join } from './path';
+import { normalizeTerminalPath } from './terminal/path';
 
 function buildParentChain(dirPath: string): FsNode | undefined {
   if (dirname(dirPath) === dirPath) return undefined;
@@ -125,6 +126,8 @@ function usePanel(theme: ThemeKind, showError: (message: string) => void) {
 
   const navigateTo = useCallback(
     async (path: string) => {
+      if (currentPathRef.current === path) return;
+
       navAbortRef.current?.abort();
       const abort = new AbortController();
       navAbortRef.current = abort;
@@ -269,12 +272,11 @@ export function App() {
   const left = usePanel(theme, showError);
   const right = usePanel(theme, showError);
   const [activePanel, setActivePanel] = useState<PanelSide>('left');
-  const [terminalHeight, setTerminalHeight] = useState(52);
-  const terminalResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [promptActive, setPromptActive] = useState(true);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
+  const expectedTerminalCwdsRef = useRef<Map<string, number>>(new Map());
 
   const activePanelRef = useRef(activePanel);
   activePanelRef.current = activePanel;
@@ -285,6 +287,11 @@ export function App() {
 
   const handleEditFile = useCallback((filePath: string, fileName: string, fileSize: number, langId: string) => {
     setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
+  }, []);
+
+  const rememberExpectedTerminalCwd = useCallback((path: string) => {
+    const normalized = normalizeTerminalPath(path);
+    expectedTerminalCwdsRef.current.set(normalized, Date.now() + 5000);
   }, []);
 
   const viewerPanelEntries = viewerFile ? (viewerFile.panel === 'left' ? left.entries : right.entries) : [];
@@ -306,9 +313,30 @@ export function App() {
   const rightRequestedCursor = viewerFile?.panel === 'right' ? viewerActiveName : undefined;
 
   const handleTerminalCwd = useCallback((path: string) => {
+    const normalizedPath = normalizeTerminalPath(path);
+    const now = Date.now();
+    for (const [expectedPath, expiresAt] of expectedTerminalCwdsRef.current) {
+      if (expiresAt <= now) {
+        expectedTerminalCwdsRef.current.delete(expectedPath);
+      }
+    }
+
+    if (expectedTerminalCwdsRef.current.has(normalizedPath)) {
+      expectedTerminalCwdsRef.current.delete(normalizedPath);
+      return;
+    }
+
     const panel = activePanel === 'left' ? left : right;
-    if (path !== panel.currentPath) {
-      panel.navigateTo(path);
+    if (normalizedPath === normalizeTerminalPath(panel.currentPath)) {
+      return;
+    }
+
+    if (normalizedPath === normalizeTerminalPath(left.currentPath) || normalizedPath === normalizeTerminalPath(right.currentPath)) {
+      return;
+    }
+
+    if (normalizedPath !== panel.currentPath) {
+      panel.navigateTo(normalizedPath);
     }
   }, [activePanel, left, right]);
 
@@ -324,17 +352,25 @@ export function App() {
   const isBrowser = !isTauriApp();
 
   useEffect(() => {
-    const urlPath = isBrowser ? decodeURIComponent(window.location.pathname) : '';
-    const hasUrlPath = urlPath.length > 1;
+    const browserPath = (() => {
+      if (!isBrowser) return '';
+      const url = new URL(window.location.href);
+      const queryPath = url.searchParams.get('path');
+      if (queryPath) return queryPath;
+      const pathName = decodeURIComponent(url.pathname);
+      return pathName.length > 1 ? pathName : '';
+    })();
+
+    const hasUrlPath = browserPath.length > 0;
 
     if (hasUrlPath) {
-      bridge.fsa.exists(urlPath).then(async (exists) => {
+      bridge.fsa.exists(browserPath).then(async (exists) => {
         if (exists) {
-          left.navigateTo(urlPath);
+          left.navigateTo(browserPath);
         } else {
-          const parent = await findExistingParent(urlPath);
+          const parent = await findExistingParent(browserPath);
           left.navigateTo(parent);
-          showError(`Directory not found: ${urlPath}`);
+          showError(`Directory not found: ${browserPath}`);
         }
       });
       bridge.utils.getHomePath().then((home) => right.navigateTo(home));
@@ -349,7 +385,10 @@ export function App() {
   const activePath = activePanel === 'left' ? left.currentPath : right.currentPath;
   useEffect(() => {
     if (isBrowser && activePath) {
-      history.replaceState(null, '', activePath);
+      const url = new URL(window.location.href);
+      url.pathname = '/';
+      url.search = `?path=${encodeURIComponent(activePath)}`;
+      history.replaceState(null, '', url.toString());
     }
   }, [activePath]);
 
@@ -387,58 +426,27 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  useEffect(() => {
-    const handlePointerMove = (e: PointerEvent) => {
-      const activeResize = terminalResizeRef.current;
-      if (!activeResize || e.pointerId !== activeResize.pointerId) return;
-      const nextHeight = activeResize.startHeight + (activeResize.startY - e.clientY);
-      const maxHeight = Math.max(180, Math.floor(window.innerHeight * 0.8));
-      setTerminalHeight(Math.min(maxHeight, Math.max(52, nextHeight)));
-    };
-
-    const handlePointerUp = (e: PointerEvent) => {
-      if (!terminalResizeRef.current || e.pointerId !== terminalResizeRef.current.pointerId) return;
-      terminalResizeRef.current = null;
-      document.body.classList.remove('terminal-resizing');
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerUp);
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
-      document.body.classList.remove('terminal-resizing');
-    };
-  }, []);
-
-  const handleTerminalResizeStart = useCallback((e: { clientY: number; pointerId: number; preventDefault(): void }) => {
-    terminalResizeRef.current = { pointerId: e.pointerId, startY: e.clientY, startHeight: terminalHeight };
-    document.body.classList.add('terminal-resizing');
-    e.preventDefault();
-  }, [terminalHeight]);
-
   if (!left.currentPath || !right.currentPath) {
     return <div className="loading">Loading...</div>;
   }
 
-  const activeCwd = activePanel === 'left' ? left.currentPath : right.currentPath;
   const actionBarHeight = 24;
+  const collapsedTerminalVisibleHeight = 40;
+  const activeCwd = activePanel === 'left' ? left.currentPath : right.currentPath;
 
   return (
     <div className="app">
-      <div className="terminal-background" style={{ height: `${terminalHeight}px` }}>
-        <div className="terminal-resize-handle" onPointerDown={handleTerminalResizeStart} />
+      <div className={`terminal-background${panelsVisible ? '' : ' expanded'}`}>
         <TerminalPanel
           cwd={activeCwd}
+          expanded={!panelsVisible}
           onCwdChange={handleTerminalCwd}
           onPromptActive={setPromptActive}
         />
       </div>
       <div
         className={`panels-overlay${panelsVisible && promptActive ? '' : ' hidden'}`}
-        style={{ bottom: `${terminalHeight + actionBarHeight}px` }}
+        style={{ bottom: `${collapsedTerminalVisibleHeight + actionBarHeight}px` }}
       >
         <div className={`panel ${activePanel === 'left' ? 'active' : ''}`} onClick={() => setActivePanel('left')}>
           {left.navigating && <div className="panel-progress" />}
@@ -446,7 +454,10 @@ export function App() {
             currentPath={left.currentPath}
             parentNode={left.parentNode}
             entries={showHidden ? left.entries : left.entries.filter((e) => !e.meta.hidden)}
-            onNavigate={left.navigateTo}
+            onNavigate={(path) => {
+              rememberExpectedTerminalCwd(path);
+              return left.navigateTo(path);
+            }}
             onViewFile={handleViewFile}
             onEditFile={handleEditFile}
             active={activePanel === 'left'}
@@ -460,7 +471,10 @@ export function App() {
             currentPath={right.currentPath}
             parentNode={right.parentNode}
             entries={showHidden ? right.entries : right.entries.filter((e) => !e.meta.hidden)}
-            onNavigate={right.navigateTo}
+            onNavigate={(path) => {
+              rememberExpectedTerminalCwd(path);
+              return right.navigateTo(path);
+            }}
             onViewFile={handleViewFile}
             onEditFile={handleEditFile}
             active={activePanel === 'right'}
