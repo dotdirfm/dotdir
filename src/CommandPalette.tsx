@@ -1,6 +1,7 @@
 import { Command } from 'cmdk';
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from './commands';
+import { focusContext } from './focusContext';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -14,18 +15,42 @@ interface CommandItem {
 }
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const [search, setSearch] = useState('');
   const [commands, setCommands] = useState<CommandType[]>([]);
   const [keybindings, setKeybindings] = useState<Keybinding[]>([]);
+  const [capturedContext, setCapturedContext] = useState<string | null>(null);
+
+  // Show/hide dialog
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (open && !dialog.open) {
+      dialog.showModal();
+    } else if (!open && dialog.open) {
+      dialog.close();
+    }
+  }, [open]);
+
+  // Capture the focus context when palette opens (before we push commandPalette)
+  useEffect(() => {
+    if (open && capturedContext === null) {
+      setCapturedContext(focusContext.current);
+    } else if (!open) {
+      setCapturedContext(null);
+    }
+  }, [open, capturedContext]);
 
   useEffect(() => {
     const updateCommands = () => {
-      setCommands(commandRegistry.getAllCommands());
+      // Use captured context for filtering, or current if not captured yet
+      const contextToUse = capturedContext ?? focusContext.current;
+      setCommands(commandRegistry.getVisibleCommandsForContext(contextToUse));
       setKeybindings(commandRegistry.getKeybindings());
     };
     updateCommands();
     return commandRegistry.onChange(updateCommands);
-  }, []);
+  }, [open, capturedContext]);
 
   const items = useMemo<CommandItem[]>(() => {
     return commands.map(cmd => {
@@ -55,13 +80,31 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     if (!open) setSearch('');
   }, [open]);
 
-  if (!open) return null;
+  // Manage focus context
+  useEffect(() => {
+    if (open) {
+      focusContext.push('commandPalette');
+      return () => focusContext.pop('commandPalette');
+    }
+  }, [open]);
+
+  // Stop all keyboard events from propagating to panels
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    e.stopPropagation();
+  }, []);
 
   return (
-    <div className="command-palette-backdrop" onClick={() => onOpenChange(false)}>
+    <dialog
+      ref={dialogRef}
+      className="command-palette-dialog"
+      onClick={(e) => {
+        if (e.target === dialogRef.current) onOpenChange(false);
+      }}
+      onClose={() => onOpenChange(false)}
+    >
       <Command
         className="command-palette"
-        onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
         shouldFilter={true}
       >
         <Command.Input
@@ -92,7 +135,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           ))}
         </Command.List>
       </Command>
-    </div>
+    </dialog>
   );
 }
 
@@ -111,6 +154,13 @@ export function useCommandPalette() {
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         setOpen(o => !o);
+        return;
+      }
+      // Escape closes palette
+      if (open && e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(false);
         return;
       }
       // Let command registry handle other shortcuts when palette is closed

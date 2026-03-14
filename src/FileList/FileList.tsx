@@ -2,6 +2,7 @@ import { FsNode } from 'fss-lang';
 import type { LayeredResolver } from 'fss-lang';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { actionQueue } from '../actionQueue';
+import { commandRegistry } from '../commands';
 import { resolveEntryStyle } from '../fss';
 import { resolveIcon, loadIconsForPaths, getCachedIcon, onIconThemeChange } from '../iconResolver';
 import { dirname, isRootPath, join } from '../path';
@@ -208,94 +209,180 @@ export const FileList = memo(function FileList({
     });
   }, [activeIndex, maxItemsPerColumn, columnCount]);
 
+  // Update context when selection changes
+  useEffect(() => {
+    if (!active) return;
+    const item = displayEntries[activeIndex];
+    const isFile = item?.entry.type === 'file';
+    commandRegistry.setContext('listItemIsFile', isFile);
+    commandRegistry.setContext('listItemIsFolder', !isFile && item != null);
+  }, [active, activeIndex, displayEntries]);
+
+  // Register navigation commands when panel is active
   useEffect(() => {
     if (!active) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'ArrowUp':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - 1)));
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + 1)));
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - maxItemsPerColumnRef.current)));
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + maxItemsPerColumnRef.current)));
-          break;
-        case 'Home':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex(0));
-          break;
-        case 'End':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex(displayEntriesRef.current.length - 1));
-          break;
-        case 'PageUp':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - displayedItemsRef.current + 1)));
-          break;
-        case 'PageDown':
-          e.preventDefault();
-          actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + displayedItemsRef.current - 1)));
-          break;
-        case 'Enter':
-          e.preventDefault();
-          actionQueue.enqueue(async () => {
-            const item = displayEntriesRef.current[activeIndexRef.current];
-            if (item) await navigateToEntry(item.entry);
-          });
-          break;
-        case 'Backspace':
-          e.preventDefault();
-          actionQueue.enqueue(async () => {
-            if (!isRootPath(currentPathRef.current)) {
-              await onNavigateRef.current(dirname(currentPathRef.current));
-            }
-          });
-          break;
-        case 'F3': {
-          e.preventDefault();
-          actionQueue.enqueue(() => {
-            const item = displayEntriesRef.current[activeIndexRef.current];
-            if (item && item.entry.type === 'file' && onViewFileRef.current) {
-              onViewFileRef.current(item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
-            }
-          });
-          break;
-        }
-        case 'F4': {
-          e.preventDefault();
-          actionQueue.enqueue(() => {
-            const item = displayEntriesRef.current[activeIndexRef.current];
-            if (item && item.entry.type === 'file' && onEditFileRef.current) {
-              const fileSize = Number(item.entry.meta.size);
-              if (fileSize <= editorFileSizeLimitRef.current) {
-                const langId = typeof item.entry.lang === 'string' && item.entry.lang
-                  ? item.entry.lang
-                  : 'plaintext';
-                onEditFileRef.current(
-                  item.entry.path as string,
-                  item.entry.name,
-                  fileSize,
-                  langId,
-                );
-              }
-            }
-          });
-          break;
-        }
-      }
-    };
+    const disposables: (() => void)[] = [];
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorUp',
+      'Cursor Up',
+      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - 1))),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorUp',
+      key: 'up',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorDown',
+      'Cursor Down',
+      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + 1))),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorDown',
+      key: 'down',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorLeft',
+      'Cursor Left (Previous Column)',
+      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - maxItemsPerColumnRef.current))),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorLeft',
+      key: 'left',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorRight',
+      'Cursor Right (Next Column)',
+      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + maxItemsPerColumnRef.current))),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorRight',
+      key: 'right',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorHome',
+      'Cursor to First',
+      () => actionQueue.enqueue(() => setActiveIndex(0)),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorHome',
+      key: 'home',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorEnd',
+      'Cursor to Last',
+      () => actionQueue.enqueue(() => setActiveIndex(displayEntriesRef.current.length - 1)),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorEnd',
+      key: 'end',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorPageUp',
+      'Cursor Page Up',
+      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - displayedItemsRef.current + 1))),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorPageUp',
+      key: 'pageup',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.cursorPageDown',
+      'Cursor Page Down',
+      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + displayedItemsRef.current - 1))),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.cursorPageDown',
+      key: 'pagedown',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.open',
+      'Open',
+      () => actionQueue.enqueue(async () => {
+        const item = displayEntriesRef.current[activeIndexRef.current];
+        if (item) await navigateToEntry(item.entry);
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.open',
+      key: 'enter',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.viewFile',
+      'View File',
+      () => actionQueue.enqueue(() => {
+        const item = displayEntriesRef.current[activeIndexRef.current];
+        if (item && item.entry.type === 'file' && onViewFileRef.current) {
+          onViewFileRef.current(item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
+        }
+      }),
+      { when: 'focusPanel && listItemIsFile' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.viewFile',
+      key: 'f3',
+      when: 'focusPanel && listItemIsFile',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.editFile',
+      'Edit File',
+      () => actionQueue.enqueue(() => {
+        const item = displayEntriesRef.current[activeIndexRef.current];
+        if (item && item.entry.type === 'file' && onEditFileRef.current) {
+          const fileSize = Number(item.entry.meta.size);
+          if (fileSize <= editorFileSizeLimitRef.current) {
+            const langId = typeof item.entry.lang === 'string' && item.entry.lang
+              ? item.entry.lang
+              : 'plaintext';
+            onEditFileRef.current(
+              item.entry.path as string,
+              item.entry.name,
+              fileSize,
+              langId,
+            );
+          }
+        }
+      }),
+      { when: 'focusPanel && listItemIsFile' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.editFile',
+      key: 'f4',
+      when: 'focusPanel && listItemIsFile',
+    }));
+
+    return () => {
+      for (const dispose of disposables) dispose();
+    };
   }, [active, navigateToEntry]);
 
   const columnCountRef = useRef(columnCount);

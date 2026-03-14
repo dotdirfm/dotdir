@@ -18,6 +18,8 @@
   --entry-selected-inactive: #252536;
   --error-bg: #45243a;
   --error-fg: #f38ba8;
+  --accent: #89b4fa;
+  --accent-fg: #1e1e2e;
 }
 
 [data-theme='light'] {
@@ -34,6 +36,8 @@
   --entry-selected-inactive: #e6e9ef;
   --error-bg: #fce4e4;
   --error-fg: #d20f39;
+  --accent: #1e66f5;
+  --accent-fg: #ffffff;
 }
 
 body {
@@ -179,12 +183,21 @@ body {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  cursor: default;
+  cursor: pointer;
   min-width: 0;
 }
 
-.action-bar-item:hover {
+.action-bar-item:hover:not(.disabled) {
   background: var(--entry-hover);
+}
+
+.action-bar-item.disabled {
+  cursor: default;
+}
+
+.action-bar-item.disabled .action-bar-key,
+.action-bar-item.disabled .action-bar-label {
+  opacity: 0.4;
 }
 
 .action-bar-key {
@@ -528,6 +541,27 @@ body {
   color: var(--fg-secondary);
   flex-shrink: 0;
   user-select: none;
+}
+
+.dialog-close-btn {
+  margin-left: 12px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-close-btn:hover {
+  background: var(--entry-hover);
+  color: var(--fg);
 }
 
 .file-editor-body {
@@ -1035,20 +1069,26 @@ body {
 }
 
 /* Command Palette */
-.command-palette-backdrop {
+.command-palette-dialog {
   position: fixed;
-  inset: 0;
+  top: 15vh;
+  left: 50%;
+  transform: translateX(-50%);
+  border: none;
+  padding: 0;
+  background: transparent;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+}
+
+.command-palette-dialog::backdrop {
   background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 15vh;
-  z-index: 10000;
 }
 
 .command-palette {
   width: 100%;
-  max-width: 640px;
+  max-width: 800px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1108,12 +1148,12 @@ body {
 
 .command-palette [cmdk-item][data-selected="true"] {
   background: var(--accent);
-  color: var(--bg);
+  color: var(--accent-fg);
 }
 
 .command-palette [cmdk-item][data-selected="true"] .command-item-keybinding {
-  color: var(--bg);
-  opacity: 0.7;
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--accent-fg);
 }
 
 .command-item-title {

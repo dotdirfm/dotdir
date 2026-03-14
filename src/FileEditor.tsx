@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import * as monaco from 'monaco-editor';
 import { FileHandle } from './fsa';
 import { bridge } from './bridge';
+import { focusContext } from './focusContext';
 import { languageRegistry } from './languageRegistry';
 
 function getAvailableLanguages(): { id: string; name: string }[] {
@@ -64,9 +65,13 @@ export function FileEditor({ filePath, fileName, langId, onClose }: FileEditorPr
     const dialog = dialogRef.current;
     if (!dialog) return;
     dialog.showModal();
+    focusContext.push('editor');
     const handleClose = () => onClose();
     dialog.addEventListener('close', handleClose);
-    return () => dialog.removeEventListener('close', handleClose);
+    return () => {
+      dialog.removeEventListener('close', handleClose);
+      focusContext.pop('editor');
+    };
   }, [onClose]);
 
   useEffect(() => {
@@ -169,7 +174,6 @@ export function FileEditor({ filePath, fileName, langId, onClose }: FileEditorPr
     <dialog
       ref={dialogRef}
       className="file-editor"
-      onKeyDown={(e) => e.stopPropagation()}
     >
       <div className="file-editor-header">
         <span style={{ flex: 1 }}>{fileName}</span>
@@ -193,6 +197,13 @@ export function FileEditor({ filePath, fileName, langId, onClose }: FileEditorPr
             ))}
           </div>
         )}
+        <button
+          className="dialog-close-btn"
+          onClick={() => dialogRef.current?.close()}
+          title="Close (Esc)"
+        >
+          ×
+        </button>
       </div>
       <div className="file-editor-body">
         <div ref={editorHostRef} className="file-editor-editor" />

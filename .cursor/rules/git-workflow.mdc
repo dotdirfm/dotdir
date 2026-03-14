@@ -1,0 +1,15 @@
+---
+description: Git commit and push workflow - require user approval
+alwaysApply: true
+---
+
+# Git Workflow
+
+**Never commit or push changes without explicit user approval.**
+
+Before committing:
+1. Show the user what files have changed (`git status`, `git diff`)
+2. Propose a commit message
+3. Wait for explicit approval (e.g., "yes", "go ahead", "commit it", "push")
+
+Do NOT interpret vague statements like "looks good" or "that's done" as approval to commit/push.

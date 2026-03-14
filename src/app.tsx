@@ -5,13 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import type { FsChangeType } from './types';
 import { bridge } from './bridge';
-import { actionQueue } from './actionQueue';
 import { FileList } from './FileList';
 import { FileViewer } from './FileViewer';
 import { FileEditor } from './FileEditor';
 import { ImageViewer, isMediaFile, type MediaFileEntry } from './ImageViewer';
 import { ModalDialog, type ModalDialogProps } from './ModalDialog';
 import { TerminalPanel } from './Terminal';
+import { ActionBar } from './ActionBar';
 import { ExtensionsPanel } from './ExtensionsPanel';
 import { CommandPalette, useCommandPalette } from './CommandPalette';
 import { commandRegistry } from './commands';
@@ -297,6 +297,12 @@ export function App() {
   const activePanelRef = useRef(activePanel);
   activePanelRef.current = activePanel;
 
+  // Set context for which panel is active
+  useEffect(() => {
+    commandRegistry.setContext('leftPanelActive', activePanel === 'left');
+    commandRegistry.setContext('rightPanelActive', activePanel === 'right');
+  }, [activePanel]);
+
   const handleViewFile = useCallback((filePath: string, fileName: string, fileSize: number) => {
     setViewerFile({ path: filePath, name: fileName, size: fileSize, panel: activePanelRef.current });
   }, []);
@@ -353,8 +359,8 @@ export function App() {
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'faraday.toggleHiddenFiles',
-      key: 'ctrl+h',
-      mac: 'cmd+h',
+      key: 'ctrl+.',
+      mac: 'cmd+.',
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -382,22 +388,43 @@ export function App() {
 
     // Navigation commands
     disposables.push(commandRegistry.registerCommand(
+      'faraday.switchPanel',
+      'Switch Panel',
+      () => setActivePanel(s => s === 'left' ? 'right' : 'left'),
+      { category: 'Navigation', when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.switchPanel',
+      key: 'tab',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
       'faraday.focusLeftPanel',
       'Focus Left Panel',
       () => setActivePanel('left'),
-      { category: 'Navigation' }
+      { category: 'Navigation', when: 'focusPanel && !leftPanelActive' }
     ));
 
     disposables.push(commandRegistry.registerCommand(
       'faraday.focusRightPanel',
       'Focus Right Panel',
       () => setActivePanel('right'),
-      { category: 'Navigation' }
+      { category: 'Navigation', when: 'focusPanel && !rightPanelActive' }
+    ));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.cancelNavigation',
+      'Cancel Navigation',
+      () => {
+        left.cancelNavigation();
+        right.cancelNavigation();
+      },
+      { category: 'Navigation', when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.focusRightPanel',
-      key: 'tab',
-      when: 'panelFocused',
+      command: 'faraday.cancelNavigation',
+      key: 'escape',
+      when: 'focusPanel',
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -410,11 +437,12 @@ export function App() {
           panel.navigateTo(parent);
         }
       },
-      { category: 'Navigation' }
+      { category: 'Navigation', when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'faraday.goToParent',
       key: 'backspace',
+      when: 'focusPanel',
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -425,7 +453,7 @@ export function App() {
         const panel = activePanelRef.current === 'left' ? left : right;
         panel.navigateTo(home);
       },
-      { category: 'Navigation' }
+      { category: 'Navigation', when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'faraday.goHome',
@@ -441,12 +469,13 @@ export function App() {
         const panel = activePanelRef.current === 'left' ? left : right;
         panel.navigateTo(panel.currentPath);
       },
-      { category: 'File' }
+      { category: 'File', when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'faraday.refresh',
       key: 'ctrl+r',
       mac: 'cmd+r',
+      when: 'focusPanel',
     }));
 
     // Command palette
@@ -456,6 +485,31 @@ export function App() {
       () => commandPalette.setOpen(true),
       { category: 'View' }
     ));
+
+    // Close viewer/editor commands
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.closeViewer',
+      'Close Viewer',
+      () => setViewerFile(null),
+      { category: 'View', when: 'focusViewer' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.closeViewer',
+      key: 'escape',
+      when: 'focusViewer',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.closeEditor',
+      'Close Editor',
+      () => setEditorFile(null),
+      { category: 'View', when: 'focusEditor' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.closeEditor',
+      key: 'escape',
+      when: 'focusEditor',
+    }));
 
     return () => {
       for (const dispose of disposables) dispose();
@@ -594,28 +648,6 @@ export function App() {
     }
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        actionQueue.enqueue(() => setActivePanel((s) => (s === 'left' ? 'right' : 'left')));
-      } else if (e.key === 'Escape') {
-        left.cancelNavigation();
-        right.cancelNavigation();
-      } else if (e.key === '.' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        setShowHidden((s) => !s);
-      } else if (e.key === 'o' && e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
-        e.preventDefault();
-        setPanelsVisible((s) => !s);
-      } else if (e.key === 'F11') {
-        e.preventDefault();
-        setShowExtensions((s) => !s);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
 
   if (!left.currentPath || !right.currentPath) {
@@ -665,20 +697,7 @@ export function App() {
           />
         </div>
       </div>
-      <div className="action-bar">
-        <div className="action-bar-item"><span className="action-bar-key">1</span><span className="action-bar-label">Help</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">2</span><span className="action-bar-label">Menu</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">3</span><span className="action-bar-label">View</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">4</span><span className="action-bar-label">Edit</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">5</span><span className="action-bar-label">Copy</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">6</span><span className="action-bar-label">Move</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">7</span><span className="action-bar-label">MkDir</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">8</span><span className="action-bar-label">Delete</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">9</span><span className="action-bar-label">PullDn</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">10</span><span className="action-bar-label">Quit</span></div>
-        <div className="action-bar-item" onClick={() => setShowExtensions(s => !s)}><span className="action-bar-key">11</span><span className="action-bar-label">Plugin</span></div>
-        <div className="action-bar-item"><span className="action-bar-key">12</span><span className="action-bar-label">Screen</span></div>
-      </div>
+      <ActionBar />
       {viewerFile &&
         (isMediaFile(viewerFile.name) ? (
           <ImageViewer

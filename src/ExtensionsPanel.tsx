@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { focusContext } from './focusContext';
 import {
   type ExtensionRef,
   type MarketplaceExtension,
@@ -48,9 +49,13 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (!dialog.open) dialog.showModal();
+    focusContext.push('modal');
     const handleClose = () => onClose();
     dialog.addEventListener('close', handleClose);
-    return () => dialog.removeEventListener('close', handleClose);
+    return () => {
+      dialog.removeEventListener('close', handleClose);
+      focusContext.pop('modal');
+    };
   }, [onClose]);
 
   const refreshInstalled = useCallback(async () => {
@@ -163,7 +168,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
   };
 
   return (
-    <dialog ref={dialogRef} className="ext-panel" onKeyDown={(e) => e.stopPropagation()}>
+    <dialog ref={dialogRef} className="ext-panel">
       <div className="ext-panel-header">
         <span className="ext-panel-title">Extensions</span>
         <button className="ext-panel-close" onClick={() => dialogRef.current?.close()}>✕</button>
