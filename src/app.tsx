@@ -692,6 +692,14 @@ export function App() {
         setActivePanel(initialActivePanel);
       }
     }
+    
+    // Clear initial state after first navigation to prevent cursor jumping
+    // when viewer is closed (was falling back to initial selectedName)
+    setTimeout(() => {
+      setInitialLeftPanel(undefined);
+      setInitialRightPanel(undefined);
+      setInitialActivePanel(undefined);
+    }, 500);
   }, [initialLeftPanel, initialRightPanel, initialActivePanel]);
 
   const latestExtensionsRef = useRef<LoadedExtension[]>([]);
