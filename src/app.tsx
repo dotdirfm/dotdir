@@ -293,7 +293,7 @@ function createPreviewTab(path: string, name: string, size: number, sourcePanel:
 
 export function App() {
   const [theme, setTheme] = useState<ThemeKind>('dark');
-  const { showDialog, closeDialog, updateDialog } = useDialog();
+  const { dialog, showDialog, closeDialog, updateDialog } = useDialog();
   const [showHidden, setShowHidden] = useState(false);
   const showError = useCallback((message: string) => {
     showDialog({ type: 'message', title: 'Error', message, variant: 'error' });
@@ -361,6 +361,11 @@ export function App() {
     commandRegistry.setContext('leftPanelActive', activePanel === 'left');
     commandRegistry.setContext('rightPanelActive', activePanel === 'right');
   }, [activePanel]);
+
+  // Set context when a dialog is open (e.g. so Tab doesn't switch panel)
+  useEffect(() => {
+    commandRegistry.setContext('dialogOpen', dialog !== null);
+  }, [dialog]);
 
   const handleViewFile = useCallback((filePath: string, fileName: string, fileSize: number) => {
     setViewerFile({ path: filePath, name: fileName, size: fileSize, panel: activePanelRef.current });
@@ -928,11 +933,12 @@ export function App() {
       'faraday.switchPanel',
       'Switch Panel',
       () => setActivePanel(s => s === 'left' ? 'right' : 'left'),
-      { category: 'Navigation', when: 'focusPanel' }
+      { category: 'Navigation', when: 'focusPanel && !dialogOpen' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'faraday.switchPanel',
       key: 'tab',
+      when: 'focusPanel && !dialogOpen',
     }));
 
     disposables.push(commandRegistry.registerCommand(

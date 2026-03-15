@@ -97,14 +97,26 @@ export const tauriBridge = {
     },
     onFsChange(callback: (event: FsChangeEvent) => void): () => void {
       let unlisten: UnlistenFn | null = null;
-      listen<RustFsChangeEvent>('fsa:change', (event) => {
+      let disposed = false;
+      const unlistenPromise = listen<RustFsChangeEvent>('fsa:change', (event) => {
         callback({
           watchId: event.payload.watch_id,
           type: event.payload.kind as FsChangeEvent['type'],
           name: event.payload.name,
         });
-      }).then((fn) => { unlisten = fn; });
-      return () => { unlisten?.(); };
+      }).then((fn) => {
+        unlisten = fn;
+        if (disposed) void fn();
+        return fn;
+      });
+      return () => {
+        disposed = true;
+        if (unlisten) {
+          void unlisten();
+        } else {
+          void unlistenPromise.then((fn) => fn());
+        }
+      };
     },
   },
   pty: {
