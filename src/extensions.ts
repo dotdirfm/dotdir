@@ -377,6 +377,21 @@ async function extractZipFiles(buffer: ArrayBuffer): Promise<Map<string, string>
   return files;
 }
 
+/**
+ * If the zip has a single top-level directory (e.g. "ext-name-1.0.0/package.json"),
+ * return the prefix to strip ("ext-name-1.0.0/"). Otherwise return "" so paths are kept as-is.
+ */
+function getZipStripPrefix(fileNames: Iterable<string>): string {
+  const names = [...fileNames];
+  if (names.length === 0) return '';
+  const first = names[0];
+  const slash = first.indexOf('/');
+  if (slash === -1) return '';
+  const prefix = first.slice(0, slash + 1);
+  const allSamePrefix = names.every((n) => n.startsWith(prefix));
+  return allSamePrefix ? prefix : '';
+}
+
 export async function installExtension(publisherUsername: string, extName: string, version: string): Promise<void> {
   const downloadUrl = `${MARKETPLACE_URL}/api/extensions/${publisherUsername}/${extName}/${version}/download`;
   const res = await fetch(downloadUrl);
@@ -389,8 +404,10 @@ export async function installExtension(publisherUsername: string, extName: strin
   const ref: ExtensionRef = { publisher: publisherUsername, name: extName, version };
   const extDir = join(extensionsDir, extensionDirName(ref));
 
+  const stripPrefix = getZipStripPrefix(files.keys());
+
   for (const [fileName, content] of files) {
-    const normalizedName = fileName.replace(/^[^/]+\//, '');
+    const normalizedName = stripPrefix ? fileName.slice(stripPrefix.length) : fileName;
     if (!normalizedName) continue;
     await bridge.fsa.writeFile(join(extDir, normalizedName), content);
   }

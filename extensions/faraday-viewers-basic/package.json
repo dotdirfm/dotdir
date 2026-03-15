@@ -6,24 +6,7 @@
   "description": "Built-in text and image/video viewers for Faraday",
   "contributes": {
     "viewers": [
-      {
-        "id": "faraday.textViewer",
-        "label": "Text Viewer",
-        "patterns": ["*"],
-        "entry": "./text-viewer.js",
-        "priority": -100
-      },
-      {
-        "id": "faraday.imageViewer",
-        "label": "Image & Video Viewer",
-        "patterns": [
-          "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.webp",
-          "*.ico", "*.svg", "*.avif", "*.tiff", "*.tif",
-          "*.mp4", "*.webm", "*.ogv", "*.ogg", "*.mov", "*.m4v"
-        ],
-        "entry": "./image-viewer.js",
-        "priority": 0
-      }
+      
     ]
   }
 }

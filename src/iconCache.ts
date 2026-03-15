@@ -1,6 +1,7 @@
 import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import { DirectoryHandle, FileHandle } from './fsa';
 import { bridge } from './bridge';
+import { normalizePath } from './path';
 
 const MAX_SIZE = 200;
 const isTauri = isTauriApp();
@@ -41,12 +42,18 @@ function evictIfNeeded(): void {
 }
 
 async function loadIconAbsolute(path: string): Promise<void> {
-  const fileName = path.split('/').pop() ?? path;
-  const handle = new FileHandle(path, fileName);
-  const file = await handle.getFile();
-  const content = await file.text();
-  cache.set(path, svgToDataUrl(content));
-  evictIfNeeded();
+  const normalized = normalizePath(path);
+  const fileName = normalized.split('/').pop() ?? normalized;
+  try {
+    const handle = new FileHandle(normalized, fileName);
+    const file = await handle.getFile();
+    const content = await file.text();
+    cache.set(path, svgToDataUrl(content));
+    evictIfNeeded();
+  } catch (err) {
+    console.warn('[IconCache] loadIconAbsolute failed', normalized, err);
+    throw err;
+  }
 }
 
 async function loadIconViaFs(name: string): Promise<void> {
@@ -66,10 +73,16 @@ async function loadIconViaHttp(name: string): Promise<void> {
   evictIfNeeded();
 }
 
+/** Sentinel paths that are fallbacks, not real icon files - skip loading to avoid ENOENT. */
+function isSentinelIconPath(name: string): boolean {
+  return name === '_default' || name.startsWith('_default_');
+}
+
 export async function loadIcons(names: string[]): Promise<void> {
   const promises: Promise<void>[] = [];
 
   for (const name of names) {
+    if (isSentinelIconPath(name)) continue;
     if (cache.has(name)) continue;
 
     if (pending.has(name)) {
@@ -86,8 +99,8 @@ export async function loadIcons(names: string[]): Promise<void> {
         } else {
           await loadIconViaHttp(name);
         }
-      } catch {
-        // Icon file not found — ignore
+      } catch (err) {
+        console.warn('[IconCache] loadIcons failed for', name.slice(-60), err);
       } finally {
         pending.delete(name);
       }

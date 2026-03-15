@@ -51,12 +51,15 @@ async function getComlinkSource(): Promise<string> {
 
 // ── Shell HTML template ──────────────────────────────────────────────
 
+/** Build shell HTML with no inline scripts (CSP-compliant when script-src uses hashes). */
 function buildShellHtml(
-  comlinkSrc: string,
-  scriptBlobUrl: string,
+  bootstrapScriptUrl: string,
+  comlinkScriptUrl: string,
+  entryScriptUrl: string,
   themeClass: string,
   handshakeId: string,
 ): string {
+  const safeId = handshakeId.replace(/"/g, '&quot;');
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -71,10 +74,10 @@ function buildShellHtml(
   body.faraday-light { background: #fff; color: #333; }
 </style>
 </head>
-<body class="${themeClass}">
-<script>window.__faradayHandshakeId=${JSON.stringify(handshakeId)};<\/script>
-<script>${comlinkSrc}<\/script>
-<script src="${scriptBlobUrl}"><\/script>
+<body class="${themeClass}" data-handshake-id="${safeId}">
+<script src="${bootstrapScriptUrl}"><\/script>
+<script src="${comlinkScriptUrl}"><\/script>
+<script src="${entryScriptUrl}"><\/script>
 </body>
 </html>`;
 }
@@ -130,6 +133,15 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const extensionApiRef = useRef<Remote<ViewerExtensionApi> | Remote<EditorExtensionApi> | null>(null);
   const scriptBlobUrlRef = useRef<string | null>(null);
   const htmlBlobUrlRef = useRef<string | null>(null);
+  const bootstrapBlobUrlRef = useRef<string | null>(null);
+  const comlinkBlobUrlRef = useRef<string | null>(null);
+  /** Captured when editor is ready so cleanup can stash even if React has already nulled refs on unmount. */
+  const editorStashPayloadRef = useRef<{
+    iframe: HTMLIFrameElement;
+    api: Remote<EditorExtensionApi>;
+    scriptUrl: string;
+    htmlUrl: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const onCloseRef = useRef(onClose);
@@ -161,41 +173,31 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       URL.revokeObjectURL(htmlBlobUrlRef.current);
       htmlBlobUrlRef.current = null;
     }
+    if (bootstrapBlobUrlRef.current) {
+      URL.revokeObjectURL(bootstrapBlobUrlRef.current);
+      bootstrapBlobUrlRef.current = null;
+    }
+    if (comlinkBlobUrlRef.current) {
+      URL.revokeObjectURL(comlinkBlobUrlRef.current);
+      comlinkBlobUrlRef.current = null;
+    }
     extensionApiRef.current = null;
   }, []);
 
   useEffect(() => {
-    // Editor with cache: re-attach iframe and call mount (no full reload)
+    editorStashPayloadRef.current = null;
+    let cached: { iframe: HTMLIFrameElement; scriptUrl: string; htmlUrl: string } | null = null;
     if (kind === 'editor' && hasCachedEditor) {
-      const cached = takeCachedEditorExtension(extensionDirPath, entry);
-      if (!cached) return;
-      const container = containerRef.current;
-      if (!container) return;
-      container.appendChild(cached.iframe);
-      iframeRef.current = cached.iframe;
-      extensionApiRef.current = cached.api;
-      setLoading(false);
-      (cached.api as Remote<EditorExtensionApi>)
-        .mount(props as EditorProps)
-        .catch((err) => {
-          setError(err instanceof Error ? err.message : String(err));
-        });
-      return () => {
-        const iframe = iframeRef.current;
-        if (iframe && extensionApiRef.current) {
-          iframe.remove();
-          stashEditorExtension(
-            extensionDirPath,
-            entry,
-            iframe,
-            extensionApiRef.current as Remote<EditorExtensionApi>,
-            cached.scriptUrl,
-            cached.htmlUrl,
-          );
-          iframeRef.current = null;
-          extensionApiRef.current = null;
+      const taken = takeCachedEditorExtension(extensionDirPath, entry);
+      if (taken) {
+        cached = { iframe: taken.iframe, scriptUrl: taken.scriptUrl, htmlUrl: taken.htmlUrl };
+        const container = containerRef.current;
+        if (container) {
+          container.appendChild(cached.iframe);
+          iframeRef.current = cached.iframe;
+          scriptBlobUrlRef.current = cached.scriptUrl;
         }
-      };
+      }
     }
 
     let cancelled = false;
@@ -203,36 +205,49 @@ export function ExtensionContainer(containerProps: ContainerProps) {
 
     (async () => {
       try {
-        // 1. Read entry JS
-        const jsContent = await readEntryScript(extensionDirPath, entry);
-        if (cancelled) return;
+        let scriptUrl: string;
+        let iframe: HTMLIFrameElement | null;
 
-        // 2. Create script blob
-        const scriptBlob = new Blob([jsContent], { type: 'application/javascript' });
-        const scriptUrl = URL.createObjectURL(scriptBlob);
-        scriptBlobUrlRef.current = scriptUrl;
+        if (cached) {
+          scriptUrl = cached.scriptUrl;
+          iframe = iframeRef.current;
+          if (!iframe) return;
+        } else {
+          const jsContent = await readEntryScript(extensionDirPath, entry);
+          if (cancelled) return;
+          const scriptBlob = new Blob([jsContent], { type: 'application/javascript' });
+          scriptUrl = URL.createObjectURL(scriptBlob);
+          scriptBlobUrlRef.current = scriptUrl;
+          if (cancelled) return;
+          iframe = iframeRef.current;
+          if (!iframe) return;
+        }
 
-        // 3. Build shell HTML (with inlined Comlink UMD)
         const [theme, comlinkSrc] = await Promise.all([
           bridge.theme.get(),
           getComlinkSource(),
         ]);
+        if (cancelled) return;
         const themeClass = theme === 'light' || theme === 'high-contrast-light'
           ? 'faraday-light'
           : 'faraday-dark';
         const handshakeId = `faraday-${crypto.randomUUID()}`;
-        const html = buildShellHtml(comlinkSrc, scriptUrl, themeClass, handshakeId);
+        const bootstrapScript = "window.__faradayHandshakeId=(document.body&&document.body.getAttribute('data-handshake-id'))||window.name||'';";
+        const bootstrapBlob = new Blob([bootstrapScript], { type: 'application/javascript' });
+        const bootstrapUrl = URL.createObjectURL(bootstrapBlob);
+        bootstrapBlobUrlRef.current = bootstrapUrl;
+        const comlinkBlob = new Blob([comlinkSrc], { type: 'application/javascript' });
+        const comlinkUrl = URL.createObjectURL(comlinkBlob);
+        comlinkBlobUrlRef.current = comlinkUrl;
+        const html = buildShellHtml(bootstrapUrl, comlinkUrl, scriptUrl, themeClass, handshakeId);
         const htmlBlob = new Blob([html], { type: 'text/html' });
         const htmlUrl = URL.createObjectURL(htmlBlob);
         htmlBlobUrlRef.current = htmlUrl;
+        if (cached?.htmlUrl) URL.revokeObjectURL(cached.htmlUrl);
 
         if (cancelled) return;
-
-        // 4. Listen for faraday-loaded BEFORE setting src so we don't miss the message
-        // (extension posts it as soon as it runs, which is during iframe load).
-        const iframe = iframeRef.current;
         if (!iframe) return;
-
+        iframe.name = handshakeId;
         const loadedPromise = new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(
             () => reject(new Error('Extension ready timed out (3s)')),
@@ -345,6 +360,14 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         if (cancelled) return;
 
         extensionApiRef.current = extensionApi;
+        if (kind === 'editor' && iframeRef.current && scriptBlobUrlRef.current && htmlBlobUrlRef.current) {
+          editorStashPayloadRef.current = {
+            iframe: iframeRef.current,
+            api: extensionApi as Remote<EditorExtensionApi>,
+            scriptUrl: scriptBlobUrlRef.current,
+            htmlUrl: htmlBlobUrlRef.current,
+          };
+        }
 
         // 7. Call mount
         if (kind === 'viewer') {
@@ -365,25 +388,32 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     return () => {
       cancelled = true;
       abortCtrl.abort();
-      const api = extensionApiRef.current;
-      const iframe = iframeRef.current;
-      const scriptUrl = scriptBlobUrlRef.current;
-      const htmlUrl = htmlBlobUrlRef.current;
-      if (kind === 'editor' && iframe && api && scriptUrl && htmlUrl) {
-        iframe.remove();
+      const payload = kind === 'editor' ? editorStashPayloadRef.current : null;
+      if (payload) {
+        payload.iframe.remove();
         stashEditorExtension(
           extensionDirPath,
           entry,
-          iframe,
-          api as Remote<EditorExtensionApi>,
-          scriptUrl,
-          htmlUrl,
+          payload.iframe,
+          payload.api,
+          payload.scriptUrl,
+          payload.htmlUrl,
         );
+        editorStashPayloadRef.current = null;
         scriptBlobUrlRef.current = null;
         htmlBlobUrlRef.current = null;
         extensionApiRef.current = null;
         iframeRef.current = null;
+        if (bootstrapBlobUrlRef.current) {
+          URL.revokeObjectURL(bootstrapBlobUrlRef.current);
+          bootstrapBlobUrlRef.current = null;
+        }
+        if (comlinkBlobUrlRef.current) {
+          URL.revokeObjectURL(comlinkBlobUrlRef.current);
+          comlinkBlobUrlRef.current = null;
+        }
       } else {
+        const api = extensionApiRef.current;
         if (api) api.unmount().catch(() => {});
         cleanup();
       }

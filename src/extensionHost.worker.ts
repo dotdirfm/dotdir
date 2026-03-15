@@ -92,6 +92,8 @@ export interface WorkerLoadedExtension {
   dirPath: string;
   iconThemeFss?: string;
   iconThemeBasePath?: string;
+  vscodeIconThemePath?: string;
+  vscodeIconThemeId?: string;
   languages?: ExtensionLanguage[];
   grammars?: LoadedGrammar[];
   viewers?: ExtensionViewerContribution[];
@@ -196,6 +198,7 @@ async function loadExtensions(homePath: string, builtInDirs: string[]): Promise<
     if (ext) loaded.push(ext);
   }
 
+  console.log('[ExtHost] loaded', loaded.length, 'extensions; FSS:', loaded.filter((e) => e.iconThemeFss).map((e) => `${e.ref.publisher}.${e.ref.name}`), 'vscode:', loaded.filter((e) => e.vscodeIconThemePath).map((e) => `${e.ref.publisher}.${e.ref.name}`));
   return loaded;
 }
 

@@ -30,6 +30,10 @@ rust-embed = { version = "8", features = ["mime-guess"] }
 mime_guess = "2"
 portable-pty = "0.8"
 
+[profile.release.package.wry]
+debug = true
+debug-assertions = true
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 

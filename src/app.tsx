@@ -694,22 +694,21 @@ export function App() {
     setActivePanel(opposite);
   }, [left.entries, right.entries, leftSelectedName, rightSelectedName, leftTabs, rightTabs]);
 
-  // Temporarily disabled: syncing terminal cwd to panels was causing infinite loop when entering a dir
-  const handleTerminalCwd = useCallback((_path: string) => {
-    // const normalizedPath = normalizeTerminalPath(path);
-    // const now = Date.now();
-    // for (const [expectedPath, expiresAt] of expectedTerminalCwdsRef.current) {
-    //   if (expiresAt <= now) {
-    //     expectedTerminalCwdsRef.current.delete(expectedPath);
-    //   }
-    // }
-    // const expectedExpiry = expectedTerminalCwdsRef.current.get(normalizedPath);
-    // if (expectedExpiry && expectedExpiry > now) return;
-    // const panel = activePanel === 'left' ? left : right;
-    // if (normalizedPath === normalizeTerminalPath(panel.currentPath)) return;
-    // if (normalizedPath === normalizeTerminalPath(left.currentPath) || normalizedPath === normalizeTerminalPath(right.currentPath)) return;
-    // if (normalizedPath !== panel.currentPath) panel.navigateTo(normalizedPath);
-    // setRequestedTerminalCwd(null);
+  const handleTerminalCwd = useCallback((path: string) => {
+    const normalizedPath = normalizeTerminalPath(path);
+    const now = Date.now();
+    for (const [expectedPath, expiresAt] of expectedTerminalCwdsRef.current) {
+      if (expiresAt <= now) {
+        expectedTerminalCwdsRef.current.delete(expectedPath);
+      }
+    }
+    const expectedExpiry = expectedTerminalCwdsRef.current.get(normalizedPath);
+    if (expectedExpiry && expectedExpiry > now) return;
+    const panel = activePanel === 'left' ? left : right;
+    if (normalizedPath === normalizeTerminalPath(panel.currentPath)) return;
+    if (normalizedPath === normalizeTerminalPath(left.currentPath) || normalizedPath === normalizeTerminalPath(right.currentPath)) return;
+    if (normalizedPath !== panel.currentPath) panel.navigateTo(normalizedPath);
+    setRequestedTerminalCwd(null);
   }, []);
 
   useEffect(() => {
@@ -1173,6 +1172,7 @@ export function App() {
     };
 
     const updateIconTheme = (exts: LoadedExtension[], themeId: string | undefined) => {
+      console.log('[ExtHost] updateIconTheme', { themeId, extsWithFss: exts.filter((e) => e.iconThemeFss).map((e) => `${e.ref.publisher}.${e.ref.name}`) });
       if (!themeId) {
         setIconTheme('fss');
         return;
@@ -1183,6 +1183,7 @@ export function App() {
       } else if (ext?.iconThemeFss) {
         setIconTheme('fss');
       } else {
+        console.warn('[ExtHost] updateIconTheme: no match for', themeId, 'ext found:', !!ext, 'vscodePath:', ext?.vscodeIconThemePath, 'iconThemeFss:', !!ext?.iconThemeFss);
         setIconTheme('none');
       }
     };

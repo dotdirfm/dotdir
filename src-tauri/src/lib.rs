@@ -404,9 +404,19 @@ fn get_icons_path(app_handle: tauri::AppHandle) -> String {
 
 #[tauri::command]
 fn get_home_path() -> String {
-    dirs::home_dir()
+    let path = dirs::home_dir()
         .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // On Windows, fallback to USERPROFILE if home_dir is empty (e.g. in some sandboxed contexts)
+    if path.is_empty() {
+        #[cfg(windows)]
+        {
+            if let Ok(p) = std::env::var("USERPROFILE") {
+                return p;
+            }
+        }
+    }
+    path
 }
 
 #[tauri::command]

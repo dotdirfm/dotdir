@@ -21,6 +21,10 @@ export function normalizePath(path: string): string {
 
   let normalized = collapseSlashes(path.replace(/\\/g, '/'));
 
+  // Remove . and ./ segments so paths resolve on all platforms (e.g. .../ext/./icons/file.svg)
+  normalized = normalized.replace(/\/\.\//g, '/').replace(/^\.\//, '');
+  if (normalized.endsWith('/.')) normalized = normalized.slice(0, -2);
+
   if (DRIVE_PREFIX_RE.test(normalized)) {
     normalized = `${normalized}/`;
   }
@@ -88,7 +92,7 @@ export function basename(path: string): string {
 }
 
 /**
- * Returns breadcrumb segments for a path. On Windows, first segment is the drive (e.g. "C:\").
+ * Returns breadcrumb segments for a path. On Windows, first segment is the drive (e.g. "C:").
  * Each segment has a display label and the full path up to that segment (for navigation).
  */
 export function getBreadcrumbSegments(path: string): { label: string; path: string }[] {
@@ -97,11 +101,12 @@ export function getBreadcrumbSegments(path: string): { label: string; path: stri
 
   const segments: { label: string; path: string }[] = [];
 
-  // Windows: drive root as first segment
+  // Windows: drive root as first segment (label "C:" so separator adds backslash; "C:\" when alone)
   if (/^[A-Za-z]:\//.test(normalized)) {
     const driveRoot = normalized.slice(0, 3); // "C:/"
-    segments.push({ label: driveRoot.replace('/', '\\'), path: driveRoot });
     const rest = normalized.slice(3);
+    const driveLabel = rest ? normalized.slice(0, 2) : driveRoot.replace('/', '\\'); // "C:" or "C:\"
+    segments.push({ label: driveLabel, path: driveRoot });
     if (!rest) return segments;
     const names = rest.split('/').filter(Boolean);
     let acc = driveRoot;

@@ -9,6 +9,7 @@
 import { bridge } from './bridge';
 import { FileHandle } from './fsa';
 import type { LoadedExtension } from './extensions';
+import { normalizePath } from './path';
 
 type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
 
@@ -94,6 +95,9 @@ export class ExtensionHostClient {
         this.handleFileRead(worker, msg.id, msg.path);
       } else if (msg.type === 'loaded') {
         const extensions: LoadedExtension[] = msg.extensions;
+        const fss = extensions.filter((e) => e.iconThemeFss).map((e) => `${e.ref.publisher}.${e.ref.name}`);
+        const vscode = extensions.filter((e) => e.vscodeIconThemePath).map((e) => `${e.ref.publisher}.${e.ref.name}`);
+        console.log('[ExtHost] loaded', extensions.length, 'extensions; FSS:', fss, 'vscode:', vscode);
         for (const cb of this.listeners) {
           cb(extensions);
         }
@@ -116,12 +120,15 @@ export class ExtensionHostClient {
 
   private async handleFileRead(worker: Worker, id: number, path: string): Promise<void> {
     try {
-      const name = path.split('/').pop() ?? path;
-      const handle = new FileHandle(path, name);
+      const normalizedPath = normalizePath(path);
+      const name = normalizedPath.split('/').pop() ?? normalizedPath;
+      const handle = new FileHandle(normalizedPath, name);
       const file = await handle.getFile();
       const text = await file.text();
+      console.log('[ExtHost] readFile ok', normalizedPath);
       worker.postMessage({ type: 'readFileResult', id, data: text });
-    } catch {
+    } catch (err) {
+      console.error('[ExtHost] readFile failed', path, err);
       worker.postMessage({ type: 'readFileResult', id, data: null, error: 'read failed' });
     }
   }

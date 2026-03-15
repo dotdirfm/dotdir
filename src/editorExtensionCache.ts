@@ -6,6 +6,7 @@
 
 import type { Remote } from 'comlink';
 import type { EditorExtensionApi } from './extensionApi';
+import { normalizePath } from './path';
 
 export interface CachedEditorExtension {
   iframe: HTMLIFrameElement;
@@ -14,7 +15,7 @@ export interface CachedEditorExtension {
   htmlUrl: string;
 }
 
-const cache = new Map<string, CachedEditorExtension>();
+export const cache = new Map<string, CachedEditorExtension>();
 
 /** Hidden container to keep cached iframes in the document (avoid GC). */
 let parking: HTMLDivElement | null = null;
@@ -22,17 +23,22 @@ let parking: HTMLDivElement | null = null;
 function getParking(): HTMLDivElement {
   if (!parking) {
     parking = document.createElement('div');
-    parking.style.setProperty('display', 'none');
-    parking.style.setProperty('position', 'absolute');
-    parking.style.setProperty('left', '-9999px');
+    parking.style.setProperty('position', 'fixed');
+    parking.style.setProperty('left', '-99999px');
+    parking.style.setProperty('top', '0');
+    parking.style.setProperty('width', '1px');
+    parking.style.setProperty('height', '1px');
+    parking.style.setProperty('overflow', 'hidden');
+    parking.style.setProperty('visibility', 'hidden');
     parking.style.setProperty('pointer-events', 'none');
     document.body.appendChild(parking);
   }
   return parking;
 }
 
+/** Normalize path so cache key is stable across Windows/Unix and trailing-slash differences. */
 export function getEditorExtensionCacheKey(extensionDirPath: string, entry: string): string {
-  return `${extensionDirPath}\0${entry}`;
+  return `${normalizePath(extensionDirPath)}\0${entry}`;
 }
 
 export function getCachedEditorExtension(

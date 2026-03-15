@@ -2,7 +2,7 @@ import { createLayer, FsNode, LayeredResolver, LayerPriority, type StyleLayer, t
 import type { ResolvedEntryStyle } from './types';
 import type { LoadedExtension } from './extensions';
 import { DirectoryHandle } from './fsa';
-import { basename, dirname, join } from './path';
+import { basename, dirname, join, normalizePath } from './path';
 
 const defaultFss = `
 folder { font-weight: bold; }
@@ -33,11 +33,22 @@ function resolveIconUrls(source: string, basePath: string): string {
 }
 
 export function setExtensionLayers(extensions: LoadedExtension[], activeIconTheme?: string): void {
-  extensionLayers = extensions
-    .filter((ext): ext is LoadedExtension & { iconThemeFss: string; iconThemeBasePath: string } =>
-      ext.iconThemeFss != null && ext.iconThemeBasePath != null)
-    .filter((ext) => !activeIconTheme || `${ext.ref.publisher}.${ext.ref.name}` === activeIconTheme)
-    .map((ext) => createLayer(resolveIconUrls(ext.iconThemeFss, ext.iconThemeBasePath), '/', LayerPriority.USER));
+  const withFss = extensions.filter(
+    (ext): ext is LoadedExtension & { iconThemeFss: string; iconThemeBasePath: string } =>
+      ext.iconThemeFss != null && ext.iconThemeBasePath != null,
+  );
+  const filtered = activeIconTheme
+    ? withFss.filter((ext) => `${ext.ref.publisher}.${ext.ref.name}` === activeIconTheme)
+    : withFss;
+  console.log('[FSS] setExtensionLayers', {
+    total: extensions.length,
+    withFss: withFss.map((e) => `${e.ref.publisher}.${e.ref.name}`),
+    activeIconTheme: activeIconTheme ?? '(all)',
+    layersAdded: filtered.map((e) => `${e.ref.publisher}.${e.ref.name}`),
+  });
+  extensionLayers = filtered.map((ext) =>
+    createLayer(resolveIconUrls(ext.iconThemeFss, normalizePath(ext.iconThemeBasePath)), '/', LayerPriority.USER),
+  );
 }
 
 const fssSourceCache = new Map<string, string | null>();
