@@ -838,6 +838,8 @@ body.terminal-resizing {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border: none;
+  border-radius: 0;
 }
 
 .file-viewer-inline .file-viewer-header {

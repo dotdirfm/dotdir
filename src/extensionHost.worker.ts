@@ -14,7 +14,7 @@
  *     { type: 'error', message }                     — fatal loading error
  */
 
-import { dirname, join } from './path';
+import { dirname, join, normalizePath } from './path';
 
 // ── Types (duplicated subset to avoid importing DOM-dependent modules) ──
 
@@ -84,6 +84,8 @@ interface ExtensionRef {
   publisher: string;
   name: string;
   version: string;
+  /** Optional absolute path for development; when set, load from this dir instead of extensionsDir. */
+  path?: string;
 }
 
 export interface WorkerLoadedExtension {
@@ -193,7 +195,7 @@ async function loadExtensions(homePath: string, builtInDirs: string[]): Promise<
 
   for (const ref of refs) {
     if (!ref.publisher || !ref.name || !ref.version) continue;
-    const extDir = join(extensionsDir, extensionDirName(ref));
+    const extDir = ref.path ? normalizePath(ref.path) : join(extensionsDir, extensionDirName(ref));
     const ext = await loadExtensionFromDir(extDir);
     if (ext) loaded.push(ext);
   }

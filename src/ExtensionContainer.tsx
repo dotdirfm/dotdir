@@ -1,17 +1,15 @@
 /**
  * ExtensionContainer
  *
- * Loads an extension entry JS file, creates a sandboxed iframe with a host-generated
- * shell HTML, and establishes two-way Comlink RPC between the host and the iframe.
+ * Loads an extension entry script in the main window and gives it a mount root.
+ * Extension renders into the provided div; no iframes, no Comlink.
  */
 
-import * as Comlink from 'comlink';
-import type { Remote } from 'comlink';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileHandle } from './fsa';
 import { bridge } from './bridge';
 import { basename, normalizePath } from './path';
-import { prepareExtensionVfs } from './extensionVfs';
+import { getExtensionScriptUrl } from './extensionLoader';
 import type {
   HostApi,
   ViewerExtensionApi,
@@ -24,73 +22,42 @@ import { focusContext } from './focusContext';
 import {
   getCachedEditorExtension,
   takeCachedEditorExtension,
-  stashEditorExtension,
+  setCachedEditorExtension,
 } from './editorExtensionCache';
 
-// Oniguruma WASM for TextMate grammars in editor extensions (Vite ?url emits asset URL)
+// Oniguruma WASM for TextMate grammars in editor extensions
 import onigWasmUrl from 'vscode-oniguruma/release/onig.wasm?url';
 
-// ── Comlink UMD source (inlined into shell HTML) ─────────────────────
+// ── Load extension script and get API via __faradayHostReady ─────────────
 
-let comlinkUmdSource: string | null = null;
-
-async function getComlinkSource(): Promise<string> {
-  if (comlinkUmdSource) return comlinkUmdSource;
-  try {
-    const mod = await import('comlink/dist/umd/comlink.min.js?raw');
-    const src = typeof mod.default === 'string' ? mod.default : '';
-    if (!src || src.length < 100) {
-      throw new Error('Comlink UMD source missing or too short');
-    }
-    comlinkUmdSource = src;
-  } catch (e) {
-    console.error('[ExtensionContainer] Failed to load Comlink UMD:', e);
-    throw new Error('Failed to load Comlink for extension iframe');
-  }
-  return comlinkUmdSource;
+function loadExtensionApi(scriptUrl: string): Promise<ViewerExtensionApi | EditorExtensionApi> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error('Extension ready timed out (5s)')),
+      5000,
+    );
+    (window as Window & { __faradayHostReady?: (api: unknown) => void }).__faradayHostReady = (api) => {
+      clearTimeout(timeout);
+      delete (window as Window & { __faradayHostReady?: (api: unknown) => void }).__faradayHostReady;
+      resolve(api as ViewerExtensionApi | EditorExtensionApi);
+    };
+    const script = document.createElement('script');
+    script.src = scriptUrl;
+    script.onerror = () => {
+      clearTimeout(timeout);
+      delete (window as Window & { __faradayHostReady?: (api: unknown) => void }).__faradayHostReady;
+      reject(new Error('Failed to load extension script'));
+    };
+    document.head.appendChild(script);
+    script.onload = () => {
+      // Script runs synchronously; __faradayHostReady may have been called already
+      if (!script.parentNode) return;
+      script.remove();
+    };
+  });
 }
 
-// ── Shell HTML template ──────────────────────────────────────────────
-
-/** Escape script content so </script> in the middle doesn't close the tag. */
-function escapeScriptContent(s: string): string {
-  return s.replace(/<\/script>/gi, '<\\/script>');
-}
-
-/** Build shell HTML with bootstrap and comlink inlined; only entry loads from VFS (no blob URLs). */
-function buildShellHtml(
-  bootstrapScript: string,
-  comlinkSrc: string,
-  entryScriptUrl: string,
-  themeClass: string,
-  handshakeId: string,
-): string {
-  const safeId = handshakeId.replace(/"/g, '&quot;');
-  const bootstrapEscaped = escapeScriptContent(bootstrapScript);
-  const comlinkEscaped = escapeScriptContent(comlinkSrc);
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-  *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 13px;
-  }
-  body.faraday-dark { background: #1e1e1e; color: #ccc; }
-  body.faraday-light { background: #fff; color: #333; }
-</style>
-</head>
-<body class="${themeClass}" data-handshake-id="${safeId}">
-<script>${bootstrapEscaped}<\/script>
-<script>${comlinkEscaped}<\/script>
-<script src="${entryScriptUrl.replace(/"/g, '&quot;')}"><\/script>
-</body>
-</html>`;
-}
-
-// ── Shared props ─────────────────────────────────────────────────────
+// ── Container props ─────────────────────────────────────────────────────
 
 interface ExtensionContainerProps {
   extensionDirPath: string;
@@ -111,8 +78,7 @@ interface EditorContainerProps extends ExtensionContainerProps {
   props: EditorProps;
   onClose: () => void;
   onDirtyChange?: (dirty: boolean) => void;
-  /** Called when the editor extension is ready (after first mount). Use to e.g. call setLanguage. */
-  onEditorReady?: (api: Remote<EditorExtensionApi>) => void;
+  onEditorReady?: (api: EditorExtensionApi) => void;
 }
 
 export type ContainerProps = ViewerContainerProps | EditorContainerProps;
@@ -128,22 +94,9 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     style,
   } = containerProps;
 
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const extensionApiRef = useRef<Remote<ViewerExtensionApi> | Remote<EditorExtensionApi> | null>(null);
-  const scriptBlobUrlRef = useRef<string | null>(null);
-  const htmlBlobUrlRef = useRef<string | null>(null);
-  const bootstrapBlobUrlRef = useRef<string | null>(null);
-  const comlinkBlobUrlRef = useRef<string | null>(null);
-  /** When using VFS (Web), base URL for extension to lazy-load workers. */
-  const extensionScriptBaseUrlRef = useRef<string | undefined>(undefined);
-  /** Captured when editor is ready so cleanup can stash even if React has already nulled refs on unmount. */
-  const editorStashPayloadRef = useRef<{
-    iframe: HTMLIFrameElement;
-    api: Remote<EditorExtensionApi>;
-    scriptUrl: string;
-    htmlUrl: string;
-  } | null>(null);
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const extensionApiRef = useRef<ViewerExtensionApi | EditorExtensionApi | null>(null);
+  const scriptUrlRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const onCloseRef = useRef(onClose);
@@ -170,224 +123,91 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     onEditorReadyRef.current = containerProps.onEditorReady;
   }
 
-  const cleanup = useCallback(() => {
-    if (scriptBlobUrlRef.current?.startsWith('blob:')) {
-      URL.revokeObjectURL(scriptBlobUrlRef.current);
-    }
-    scriptBlobUrlRef.current = null;
-    if (htmlBlobUrlRef.current?.startsWith('blob:')) {
-      URL.revokeObjectURL(htmlBlobUrlRef.current);
-    }
-    htmlBlobUrlRef.current = null;
-    if (bootstrapBlobUrlRef.current?.startsWith('blob:')) {
-      URL.revokeObjectURL(bootstrapBlobUrlRef.current);
-    }
-    bootstrapBlobUrlRef.current = null;
-    if (comlinkBlobUrlRef.current?.startsWith('blob:')) {
-      URL.revokeObjectURL(comlinkBlobUrlRef.current);
-    }
-    comlinkBlobUrlRef.current = null;
-    extensionApiRef.current = null;
-  }, []);
+  const buildHostApi = useCallback((): HostApi => ({
+    async readFile(path: string): Promise<ArrayBuffer> {
+      const handle = new FileHandle(path, basename(path));
+      const file = await handle.getFile();
+      return file.arrayBuffer();
+    },
+    async readFileRange(path: string, offset: number, length: number): Promise<ArrayBuffer> {
+      const handle = new FileHandle(path, basename(path));
+      const file = await handle.getFile();
+      const slice = file.slice(offset, offset + length);
+      return slice.arrayBuffer();
+    },
+    async readFileText(path: string): Promise<string> {
+      const handle = new FileHandle(path, basename(path));
+      const file = await handle.getFile();
+      return file.text();
+    },
+    async writeFile(path: string, content: string): Promise<void> {
+      await bridge.fsa.writeFile(path, content);
+    },
+    async getTheme(): Promise<string> {
+      return bridge.theme.get();
+    },
+    onClose(): void {
+      onCloseRef.current();
+    },
+    onNavigateMedia(file: MediaFileRef): void {
+      onNavigateMediaRef.current?.(file);
+    },
+    async getOnigurumaWasm(): Promise<ArrayBuffer> {
+      const r = await fetch(onigWasmUrl);
+      return r.arrayBuffer();
+    },
+    async getExtensionResourceUrl(relativePath: string): Promise<string> {
+      const safe = normalizePath(relativePath).replace(/^\/+/, '');
+      if (safe.includes('..')) throw new Error('Invalid extension resource path');
+      // Extensions run in host; no VFS base URL. Could add bridge to read and return blob URL if needed.
+      throw new Error('Extension resource URL not available in mount-point mode');
+    },
+  }), []);
 
   useEffect(() => {
-    editorStashPayloadRef.current = null;
-    let cached: { iframe: HTMLIFrameElement; scriptUrl: string; htmlUrl: string } | null = null;
-    if (kind === 'editor' && hasCachedEditor) {
-      const taken = takeCachedEditorExtension(extensionDirPath, entry);
-      if (taken) {
-        cached = { iframe: taken.iframe, scriptUrl: taken.scriptUrl, htmlUrl: taken.htmlUrl };
-        const container = containerRef.current;
-        if (container) {
-          container.appendChild(cached.iframe);
-          iframeRef.current = cached.iframe;
-          scriptBlobUrlRef.current = cached.scriptUrl;
-        }
-      }
-    }
+    const mountEl = mountRef.current;
+    if (!mountEl) return;
 
     let cancelled = false;
-    const abortCtrl = new AbortController();
+    let api: ViewerExtensionApi | EditorExtensionApi | null = null;
+    let scriptUrl: string | null = null;
 
     (async () => {
       try {
-        let scriptUrl: string;
-        let iframe: HTMLIFrameElement | null;
+        let resolvedApi: ViewerExtensionApi | EditorExtensionApi;
 
-        if (cached) {
-          scriptUrl = cached.scriptUrl;
-          iframe = iframeRef.current;
-          if (!iframe) return;
+        if (kind === 'editor' && hasCachedEditor) {
+          const cached = takeCachedEditorExtension(extensionDirPath, entry);
+          if (cached?.api) {
+            resolvedApi = cached.api;
+            scriptUrl = cached.scriptUrl;
+            scriptUrlRef.current = scriptUrl;
+          } else {
+            const { scriptUrl: url } = await getExtensionScriptUrl(extensionDirPath, entry);
+            scriptUrl = url;
+            scriptUrlRef.current = url;
+            resolvedApi = await loadExtensionApi(url);
+          }
         } else {
-          const vfs = await prepareExtensionVfs(extensionDirPath, entry);
-          if (cancelled) return;
-          scriptUrl = vfs.entryUrl;
-          scriptBlobUrlRef.current = null;
-          extensionScriptBaseUrlRef.current = vfs.baseUrl;
-          if (cancelled) return;
-          iframe = iframeRef.current;
-          if (!iframe) return;
+          const { scriptUrl: url } = await getExtensionScriptUrl(extensionDirPath, entry);
+          scriptUrl = url;
+          scriptUrlRef.current = url;
+          resolvedApi = await loadExtensionApi(url);
         }
 
-        const [theme, comlinkSrc] = await Promise.all([
-          bridge.theme.get(),
-          getComlinkSource(),
-        ]);
-        if (cancelled) return;
-        const themeClass = theme === 'light' || theme === 'high-contrast-light'
-          ? 'faraday-light'
-          : 'faraday-dark';
-        const handshakeId = `faraday-${crypto.randomUUID()}`;
-        const bootstrapScript = "window.__faradayHandshakeId=(document.body&&document.body.getAttribute('data-handshake-id'))||window.name||'';";
-        const html = buildShellHtml(bootstrapScript, comlinkSrc, scriptUrl, themeClass, handshakeId);
-        const htmlUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
-        htmlBlobUrlRef.current = htmlUrl;
-        bootstrapBlobUrlRef.current = null;
-        comlinkBlobUrlRef.current = null;
-        if (cached?.htmlUrl && cached.htmlUrl.startsWith('blob:')) URL.revokeObjectURL(cached.htmlUrl);
-
-        if (cancelled) return;
-        if (!iframe) return;
-        iframe.name = handshakeId;
-        const loadedPromise = new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(
-            () => reject(new Error('Extension ready timed out (3s)')),
-            3000,
-          );
-          const handler = (event: MessageEvent) => {
-            if (event.data?.handshakeId !== handshakeId) return;
-            if (event.data?.type === 'faraday-error') {
-              clearTimeout(timeout);
-              window.removeEventListener('message', handler);
-              reject(new Error(event.data.message || 'Extension error'));
-              return;
-            }
-            if (event.data?.type !== 'faraday-loaded') return;
-            clearTimeout(timeout);
-            window.removeEventListener('message', handler);
-            resolve();
-          };
-          window.addEventListener('message', handler);
-          abortCtrl.signal.addEventListener('abort', () => {
-            clearTimeout(timeout);
-            window.removeEventListener('message', handler);
-            reject(new Error('Aborted'));
-          });
-        });
-
-        iframe.src = htmlUrl;
-        await loadedPromise;
         if (cancelled) return;
 
-        // 5. Build HostApi
-        const hostApi: HostApi = {
-          async readFile(path: string): Promise<ArrayBuffer> {
-            const handle = new FileHandle(path, basename(path));
-            const file = await handle.getFile();
-            return file.arrayBuffer();
-          },
-          async readFileRange(path: string, offset: number, length: number): Promise<ArrayBuffer> {
-            const handle = new FileHandle(path, basename(path));
-            const file = await handle.getFile();
-            const slice = file.slice(offset, offset + length);
-            return slice.arrayBuffer();
-          },
-          async readFileText(path: string): Promise<string> {
-            const handle = new FileHandle(path, basename(path));
-            const file = await handle.getFile();
-            return file.text();
-          },
-          async writeFile(path: string, content: string): Promise<void> {
-            await bridge.fsa.writeFile(path, content);
-          },
-          async getTheme(): Promise<string> {
-            return bridge.theme.get();
-          },
-          onClose(): void {
-            onCloseRef.current();
-          },
-          onNavigateMedia(file: MediaFileRef): void {
-            onNavigateMediaRef.current?.(file);
-          },
-          async getOnigurumaWasm(): Promise<ArrayBuffer> {
-            const r = await fetch(onigWasmUrl);
-            return r.arrayBuffer();
-          },
-          async getExtensionResourceUrl(relativePath: string): Promise<string> {
-            const safe = normalizePath(relativePath).replace(/^\/+/, '');
-            if (safe.includes('..')) throw new Error('Invalid extension resource path');
-            const base = extensionScriptBaseUrlRef.current;
-            if (base) return base.replace(/\/$/, '') + '/' + safe;
-            throw new Error('Extension resource URL requires VFS (faraday-resources or /vfs/)');
-          },
-        };
-
-        // 6. Comlink handshake — send port to iframe, receive extension API back
-        const { port1, port2 } = new MessageChannel();
-        Comlink.expose(hostApi, port1);
-
-        iframe.contentWindow!.postMessage(
-          { type: 'faraday-init', port: port2, handshakeId },
-          '*',
-          [port2],
-        );
-
-        // Wait for the iframe to send back its extensionApi port
-        const extensionApi = await new Promise<Remote<ViewerExtensionApi> | Remote<EditorExtensionApi>>(
-          (resolve, reject) => {
-            const timeout = setTimeout(
-              () => reject(new Error('Extension handshake timed out (5s)')),
-              5000,
-            );
-            const handler = (event: MessageEvent) => {
-              if (event.data?.handshakeId !== handshakeId) return;
-              if (event.data?.type === 'faraday-error') {
-                clearTimeout(timeout);
-                window.removeEventListener('message', handler);
-                reject(new Error(event.data.message || 'Extension error'));
-                return;
-              }
-              if (event.data?.type !== 'faraday-ready') return;
-              clearTimeout(timeout);
-              window.removeEventListener('message', handler);
-              const extPort: MessagePort = event.data.port;
-              if (kind === 'viewer') {
-                resolve(Comlink.wrap<ViewerExtensionApi>(extPort));
-              } else {
-                resolve(Comlink.wrap<EditorExtensionApi>(extPort));
-              }
-            };
-            window.addEventListener('message', handler);
-            abortCtrl.signal.addEventListener('abort', () => {
-              clearTimeout(timeout);
-              window.removeEventListener('message', handler);
-              reject(new Error('Aborted'));
-            });
-          },
-        );
-        if (cancelled) return;
-
-        extensionApiRef.current = extensionApi;
-        if (kind === 'editor' && iframeRef.current && scriptBlobUrlRef.current && htmlBlobUrlRef.current) {
-          editorStashPayloadRef.current = {
-            iframe: iframeRef.current,
-            api: extensionApi as Remote<EditorExtensionApi>,
-            scriptUrl: scriptBlobUrlRef.current,
-            htmlUrl: htmlBlobUrlRef.current,
-          };
-        }
-
-        // 7. Call mount (merge extensionScriptBaseUrl for lazy-loading workers)
-        const baseUrl = extensionScriptBaseUrlRef.current;
-        const mountProps = { ...props, extensionScriptBaseUrl: baseUrl };
+        api = resolvedApi;
+        extensionApiRef.current = api;
+        const hostApi = buildHostApi();
         if (kind === 'viewer') {
-          await (extensionApi as Remote<ViewerExtensionApi>).mount(mountProps as ViewerProps);
+          await (api as ViewerExtensionApi).mount(mountEl, hostApi, props as ViewerProps);
         } else {
-          await (extensionApi as Remote<EditorExtensionApi>).mount(mountProps as EditorProps);
-          onEditorReadyRef.current?.(extensionApi as Remote<EditorExtensionApi>);
+          await (api as EditorExtensionApi).mount(mountEl, hostApi, props as EditorProps);
+          onEditorReadyRef.current?.(api as EditorExtensionApi);
         }
 
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
@@ -398,55 +218,39 @@ export function ExtensionContainer(containerProps: ContainerProps) {
 
     return () => {
       cancelled = true;
-      abortCtrl.abort();
-      const payload = kind === 'editor' ? editorStashPayloadRef.current : null;
-      if (payload) {
-        payload.iframe.remove();
-        stashEditorExtension(
-          extensionDirPath,
-          entry,
-          payload.iframe,
-          payload.api,
-          payload.scriptUrl,
-          payload.htmlUrl,
-        );
-        editorStashPayloadRef.current = null;
-        scriptBlobUrlRef.current = null;
-        htmlBlobUrlRef.current = null;
+      const currentApi = extensionApiRef.current;
+      const currentScriptUrl = scriptUrlRef.current;
+      if (kind === 'editor' && currentApi && currentScriptUrl) {
+        (currentApi as EditorExtensionApi).unmount().catch(() => {});
+        setCachedEditorExtension(extensionDirPath, entry, { api: currentApi as EditorExtensionApi, scriptUrl: currentScriptUrl });
         extensionApiRef.current = null;
-        iframeRef.current = null;
-        if (bootstrapBlobUrlRef.current?.startsWith('blob:')) {
-          URL.revokeObjectURL(bootstrapBlobUrlRef.current);
-        }
-        if (comlinkBlobUrlRef.current?.startsWith('blob:')) {
-          URL.revokeObjectURL(comlinkBlobUrlRef.current);
-        }
-        bootstrapBlobUrlRef.current = null;
-        comlinkBlobUrlRef.current = null;
-      } else {
-        const api = extensionApiRef.current;
-        if (api) api.unmount().catch(() => {});
-        cleanup();
+        scriptUrlRef.current = null;
+      } else if (currentApi) {
+        currentApi.unmount().catch(() => {});
+        extensionApiRef.current = null;
       }
+      if (scriptUrlRef.current?.startsWith('blob:')) {
+        URL.revokeObjectURL(scriptUrlRef.current);
+      }
+      scriptUrlRef.current = null;
     };
-  }, [extensionDirPath, entry, kind, cleanup]); // intentionally exclude `props`
+  }, [extensionDirPath, entry, kind, buildHostApi]); // intentionally exclude props
 
-  // Re-mount when props change (file path changed) without recreating the iframe
+  // Re-mount when props change (e.g. file path)
   const prevPropsRef = useRef(props);
   useEffect(() => {
     const api = extensionApiRef.current;
-    if (!api || loading || error) return;
+    const mountEl = mountRef.current;
+    if (!api || !mountEl || loading || error) return;
     if (prevPropsRef.current === props) return;
     prevPropsRef.current = props;
-
-    const baseUrl = extensionScriptBaseUrlRef.current;
-    const mountProps = { ...props, extensionScriptBaseUrl: baseUrl };
+    const hostApi = buildHostApi();
     if (kind === 'viewer') {
-      (api as Remote<ViewerExtensionApi>).mount(mountProps as ViewerProps).catch(() => {});
+      (api as ViewerExtensionApi).mount(mountEl, hostApi, props as ViewerProps).catch(() => {});
     } else {
-      (api as Remote<EditorExtensionApi>).mount(mountProps as EditorProps).catch(() => {});
+      (api as EditorExtensionApi).mount(mountEl, hostApi, props as EditorProps).catch(() => {});
     }
-  }, [props, kind, loading, error]);
+  }, [props, kind, loading, error, buildHostApi]);
 
   if (error) {
     return (
@@ -457,29 +261,29 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   }
 
   return (
-    <div
-      ref={containerRef}
-      className={className}
-      style={{ ...style, position: 'relative' }}
-    >
+    <div className={className} style={{ ...style, position: 'relative' }}>
       {loading && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-muted, #888)' }}>
           Loading {kind}…
         </div>
       )}
-      {!hasCachedEditor && (
-        <iframe
-          ref={iframeRef}
-          style={{ width: '100%', height: '100%', border: 'none', display: loading ? 'none' : 'block' }}
-          sandbox="allow-scripts allow-same-origin"
-          tabIndex={kind === 'viewer' && (props as ViewerProps).inline ? -1 : 0}
-        />
-      )}
+      <div
+        ref={mountRef}
+        style={{
+          width: '100%',
+          height: '100%',
+          minHeight: 0,
+          display: loading ? 'none' : 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+        tabIndex={kind === 'viewer' && (props as ViewerProps).inline ? -1 : 0}
+      />
     </div>
   );
 }
 
-// ── Convenience wrappers ─────────────────────────────────────────────
+// ── Convenience wrappers ───────────────────────────────────────────────
 
 interface ViewerContainerWrapperProps {
   extensionDirPath: string;
@@ -530,7 +334,7 @@ export function ViewerContainer({
         type="button"
         title="Close (Esc)"
         onClick={inline ? onClose : () => dialogRef.current?.close()}
-        style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, padding: '0 8px', flexShrink: 0 }}
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, padding: '0 8px', flexShrink: 0, color: 'inherit' }}
         aria-label="Close"
       >
         ×
@@ -554,7 +358,6 @@ export function ViewerContainer({
   if (inline) {
     return (
       <div className="file-viewer file-viewer-inline" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        {toolbar}
         <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
       </div>
     );
@@ -576,9 +379,7 @@ interface EditorContainerWrapperProps {
   langId: string;
   onClose: () => void;
   onDirtyChange?: (dirty: boolean) => void;
-  /** All languages from loaded extensions (for custom grammars). */
   languages?: EditorProps['languages'];
-  /** All grammars with content from loaded extensions (for TextMate tokenization). */
   grammars?: EditorProps['grammars'];
 }
 
@@ -594,7 +395,7 @@ export function EditorContainer({
   grammars,
 }: EditorContainerWrapperProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
-  const editorApiRef = useRef<Remote<EditorExtensionApi> | null>(null);
+  const editorApiRef = useRef<EditorExtensionApi | null>(null);
   const [currentLangId, setCurrentLangId] = useState(langId);
 
   useEffect(() => {
@@ -624,7 +425,6 @@ export function EditorContainer({
     if (api && typeof api.setLanguage === 'function') api.setLanguage(next);
   };
 
-  // Deduplicate by lang.id so we don't get duplicate keys (e.g. "xml" from multiple extensions)
   const langList = useMemo(() => {
     const list = languages ?? [];
     const seen = new Set<string>();
@@ -636,11 +436,9 @@ export function EditorContainer({
   }, [languages]);
   const showLangSelect = langList.length > 0;
 
-  const toolbarHeight = 38;
-
   return (
     <dialog ref={dialogRef} className="file-editor" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
-      <div className="extension-dialog-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border, #333)', flexShrink: 0, minHeight: toolbarHeight, boxSizing: 'border-box' }}>
+      <div className="extension-dialog-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border, #333)', flexShrink: 0, minHeight: 38, boxSizing: 'border-box' }}>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={fileName}>{fileName}</span>
         {showLangSelect && (
           <>
@@ -664,7 +462,7 @@ export function EditorContainer({
           type="button"
           title="Close (Esc)"
           onClick={() => dialogRef.current?.close()}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, padding: '0 8px', flexShrink: 0 }}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, padding: '0 8px', flexShrink: 0, color: 'inherit' }}
           aria-label="Close"
         >
           ×

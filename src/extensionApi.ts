@@ -69,29 +69,28 @@ export interface HostApi {
   getExtensionResourceUrl?(relativePath: string): Promise<string>;
 }
 
-// ── Extension APIs (iframe exposes to host) ──────────────────────────
+// ── Extension APIs (extension exposes to host via __faradayHostReady) ─
 
 export interface ViewerExtensionApi {
-  mount(props: ViewerProps): Promise<void>;
+  /** Render viewer UI into the provided root. */
+  mount(root: HTMLElement, hostApi: HostApi, props: ViewerProps): Promise<void>;
   unmount(): Promise<void>;
 }
 
 export interface EditorExtensionApi {
-  mount(props: EditorProps): Promise<void>;
+  /** Render editor UI into the provided root. */
+  mount(root: HTMLElement, hostApi: HostApi, props: EditorProps): Promise<void>;
   unmount(): Promise<void>;
   setDirty?(dirty: boolean): void;
   /** Change the editor language (e.g. for syntax highlighting). */
   setLanguage?(langId: string): void | Promise<void>;
 }
 
-// ── Handshake message types ──────────────────────────────────────────
+/** Extension calls this when loaded; host sets it before injecting the script. */
+export type FaradayHostReadyCallback = (api: ViewerExtensionApi | EditorExtensionApi) => void;
 
-export interface FaradayInitMessage {
-  type: 'faraday-init';
-  port: MessagePort;
-}
-
-export interface FaradayReadyMessage {
-  type: 'faraday-ready';
-  port: MessagePort;
+declare global {
+  interface Window {
+    __faradayHostReady?: FaradayHostReadyCallback;
+  }
 }

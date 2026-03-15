@@ -50,10 +50,6 @@ export interface Bridge {
     get(): Promise<string>;
     onChange(callback: (theme: string) => void): () => void;
   };
-  /** Extension VFS: register dir for faraday-resources:// (Tauri only). */
-  extensionVfs?: {
-    register(key: string, dirPath: string): Promise<void>;
-  };
   onReconnect?(callback: () => void): () => void;
 }
 

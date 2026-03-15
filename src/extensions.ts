@@ -1,6 +1,6 @@
 import { bridge } from './bridge';
 import { FileHandle } from './fsa';
-import { dirname, join } from './path';
+import { dirname, join, normalizePath } from './path';
 
 export const MARKETPLACE_URL = 'https://lastcompute.ru';
 
@@ -103,6 +103,8 @@ export interface ExtensionRef {
   publisher: string;
   name: string;
   version: string;
+  /** Optional absolute path for development; when set, load extension from this dir instead of ~/.faraday/extensions/<publisher>-<name>-<version>. */
+  path?: string;
 }
 
 export interface LoadedGrammar {
@@ -193,7 +195,7 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
   for (const ref of refs) {
     if (!ref.publisher || !ref.name || !ref.version) continue;
     try {
-      const extDir = join(extensionsDir, extensionDirName(ref));
+      const extDir = ref.path ? normalizePath(ref.path) : join(extensionsDir, extensionDirName(ref));
       const manifest: ExtensionManifest = JSON.parse(
         await readTextFile(join(extDir, 'package.json')),
       );
