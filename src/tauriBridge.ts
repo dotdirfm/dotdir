@@ -141,14 +141,8 @@ export const tauriBridge = {
     async getHomePath(): Promise<string> {
       return normalizePath(await invoke<string>('get_home_path'));
     },
-    async getIconsPath(): Promise<string> {
-      return normalizePath(await invoke<string>('get_icons_path'));
-    },
     async getTerminalProfiles(): Promise<TerminalProfile[]> {
       return invoke<RustTerminalProfile[]>('get_terminal_profiles');
-    },
-    async getBuiltinExtensionDirs(): Promise<string[]> {
-      return invoke<string[]>('get_builtin_extension_dirs');
     },
   },
   theme: {

@@ -13,33 +13,9 @@ import { normalizePath } from './path';
 
 type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
 
-/**
- * Discover built-in extension directories.
- * Tauri: uses bundled resources. Headless (faraday serve): uses bridge RPC so the server
- * can return paths to its extensions dir.
- */
-async function discoverBuiltInExtensionDirs(): Promise<string[]> {
-  try {
-    const { isTauri } = await import('@tauri-apps/api/core');
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<string[]>('get_builtin_extension_dirs');
-    }
-  } catch {
-    // Tauri not available (e.g. not in Tauri env)
-  }
-  // Headless / serve: ask the backend for built-in extension dirs
-  try {
-    return await bridge.utils.getBuiltinExtensionDirs();
-  } catch {
-    return [];
-  }
-}
-
 export class ExtensionHostClient {
   private worker: Worker | null = null;
   private homePath: string | null = null;
-  private builtInDirs: string[] | null = null;
   private listeners: ExtensionsLoadedCallback[] = [];
   private starting = false;
 
@@ -58,9 +34,6 @@ export class ExtensionHostClient {
     try {
       if (!this.homePath) {
         this.homePath = await bridge.utils.getHomePath();
-      }
-      if (!this.builtInDirs) {
-        this.builtInDirs = await discoverBuiltInExtensionDirs();
       }
       this.spawnWorker();
     } finally {
@@ -114,7 +87,6 @@ export class ExtensionHostClient {
     worker.postMessage({
       type: 'start',
       homePath: this.homePath,
-      builtInDirs: this.builtInDirs ?? [],
     });
   }
 

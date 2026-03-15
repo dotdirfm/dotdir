@@ -6,7 +6,6 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::path::BaseDirectory;
 use tauri::{Emitter, Manager, State};
 
 #[cfg(unix)]
@@ -379,29 +378,6 @@ fn pty_close(pty_id: u32, state: State<'_, AppState>) {
     }
 }
 
-fn resolve_icons_path(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-
-    if let Ok(resource_dir) = app_handle.path().resource_dir() {
-        candidates.push(resource_dir.join("icons"));
-    }
-
-    if let Ok(current_exe) = std::env::current_exe() {
-        if let Some(exe_dir) = current_exe.parent() {
-            candidates.push(exe_dir.join("icons"));
-        }
-    }
-
-    candidates.into_iter().find(|path| path.is_dir())
-}
-
-#[tauri::command]
-fn get_icons_path(app_handle: tauri::AppHandle) -> String {
-    resolve_icons_path(&app_handle)
-        .map(|path| path.to_string_lossy().into_owned())
-        .unwrap_or_default()
-}
-
 #[tauri::command]
 fn get_home_path() -> String {
     let path = dirs::home_dir()
@@ -417,23 +393,6 @@ fn get_home_path() -> String {
         }
     }
     path
-}
-
-#[tauri::command]
-fn get_builtin_extension_dirs(app: tauri::AppHandle) -> Vec<String> {
-    let mut dirs = Vec::new();
-    // Use PathResolver so we get the same path the bundler uses ($RESOURCE/extensions)
-    let Ok(extensions_dir) = app.path().resolve("extensions", BaseDirectory::Resource) else {
-        return dirs;
-    };
-    if let Ok(entries) = std::fs::read_dir(&extensions_dir) {
-        for entry in entries.flatten() {
-            if entry.path().is_dir() {
-                dirs.push(entry.path().to_string_lossy().into_owned());
-            }
-        }
-    }
-    dirs
 }
 
 #[tauri::command]
@@ -494,9 +453,7 @@ pub fn run() {
             fsa_watch,
             fsa_unwatch,
             get_home_path,
-            get_icons_path,
             get_terminal_profiles,
-            get_builtin_extension_dirs,
             get_theme,
             debug_log,
             pty_spawn,

@@ -7,7 +7,6 @@ use axum::{
     body::Body,
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
     },
     http::{header, StatusCode, Uri},
     response::{IntoResponse, Response},
@@ -26,7 +25,7 @@ use futures::{SinkExt, StreamExt};
 use rust_embed::RustEmbed;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::mpsc;
 
 #[derive(RustEmbed)]
@@ -64,19 +63,11 @@ impl From<ops::EntryInfo> for JsEntry {
     }
 }
 
-// ── Shared server config ────────────────────────────────────────────
-
-#[derive(Clone)]
-struct ServerState {
-    icons_dir: Arc<Option<String>>,
-}
-
 // ── Per-connection session ──────────────────────────────────────────
 
 struct Session {
     fdt: FdTable,
     watcher: FsWatcher,
-    icons_dir: Option<String>,
     ptys: std::sync::Mutex<HashMap<u32, pty::PtyHandle>>,
     next_pty_id: std::sync::atomic::AtomicU32,
 }
@@ -85,12 +76,11 @@ struct Session {
 
 async fn ws_handler(
     ws: WebSocketUpgrade,
-    State(state): State<ServerState>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+    ws.on_upgrade(move |socket| handle_socket(socket))
 }
 
-async fn handle_socket(socket: WebSocket, state: ServerState) {
+async fn handle_socket(socket: WebSocket) {
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
 
@@ -112,7 +102,6 @@ async fn handle_socket(socket: WebSocket, state: ServerState) {
     let session = Arc::new(Session {
         fdt: FdTable::new(),
         watcher,
-        icons_dir: state.icons_dir.as_ref().clone(),
         ptys: std::sync::Mutex::new(HashMap::new()),
         next_pty_id: std::sync::atomic::AtomicU32::new(0),
     });
@@ -291,34 +280,6 @@ fn rpc_error(id: &Value, e: &FsError) -> Message {
     )
 }
 
-/// Discover built-in extension dirs for headless serve (e.g. repo/extensions/* with package.json).
-fn get_builtin_extension_dirs() -> Vec<String> {
-    let mut roots: Vec<PathBuf> = Vec::new();
-    if let Ok(cwd) = std::env::current_dir() {
-        roots.push(cwd.join("extensions"));
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        // target/debug/faraday or target/release/faraday -> repo root
-        if let Some(p) = exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
-            roots.push(p.join("extensions"));
-        }
-    }
-    for root in roots {
-        let Ok(rd) = std::fs::read_dir(&root) else { continue };
-        let mut dirs: Vec<String> = rd
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().is_dir())
-            .filter(|e| e.path().join("package.json").exists())
-            .map(|e| e.path().to_string_lossy().into_owned())
-            .collect();
-        if !dirs.is_empty() {
-            dirs.sort();
-            return dirs;
-        }
-    }
-    Vec::new()
-}
-
 fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, FsError> {
     match method {
         "fs.entries" => {
@@ -390,9 +351,7 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_default()
         )),
-        "utils.getIconsPath" => Ok(json!(session.icons_dir.as_deref().unwrap_or(""))),
         "utils.getTerminalProfiles" => Ok(serde_json::to_value(pty::list_profiles()).unwrap()),
-        "utils.getBuiltinExtensionDirs" => Ok(serde_json::to_value(get_builtin_extension_dirs()).unwrap()),
         _ => Err(FsError::InvalidInput),
     }
 }
@@ -438,46 +397,11 @@ async fn embedded_asset_handler(uri: Uri) -> Response {
     }
 }
 
-async fn disk_asset_handler(uri: Uri, dir: &str) -> Response {
-    let path = uri.path().trim_start_matches('/');
-    let file_path = PathBuf::from(dir).join(if path.is_empty() { "index.html" } else { path });
-
-    match tokio::fs::read(&file_path).await {
-        Ok(bytes) => {
-            let mime = mime_guess::from_path(&file_path)
-                .first_or_octet_stream()
-                .to_string();
-            Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, mime)
-                .body(Body::from(bytes))
-                .unwrap()
-        }
-        Err(_) => {
-            // SPA fallback
-            let index = PathBuf::from(dir).join("index.html");
-            match tokio::fs::read(&index).await {
-                Ok(bytes) => Response::builder()
-                    .status(StatusCode::OK)
-                    .header(header::CONTENT_TYPE, "text/html")
-                    .body(Body::from(bytes))
-                    .unwrap(),
-                Err(_) => Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::empty())
-                    .unwrap(),
-            }
-        }
-    }
-}
-
 // ── Config parsing ──────────────────────────────────────────────────
 
 struct Config {
     port: u16,
     host: String,
-    static_dir: Option<String>,
-    icons_dir: Option<String>,
 }
 
 fn parse_config(args: &[String]) -> Config {
@@ -486,8 +410,6 @@ fn parse_config(args: &[String]) -> Config {
         .and_then(|s| s.parse().ok())
         .unwrap_or(3001);
     let mut host = std::env::var("FARADAY_HOST").unwrap_or_else(|_| "127.0.0.1".into());
-    let mut static_dir: Option<String> = None;
-    let mut icons_dir: Option<String> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -502,17 +424,6 @@ fn parse_config(args: &[String]) -> Config {
                 host = args[i + 1].clone();
                 i += 2;
             }
-            "--static-dir" if i + 1 < args.len() => {
-                static_dir = Some(args[i + 1].clone());
-                i += 2;
-            }
-            "--icons-dir" if i + 1 < args.len() => {
-                icons_dir = std::fs::canonicalize(&args[i + 1])
-                    .ok()
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .or_else(|| Some(args[i + 1].clone()));
-                i += 2;
-            }
             _ => i += 1,
         }
     }
@@ -520,8 +431,6 @@ fn parse_config(args: &[String]) -> Config {
     Config {
         port,
         host,
-        static_dir,
-        icons_dir,
     }
 }
 
@@ -536,24 +445,9 @@ pub fn run(args: &[String]) {
     let config = parse_config(args);
     let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
     rt.block_on(async {
-        let state = ServerState {
-            icons_dir: Arc::new(config.icons_dir),
-        };
-
         let app = Router::new()
             .route("/ws", get(ws_handler))
-            .with_state(state);
-
-        let app = if let Some(dir) = config.static_dir {
-            eprintln!("Serving web UI from {dir} (disk)");
-            app.fallback(move |uri: Uri| {
-                let dir = dir.clone();
-                async move { disk_asset_handler(uri, &dir).await }
-            })
-        } else {
-            eprintln!("Serving web UI from embedded assets");
-            app.fallback(embedded_asset_handler)
-        };
+            .fallback(embedded_asset_handler);
 
         let addr = format!("{}:{}", config.host, config.port);
         eprintln!("Faraday server listening on http://{addr}");

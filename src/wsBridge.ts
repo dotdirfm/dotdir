@@ -221,9 +221,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
     },
     utils: {
       getHomePath: () => rpc('utils.getHomePath', {}) as Promise<string>,
-      getIconsPath: () => rpc('utils.getIconsPath', {}) as Promise<string>,
       getTerminalProfiles: () => rpc('utils.getTerminalProfiles', {}) as Promise<TerminalProfile[]>,
-      getBuiltinExtensionDirs: () => rpc('utils.getBuiltinExtensionDirs', {}) as Promise<string[]>,
     },
     theme: {
       get: () => Promise.resolve(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
