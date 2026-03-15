@@ -21,11 +21,13 @@ use std::sync::Arc;
 
 // ── Argument parsing ─────────────────────────────────────────────────
 
+#[cfg(unix)]
 struct Args {
     socket_path: String,
     token: String,
 }
 
+#[cfg(unix)]
 fn parse_args(args: &[String]) -> Result<Args, String> {
     let mut socket_path = None;
     let mut token = None;

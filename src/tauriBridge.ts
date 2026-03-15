@@ -72,7 +72,9 @@ export const tauriBridge = {
       return invoke<number>('fsa_open', { filePath });
     },
     async read(fd: number, offset: number, length: number): Promise<ArrayBuffer> {
-      const bytes = await invoke<number[]>('fsa_read', { fd, offset, length });
+      const offsetInt = Math.max(0, Math.floor(offset));
+      const lengthInt = Math.max(0, Math.floor(length));
+      const bytes = await invoke<number[]>('fsa_read', { fd, offset: offsetInt, length: lengthInt });
       return new Uint8Array(bytes).buffer;
     },
     async close(fd: number): Promise<void> {

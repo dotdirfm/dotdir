@@ -20,6 +20,14 @@ import type {
   MediaFileRef,
 } from './extensionApi';
 import { focusContext } from './focusContext';
+import {
+  getCachedEditorExtension,
+  takeCachedEditorExtension,
+  stashEditorExtension,
+} from './editorExtensionCache';
+
+// Oniguruma WASM for TextMate grammars in editor extensions (Vite ?url emits asset URL)
+import onigWasmUrl from 'vscode-oniguruma/release/onig.wasm?url';
 
 // ── Comlink UMD source (inlined into shell HTML) ─────────────────────
 
@@ -117,6 +125,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     style,
   } = containerProps;
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const extensionApiRef = useRef<Remote<ViewerExtensionApi> | Remote<EditorExtensionApi> | null>(null);
   const scriptBlobUrlRef = useRef<string | null>(null);
@@ -125,6 +134,9 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const [loading, setLoading] = useState(true);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+
+  const hasCachedEditor =
+    kind === 'editor' && !!getCachedEditorExtension(extensionDirPath, entry);
 
   const onNavigateMediaRef = useRef(
     containerProps.kind === 'viewer' ? containerProps.onNavigateMedia : undefined,
@@ -153,6 +165,39 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   }, []);
 
   useEffect(() => {
+    // Editor with cache: re-attach iframe and call mount (no full reload)
+    if (kind === 'editor' && hasCachedEditor) {
+      const cached = takeCachedEditorExtension(extensionDirPath, entry);
+      if (!cached) return;
+      const container = containerRef.current;
+      if (!container) return;
+      container.appendChild(cached.iframe);
+      iframeRef.current = cached.iframe;
+      extensionApiRef.current = cached.api;
+      setLoading(false);
+      (cached.api as Remote<EditorExtensionApi>)
+        .mount(props as EditorProps)
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : String(err));
+        });
+      return () => {
+        const iframe = iframeRef.current;
+        if (iframe && extensionApiRef.current) {
+          iframe.remove();
+          stashEditorExtension(
+            extensionDirPath,
+            entry,
+            iframe,
+            extensionApiRef.current as Remote<EditorExtensionApi>,
+            cached.scriptUrl,
+            cached.htmlUrl,
+          );
+          iframeRef.current = null;
+          extensionApiRef.current = null;
+        }
+      };
+    }
+
     let cancelled = false;
     const abortCtrl = new AbortController();
 
@@ -225,6 +270,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
             const file = await handle.getFile();
             return file.arrayBuffer();
           },
+          async readFileRange(path: string, offset: number, length: number): Promise<ArrayBuffer> {
+            const handle = new FileHandle(path, basename(path));
+            const file = await handle.getFile();
+            const slice = file.slice(offset, offset + length);
+            return slice.arrayBuffer();
+          },
           async readFileText(path: string): Promise<string> {
             const handle = new FileHandle(path, basename(path));
             const file = await handle.getFile();
@@ -241,6 +292,10 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           },
           onNavigateMedia(file: MediaFileRef): void {
             onNavigateMediaRef.current?.(file);
+          },
+          async getOnigurumaWasm(): Promise<ArrayBuffer> {
+            const r = await fetch(onigWasmUrl);
+            return r.arrayBuffer();
           },
         };
 
@@ -311,10 +366,27 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       cancelled = true;
       abortCtrl.abort();
       const api = extensionApiRef.current;
-      if (api) {
-        api.unmount().catch(() => {});
+      const iframe = iframeRef.current;
+      const scriptUrl = scriptBlobUrlRef.current;
+      const htmlUrl = htmlBlobUrlRef.current;
+      if (kind === 'editor' && iframe && api && scriptUrl && htmlUrl) {
+        iframe.remove();
+        stashEditorExtension(
+          extensionDirPath,
+          entry,
+          iframe,
+          api as Remote<EditorExtensionApi>,
+          scriptUrl,
+          htmlUrl,
+        );
+        scriptBlobUrlRef.current = null;
+        htmlBlobUrlRef.current = null;
+        extensionApiRef.current = null;
+        iframeRef.current = null;
+      } else {
+        if (api) api.unmount().catch(() => {});
+        cleanup();
       }
-      cleanup();
     };
   }, [extensionDirPath, entry, kind, cleanup]); // intentionally exclude `props`
 
@@ -342,17 +414,24 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   }
 
   return (
-    <div className={className} style={{ ...style, position: 'relative' }}>
+    <div
+      ref={containerRef}
+      className={className}
+      style={{ ...style, position: 'relative' }}
+    >
       {loading && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-muted, #888)' }}>
           Loading {kind}…
         </div>
       )}
-      <iframe
-        ref={iframeRef}
-        style={{ width: '100%', height: '100%', border: 'none', display: loading ? 'none' : 'block' }}
-        sandbox="allow-scripts allow-same-origin"
-      />
+      {!hasCachedEditor && (
+        <iframe
+          ref={iframeRef}
+          style={{ width: '100%', height: '100%', border: 'none', display: loading ? 'none' : 'block' }}
+          sandbox="allow-scripts allow-same-origin"
+          tabIndex={kind === 'viewer' && (props as ViewerProps).inline ? -1 : undefined}
+        />
+      )}
     </div>
   );
 }
@@ -431,6 +510,11 @@ interface EditorContainerWrapperProps {
   fileName: string;
   langId: string;
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  /** All languages from loaded extensions (for custom grammars). */
+  languages?: EditorProps['languages'];
+  /** All grammars with content from loaded extensions (for TextMate tokenization). */
+  grammars?: EditorProps['grammars'];
 }
 
 export function EditorContainer({
@@ -440,6 +524,9 @@ export function EditorContainer({
   fileName,
   langId,
   onClose,
+  onDirtyChange,
+  languages,
+  grammars,
 }: EditorContainerWrapperProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
 
@@ -456,7 +543,7 @@ export function EditorContainer({
     };
   }, [onClose]);
 
-  const editorProps: EditorProps = { filePath, fileName, langId };
+  const editorProps: EditorProps = { filePath, fileName, langId, extensionDirPath, languages, grammars };
 
   return (
     <dialog ref={dialogRef} className="file-editor">
@@ -466,6 +553,7 @@ export function EditorContainer({
         entry={entry}
         props={editorProps}
         onClose={() => dialogRef.current?.close()}
+        onDirtyChange={onDirtyChange}
         className="extension-editor-frame"
         style={{ width: '100%', height: '100%' }}
       />

@@ -15,10 +15,29 @@ export interface ViewerProps {
   mediaFiles?: MediaFileRef[];
 }
 
+/** Grammar contribution + loaded content (from host, for custom syntax highlighting). */
+export interface EditorGrammarPayload {
+  contribution: { language: string; scopeName: string; path: string; embeddedLanguages?: Record<string, string> };
+  content: object;
+}
+
+export interface EditorLanguagePayload {
+  id: string;
+  aliases?: string[];
+  extensions?: string[];
+  filenames?: string[];
+}
+
 export interface EditorProps {
   filePath: string;
   fileName: string;
   langId: string;
+  /** Extension root path (for reading package.json / grammars). */
+  extensionDirPath?: string;
+  /** All languages from loaded extensions (for Monaco registration). */
+  languages?: EditorLanguagePayload[];
+  /** All grammars with content from loaded extensions (for TextMate tokenization). */
+  grammars?: EditorGrammarPayload[];
 }
 
 export interface MediaFileRef {
@@ -32,10 +51,14 @@ export interface MediaFileRef {
 export interface HostApi {
   readFile(path: string): Promise<ArrayBuffer>;
   readFileText(path: string): Promise<string>;
+  /** Read a byte range (for chunked viewing). */
+  readFileRange?(path: string, offset: number, length: number): Promise<ArrayBuffer>;
   writeFile(path: string, content: string): Promise<void>;
   getTheme(): Promise<string>;
   onClose(): void;
   onNavigateMedia?(file: MediaFileRef): void;
+  /** Oniguruma WASM binary for TextMate grammars (optional). */
+  getOnigurumaWasm?(): Promise<ArrayBuffer>;
 }
 
 // ── Extension APIs (iframe exposes to host) ──────────────────────────

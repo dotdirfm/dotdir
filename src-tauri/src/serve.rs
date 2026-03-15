@@ -7,13 +7,15 @@ use axum::{
     body::Body,
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, State,
+        State,
     },
     http::{header, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::get,
     Router,
 };
+#[cfg(unix)]
+use axum::extract::Path;
 use crate::pty;
 use faraday_core::{
     error::FsError,

@@ -8,10 +8,9 @@ import type { FsChangeType } from './types';
 import { bridge } from './bridge';
 import { FileList } from './FileList';
 import { PanelTabs, type PanelTab } from './FileList/PanelTabs';
-import { FileViewer } from './FileViewer';
-import { FileEditor } from './FileEditor';
-import { ImageViewer, isMediaFile, type MediaFileEntry } from './ImageViewer';
+import { isMediaFile, type MediaFileEntry } from './mediaFiles';
 import { ViewerContainer, EditorContainer } from './ExtensionContainer';
+import { clearEditorExtensionCache } from './editorExtensionCache';
 import { viewerRegistry, editorRegistry, populateRegistries } from './viewerEditorRegistry';
 import { ModalDialog, type ModalDialogProps } from './ModalDialog';
 import { TerminalPanel } from './Terminal';
@@ -1217,6 +1216,7 @@ export function App() {
     };
 
     const unsub = extensionHost.onLoaded((exts) => {
+      clearEditorExtensionCache();
       latestExtensionsRef.current = exts;
       populateRegistries(exts);
       setExtensionLayers(exts, activeIconThemeRef.current);
@@ -1321,6 +1321,7 @@ export function App() {
               };
               const resolved = viewerRegistry.resolve(tab.name);
               if (resolved) {
+                const mediaFiles: MediaFileEntry[] = [];
                 return (
                   <ViewerContainer
                     extensionDirPath={resolved.extensionDirPath}
@@ -1329,29 +1330,15 @@ export function App() {
                     fileName={tab.name}
                     fileSize={tab.size}
                     inline
+                    mediaFiles={mediaFiles}
                     onClose={closeTab}
                   />
                 );
               }
-              const mediaFiles: MediaFileEntry[] = [];
-              return isMediaFile(tab.name) ? (
-                <ImageViewer
-                  filePath={tab.path}
-                  fileName={tab.name}
-                  fileSize={tab.size}
-                  mediaFiles={mediaFiles}
-                  onClose={closeTab}
-                  onNavigateMedia={() => {}}
-                  inline
-                />
-              ) : (
-                <FileViewer
-                  filePath={tab.path}
-                  fileName={tab.name}
-                  fileSize={tab.size}
-                  onClose={closeTab}
-                  inline
-                />
+              return (
+                <div style={{ padding: 16, color: 'var(--fg-muted, #888)', textAlign: 'center' }}>
+                  No viewer extension for this file type. Install viewer extensions from the extensions panel.
+                </div>
               );
             })()
           ) : null}
@@ -1400,6 +1387,7 @@ export function App() {
               };
               const resolved = viewerRegistry.resolve(tab.name);
               if (resolved) {
+                const mediaFiles: MediaFileEntry[] = [];
                 return (
                   <ViewerContainer
                     extensionDirPath={resolved.extensionDirPath}
@@ -1408,29 +1396,15 @@ export function App() {
                     fileName={tab.name}
                     fileSize={tab.size}
                     inline
+                    mediaFiles={mediaFiles}
                     onClose={closeTab}
                   />
                 );
               }
-              const mediaFiles: MediaFileEntry[] = [];
-              return isMediaFile(tab.name) ? (
-                <ImageViewer
-                  filePath={tab.path}
-                  fileName={tab.name}
-                  fileSize={tab.size}
-                  mediaFiles={mediaFiles}
-                  onClose={closeTab}
-                  onNavigateMedia={() => {}}
-                  inline
-                />
-              ) : (
-                <FileViewer
-                  filePath={tab.path}
-                  fileName={tab.name}
-                  fileSize={tab.size}
-                  onClose={closeTab}
-                  inline
-                />
+              return (
+                <div style={{ padding: 16, color: 'var(--fg-muted, #888)', textAlign: 'center' }}>
+                  No viewer extension for this file type. Install viewer extensions from the extensions panel.
+                </div>
               );
             })()
           ) : null}
@@ -1454,23 +1428,20 @@ export function App() {
             />
           );
         }
-        // Fallback to built-in viewers
-        return isMediaFile(viewerFile.name) ? (
-          <ImageViewer
-            filePath={viewerFile.path}
-            fileName={viewerFile.name}
-            fileSize={viewerFile.size}
-            mediaFiles={mediaFiles}
+        return (
+          <ModalDialog
+            title="No viewer"
+            message="No viewer extension found for this file type. Install viewer extensions (e.g. Image Viewer, File Viewer) from the extensions panel."
             onClose={() => setViewerFile(null)}
-            onNavigateMedia={handleNavigateMedia}
           />
-        ) : (
-          <FileViewer filePath={viewerFile.path} fileName={viewerFile.name} fileSize={viewerFile.size} onClose={() => setViewerFile(null)} />
         );
       })()}
       {editorFile && (() => {
         const resolved = editorRegistry.resolve(editorFile.name);
         if (resolved) {
+          const exts = latestExtensionsRef.current;
+          const allLanguages = exts.flatMap((e) => e.languages ?? []);
+          const allGrammars = exts.flatMap((e) => e.grammars ?? []);
           return (
             <EditorContainer
               extensionDirPath={resolved.extensionDirPath}
@@ -1479,15 +1450,15 @@ export function App() {
               fileName={editorFile.name}
               langId={editorFile.langId}
               onClose={() => setEditorFile(null)}
+              languages={allLanguages}
+              grammars={allGrammars}
             />
           );
         }
-        // Fallback to built-in Monaco editor
         return (
-          <FileEditor
-            filePath={editorFile.path}
-            fileName={editorFile.name}
-            langId={editorFile.langId}
+          <ModalDialog
+            title="No editor"
+            message="No editor extension found for this file type. Install an editor extension (e.g. Monaco Editor) from the extensions panel."
             onClose={() => setEditorFile(null)}
           />
         );

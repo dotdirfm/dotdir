@@ -80,8 +80,8 @@ export async function createJsoncFileWatcher<T>(
       console.log(`[${name}] Loaded`);
       onLoad?.(currentValue);
       notifyListeners();
-    } catch (err) {
-      if (err instanceof Error && (err.message?.includes('not found') || err.name === 'NotFoundError')) {
+    } catch (err: any) {
+      if (err && typeof err.message === 'string' && (err.message === "ENOENT" || err.message?.includes('not found') || err.name === 'NotFoundError')) {
         currentValue = defaultValue;
         onLoad?.(currentValue);
         notifyListeners();
