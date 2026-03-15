@@ -44,10 +44,31 @@ interface LoadedGrammar {
   content: object;
 }
 
+interface ExtensionViewerContribution {
+  id: string;
+  label: string;
+  patterns: string[];
+  mimeTypes?: string[];
+  entry: string;
+  priority?: number;
+}
+
+interface ExtensionEditorContribution {
+  id: string;
+  label: string;
+  patterns: string[];
+  mimeTypes?: string[];
+  langId?: string;
+  entry: string;
+  priority?: number;
+}
+
 interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme;
   languages?: ExtensionLanguage[];
   grammars?: ExtensionGrammar[];
+  viewers?: ExtensionViewerContribution[];
+  editors?: ExtensionEditorContribution[];
 }
 
 interface ExtensionManifest {
@@ -73,6 +94,8 @@ export interface WorkerLoadedExtension {
   iconThemeBasePath?: string;
   languages?: ExtensionLanguage[];
   grammars?: LoadedGrammar[];
+  viewers?: ExtensionViewerContribution[];
+  editors?: ExtensionEditorContribution[];
 }
 
 // ── File reading via RPC to main thread ─────────────────────────────
@@ -94,65 +117,83 @@ function extensionDirName(ref: ExtensionRef): string {
   return `${ref.publisher}-${ref.name}-${ref.version}`;
 }
 
-async function loadExtensions(homePath: string): Promise<WorkerLoadedExtension[]> {
-  const extensionsDir = join(homePath, '.faraday', 'extensions');
+async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtension | null> {
+  try {
+    const manifestText = await readTextFile(join(extDir, 'package.json'));
+    if (manifestText === null) return null;
+    const manifest: ExtensionManifest = JSON.parse(manifestText);
 
-  // Read extensions.json
+    const ref: ExtensionRef = {
+      publisher: manifest.publisher || 'unknown',
+      name: manifest.name || 'unknown',
+      version: manifest.version || '0.0.0',
+    };
+
+    let iconThemeFss: string | undefined;
+    let iconThemeBasePath: string | undefined;
+    if (manifest.contributes?.iconTheme?.path) {
+      const fssPath = join(extDir, manifest.contributes.iconTheme.path);
+      const fssText = await readTextFile(fssPath);
+      if (fssText !== null) {
+        iconThemeFss = fssText;
+        iconThemeBasePath = dirname(fssPath);
+      }
+    }
+
+    const languages = manifest.contributes?.languages;
+
+    let grammars: LoadedGrammar[] | undefined;
+    if (manifest.contributes?.grammars?.length) {
+      grammars = [];
+      for (const grammarContrib of manifest.contributes.grammars) {
+        try {
+          const grammarPath = join(extDir, grammarContrib.path);
+          const grammarText = await readTextFile(grammarPath);
+          if (grammarText !== null) {
+            const grammarContent = JSON.parse(grammarText);
+            grammars.push({ contribution: grammarContrib, content: grammarContent });
+          }
+        } catch {
+          // Skip grammars that fail to load
+        }
+      }
+    }
+
+    const viewers = manifest.contributes?.viewers;
+    const editors = manifest.contributes?.editors;
+
+    return { ref, manifest, dirPath: extDir, iconThemeFss, iconThemeBasePath, languages, grammars, viewers, editors };
+  } catch {
+    return null;
+  }
+}
+
+async function loadExtensions(homePath: string, builtInDirs: string[]): Promise<WorkerLoadedExtension[]> {
+  const loaded: WorkerLoadedExtension[] = [];
+
+  // 1. Load built-in extensions from provided dirs
+  for (const dir of builtInDirs) {
+    const ext = await loadExtensionFromDir(dir);
+    if (ext) loaded.push(ext);
+  }
+
+  // 2. Load user extensions from ~/.faraday/extensions/
+  const extensionsDir = join(homePath, '.faraday', 'extensions');
   let refs: ExtensionRef[];
   try {
     const text = await readTextFile(join(extensionsDir, 'extensions.json'));
-    if (text === null) return [];
+    if (text === null) return loaded;
     const parsed = JSON.parse(text);
     refs = Array.isArray(parsed) ? parsed : [];
   } catch {
-    return [];
+    return loaded;
   }
 
-  const loaded: WorkerLoadedExtension[] = [];
   for (const ref of refs) {
     if (!ref.publisher || !ref.name || !ref.version) continue;
-    try {
-      const extDir = join(extensionsDir, extensionDirName(ref));
-      const manifestText = await readTextFile(join(extDir, 'package.json'));
-      if (manifestText === null) continue;
-      const manifest: ExtensionManifest = JSON.parse(manifestText);
-
-      let iconThemeFss: string | undefined;
-      let iconThemeBasePath: string | undefined;
-      if (manifest.contributes?.iconTheme?.path) {
-        const fssPath = join(extDir, manifest.contributes.iconTheme.path);
-        const fssText = await readTextFile(fssPath);
-        if (fssText !== null) {
-          iconThemeFss = fssText;
-          iconThemeBasePath = dirname(fssPath);
-        }
-      }
-
-      // Load language contributions
-      const languages = manifest.contributes?.languages;
-
-      // Load grammar contributions
-      let grammars: LoadedGrammar[] | undefined;
-      if (manifest.contributes?.grammars?.length) {
-        grammars = [];
-        for (const grammarContrib of manifest.contributes.grammars) {
-          try {
-            const grammarPath = join(extDir, grammarContrib.path);
-            const grammarText = await readTextFile(grammarPath);
-            if (grammarText !== null) {
-              const grammarContent = JSON.parse(grammarText);
-              grammars.push({ contribution: grammarContrib, content: grammarContent });
-            }
-          } catch {
-            // Skip grammars that fail to load
-          }
-        }
-      }
-
-      loaded.push({ ref, manifest, dirPath: extDir, iconThemeFss, iconThemeBasePath, languages, grammars });
-    } catch {
-      continue;
-    }
+    const extDir = join(extensionsDir, extensionDirName(ref));
+    const ext = await loadExtensionFromDir(extDir);
+    if (ext) loaded.push(ext);
   }
 
   return loaded;
@@ -164,7 +205,7 @@ self.onmessage = (e: MessageEvent) => {
   const msg = e.data;
 
   if (msg.type === 'start') {
-    loadExtensions(msg.homePath)
+    loadExtensions(msg.homePath, msg.builtInDirs || [])
       .then((extensions) => {
         self.postMessage({ type: 'loaded', extensions });
       })

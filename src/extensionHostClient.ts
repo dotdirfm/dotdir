@@ -12,9 +12,38 @@ import type { LoadedExtension } from './extensions';
 
 type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
 
+/**
+ * Discover built-in extension directories.
+ * In dev: resolve from the repo `extensions/` dir (via import.meta.url).
+ * In production: Tauri bundles them into the app resources.
+ */
+async function discoverBuiltInExtensionDirs(): Promise<string[]> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const dirs: string[] = await invoke('get_builtin_extension_dirs');
+    return dirs;
+  } catch {
+    // Not Tauri or command not available — try to resolve from well-known path
+    // In dev, the extensions/ dir is at the repo root; the bridge can check existence.
+    const homePath = await bridge.utils.getHomePath();
+    // Try a few well-known dev paths
+    const candidates = [
+      // Vite dev server can resolve relative to root
+      '/extensions/faraday-viewers-basic',
+      '/extensions/faraday-editor-monaco',
+    ];
+    // For web/headless mode, we don't have filesystem access to the repo root.
+    // Built-in dirs are only supported in Tauri mode for now.
+    void candidates;
+    void homePath;
+    return [];
+  }
+}
+
 export class ExtensionHostClient {
   private worker: Worker | null = null;
   private homePath: string | null = null;
+  private builtInDirs: string[] | null = null;
   private listeners: ExtensionsLoadedCallback[] = [];
   private starting = false;
 
@@ -33,6 +62,9 @@ export class ExtensionHostClient {
     try {
       if (!this.homePath) {
         this.homePath = await bridge.utils.getHomePath();
+      }
+      if (!this.builtInDirs) {
+        this.builtInDirs = await discoverBuiltInExtensionDirs();
       }
       this.spawnWorker();
     } finally {
@@ -80,7 +112,11 @@ export class ExtensionHostClient {
     };
 
     this.worker = worker;
-    worker.postMessage({ type: 'start', homePath: this.homePath });
+    worker.postMessage({
+      type: 'start',
+      homePath: this.homePath,
+      builtInDirs: this.builtInDirs ?? [],
+    });
   }
 
   private async handleFileRead(worker: Worker, id: number, path: string): Promise<void> {

@@ -11,6 +11,8 @@ import { PanelTabs, type PanelTab } from './FileList/PanelTabs';
 import { FileViewer } from './FileViewer';
 import { FileEditor } from './FileEditor';
 import { ImageViewer, isMediaFile, type MediaFileEntry } from './ImageViewer';
+import { ViewerContainer, EditorContainer } from './ExtensionContainer';
+import { viewerRegistry, editorRegistry, populateRegistries } from './viewerEditorRegistry';
 import { ModalDialog, type ModalDialogProps } from './ModalDialog';
 import { TerminalPanel } from './Terminal';
 import { ActionBar } from './ActionBar';
@@ -1216,6 +1218,7 @@ export function App() {
 
     const unsub = extensionHost.onLoaded((exts) => {
       latestExtensionsRef.current = exts;
+      populateRegistries(exts);
       setExtensionLayers(exts, activeIconThemeRef.current);
       updateIconTheme(exts, activeIconThemeRef.current);
       registerLanguages(exts);
@@ -1312,6 +1315,24 @@ export function App() {
             (() => {
               const tab = leftTabs[leftActiveIndex];
               if (tab.type !== 'preview') return null;
+              const closeTab = () => {
+                setLeftTabs((prev) => prev.filter((_, i) => i !== leftActiveIndex));
+                setLeftActiveIndex(Math.max(0, leftActiveIndex - 1));
+              };
+              const resolved = viewerRegistry.resolve(tab.name);
+              if (resolved) {
+                return (
+                  <ViewerContainer
+                    extensionDirPath={resolved.extensionDirPath}
+                    entry={resolved.contribution.entry}
+                    filePath={tab.path}
+                    fileName={tab.name}
+                    fileSize={tab.size}
+                    inline
+                    onClose={closeTab}
+                  />
+                );
+              }
               const mediaFiles: MediaFileEntry[] = [];
               return isMediaFile(tab.name) ? (
                 <ImageViewer
@@ -1319,10 +1340,7 @@ export function App() {
                   fileName={tab.name}
                   fileSize={tab.size}
                   mediaFiles={mediaFiles}
-                  onClose={() => {
-                    setLeftTabs((prev) => prev.filter((_, i) => i !== leftActiveIndex));
-                    setLeftActiveIndex(Math.max(0, leftActiveIndex - 1));
-                  }}
+                  onClose={closeTab}
                   onNavigateMedia={() => {}}
                   inline
                 />
@@ -1331,10 +1349,7 @@ export function App() {
                   filePath={tab.path}
                   fileName={tab.name}
                   fileSize={tab.size}
-                  onClose={() => {
-                    setLeftTabs((prev) => prev.filter((_, i) => i !== leftActiveIndex));
-                    setLeftActiveIndex(Math.max(0, leftActiveIndex - 1));
-                  }}
+                  onClose={closeTab}
                   inline
                 />
               );
@@ -1379,6 +1394,24 @@ export function App() {
             (() => {
               const tab = rightTabs[rightActiveIndex];
               if (tab.type !== 'preview') return null;
+              const closeTab = () => {
+                setRightTabs((prev) => prev.filter((_, i) => i !== rightActiveIndex));
+                setRightActiveIndex(Math.max(0, rightActiveIndex - 1));
+              };
+              const resolved = viewerRegistry.resolve(tab.name);
+              if (resolved) {
+                return (
+                  <ViewerContainer
+                    extensionDirPath={resolved.extensionDirPath}
+                    entry={resolved.contribution.entry}
+                    filePath={tab.path}
+                    fileName={tab.name}
+                    fileSize={tab.size}
+                    inline
+                    onClose={closeTab}
+                  />
+                );
+              }
               const mediaFiles: MediaFileEntry[] = [];
               return isMediaFile(tab.name) ? (
                 <ImageViewer
@@ -1386,10 +1419,7 @@ export function App() {
                   fileName={tab.name}
                   fileSize={tab.size}
                   mediaFiles={mediaFiles}
-                  onClose={() => {
-                    setRightTabs((prev) => prev.filter((_, i) => i !== rightActiveIndex));
-                    setRightActiveIndex(Math.max(0, rightActiveIndex - 1));
-                  }}
+                  onClose={closeTab}
                   onNavigateMedia={() => {}}
                   inline
                 />
@@ -1398,10 +1428,7 @@ export function App() {
                   filePath={tab.path}
                   fileName={tab.name}
                   fileSize={tab.size}
-                  onClose={() => {
-                    setRightTabs((prev) => prev.filter((_, i) => i !== rightActiveIndex));
-                    setRightActiveIndex(Math.max(0, rightActiveIndex - 1));
-                  }}
+                  onClose={closeTab}
                   inline
                 />
               );
@@ -1411,8 +1438,24 @@ export function App() {
         </div>
       </div>
       <ActionBar />
-      {viewerFile &&
-        (isMediaFile(viewerFile.name) ? (
+      {viewerFile && (() => {
+        const resolved = viewerRegistry.resolve(viewerFile.name);
+        if (resolved) {
+          return (
+            <ViewerContainer
+              extensionDirPath={resolved.extensionDirPath}
+              entry={resolved.contribution.entry}
+              filePath={viewerFile.path}
+              fileName={viewerFile.name}
+              fileSize={viewerFile.size}
+              mediaFiles={mediaFiles}
+              onClose={() => setViewerFile(null)}
+              onNavigateMedia={handleNavigateMedia}
+            />
+          );
+        }
+        // Fallback to built-in viewers
+        return isMediaFile(viewerFile.name) ? (
           <ImageViewer
             filePath={viewerFile.path}
             fileName={viewerFile.name}
@@ -1423,15 +1466,32 @@ export function App() {
           />
         ) : (
           <FileViewer filePath={viewerFile.path} fileName={viewerFile.name} fileSize={viewerFile.size} onClose={() => setViewerFile(null)} />
-        ))}
-      {editorFile && (
-        <FileEditor
-          filePath={editorFile.path}
-          fileName={editorFile.name}
-          langId={editorFile.langId}
-          onClose={() => setEditorFile(null)}
-        />
-      )}
+        );
+      })()}
+      {editorFile && (() => {
+        const resolved = editorRegistry.resolve(editorFile.name);
+        if (resolved) {
+          return (
+            <EditorContainer
+              extensionDirPath={resolved.extensionDirPath}
+              entry={resolved.contribution.entry}
+              filePath={editorFile.path}
+              fileName={editorFile.name}
+              langId={editorFile.langId}
+              onClose={() => setEditorFile(null)}
+            />
+          );
+        }
+        // Fallback to built-in Monaco editor
+        return (
+          <FileEditor
+            filePath={editorFile.path}
+            fileName={editorFile.name}
+            langId={editorFile.langId}
+            onClose={() => setEditorFile(null)}
+          />
+        );
+      })()}
       {showExtensions && (
         <ExtensionsPanel
           onClose={() => setShowExtensions(false)}

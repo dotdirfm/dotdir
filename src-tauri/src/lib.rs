@@ -6,6 +6,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tauri::path::BaseDirectory;
 use tauri::{Emitter, Manager, State};
 
 #[cfg(unix)]
@@ -409,6 +410,23 @@ fn get_home_path() -> String {
 }
 
 #[tauri::command]
+fn get_builtin_extension_dirs(app: tauri::AppHandle) -> Vec<String> {
+    let mut dirs = Vec::new();
+    // Use PathResolver so we get the same path the bundler uses ($RESOURCE/extensions)
+    let Ok(extensions_dir) = app.path().resolve("extensions", BaseDirectory::Resource) else {
+        return dirs;
+    };
+    if let Ok(entries) = std::fs::read_dir(&extensions_dir) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                dirs.push(entry.path().to_string_lossy().into_owned());
+            }
+        }
+    }
+    dirs
+}
+
+#[tauri::command]
 fn get_theme(window: tauri::Window) -> String {
     match window.theme() {
         Ok(tauri::Theme::Dark) => "dark".to_string(),
@@ -468,6 +486,7 @@ pub fn run() {
             get_home_path,
             get_icons_path,
             get_terminal_profiles,
+            get_builtin_extension_dirs,
             get_theme,
             debug_log,
             pty_spawn,

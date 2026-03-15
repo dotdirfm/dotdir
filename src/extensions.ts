@@ -55,6 +55,25 @@ export interface ExtensionMenu {
   when?: string;
 }
 
+export interface ExtensionViewerContribution {
+  id: string;
+  label: string;
+  patterns: string[];
+  mimeTypes?: string[];
+  entry: string;
+  priority?: number;
+}
+
+export interface ExtensionEditorContribution {
+  id: string;
+  label: string;
+  patterns: string[];
+  mimeTypes?: string[];
+  langId?: string;
+  entry: string;
+  priority?: number;
+}
+
 export interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme; // FSS format (single)
   iconThemes?: ExtensionIconThemeVSCode[]; // VS Code format (array)
@@ -66,6 +85,8 @@ export interface ExtensionContributions {
     commandPalette?: ExtensionMenu[];
     'explorer/context'?: ExtensionMenu[];
   };
+  viewers?: ExtensionViewerContribution[];
+  editors?: ExtensionEditorContribution[];
 }
 
 export interface ExtensionManifest {
@@ -110,6 +131,10 @@ export interface LoadedExtension {
   commands?: ExtensionCommand[];
   /** Keybinding contributions from this extension */
   keybindings?: ExtensionKeybinding[];
+  /** Viewer contributions from this extension */
+  viewers?: ExtensionViewerContribution[];
+  /** Editor contributions from this extension */
+  editors?: ExtensionEditorContribution[];
 }
 
 export interface MarketplaceExtension {
@@ -241,6 +266,10 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
       const commands = manifest.contributes?.commands;
       const keybindings = manifest.contributes?.keybindings;
 
+      // Load viewer and editor contributions
+      const viewers = manifest.contributes?.viewers;
+      const editors = manifest.contributes?.editors;
+
       loaded.push({
         ref,
         manifest,
@@ -254,6 +283,8 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         grammars,
         commands,
         keybindings,
+        viewers,
+        editors,
       });
     } catch {
       continue;

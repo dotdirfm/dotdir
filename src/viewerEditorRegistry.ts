@@ -1,0 +1,111 @@
+/**
+ * Viewer & Editor Registries
+ *
+ * Resolves which viewer/editor extension should handle a given file
+ * based on glob patterns and priority.
+ */
+
+import type { ExtensionViewerContribution, ExtensionEditorContribution, LoadedExtension } from './extensions';
+
+export interface ResolvedViewer {
+  contribution: ExtensionViewerContribution;
+  extensionDirPath: string;
+}
+
+export interface ResolvedEditor {
+  contribution: ExtensionEditorContribution;
+  extensionDirPath: string;
+}
+
+interface RegistryEntry<T> {
+  contribution: T;
+  extensionDirPath: string;
+}
+
+function matchPattern(pattern: string, fileName: string): boolean {
+  if (pattern === '*' || pattern === '*.*') return true;
+
+  if (pattern.startsWith('*.')) {
+    const ext = pattern.slice(1); // e.g. ".png"
+    return fileName.toLowerCase().endsWith(ext.toLowerCase());
+  }
+
+  // Exact match
+  return fileName.toLowerCase() === pattern.toLowerCase();
+}
+
+function matchesAny(patterns: string[], fileName: string): boolean {
+  return patterns.some((p) => matchPattern(p, fileName));
+}
+
+function resolve<T extends { patterns: string[]; priority?: number }>(
+  entries: RegistryEntry<T>[],
+  fileName: string,
+): RegistryEntry<T> | null {
+  const matches = entries.filter((e) => matchesAny(e.contribution.patterns, fileName));
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => (b.contribution.priority ?? 0) - (a.contribution.priority ?? 0));
+  return matches[0];
+}
+
+class ViewerRegistry {
+  private entries: RegistryEntry<ExtensionViewerContribution>[] = [];
+
+  clear(): void {
+    this.entries = [];
+  }
+
+  register(contribution: ExtensionViewerContribution, extensionDirPath: string): void {
+    this.entries.push({ contribution, extensionDirPath });
+  }
+
+  resolve(fileName: string): ResolvedViewer | null {
+    return resolve(this.entries, fileName);
+  }
+
+  getAll(): readonly RegistryEntry<ExtensionViewerContribution>[] {
+    return this.entries;
+  }
+}
+
+class EditorRegistry {
+  private entries: RegistryEntry<ExtensionEditorContribution>[] = [];
+
+  clear(): void {
+    this.entries = [];
+  }
+
+  register(contribution: ExtensionEditorContribution, extensionDirPath: string): void {
+    this.entries.push({ contribution, extensionDirPath });
+  }
+
+  resolve(fileName: string): ResolvedEditor | null {
+    return resolve(this.entries, fileName);
+  }
+
+  getAll(): readonly RegistryEntry<ExtensionEditorContribution>[] {
+    return this.entries;
+  }
+}
+
+export const viewerRegistry = new ViewerRegistry();
+export const editorRegistry = new EditorRegistry();
+
+/** Populate registries from loaded extensions. Called when extensions finish loading. */
+export function populateRegistries(extensions: LoadedExtension[]): void {
+  viewerRegistry.clear();
+  editorRegistry.clear();
+
+  for (const ext of extensions) {
+    if (ext.viewers) {
+      for (const v of ext.viewers) {
+        viewerRegistry.register(v, ext.dirPath);
+      }
+    }
+    if (ext.editors) {
+      for (const e of ext.editors) {
+        editorRegistry.register(e, ext.dirPath);
+      }
+    }
+  }
+}
