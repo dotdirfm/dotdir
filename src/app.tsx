@@ -13,6 +13,7 @@ import { ViewerContainer, EditorContainer } from './ExtensionContainer';
 import { clearEditorExtensionCache } from './editorExtensionCache';
 import { viewerRegistry, editorRegistry, populateRegistries } from './viewerEditorRegistry';
 import { ModalDialog, type ModalDialogProps } from './ModalDialog';
+import { OpenCreateFileDialog, type LanguageOption } from './OpenCreateFileDialog';
 import { TerminalPanel } from './Terminal';
 import { ActionBar } from './ActionBar';
 import { ExtensionsPanel } from './ExtensionsPanel';
@@ -307,6 +308,7 @@ export function App() {
   const expectedTerminalCwdsRef = useRef<Map<string, number>>(new Map());
   const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
+  const [openCreateFileDialog, setOpenCreateFileDialog] = useState<{ currentPath: string; languages: LanguageOption[] } | null>(null);
   const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
   const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
   const [initialLeftPanel, setInitialLeftPanel] = useState<PanelPersistedState | undefined>(undefined);
@@ -364,6 +366,19 @@ export function App() {
   const handleEditFile = useCallback((filePath: string, fileName: string, fileSize: number, langId: string) => {
     setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
   }, []);
+
+  const handleOpenCreateFileConfirm = useCallback(
+    async (filePath: string, fileName: string, langId: string) => {
+      setOpenCreateFileDialog(null);
+      const exists = await bridge.fsa.exists(filePath);
+      if (!exists) {
+        await bridge.fsa.writeFile(filePath, '');
+      }
+      const size = exists ? (await bridge.fsa.stat(filePath)).size : 0;
+      setEditorFile({ path: filePath, name: fileName, size, langId });
+    },
+    []
+  );
 
   const rememberExpectedTerminalCwd = useCallback((path: string) => {
     const normalized = normalizeTerminalPath(path);
@@ -970,6 +985,32 @@ export function App() {
       when: 'focusPanel',
     }));
 
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.openCreateFile',
+      'Open / Create File',
+      () => {
+        const panel = activePanelRef.current === 'left' ? left : right;
+        const currentPath = panel.currentPath;
+        const exts = latestExtensionsRef.current;
+        const langList = exts.flatMap((e) => e.languages ?? []);
+        const seen = new Set<string>();
+        const languages: LanguageOption[] = langList
+          .filter((l) => {
+            if (seen.has(l.id)) return false;
+            seen.add(l.id);
+            return true;
+          })
+          .map((l) => ({ id: l.id, label: l.aliases?.[0] ?? l.id }));
+        setOpenCreateFileDialog({ currentPath, languages });
+      },
+      { category: 'File', when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.openCreateFile',
+      key: 'shift+f4',
+      when: 'focusPanel',
+    }));
+
     // Command palette
     disposables.push(commandRegistry.registerCommand(
       'faraday.showCommandPalette',
@@ -1514,6 +1555,14 @@ export function App() {
         />
       )}
       {dialog && <ModalDialog {...dialog} onClose={() => setDialog(null)} />}
+      {openCreateFileDialog && (
+        <OpenCreateFileDialog
+          currentPath={openCreateFileDialog.currentPath}
+          languages={openCreateFileDialog.languages}
+          onConfirm={handleOpenCreateFileConfirm}
+          onCancel={() => setOpenCreateFileDialog(null)}
+        />
+      )}
       <CommandPalette open={commandPalette.open} onOpenChange={commandPalette.setOpen} />
     </div>
   );

@@ -570,6 +570,54 @@ body.terminal-resizing {
   outline-offset: 1px;
 }
 
+.open-create-file-dialog .modal-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.open-create-file-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.open-create-file-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.open-create-file-field label {
+  font-size: 12px;
+  color: var(--fg-secondary);
+}
+
+.open-create-file-field input,
+.open-create-file-field select {
+  padding: 6px 8px;
+  font-size: 13px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+}
+
+.open-create-file-field input:focus,
+.open-create-file-field select:focus {
+  outline: 2px solid var(--border-active);
+  outline-offset: 0;
+}
+
+.open-create-file-hint {
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.modal-dialog-buttons button[type="submit"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .file-list {
   display: flex;
   flex-direction: column;
