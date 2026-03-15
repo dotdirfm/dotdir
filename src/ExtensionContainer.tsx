@@ -47,6 +47,7 @@ function buildShellHtml(
   comlinkSrc: string,
   scriptBlobUrl: string,
   themeClass: string,
+  handshakeId: string,
 ): string {
   return `<!DOCTYPE html>
 <html>
@@ -63,6 +64,7 @@ function buildShellHtml(
 </style>
 </head>
 <body class="${themeClass}">
+<script>window.__faradayHandshakeId=${JSON.stringify(handshakeId)};<\/script>
 <script>${comlinkSrc}<\/script>
 <script src="${scriptBlobUrl}"><\/script>
 </body>
@@ -173,7 +175,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         const themeClass = theme === 'light' || theme === 'high-contrast-light'
           ? 'faraday-light'
           : 'faraday-dark';
-        const html = buildShellHtml(comlinkSrc, scriptUrl, themeClass);
+        const handshakeId = `faraday-${crypto.randomUUID()}`;
+        const html = buildShellHtml(comlinkSrc, scriptUrl, themeClass, handshakeId);
         const htmlBlob = new Blob([html], { type: 'text/html' });
         const htmlUrl = URL.createObjectURL(htmlBlob);
         htmlBlobUrlRef.current = htmlUrl;
@@ -191,7 +194,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
             3000,
           );
           const handler = (event: MessageEvent) => {
-            if (event.source !== iframe.contentWindow) return;
+            if (event.data?.handshakeId !== handshakeId) return;
             if (event.data?.type === 'faraday-error') {
               clearTimeout(timeout);
               window.removeEventListener('message', handler);
@@ -246,7 +249,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         Comlink.expose(hostApi, port1);
 
         iframe.contentWindow!.postMessage(
-          { type: 'faraday-init', port: port2 },
+          { type: 'faraday-init', port: port2, handshakeId },
           '*',
           [port2],
         );
@@ -259,7 +262,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
               5000,
             );
             const handler = (event: MessageEvent) => {
-              if (event.source !== iframe.contentWindow) return;
+              if (event.data?.handshakeId !== handshakeId) return;
               if (event.data?.type === 'faraday-error') {
                 clearTimeout(timeout);
                 window.removeEventListener('message', handler);

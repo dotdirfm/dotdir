@@ -46,6 +46,7 @@ export interface Bridge {
     getHomePath(): Promise<string>;
     getIconsPath(): Promise<string>;
     getTerminalProfiles(): Promise<TerminalProfile[]>;
+    getBuiltinExtensionDirs(): Promise<string[]>;
   };
   theme: {
     get(): Promise<string>;

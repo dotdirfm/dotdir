@@ -14,28 +14,23 @@ type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
 
 /**
  * Discover built-in extension directories.
- * In dev: resolve from the repo `extensions/` dir (via import.meta.url).
- * In production: Tauri bundles them into the app resources.
+ * Tauri: uses bundled resources. Headless (faraday serve): uses bridge RPC so the server
+ * can return paths to its extensions dir.
  */
 async function discoverBuiltInExtensionDirs(): Promise<string[]> {
   try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    const dirs: string[] = await invoke('get_builtin_extension_dirs');
-    return dirs;
+    const { isTauri } = await import('@tauri-apps/api/core');
+    if (isTauri()) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<string[]>('get_builtin_extension_dirs');
+    }
   } catch {
-    // Not Tauri or command not available — try to resolve from well-known path
-    // In dev, the extensions/ dir is at the repo root; the bridge can check existence.
-    const homePath = await bridge.utils.getHomePath();
-    // Try a few well-known dev paths
-    const candidates = [
-      // Vite dev server can resolve relative to root
-      '/extensions/faraday-viewers-basic',
-      '/extensions/faraday-editor-monaco',
-    ];
-    // For web/headless mode, we don't have filesystem access to the repo root.
-    // Built-in dirs are only supported in Tauri mode for now.
-    void candidates;
-    void homePath;
+    // Tauri not available (e.g. not in Tauri env)
+  }
+  // Headless / serve: ask the backend for built-in extension dirs
+  try {
+    return await bridge.utils.getBuiltinExtensionDirs();
+  } catch {
     return [];
   }
 }

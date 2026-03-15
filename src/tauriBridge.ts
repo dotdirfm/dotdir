@@ -145,6 +145,9 @@ export const tauriBridge = {
     async getTerminalProfiles(): Promise<TerminalProfile[]> {
       return invoke<RustTerminalProfile[]>('get_terminal_profiles');
     },
+    async getBuiltinExtensionDirs(): Promise<string[]> {
+      return invoke<string[]>('get_builtin_extension_dirs');
+    },
   },
   theme: {
     async get(): Promise<string> {

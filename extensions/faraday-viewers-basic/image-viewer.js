@@ -249,33 +249,48 @@
     document.head.appendChild(style);
   }
 
-  // Comlink handshake: signal ready first so host sends faraday-init after we're listening
+  var handshakeId = typeof window.__faradayHandshakeId !== 'undefined' ? window.__faradayHandshakeId : null;
+  function sendLoaded() {
+    window.parent.postMessage(
+      handshakeId != null ? { type: 'faraday-loaded', handshakeId: handshakeId } : { type: 'faraday-loaded' },
+      '*'
+    );
+  }
+  function sendReady(port) {
+    window.parent.postMessage(
+      handshakeId != null ? { type: 'faraday-ready', port: port, handshakeId: handshakeId } : { type: 'faraday-ready', port: port },
+      '*',
+      [port]
+    );
+  }
+  function sendError(msg) {
+    window.parent.postMessage(
+      handshakeId != null ? { type: 'faraday-error', message: msg, handshakeId: handshakeId } : { type: 'faraday-error', message: msg },
+      '*'
+    );
+  }
   function onInit(event) {
     if (!event.data || event.data.type !== 'faraday-init') return;
     window.removeEventListener('message', onInit);
     if (typeof window.Comlink === 'undefined') {
-      window.parent.postMessage({ type: 'faraday-error', message: 'Comlink not loaded' }, '*');
+      sendError('Comlink not loaded');
       return;
     }
     var Comlink = window.Comlink;
     var port = event.data.port;
     if (!port) {
-      window.parent.postMessage({ type: 'faraday-error', message: 'No port in faraday-init' }, '*');
+      sendError('No port in faraday-init');
       return;
     }
     try {
       hostApi = Comlink.wrap(port);
       var channel = new MessageChannel();
       Comlink.expose(extensionApi, channel.port1);
-      window.parent.postMessage(
-        { type: 'faraday-ready', port: channel.port2 },
-        '*',
-        [channel.port2]
-      );
+      sendReady(channel.port2);
     } catch (e) {
-      window.parent.postMessage({ type: 'faraday-error', message: String(e && e.message) }, '*');
+      sendError(String(e && e.message));
     }
   }
   window.addEventListener('message', onInit);
-  window.parent.postMessage({ type: 'faraday-loaded' }, '*');
+  sendLoaded();
 })();

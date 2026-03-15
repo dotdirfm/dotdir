@@ -289,6 +289,34 @@ fn rpc_error(id: &Value, e: &FsError) -> Message {
     )
 }
 
+/// Discover built-in extension dirs for headless serve (e.g. repo/extensions/* with package.json).
+fn get_builtin_extension_dirs() -> Vec<String> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd.join("extensions"));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        // target/debug/faraday or target/release/faraday -> repo root
+        if let Some(p) = exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
+            roots.push(p.join("extensions"));
+        }
+    }
+    for root in roots {
+        let Ok(rd) = std::fs::read_dir(&root) else { continue };
+        let mut dirs: Vec<String> = rd
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .filter(|e| e.path().join("package.json").exists())
+            .map(|e| e.path().to_string_lossy().into_owned())
+            .collect();
+        if !dirs.is_empty() {
+            dirs.sort();
+            return dirs;
+        }
+    }
+    Vec::new()
+}
+
 fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, FsError> {
     match method {
         "fs.entries" => {
@@ -362,6 +390,7 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
         )),
         "utils.getIconsPath" => Ok(json!(session.icons_dir.as_deref().unwrap_or(""))),
         "utils.getTerminalProfiles" => Ok(serde_json::to_value(pty::list_profiles()).unwrap()),
+        "utils.getBuiltinExtensionDirs" => Ok(serde_json::to_value(get_builtin_extension_dirs()).unwrap()),
         _ => Err(FsError::InvalidInput),
     }
 }
