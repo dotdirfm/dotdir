@@ -14,6 +14,8 @@ interface FileViewerProps {
   fileName: string;
   fileSize: number;
   onClose: () => void;
+  /** When true, render inside a div (e.g. panel tab) instead of a modal dialog. */
+  inline?: boolean;
 }
 
 interface ScreenLine {
@@ -36,8 +38,9 @@ async function readChunkAt(file: File, offset: number, length: number): Promise<
   return new Uint8Array(buf);
 }
 
-export function FileViewer({ filePath, fileName, fileSize, onClose }: FileViewerProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
+export function FileViewer({ filePath, fileName, fileSize, onClose, inline = false }: FileViewerProps) {
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const scrollbarRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
@@ -384,7 +387,9 @@ export function FileViewer({ filePath, fileName, fileSize, onClose }: FileViewer
   }, [filePath, fillScreen, commitScreen, measureViewport]);
 
   useEffect(() => {
-    const dialog = dialogRef.current!;
+    if (inline) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
     dialog.showModal();
     focusContext.push('viewer');
     const handleClose = () => onClose();
@@ -393,7 +398,7 @@ export function FileViewer({ filePath, fileName, fileSize, onClose }: FileViewer
       dialog.removeEventListener('close', handleClose);
       focusContext.pop('viewer');
     };
-  }, [onClose]);
+  }, [inline, onClose]);
 
   useEffect(() => {
     requestAnimationFrame(() => {
@@ -631,24 +636,27 @@ export function FileViewer({ filePath, fileName, fileSize, onClose }: FileViewer
     }
   }, [scrollUp, scrollDown]);
 
-  return (
-    <dialog
-      ref={dialogRef}
-      className="file-viewer"
-    >
-      <div className="file-viewer-header">
-        <span style={{ flex: 1 }}>{fileName}</span>
-        {wrap && <span style={{ marginLeft: 12 }}>Wrap</span>}
-        <span style={{ marginLeft: 12 }}>{displayedSize > 0 ? formatBytes(displayedSize) : '0 B'}</span>
-        <button
-          className="dialog-close-btn"
-          onClick={() => dialogRef.current?.close()}
-          title="Close (Esc)"
-        >
-          ×
-        </button>
-      </div>
-      <div className="file-viewer-body">
+  const header = (
+    <div className="file-viewer-header">
+      <span style={{ flex: 1 }}>{fileName}</span>
+      {wrap && <span style={{ marginLeft: 12 }}>Wrap</span>}
+      <span style={{ marginLeft: 12 }}>{displayedSize > 0 ? formatBytes(displayedSize) : '0 B'}</span>
+      <button
+        className="dialog-close-btn"
+        onClick={() => (inline ? onClose() : dialogRef.current?.close())}
+        title="Close (Esc)"
+      >
+        ×
+      </button>
+    </div>
+  );
+
+  const body = (
+    <>
+      <div
+        className="file-viewer-body"
+        style={inline ? { flex: 1, minHeight: 0, display: 'flex' } : undefined}
+      >
         <div
           className="file-viewer-text"
           ref={bodyRef}
@@ -685,6 +693,32 @@ export function FileViewer({ filePath, fileName, fileSize, onClose }: FileViewer
           />
         </div>
       </div>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div
+        ref={(el) => {
+          containerRef.current = el;
+        }}
+        className="file-viewer file-viewer-inline"
+      >
+        {header}
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <dialog
+      ref={(el) => {
+        dialogRef.current = el;
+      }}
+      className="file-viewer"
+    >
+      {header}
+      {body}
     </dialog>
   );
 }

@@ -17,7 +17,7 @@ export const Breadcrumbs = memo(function Breadcrumbs({ currentPath, onNavigate }
   const segments = useMemo(() => getBreadcrumbSegments(currentPath), [currentPath]);
 
   const handleSegmentClick = useCallback(
-    (seg: { path: string }, i: number, isLast: boolean) => {
+    (seg: { path: string }, _i: number, isLast: boolean) => {
       if (isLast) {
         void navigator.clipboard.writeText(currentPath).then(() => {
           if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);

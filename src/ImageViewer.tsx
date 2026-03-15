@@ -57,14 +57,16 @@ interface ImageViewerProps {
   mediaFiles: MediaFileEntry[];
   onClose: () => void;
   onNavigateMedia: (file: MediaFileEntry) => void;
+  /** When true, render inside a div (e.g. panel tab) instead of a modal dialog. */
+  inline?: boolean;
 }
 
-export function ImageViewer({ filePath, fileName, fileSize, mediaFiles, onClose, onNavigateMedia }: ImageViewerProps) {
+export function ImageViewer({ filePath, fileName, fileSize, mediaFiles, onClose, onNavigateMedia, inline = false }: ImageViewerProps) {
   const isVideo = isVideoFile(fileName);
   const isVideoRef = useRef(isVideo);
   isVideoRef.current = isVideo;
 
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +100,9 @@ export function ImageViewer({ filePath, fileName, fileSize, mediaFiles, onClose,
   // ── Dialog lifecycle ──────────────────────────────────────────────
 
   useEffect(() => {
-    const dialog = dialogRef.current!;
+    if (inline) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
     dialog.showModal();
     focusContext.push('viewer');
     const handleClose = () => onClose();
@@ -107,7 +111,7 @@ export function ImageViewer({ filePath, fileName, fileSize, mediaFiles, onClose,
       dialog.removeEventListener('close', handleClose);
       focusContext.pop('viewer');
     };
-  }, [onClose]);
+  }, [inline, onClose]);
 
   useEffect(() => {
     if (objectUrl) bodyRef.current?.focus();
@@ -387,13 +391,13 @@ export function ImageViewer({ filePath, fileName, fileSize, mediaFiles, onClose,
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  return (
-    <dialog ref={dialogRef} className="file-viewer">
+  const content = (
+    <>
       <div className="file-viewer-header">
         <span style={{ flex: 1 }}>{fileName}</span>
         <button
           className="dialog-close-btn"
-          onClick={() => dialogRef.current?.close()}
+          onClick={() => (inline ? onClose() : dialogRef.current?.close())}
           title="Close (Esc)"
         >
           ×
@@ -475,6 +479,20 @@ export function ImageViewer({ filePath, fileName, fileSize, mediaFiles, onClose,
           )}
         </div>
       </div>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div className="file-viewer image-viewer-inline">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <dialog ref={(el) => { dialogRef.current = el; }} className="file-viewer">
+      {content}
     </dialog>
   );
 }
