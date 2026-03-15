@@ -108,7 +108,7 @@ export function ActionBar() {
           className={`action-bar-item${item.command ? '' : ' disabled'}`}
           onClick={() => handleClick(item)}
         >
-          <span className="action-bar-key">{item.fKey}</span>
+          <span className="action-bar-key">F{item.fKey}</span>
           <span className="action-bar-label">
             {item.command?.title ?? ''}
           </span>

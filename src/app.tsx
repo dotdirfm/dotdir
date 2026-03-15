@@ -180,6 +180,9 @@ function usePanel(theme: ThemeKind, showError: (message: string) => void) {
           showErrorRef.current(`Failed to read directory: ${msg}`);
         }
       } finally {
+        if (navAbortRef.current === abort) {
+          navAbortRef.current = null;
+        }
         clearTimeout(navTimerRef.current!);
         navTimerRef.current = null;
         setNavigating(false);
