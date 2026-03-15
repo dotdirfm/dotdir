@@ -385,6 +385,26 @@ export function App() {
     setViewerFile(prev => prev ? { ...file, panel: prev.panel } : null);
   }, []);
 
+  // When image/media viewer is open, ArrowLeft/ArrowRight navigate between media files (host handles keys so they work even when iframe has no focus)
+  useEffect(() => {
+    if (!viewerFile || mediaFiles.length === 0) return;
+    const idx = mediaFiles.findIndex((f) => f.path === viewerFile.path);
+    if (idx < 0) return;
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as Node;
+      if (target && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable))) return;
+      if (e.key === 'ArrowLeft' && idx > 0) {
+        handleNavigateMedia(mediaFiles[idx - 1]!);
+        e.preventDefault();
+      } else if (e.key === 'ArrowRight' && idx < mediaFiles.length - 1) {
+        handleNavigateMedia(mediaFiles[idx + 1]!);
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [viewerFile, mediaFiles, handleNavigateMedia]);
+
   const viewerActiveName = viewerFile && isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
   const leftRequestedCursor = viewerFile?.panel === 'left' ? viewerActiveName : undefined;
   const rightRequestedCursor = viewerFile?.panel === 'right' ? viewerActiveName : undefined;

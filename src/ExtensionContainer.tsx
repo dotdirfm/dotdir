@@ -7,7 +7,7 @@
 
 import * as Comlink from 'comlink';
 import type { Remote } from 'comlink';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileHandle } from './fsa';
 import { bridge } from './bridge';
 import { join, basename } from './path';
@@ -113,6 +113,8 @@ interface EditorContainerProps extends ExtensionContainerProps {
   props: EditorProps;
   onClose: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  /** Called when the editor extension is ready (after first mount). Use to e.g. call setLanguage. */
+  onEditorReady?: (api: Remote<EditorExtensionApi>) => void;
 }
 
 export type ContainerProps = ViewerContainerProps | EditorContainerProps;
@@ -160,8 +162,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const onDirtyChangeRef = useRef(
     containerProps.kind === 'editor' ? containerProps.onDirtyChange : undefined,
   );
+  const onEditorReadyRef = useRef(
+    containerProps.kind === 'editor' ? containerProps.onEditorReady : undefined,
+  );
   if (containerProps.kind === 'editor') {
     onDirtyChangeRef.current = containerProps.onDirtyChange;
+    onEditorReadyRef.current = containerProps.onEditorReady;
   }
 
   const cleanup = useCallback(() => {
@@ -374,6 +380,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           await (extensionApi as Remote<ViewerExtensionApi>).mount(props as ViewerProps);
         } else {
           await (extensionApi as Remote<EditorExtensionApi>).mount(props as EditorProps);
+          onEditorReadyRef.current?.(extensionApi as Remote<EditorExtensionApi>);
         }
 
         setLoading(false);
@@ -459,7 +466,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           ref={iframeRef}
           style={{ width: '100%', height: '100%', border: 'none', display: loading ? 'none' : 'block' }}
           sandbox="allow-scripts allow-same-origin"
-          tabIndex={kind === 'viewer' && (props as ViewerProps).inline ? -1 : undefined}
+          tabIndex={kind === 'viewer' && (props as ViewerProps).inline ? -1 : 0}
         />
       )}
     </div>
@@ -509,6 +516,22 @@ export function ViewerContainer({
 
   const viewerProps: ViewerProps = { filePath, fileName, fileSize, inline, mediaFiles };
 
+  const toolbarHeight = 38;
+  const toolbar = (
+    <div className="extension-dialog-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border, #333)', flexShrink: 0, minHeight: toolbarHeight, boxSizing: 'border-box' }}>
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={fileName}>{fileName}</span>
+      <button
+        type="button"
+        title="Close (Esc)"
+        onClick={inline ? onClose : () => dialogRef.current?.close()}
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, padding: '0 8px', flexShrink: 0 }}
+        aria-label="Close"
+      >
+        ×
+      </button>
+    </div>
+  );
+
   const container = (
     <ExtensionContainer
       kind="viewer"
@@ -523,12 +546,18 @@ export function ViewerContainer({
   );
 
   if (inline) {
-    return <div className="file-viewer file-viewer-inline" style={{ display: 'flex', flexDirection: 'column' }}>{container}</div>;
+    return (
+      <div className="file-viewer file-viewer-inline" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {toolbar}
+        <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
+      </div>
+    );
   }
 
   return (
-    <dialog ref={dialogRef} className="file-viewer">
-      {container}
+    <dialog ref={dialogRef} className="file-viewer" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
+      {toolbar}
+      <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
     </dialog>
   );
 }
@@ -559,6 +588,12 @@ export function EditorContainer({
   grammars,
 }: EditorContainerWrapperProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const editorApiRef = useRef<Remote<EditorExtensionApi> | null>(null);
+  const [currentLangId, setCurrentLangId] = useState(langId);
+
+  useEffect(() => {
+    setCurrentLangId(langId);
+  }, [langId]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -570,23 +605,78 @@ export function EditorContainer({
     return () => {
       dialog.removeEventListener('close', handleClose);
       focusContext.pop('editor');
+      editorApiRef.current = null;
     };
   }, [onClose]);
 
-  const editorProps: EditorProps = { filePath, fileName, langId, extensionDirPath, languages, grammars };
+  const editorProps: EditorProps = { filePath, fileName, langId, extensionDirPath, languages, grammars, inline: false };
+
+  const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const next = e.target.value;
+    setCurrentLangId(next);
+    const api = editorApiRef.current;
+    if (api && typeof api.setLanguage === 'function') api.setLanguage(next);
+  };
+
+  // Deduplicate by lang.id so we don't get duplicate keys (e.g. "xml" from multiple extensions)
+  const langList = useMemo(() => {
+    const list = languages ?? [];
+    const seen = new Set<string>();
+    return list.filter((lang) => {
+      if (seen.has(lang.id)) return false;
+      seen.add(lang.id);
+      return true;
+    });
+  }, [languages]);
+  const showLangSelect = langList.length > 0;
+
+  const toolbarHeight = 38;
 
   return (
-    <dialog ref={dialogRef} className="file-editor">
-      <ExtensionContainer
-        kind="editor"
-        extensionDirPath={extensionDirPath}
-        entry={entry}
-        props={editorProps}
-        onClose={() => dialogRef.current?.close()}
-        onDirtyChange={onDirtyChange}
-        className="extension-editor-frame"
-        style={{ width: '100%', height: '100%' }}
-      />
+    <dialog ref={dialogRef} className="file-editor" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
+      <div className="extension-dialog-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border, #333)', flexShrink: 0, minHeight: toolbarHeight, boxSizing: 'border-box' }}>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={fileName}>{fileName}</span>
+        {showLangSelect && (
+          <>
+            <label htmlFor="editor-lang-select" style={{ whiteSpace: 'nowrap' }}>Language:</label>
+            <select
+              id="editor-lang-select"
+              value={currentLangId}
+              onChange={handleLanguageChange}
+              style={{ minWidth: 120, padding: '2px 6px' }}
+            >
+              <option value="plaintext">Plain Text</option>
+              {langList.map((lang) => (
+                <option key={lang.id} value={lang.id}>
+                  {lang.aliases?.[0] ?? lang.id}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+        <button
+          type="button"
+          title="Close (Esc)"
+          onClick={() => dialogRef.current?.close()}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, padding: '0 8px', flexShrink: 0 }}
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <ExtensionContainer
+          kind="editor"
+          extensionDirPath={extensionDirPath}
+          entry={entry}
+          props={editorProps}
+          onClose={() => dialogRef.current?.close()}
+          onDirtyChange={onDirtyChange}
+          onEditorReady={(api) => { editorApiRef.current = api; }}
+          className="extension-editor-frame"
+          style={{ width: '100%', height: '100%' }}
+        />
+      </div>
     </dialog>
   );
 }

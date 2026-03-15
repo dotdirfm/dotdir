@@ -38,6 +38,8 @@ export interface EditorProps {
   languages?: EditorLanguagePayload[];
   /** All grammars with content from loaded extensions (for TextMate tokenization). */
   grammars?: EditorGrammarPayload[];
+  /** True when shown inline (e.g. preview tab). Extensions should not steal focus when inline. */
+  inline?: boolean;
 }
 
 export interface MediaFileRef {
@@ -72,6 +74,8 @@ export interface EditorExtensionApi {
   mount(props: EditorProps): Promise<void>;
   unmount(): Promise<void>;
   setDirty?(dirty: boolean): void;
+  /** Change the editor language (e.g. for syntax highlighting). */
+  setLanguage?(langId: string): void | Promise<void>;
 }
 
 // ── Handshake message types ──────────────────────────────────────────
