@@ -91,6 +91,23 @@ export function basename(path: string): string {
   return index < 0 ? trimmed : trimmed.slice(index + 1);
 }
 
+/** Executable extensions when mode has no execute bits (e.g. Windows). */
+const EXECUTABLE_EXTENSIONS = new Set([
+  '.exe', '.com', '.bat', '.cmd', '.msi', '.scr', '.ps1', '.vbs', '.js', '.wsf',
+]);
+
+/**
+ * Returns whether a file should be treated as executable.
+ * Uses mode bits (Unix) and/or executable extension (Windows and fallback).
+ */
+export function isFileExecutable(mode: number, fileName: string): boolean {
+  if ((mode & 0o111) !== 0) return true;
+  const i = fileName.lastIndexOf('.');
+  if (i < 0) return false;
+  const ext = fileName.slice(i).toLowerCase();
+  return EXECUTABLE_EXTENSIONS.has(ext);
+}
+
 /**
  * Returns breadcrumb segments for a path. On Windows, first segment is the drive (e.g. "C:").
  * Each segment has a display label and the full path up to that segment (for navigation).

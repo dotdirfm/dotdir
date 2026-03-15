@@ -222,6 +222,29 @@ fn entry_mode(_meta: &fs::Metadata) -> u32 {
     0
 }
 
+/// On Windows, executable-ness is determined by extension; PATHEXT lists those extensions.
+#[cfg(windows)]
+fn is_executable_extension(name: &str) -> bool {
+    let ext = name
+        .rfind('.')
+        .map(|i| name[i..].to_lowercase())
+        .filter(|s| s.len() > 1);
+    let Some(ext) = ext else { return false };
+    let pathext = std::env::var_os("PATHEXT")
+        .unwrap_or_else(|| std::ffi::OsString::from(".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC"));
+    let pathext = pathext.to_string_lossy();
+    pathext.split(';').any(|s| {
+        let s = s.trim().to_lowercase();
+        s.starts_with('.') && s == ext
+    })
+}
+
+/// No extension-based executable check on non-Windows (mode bits are used).
+#[cfg(not(windows))]
+fn is_executable_extension(_name: &str) -> bool {
+    false
+}
+
 #[cfg(unix)]
 fn entry_nlink(path: &Path) -> u32 {
     fs::symlink_metadata(path)
@@ -281,10 +304,14 @@ pub fn entries(dir_path: &str) -> Result<Vec<EntryInfo>, FsError> {
 
         // stat() follows symlinks — gives target size/mtime/mode
         let full_path = entry.path();
-        let (size, mtime_ms, mode) = match fs::metadata(&full_path) {
+        let (size, mtime_ms, mut mode) = match fs::metadata(&full_path) {
             Ok(meta) => (meta.len() as f64, metadata_mtime_ms(&meta), entry_mode(&meta)),
             Err(_) => (0.0, 0.0, 0),
         };
+        // On platforms without execute bits (e.g. Windows), use executable extension heuristic
+        if kind == EntryKind::File && mode & 0o111 == 0 && is_executable_extension(&name) {
+            mode |= 0o111;
+        }
 
         let nlink = entry_nlink(&full_path);
         let hidden = is_hidden(&name, &full_path);

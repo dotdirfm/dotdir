@@ -25,7 +25,7 @@ import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type LoadedExtension, type PanelPersist
 import { initUserSettings, onSettingsChange, updateSettings } from './userSettings';
 import { languageRegistry } from './languageRegistry';
 import { setIconTheme, setIconThemeKind } from './iconResolver';
-import { basename, dirname, isRootPath, join } from './path';
+import { basename, dirname, isFileExecutable, isRootPath, join } from './path';
 import { normalizeTerminalPath } from './terminal/path';
 import { initUserKeybindings } from './userKeybindings';
 
@@ -63,7 +63,7 @@ function handleToFsNode(handle: FileSystemHandle & { meta?: HandleMeta }, dirPat
     meta: {
       size: handle.meta?.size ?? 0,
       mtimeMs: handle.meta?.mtimeMs ?? 0,
-      executable: !isDir && handle.meta != null && (handle.meta.mode & 0o111) !== 0,
+      executable: !isDir && handle.meta != null && isFileExecutable(handle.meta.mode ?? 0, handle.name),
       hidden: handle.meta?.hidden ?? handle.name.startsWith('.'),
       nlink: handle.meta?.nlink ?? 1,
       entryKind: handle.meta?.kind ?? (isDir ? 'directory' : 'file'),
