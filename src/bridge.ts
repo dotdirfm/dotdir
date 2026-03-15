@@ -33,6 +33,12 @@ export interface Bridge {
     unwatch(watchId: string): Promise<void>;
     onFsChange(callback: (event: FsChangeEvent) => void): () => void;
     writeFile(filePath: string, data: string): Promise<void>;
+    /** Create directory (and parents). */
+    createDir?(dirPath: string): Promise<void>;
+    /** Move file or folder to OS trash (Tauri only). */
+    moveToTrash?(path: string): Promise<void>;
+    /** Remove a single file or empty directory (Tauri only). For recursive delete, call in order: files first, then dirs deepest-first. */
+    deletePath?(path: string): Promise<void>;
   };
   pty: {
     spawn(cwd: string, profileId?: string): Promise<PtyLaunchInfo>;

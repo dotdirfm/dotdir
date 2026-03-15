@@ -613,9 +613,59 @@ body.terminal-resizing {
   color: var(--fg-muted);
 }
 
+.make-folder-dialog .modal-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.make-folder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.make-folder-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.make-folder-field label {
+  font-size: 12px;
+  color: var(--fg-secondary);
+}
+.make-folder-field input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--fg);
+}
+.make-folder-field input:focus {
+  outline: 2px solid var(--border-active);
+}
+
 .modal-dialog-buttons button[type="submit"]:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.delete-progress-dialog .delete-progress-text {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.delete-progress-dialog .delete-progress-path {
+  font-size: 12px;
+  color: var(--fg-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60vw;
+}
+
+.delete-progress-dialog .delete-progress-hint {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--fg-muted);
 }
 
 .file-list {

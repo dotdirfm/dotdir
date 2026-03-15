@@ -302,6 +302,11 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
             ops::write_text(path, data)?;
             Ok(Value::Null)
         }
+        "fs.createDir" => {
+            let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
+            std::fs::create_dir_all(path).map_err(FsError::Io)?;
+            Ok(Value::Null)
+        }
         "fs.open" => {
             let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
             Ok(json!(ops::open(path, &session.fdt)?))

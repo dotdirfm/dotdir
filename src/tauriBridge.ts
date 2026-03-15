@@ -68,6 +68,15 @@ export const tauriBridge = {
     async writeFile(filePath: string, data: string): Promise<void> {
       return invoke<void>('fsa_write_text', { filePath, data });
     },
+    async createDir(dirPath: string): Promise<void> {
+      return invoke<void>('fsa_create_dir', { dirPath });
+    },
+    async moveToTrash(path: string): Promise<void> {
+      return invoke<void>('move_to_trash', { path });
+    },
+    async deletePath(path: string): Promise<void> {
+      return invoke<void>('fsa_delete_path', { path });
+    },
     async open(filePath: string): Promise<number> {
       return invoke<number>('fsa_open', { filePath });
     },

@@ -21,6 +21,10 @@ interface FileListProps {
   onNavigate: (path: string) => Promise<void>;
   onViewFile?: (filePath: string, fileName: string, fileSize: number) => void;
   onEditFile?: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
+  /** Move selected item to trash. Receives (path, name, isDir, refresh). */
+  onMoveToTrash?: (path: string, name: string, isDir: boolean, refresh: () => void) => void;
+  /** Permanently delete selected item. Receives (path, name, isDir, refresh). */
+  onPermanentDelete?: (path: string, name: string, isDir: boolean, refresh: () => void) => void;
   /** Run executable in terminal: receives (command) and should write command + newline to terminal. */
   onExecuteInTerminal?: (command: string) => Promise<void>;
   editorFileSizeLimit?: number;
@@ -80,6 +84,8 @@ export const FileList = memo(function FileList({
   onNavigate,
   onViewFile,
   onEditFile,
+  onMoveToTrash,
+  onPermanentDelete,
   onExecuteInTerminal,
   editorFileSizeLimit = 1024 * 1024,
   active,
@@ -113,6 +119,10 @@ export const FileList = memo(function FileList({
   onEditFileRef.current = onEditFile;
   const onExecuteInTerminalRef = useRef(onExecuteInTerminal);
   onExecuteInTerminalRef.current = onExecuteInTerminal;
+  const onMoveToTrashRef = useRef(onMoveToTrash);
+  onMoveToTrashRef.current = onMoveToTrash;
+  const onPermanentDeleteRef = useRef(onPermanentDelete);
+  onPermanentDeleteRef.current = onPermanentDelete;
   const editorFileSizeLimitRef = useRef(editorFileSizeLimit);
   editorFileSizeLimitRef.current = editorFileSizeLimit;
 
@@ -471,6 +481,48 @@ export const FileList = memo(function FileList({
     }));
 
     disposables.push(commandRegistry.registerCommand(
+      'list.moveToTrash',
+      'Move to Trash',
+      () => actionQueue.enqueue(() => {
+        const item = displayEntriesRef.current[activeIndexRef.current];
+        const onMove = onMoveToTrashRef.current;
+        if (!item || !onMove) return;
+        const path = item.entry.path as string;
+        const name = item.entry.name;
+        const isDir = item.entry.type === 'folder';
+        const refresh = () => onNavigateRef.current(currentPathRef.current);
+        onMove(path, name, isDir, refresh);
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.moveToTrash',
+      key: 'f8',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.permanentDelete',
+      'Permanently Delete',
+      () => actionQueue.enqueue(() => {
+        const item = displayEntriesRef.current[activeIndexRef.current];
+        const onDelete = onPermanentDeleteRef.current;
+        if (!item || !onDelete) return;
+        const path = item.entry.path as string;
+        const name = item.entry.name;
+        const isDir = item.entry.type === 'folder';
+        const refresh = () => onNavigateRef.current(currentPathRef.current);
+        onDelete(path, name, isDir, refresh);
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.permanentDelete',
+      key: 'shift+delete',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
       'list.pasteFilename',
       'Paste Filename to Terminal',
       () => actionQueue.enqueue(async () => {
@@ -511,7 +563,7 @@ export const FileList = memo(function FileList({
     return () => {
       for (const dispose of disposables) dispose();
     };
-  }, [active, navigateToEntry, onExecuteInTerminal]);
+  }, [active, navigateToEntry, onExecuteInTerminal, onMoveToTrash, onPermanentDelete]);
 
   const columnCountRef = useRef(columnCount);
   columnCountRef.current = columnCount;

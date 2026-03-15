@@ -193,6 +193,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       watch: (watchId: string, dirPath: string) => rpc('fs.watch', { watchId, path: dirPath }) as Promise<boolean>,
       unwatch: (watchId: string) => rpc('fs.unwatch', { watchId }) as Promise<void>,
       writeFile: (filePath: string, data: string) => rpc('fs.writeFile', { path: filePath, data }) as Promise<void>,
+      createDir: (dirPath: string) => rpc('fs.createDir', { path: dirPath }) as Promise<void>,
       onFsChange(callback: (event: FsChangeEvent) => void): () => void {
         changeListeners.add(callback);
         return () => {

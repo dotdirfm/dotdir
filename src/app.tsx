@@ -12,8 +12,10 @@ import { isMediaFile, type MediaFileEntry } from './mediaFiles';
 import { ViewerContainer, EditorContainer } from './ExtensionContainer';
 import { clearEditorExtensionCache } from './editorExtensionCache';
 import { viewerRegistry, editorRegistry, populateRegistries } from './viewerEditorRegistry';
-import { ModalDialog, type ModalDialogProps } from './ModalDialog';
-import { OpenCreateFileDialog, type LanguageOption } from './OpenCreateFileDialog';
+import type { LanguageOption } from './OpenCreateFileDialog';
+import { collectPathsForDelete } from './deleteHelpers';
+import { useDialog, DialogHolder } from './dialogContext';
+import { ModalDialog } from './ModalDialog';
 import { TerminalPanel } from './Terminal';
 import { ActionBar } from './ActionBar';
 import { ExtensionsPanel } from './ExtensionsPanel';
@@ -291,11 +293,11 @@ function createPreviewTab(path: string, name: string, size: number, sourcePanel:
 
 export function App() {
   const [theme, setTheme] = useState<ThemeKind>('dark');
-  const [dialog, setDialog] = useState<Omit<ModalDialogProps, 'onClose'> | null>(null);
+  const { showDialog, closeDialog, updateDialog } = useDialog();
   const [showHidden, setShowHidden] = useState(false);
   const showError = useCallback((message: string) => {
-    setDialog({ title: 'Error', message, variant: 'error' });
-  }, []);
+    showDialog({ type: 'message', title: 'Error', message, variant: 'error' });
+  }, [showDialog]);
   const left = usePanel(theme, showError);
   const right = usePanel(theme, showError);
   const [activePanel, setActivePanel] = useState<PanelSide>('left');
@@ -308,7 +310,8 @@ export function App() {
   const expectedTerminalCwdsRef = useRef<Map<string, number>>(new Map());
   const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
-  const [openCreateFileDialog, setOpenCreateFileDialog] = useState<{ currentPath: string; languages: LanguageOption[] } | null>(null);
+  const cancelDeleteRef = useRef(false);
+  const deleteProgressSpecRef = useRef<{ type: 'deleteProgress'; total: number; current: number; currentPath: string; onCancel: () => void } | null>(null);
   const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
   const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
   const [initialLeftPanel, setInitialLeftPanel] = useState<PanelPersistedState | undefined>(undefined);
@@ -369,7 +372,6 @@ export function App() {
 
   const handleOpenCreateFileConfirm = useCallback(
     async (filePath: string, fileName: string, langId: string) => {
-      setOpenCreateFileDialog(null);
       const exists = await bridge.fsa.exists(filePath);
       if (!exists) {
         await bridge.fsa.writeFile(filePath, '');
@@ -378,6 +380,105 @@ export function App() {
       setEditorFile({ path: filePath, name: fileName, size, langId });
     },
     []
+  );
+
+  const handleMoveToTrash = useCallback(
+    (path: string, name: string, _isDir: boolean, refresh: () => void) => {
+      if (!bridge.fsa.moveToTrash) {
+        showDialog({ type: 'message', title: 'Not available', message: 'Move to Trash is only available in the desktop app.', variant: 'error' });
+        return;
+      }
+      showDialog({
+        type: 'message',
+        title: 'Move to Trash',
+        message: `Move "${name}" to Trash?`,
+        variant: 'default',
+        buttons: [
+          { label: 'Cancel' },
+          { label: 'Move to Trash', default: true, onClick: async () => {
+            try {
+              await bridge.fsa.moveToTrash!(path);
+              refresh();
+            } catch (e) {
+              showDialog({ type: 'message', title: 'Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
+            }
+          }},
+        ],
+      });
+    },
+    [showDialog]
+  );
+
+  const handlePermanentDelete = useCallback(
+    (path: string, name: string, isDir: boolean, refresh: () => void) => {
+      if (!bridge.fsa.deletePath) {
+        showDialog({ type: 'message', title: 'Not available', message: 'Permanent delete is only available in the desktop app.', variant: 'error' });
+        return;
+      }
+      showDialog({
+        type: 'message',
+        title: 'Permanently Delete',
+        message: `Permanently delete "${name}"? This cannot be undone.`,
+        variant: 'default',
+        buttons: [
+          { label: 'Cancel' },
+          { label: 'Delete', default: true, onClick: async () => {
+            try {
+              if (isDir) {
+                const { files, dirs } = await collectPathsForDelete(path);
+                const paths = [...files, ...dirs];
+                if (paths.length === 0) {
+                  await bridge.fsa.deletePath!(path);
+                  refresh();
+                  return;
+                }
+                cancelDeleteRef.current = false;
+                const initialSpec = {
+                  type: 'deleteProgress' as const,
+                  total: paths.length,
+                  current: 0,
+                  currentPath: paths[0] ?? '',
+                  onCancel: () => {
+                    showDialog({
+                      type: 'cancelDeleteConfirm',
+                      onResume: () => {
+                        if (deleteProgressSpecRef.current) showDialog(deleteProgressSpecRef.current);
+                      },
+                      onCancelDeletion: () => {
+                        cancelDeleteRef.current = true;
+                        closeDialog();
+                      },
+                    });
+                  },
+                };
+                deleteProgressSpecRef.current = { ...initialSpec };
+                showDialog(initialSpec);
+                for (let i = 0; i < paths.length; i++) {
+                  if (cancelDeleteRef.current) {
+                    closeDialog();
+                    refresh();
+                    return;
+                  }
+                  updateDialog({ current: i, currentPath: paths[i] });
+                  if (deleteProgressSpecRef.current) {
+                    deleteProgressSpecRef.current = { ...deleteProgressSpecRef.current, current: i, currentPath: paths[i] };
+                  }
+                  await bridge.fsa.deletePath!(paths[i]);
+                }
+                closeDialog();
+              } else {
+                await bridge.fsa.deletePath!(path);
+              }
+              refresh();
+            } catch (e) {
+              closeDialog();
+              showDialog({ type: 'message', title: 'Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
+            }
+          }},
+        ],
+      });
+    },
+    [showDialog, closeDialog, updateDialog]
   );
 
   const rememberExpectedTerminalCwd = useCallback((path: string) => {
@@ -1001,13 +1102,38 @@ export function App() {
             return true;
           })
           .map((l) => ({ id: l.id, label: l.aliases?.[0] ?? l.id }));
-        setOpenCreateFileDialog({ currentPath, languages });
+        showDialog({ type: 'openCreateFile', currentPath, languages, onConfirm: handleOpenCreateFileConfirm, onCancel: () => {} });
       },
       { category: 'File', when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'faraday.openCreateFile',
       key: 'shift+f4',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'faraday.makeFolder',
+      'Make Folder',
+      () => {
+        const panel = activePanelRef.current === 'left' ? left : right;
+        const currentPath = panel.currentPath;
+        showDialog({
+          type: 'makeFolder',
+          currentPath,
+          onConfirm: async (folderName: string) => {
+            const fullPath = currentPath ? `${currentPath.replace(/\/?$/, '')}/${folderName}` : folderName;
+            if (bridge.fsa.createDir) await bridge.fsa.createDir(fullPath);
+            panel.navigateTo(currentPath);
+          },
+          onCancel: () => {},
+        });
+      },
+      { category: 'File', when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.makeFolder',
+      key: 'f7',
       when: 'focusPanel',
     }));
 
@@ -1070,7 +1196,7 @@ export function App() {
     return () => {
       for (const dispose of disposables) dispose();
     };
-  }, [left, right, commandPalette]);
+  }, [left, right, commandPalette, showDialog, closeDialog, updateDialog, handleOpenCreateFileConfirm]);
 
   const isBrowser = !isTauriApp();
 
@@ -1365,6 +1491,8 @@ export function App() {
               }}
               onViewFile={handleViewFile}
               onEditFile={handleEditFile}
+              onMoveToTrash={(path, name, isDir) => handleMoveToTrash(path, name, isDir, () => left.navigateTo(left.currentPath))}
+              onPermanentDelete={(path, name, isDir) => handlePermanentDelete(path, name, isDir, () => left.navigateTo(left.currentPath))}
               onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
               editorFileSizeLimit={editorFileSizeLimit}
               active={activePanel === 'left'}
@@ -1431,6 +1559,8 @@ export function App() {
               }}
               onViewFile={handleViewFile}
               onEditFile={handleEditFile}
+              onMoveToTrash={(path, name, isDir) => handleMoveToTrash(path, name, isDir, () => right.navigateTo(right.currentPath))}
+              onPermanentDelete={(path, name, isDir) => handlePermanentDelete(path, name, isDir, () => right.navigateTo(right.currentPath))}
               onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
               editorFileSizeLimit={editorFileSizeLimit}
               active={activePanel === 'right'}
@@ -1554,15 +1684,7 @@ export function App() {
           }}
         />
       )}
-      {dialog && <ModalDialog {...dialog} onClose={() => setDialog(null)} />}
-      {openCreateFileDialog && (
-        <OpenCreateFileDialog
-          currentPath={openCreateFileDialog.currentPath}
-          languages={openCreateFileDialog.languages}
-          onConfirm={handleOpenCreateFileConfirm}
-          onCancel={() => setOpenCreateFileDialog(null)}
-        />
-      )}
+      <DialogHolder />
       <CommandPalette open={commandPalette.open} onOpenChange={commandPalette.setOpen} />
     </div>
   );

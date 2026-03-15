@@ -5,6 +5,7 @@ import { initBridge } from './bridge';
 import { createRoot } from 'react-dom/client';
 import { createElement } from 'react';
 import { App } from './app';
+import { DialogProvider } from './dialogContext';
 
 declare global {
   interface Window {
@@ -61,7 +62,7 @@ try {
 
   document.getElementById('boot-status')?.remove();
   const root = createRoot(container);
-  root.render(createElement(App));
+  root.render(createElement(DialogProvider, null, createElement(App)));
   await writeBootLog('React render started');
 } catch (error) {
   await writeBootLog(`startup catch: ${String(error)}`);

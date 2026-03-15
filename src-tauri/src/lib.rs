@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::RwLock;
 use tauri::{Emitter, Manager, State};
@@ -202,6 +202,12 @@ fn fsa_exists(file_path: String) -> bool {
 #[tauri::command]
 fn fsa_write_text(file_path: String, data: String) -> CmdResult<()> {
   ops::write_text(&file_path, &data).map_err(Into::into)
+}
+
+#[tauri::command]
+fn fsa_create_dir(dir_path: String) -> CmdResult<()> {
+    fs::create_dir_all(&dir_path).map_err(|e| CmdError(FsError::from_io(e)))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -411,6 +417,31 @@ fn debug_log(message: String) {
     write_debug_log(&message);
 }
 
+// ── Move to Trash & Permanent Delete ─────────────────────────────────
+
+#[tauri::command]
+fn move_to_trash(path: String) -> CmdResult<()> {
+    let p = Path::new(&path).canonicalize().map_err(|e| CmdError(FsError::from_io(e)))?;
+    trash::delete(&p).map_err(|e| {
+        CmdError(FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))
+    })?;
+    Ok(())
+}
+
+/// Remove a single file or empty directory. For recursive delete the frontend
+/// must delete in order (files first, then dirs from deepest to shallowest).
+#[tauri::command]
+fn fsa_delete_path(path: String) -> CmdResult<()> {
+    let p = Path::new(&path);
+    let meta = fs::metadata(p).map_err(|e| CmdError(FsError::from_io(e)))?;
+    if meta.is_dir() {
+        fs::remove_dir(p).map_err(|e| CmdError(FsError::from_io(e)))?;
+    } else {
+        fs::remove_file(p).map_err(|e| CmdError(FsError::from_io(e)))?;
+    }
+    Ok(())
+}
+
 // ── App setup ────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -449,6 +480,7 @@ pub fn run() {
             fsa_stat,
             fsa_exists,
             fsa_write_text,
+            fsa_create_dir,
             fsa_open,
             fsa_read,
             fsa_close,
@@ -458,6 +490,8 @@ pub fn run() {
             get_terminal_profiles,
             get_theme,
             debug_log,
+            move_to_trash,
+            fsa_delete_path,
             pty_spawn,
             pty_write,
             pty_resize,
