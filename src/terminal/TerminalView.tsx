@@ -29,6 +29,8 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
   const hasTerminalFocusRef = useRef(false);
   const replayFrameRef = useRef<number | null>(null);
   const syncInFlightRef = useRef(false);
+  /** Last viewport size we fitted to; avoids ResizeObserver loop from fit.fit() changing layout. */
+  const lastFitSizeRef = useRef({ w: 0, h: 0 });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -50,6 +52,11 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
         fitFrameRef.current = null;
         const body = container.parentElement;
         if (!body || body.clientWidth < 20 || body.clientHeight < 20) return;
+        const w = body.clientWidth;
+        const h = body.clientHeight;
+        const last = lastFitSizeRef.current;
+        if (last.w === w && last.h === h) return;
+        lastFitSizeRef.current = { w, h };
         fit.fit();
         void session.resize(Math.max(2, term.cols), Math.max(1, term.rows));
         const screen = container.querySelector('.xterm-screen');
@@ -148,7 +155,13 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
       void session.resize(Math.max(2, cols), Math.max(1, rows));
     });
 
-    const resizeObserver = new ResizeObserver(() => {
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      if (width < 20 || height < 20) return;
+      const last = lastFitSizeRef.current;
+      if (last.w === width && last.h === height) return;
       scheduleLayout();
     });
     resizeObserver.observe(container.parentElement ?? container);

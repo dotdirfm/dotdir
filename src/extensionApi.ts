@@ -13,6 +13,8 @@ export interface ViewerProps {
   fileSize: number;
   inline?: boolean;
   mediaFiles?: MediaFileRef[];
+  /** When set (e.g. Web VFS), extension can load scripts/workers from this base URL. */
+  extensionScriptBaseUrl?: string;
 }
 
 /** Grammar contribution + loaded content (from host, for custom syntax highlighting). */
@@ -40,6 +42,8 @@ export interface EditorProps {
   grammars?: EditorGrammarPayload[];
   /** True when shown inline (e.g. preview tab). Extensions should not steal focus when inline. */
   inline?: boolean;
+  /** When set (e.g. Web VFS), extension can load scripts/workers from this base URL for lazy loading. */
+  extensionScriptBaseUrl?: string;
 }
 
 export interface MediaFileRef {
@@ -61,6 +65,8 @@ export interface HostApi {
   onNavigateMedia?(file: MediaFileRef): void;
   /** Oniguruma WASM binary for TextMate grammars (optional). */
   getOnigurumaWasm?(): Promise<ArrayBuffer>;
+  /** URL to a file inside the extension dir (for lazy-loading workers). Returns blob URL. */
+  getExtensionResourceUrl?(relativePath: string): Promise<string>;
 }
 
 // ── Extension APIs (iframe exposes to host) ──────────────────────────

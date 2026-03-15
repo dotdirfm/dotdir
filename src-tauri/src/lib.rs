@@ -2,11 +2,15 @@ use faraday_core::error::FsError;
 use faraday_core::ops::{self, EntryInfo, FdTable, StatResult};
 use faraday_core::watch::{EventCallback, FsWatcher};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::RwLock;
 use tauri::{Emitter, Manager, State};
+use tauri::http::header::CONTENT_TYPE;
+use tauri::http::StatusCode;
 
 #[cfg(unix)]
 mod elevate;
@@ -409,14 +413,105 @@ fn debug_log(message: String) {
     write_debug_log(&message);
 }
 
+// ── Extension VFS (faraday-resources://) ───────────────────────────────
+
+/// Maps VFS key (e.g. hash of extension dir) to filesystem path. Used by the custom protocol.
+pub struct ExtensionVfs(pub Arc<RwLock<HashMap<String, PathBuf>>>);
+
+#[tauri::command]
+fn register_extension_vfs(key: String, dir_path: String, state: State<'_, ExtensionVfs>) {
+    let path = PathBuf::from(&dir_path);
+    state.0.write().unwrap().insert(key, path);
+}
+
+fn faraday_resources_protocol(
+    vfs: Arc<RwLock<HashMap<String, PathBuf>>>,
+    request: tauri::http::Request<Vec<u8>>,
+) -> tauri::http::Response<Vec<u8>> {
+    // Tauri 2 uses http://faraday-resources.local/vfs/<key>/<file> — path is /vfs/<key>/<file>
+    let path = request.uri().path().trim_start_matches('/');
+    let parts: Vec<&str> = path.split('/').collect();
+    if parts.len() < 3 || parts[0] != "vfs" {
+        return tauri::http::Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(b"invalid path (expected /vfs/<key>/<file>)".to_vec())
+            .unwrap();
+    }
+    let key = parts[1];
+    let file_rel = parts[2..].join("/");
+    let base_dir = match vfs.read().unwrap().get(key) {
+        Some(d) => d.clone(),
+        None => {
+            return tauri::http::Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+                .body(format!("vfs key not found: {}", key).into_bytes())
+                .unwrap();
+        }
+    };
+    let full_path = base_dir.join(&file_rel);
+    let full_path = match std::fs::canonicalize(&full_path) {
+        Ok(p) => p,
+        Err(_) => {
+            return tauri::http::Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+                .body(format!("file not found: {}", file_rel).into_bytes())
+                .unwrap();
+        }
+    };
+    let base_canon = match std::fs::canonicalize(&base_dir) {
+        Ok(p) => p,
+        Err(_) => {
+            return tauri::http::Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+                .body(b"invalid vfs base dir".to_vec())
+                .unwrap();
+        }
+    };
+    if !full_path.starts_with(&base_canon) {
+        return tauri::http::Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(b"path traversal not allowed".to_vec())
+            .unwrap();
+    }
+    let body = match fs::read(&full_path) {
+        Ok(b) => b,
+        Err(_) => {
+            return tauri::http::Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+                .body(format!("read failed: {}", file_rel).into_bytes())
+                .unwrap();
+        }
+    };
+    let mime = mime_guess::from_path(&full_path)
+        .first_raw()
+        .unwrap_or("application/octet-stream");
+    tauri::http::Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, mime)
+        .body(body)
+        .unwrap()
+}
+
 // ── App setup ────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     write_debug_log("faraday_tauri_lib::run entered");
+    let extension_vfs: Arc<RwLock<HashMap<String, PathBuf>>> = Arc::new(RwLock::new(HashMap::new()));
+    let extension_vfs_clone = extension_vfs.clone();
     tauri::Builder::default()
+        .register_uri_scheme_protocol("faraday-resources", move |_ctx, request| {
+            faraday_resources_protocol(extension_vfs_clone.clone(), request)
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
+        .manage(ExtensionVfs(extension_vfs))
         .setup(|app| {
             write_debug_log("tauri setup started");
             let handle = app.handle().clone();
@@ -456,6 +551,7 @@ pub fn run() {
             get_terminal_profiles,
             get_theme,
             debug_log,
+            register_extension_vfs,
             pty_spawn,
             pty_write,
             pty_resize,

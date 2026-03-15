@@ -18,7 +18,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; frame-src 'self' blob:; connect-src 'self' https://lastcompute.ru https://marketplace.visualstudio.com https://*.gallerycdn.vsassets.io https://*.vo.msecnd.net blob: data:; img-src 'self' data: blob: https://lastcompute.ru https://*.gallerycdn.vsassets.io; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self' blob: 'unsafe-inline' 'unsafe-eval'"
+      "csp": "default-src 'self' http://faraday-resources.local; frame-src 'self' http://faraday-resources.local; connect-src 'self' https://lastcompute.ru https://marketplace.visualstudio.com https://*.gallerycdn.vsassets.io https://*.vo.msecnd.net blob: data:; img-src 'self' data: blob: https://lastcompute.ru https://*.gallerycdn.vsassets.io; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self' blob: http://faraday-resources.local faraday-resources: 'unsafe-inline' 'unsafe-eval'"
     }
   },
   "bundle": {

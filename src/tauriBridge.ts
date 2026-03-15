@@ -156,4 +156,9 @@ export const tauriBridge = {
       return () => mq.removeEventListener('change', handler);
     },
   },
+  extensionVfs: {
+    async register(key: string, dirPath: string): Promise<void> {
+      return invoke<void>('register_extension_vfs', { key, dirPath });
+    },
+  },
 };

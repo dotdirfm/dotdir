@@ -10,7 +10,8 @@ import type { Remote } from 'comlink';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileHandle } from './fsa';
 import { bridge } from './bridge';
-import { join, basename } from './path';
+import { basename, normalizePath } from './path';
+import { prepareExtensionVfs } from './extensionVfs';
 import type {
   HostApi,
   ViewerExtensionApi,
@@ -51,15 +52,22 @@ async function getComlinkSource(): Promise<string> {
 
 // ── Shell HTML template ──────────────────────────────────────────────
 
-/** Build shell HTML with no inline scripts (CSP-compliant when script-src uses hashes). */
+/** Escape script content so </script> in the middle doesn't close the tag. */
+function escapeScriptContent(s: string): string {
+  return s.replace(/<\/script>/gi, '<\\/script>');
+}
+
+/** Build shell HTML with bootstrap and comlink inlined; only entry loads from VFS (no blob URLs). */
 function buildShellHtml(
-  bootstrapScriptUrl: string,
-  comlinkScriptUrl: string,
+  bootstrapScript: string,
+  comlinkSrc: string,
   entryScriptUrl: string,
   themeClass: string,
   handshakeId: string,
 ): string {
   const safeId = handshakeId.replace(/"/g, '&quot;');
+  const bootstrapEscaped = escapeScriptContent(bootstrapScript);
+  const comlinkEscaped = escapeScriptContent(comlinkSrc);
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -75,21 +83,11 @@ function buildShellHtml(
 </style>
 </head>
 <body class="${themeClass}" data-handshake-id="${safeId}">
-<script src="${bootstrapScriptUrl}"><\/script>
-<script src="${comlinkScriptUrl}"><\/script>
-<script src="${entryScriptUrl}"><\/script>
+<script>${bootstrapEscaped}<\/script>
+<script>${comlinkEscaped}<\/script>
+<script src="${entryScriptUrl.replace(/"/g, '&quot;')}"><\/script>
 </body>
 </html>`;
-}
-
-// ── Read extension entry JS via bridge ───────────────────────────────
-
-async function readEntryScript(extensionDirPath: string, entry: string): Promise<string> {
-  const entryPath = join(extensionDirPath, entry);
-  const name = basename(entryPath);
-  const handle = new FileHandle(entryPath, name);
-  const file = await handle.getFile();
-  return file.text();
 }
 
 // ── Shared props ─────────────────────────────────────────────────────
@@ -137,6 +135,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const htmlBlobUrlRef = useRef<string | null>(null);
   const bootstrapBlobUrlRef = useRef<string | null>(null);
   const comlinkBlobUrlRef = useRef<string | null>(null);
+  /** When using VFS (Web), base URL for extension to lazy-load workers. */
+  const extensionScriptBaseUrlRef = useRef<string | undefined>(undefined);
   /** Captured when editor is ready so cleanup can stash even if React has already nulled refs on unmount. */
   const editorStashPayloadRef = useRef<{
     iframe: HTMLIFrameElement;
@@ -171,22 +171,22 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   }
 
   const cleanup = useCallback(() => {
-    if (scriptBlobUrlRef.current) {
+    if (scriptBlobUrlRef.current?.startsWith('blob:')) {
       URL.revokeObjectURL(scriptBlobUrlRef.current);
-      scriptBlobUrlRef.current = null;
     }
-    if (htmlBlobUrlRef.current) {
+    scriptBlobUrlRef.current = null;
+    if (htmlBlobUrlRef.current?.startsWith('blob:')) {
       URL.revokeObjectURL(htmlBlobUrlRef.current);
-      htmlBlobUrlRef.current = null;
     }
-    if (bootstrapBlobUrlRef.current) {
+    htmlBlobUrlRef.current = null;
+    if (bootstrapBlobUrlRef.current?.startsWith('blob:')) {
       URL.revokeObjectURL(bootstrapBlobUrlRef.current);
-      bootstrapBlobUrlRef.current = null;
     }
-    if (comlinkBlobUrlRef.current) {
+    bootstrapBlobUrlRef.current = null;
+    if (comlinkBlobUrlRef.current?.startsWith('blob:')) {
       URL.revokeObjectURL(comlinkBlobUrlRef.current);
-      comlinkBlobUrlRef.current = null;
     }
+    comlinkBlobUrlRef.current = null;
     extensionApiRef.current = null;
   }, []);
 
@@ -219,11 +219,11 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           iframe = iframeRef.current;
           if (!iframe) return;
         } else {
-          const jsContent = await readEntryScript(extensionDirPath, entry);
+          const vfs = await prepareExtensionVfs(extensionDirPath, entry);
           if (cancelled) return;
-          const scriptBlob = new Blob([jsContent], { type: 'application/javascript' });
-          scriptUrl = URL.createObjectURL(scriptBlob);
-          scriptBlobUrlRef.current = scriptUrl;
+          scriptUrl = vfs.entryUrl;
+          scriptBlobUrlRef.current = null;
+          extensionScriptBaseUrlRef.current = vfs.baseUrl;
           if (cancelled) return;
           iframe = iframeRef.current;
           if (!iframe) return;
@@ -239,17 +239,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           : 'faraday-dark';
         const handshakeId = `faraday-${crypto.randomUUID()}`;
         const bootstrapScript = "window.__faradayHandshakeId=(document.body&&document.body.getAttribute('data-handshake-id'))||window.name||'';";
-        const bootstrapBlob = new Blob([bootstrapScript], { type: 'application/javascript' });
-        const bootstrapUrl = URL.createObjectURL(bootstrapBlob);
-        bootstrapBlobUrlRef.current = bootstrapUrl;
-        const comlinkBlob = new Blob([comlinkSrc], { type: 'application/javascript' });
-        const comlinkUrl = URL.createObjectURL(comlinkBlob);
-        comlinkBlobUrlRef.current = comlinkUrl;
-        const html = buildShellHtml(bootstrapUrl, comlinkUrl, scriptUrl, themeClass, handshakeId);
-        const htmlBlob = new Blob([html], { type: 'text/html' });
-        const htmlUrl = URL.createObjectURL(htmlBlob);
+        const html = buildShellHtml(bootstrapScript, comlinkSrc, scriptUrl, themeClass, handshakeId);
+        const htmlUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
         htmlBlobUrlRef.current = htmlUrl;
-        if (cached?.htmlUrl) URL.revokeObjectURL(cached.htmlUrl);
+        bootstrapBlobUrlRef.current = null;
+        comlinkBlobUrlRef.current = null;
+        if (cached?.htmlUrl && cached.htmlUrl.startsWith('blob:')) URL.revokeObjectURL(cached.htmlUrl);
 
         if (cancelled) return;
         if (!iframe) return;
@@ -318,6 +313,13 @@ export function ExtensionContainer(containerProps: ContainerProps) {
             const r = await fetch(onigWasmUrl);
             return r.arrayBuffer();
           },
+          async getExtensionResourceUrl(relativePath: string): Promise<string> {
+            const safe = normalizePath(relativePath).replace(/^\/+/, '');
+            if (safe.includes('..')) throw new Error('Invalid extension resource path');
+            const base = extensionScriptBaseUrlRef.current;
+            if (base) return base.replace(/\/$/, '') + '/' + safe;
+            throw new Error('Extension resource URL requires VFS (faraday-resources or /vfs/)');
+          },
         };
 
         // 6. Comlink handshake — send port to iframe, receive extension API back
@@ -375,11 +377,13 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           };
         }
 
-        // 7. Call mount
+        // 7. Call mount (merge extensionScriptBaseUrl for lazy-loading workers)
+        const baseUrl = extensionScriptBaseUrlRef.current;
+        const mountProps = { ...props, extensionScriptBaseUrl: baseUrl };
         if (kind === 'viewer') {
-          await (extensionApi as Remote<ViewerExtensionApi>).mount(props as ViewerProps);
+          await (extensionApi as Remote<ViewerExtensionApi>).mount(mountProps as ViewerProps);
         } else {
-          await (extensionApi as Remote<EditorExtensionApi>).mount(props as EditorProps);
+          await (extensionApi as Remote<EditorExtensionApi>).mount(mountProps as EditorProps);
           onEditorReadyRef.current?.(extensionApi as Remote<EditorExtensionApi>);
         }
 
@@ -411,14 +415,14 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         htmlBlobUrlRef.current = null;
         extensionApiRef.current = null;
         iframeRef.current = null;
-        if (bootstrapBlobUrlRef.current) {
+        if (bootstrapBlobUrlRef.current?.startsWith('blob:')) {
           URL.revokeObjectURL(bootstrapBlobUrlRef.current);
-          bootstrapBlobUrlRef.current = null;
         }
-        if (comlinkBlobUrlRef.current) {
+        if (comlinkBlobUrlRef.current?.startsWith('blob:')) {
           URL.revokeObjectURL(comlinkBlobUrlRef.current);
-          comlinkBlobUrlRef.current = null;
         }
+        bootstrapBlobUrlRef.current = null;
+        comlinkBlobUrlRef.current = null;
       } else {
         const api = extensionApiRef.current;
         if (api) api.unmount().catch(() => {});
@@ -435,10 +439,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     if (prevPropsRef.current === props) return;
     prevPropsRef.current = props;
 
+    const baseUrl = extensionScriptBaseUrlRef.current;
+    const mountProps = { ...props, extensionScriptBaseUrl: baseUrl };
     if (kind === 'viewer') {
-      (api as Remote<ViewerExtensionApi>).mount(props as ViewerProps).catch(() => {});
+      (api as Remote<ViewerExtensionApi>).mount(mountProps as ViewerProps).catch(() => {});
     } else {
-      (api as Remote<EditorExtensionApi>).mount(props as EditorProps).catch(() => {});
+      (api as Remote<EditorExtensionApi>).mount(mountProps as EditorProps).catch(() => {});
     }
   }, [props, kind, loading, error]);
 
