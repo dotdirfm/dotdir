@@ -3,6 +3,7 @@ import type { LayeredResolver } from 'fss-lang';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { actionQueue } from '../actionQueue';
 import { commandRegistry } from '../commands';
+import { viewerRegistry, editorRegistry } from '../viewerEditorRegistry';
 import { resolveEntryStyle } from '../fss';
 import type { ResolvedEntryStyle } from '../types';
 import { resolveIcon, loadIconsForPaths, getCachedIcon, onIconThemeChange } from '../iconResolver';
@@ -286,16 +287,26 @@ export const FileList = memo(function FileList({
     });
   }, [activeIndex, maxItemsPerColumn, columnCount]);
 
-  // Update context when selection changes
-  useEffect(() => {
-    if (!active) return;
-    const item = displayEntries[activeIndex];
+  // Update context when selection changes or registries update
+  const updateSelectionContext = useCallback(() => {
+    const item = displayEntriesRef.current[activeIndexRef.current];
     const isFile = item?.entry.type === 'file';
     const isExecutable = isFile && item != null && !!(item.entry.meta as { executable?: boolean }).executable;
+    const fileName = item?.entry.name ?? '';
     commandRegistry.setContext('listItemIsFile', isFile);
     commandRegistry.setContext('listItemIsFolder', !isFile && item != null);
     commandRegistry.setContext('listItemIsExecutable', isExecutable);
-  }, [active, activeIndex, displayEntries]);
+    commandRegistry.setContext('listItemHasViewer', isFile && viewerRegistry.resolve(fileName) !== null);
+    commandRegistry.setContext('listItemHasEditor', isFile && editorRegistry.resolve(fileName) !== null);
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    updateSelectionContext();
+    const unsubViewer = viewerRegistry.onChange(updateSelectionContext);
+    const unsubEditor = editorRegistry.onChange(updateSelectionContext);
+    return () => { unsubViewer(); unsubEditor(); };
+  }, [active, activeIndex, displayEntries, updateSelectionContext]);
 
   // Register navigation commands when panel is active
   useEffect(() => {
@@ -444,12 +455,12 @@ export const FileList = memo(function FileList({
           onViewFileRef.current(item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
         }
       }),
-      { when: 'focusPanel && listItemIsFile' }
+      { when: 'focusPanel && listItemHasViewer' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.viewFile',
       key: 'f3',
-      when: 'focusPanel && listItemIsFile',
+      when: 'focusPanel && listItemHasViewer',
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -472,12 +483,12 @@ export const FileList = memo(function FileList({
           }
         }
       }),
-      { when: 'focusPanel && listItemIsFile' }
+      { when: 'focusPanel && listItemHasEditor' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.editFile',
       key: 'f4',
-      when: 'focusPanel && listItemIsFile',
+      when: 'focusPanel && listItemHasEditor',
     }));
 
     disposables.push(commandRegistry.registerCommand(

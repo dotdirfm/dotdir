@@ -48,8 +48,11 @@ function resolve<T extends { patterns: string[]; priority?: number }>(
   return matches[0];
 }
 
+type RegistryListener = () => void;
+
 class ViewerRegistry {
   private entries: RegistryEntry<ExtensionViewerContribution>[] = [];
+  private listeners = new Set<RegistryListener>();
 
   clear(): void {
     this.entries = [];
@@ -66,10 +69,20 @@ class ViewerRegistry {
   getAll(): readonly RegistryEntry<ExtensionViewerContribution>[] {
     return this.entries;
   }
+
+  onChange(listener: RegistryListener): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+
+  notifyListeners(): void {
+    for (const listener of this.listeners) listener();
+  }
 }
 
 class EditorRegistry {
   private entries: RegistryEntry<ExtensionEditorContribution>[] = [];
+  private listeners = new Set<RegistryListener>();
 
   clear(): void {
     this.entries = [];
@@ -85,6 +98,15 @@ class EditorRegistry {
 
   getAll(): readonly RegistryEntry<ExtensionEditorContribution>[] {
     return this.entries;
+  }
+
+  onChange(listener: RegistryListener): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+
+  notifyListeners(): void {
+    for (const listener of this.listeners) listener();
   }
 }
 
@@ -108,4 +130,7 @@ export function populateRegistries(extensions: LoadedExtension[]): void {
       }
     }
   }
+
+  viewerRegistry.notifyListeners();
+  editorRegistry.notifyListeners();
 }
