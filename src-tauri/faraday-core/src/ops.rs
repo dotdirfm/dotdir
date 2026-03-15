@@ -8,8 +8,19 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
+
+/// On Windows, paths from the frontend use forward slashes; ensure we use a path the OS accepts.
+#[cfg(windows)]
+fn path_for_fs(s: &str) -> PathBuf {
+    PathBuf::from(s.replace('/', std::path::MAIN_SEPARATOR_STR))
+}
+
+#[cfg(not(windows))]
+fn path_for_fs(s: &str) -> PathBuf {
+    PathBuf::from(s)
+}
 
 // ── Result types ─────────────────────────────────────────────────────
 
@@ -252,7 +263,8 @@ fn is_hidden(name: &str, #[allow(unused)] full_path: &Path) -> bool {
 // ── Operations ───────────────────────────────────────────────────────
 
 pub fn entries(dir_path: &str) -> Result<Vec<EntryInfo>, FsError> {
-    let dir = fs::read_dir(dir_path).map_err(FsError::from_io)?;
+    let path = path_for_fs(dir_path);
+    let dir = fs::read_dir(&path).map_err(FsError::from_io)?;
     let mut result = Vec::new();
 
     for entry in dir {
@@ -300,7 +312,8 @@ pub fn entries(dir_path: &str) -> Result<Vec<EntryInfo>, FsError> {
 }
 
 pub fn stat(file_path: &str) -> Result<StatResult, FsError> {
-    let meta = fs::metadata(file_path).map_err(FsError::from_io)?;
+    let path = path_for_fs(file_path);
+    let meta = fs::metadata(&path).map_err(FsError::from_io)?;
     Ok(StatResult {
         size: meta.len() as f64,
         mtime_ms: metadata_mtime_ms(&meta),
@@ -308,22 +321,23 @@ pub fn stat(file_path: &str) -> Result<StatResult, FsError> {
 }
 
 pub fn exists(file_path: &str) -> bool {
-    Path::new(file_path).try_exists().unwrap_or(false)
+    path_for_fs(file_path).try_exists().unwrap_or(false)
 }
 
 pub fn write_text(file_path: &str, data: &str) -> Result<(), FsError> {
-  let path = Path::new(file_path);
+  let path = path_for_fs(file_path);
   if let Some(parent) = path.parent() {
     fs::create_dir_all(parent).map_err(FsError::from_io)?;
   }
-  let mut file = fs::File::create(path).map_err(FsError::from_io)?;
+  let mut file = fs::File::create(&path).map_err(FsError::from_io)?;
   file.write_all(data.as_bytes()).map_err(FsError::from_io)
 }
 
 #[cfg(unix)]
 pub fn open(file_path: &str, fdt: &FdTable) -> Result<i32, FsError> {
     use std::os::unix::io::IntoRawFd;
-    let file = fs::File::open(file_path).map_err(FsError::from_io)?;
+    let path = path_for_fs(file_path);
+    let file = fs::File::open(&path).map_err(FsError::from_io)?;
     let fd = file.into_raw_fd();
     fdt.track(fd);
     Ok(fd)
@@ -332,7 +346,8 @@ pub fn open(file_path: &str, fdt: &FdTable) -> Result<i32, FsError> {
 #[cfg(not(unix))]
 pub fn open(file_path: &str, fdt: &FdTable) -> Result<i32, FsError> {
     use std::os::windows::io::IntoRawHandle;
-    let file = fs::File::open(file_path).map_err(FsError::from_io)?;
+    let path = path_for_fs(file_path);
+    let file = fs::File::open(&path).map_err(FsError::from_io)?;
     let handle = file.into_raw_handle();
     let fd = handle as i64;
     fdt.track(fd);

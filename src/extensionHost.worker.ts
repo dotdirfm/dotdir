@@ -14,7 +14,7 @@
  *     { type: 'error', message }                     — fatal loading error
  */
 
-import { dirname, join } from './path';
+import { dirname, join, normalizePath } from './path';
 
 // ── Types (duplicated subset to avoid importing DOM-dependent modules) ──
 
@@ -44,8 +44,15 @@ interface LoadedGrammar {
   content: object;
 }
 
+interface ExtensionIconThemeVSCode {
+  id: string;
+  label: string;
+  path: string;
+}
+
 interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme;
+  iconThemes?: ExtensionIconThemeVSCode[];
   languages?: ExtensionLanguage[];
   grammars?: ExtensionGrammar[];
 }
@@ -71,6 +78,8 @@ export interface WorkerLoadedExtension {
   dirPath: string;
   iconThemeFss?: string;
   iconThemeBasePath?: string;
+  vscodeIconThemePath?: string;
+  vscodeIconThemeId?: string;
   languages?: ExtensionLanguage[];
   grammars?: LoadedGrammar[];
 }
@@ -96,36 +105,67 @@ function extensionDirName(ref: ExtensionRef): string {
 
 async function loadExtensions(homePath: string): Promise<WorkerLoadedExtension[]> {
   const extensionsDir = join(homePath, '.faraday', 'extensions');
+  console.log('[ExtHost] loadExtensions start', { homePath, extensionsDir });
 
   // Read extensions.json
   let refs: ExtensionRef[];
   try {
-    const text = await readTextFile(join(extensionsDir, 'extensions.json'));
-    if (text === null) return [];
+    const extensionsJsonPath = join(extensionsDir, 'extensions.json');
+    const text = await readTextFile(extensionsJsonPath);
+    if (text === null) {
+      console.log('[ExtHost] extensions.json read returned null');
+      return [];
+    }
     const parsed = JSON.parse(text);
     refs = Array.isArray(parsed) ? parsed : [];
-  } catch {
+    console.log('[ExtHost] extensions.json refs', refs.length, refs.map((r) => `${r.publisher}.${r.name}@${r.version}`));
+  } catch (e) {
+    console.log('[ExtHost] extensions.json parse failed', e);
     return [];
   }
 
   const loaded: WorkerLoadedExtension[] = [];
   for (const ref of refs) {
     if (!ref.publisher || !ref.name || !ref.version) continue;
+    const extKey = `${ref.publisher}.${ref.name}`;
     try {
       const extDir = join(extensionsDir, extensionDirName(ref));
       const manifestText = await readTextFile(join(extDir, 'package.json'));
-      if (manifestText === null) continue;
+      if (manifestText === null) {
+        console.log('[ExtHost] package.json null for', extKey, extDir);
+        continue;
+      }
       const manifest: ExtensionManifest = JSON.parse(manifestText);
 
       let iconThemeFss: string | undefined;
       let iconThemeBasePath: string | undefined;
+      let vscodeIconThemePath: string | undefined;
+      let vscodeIconThemeId: string | undefined;
+
       if (manifest.contributes?.iconTheme?.path) {
-        const fssPath = join(extDir, manifest.contributes.iconTheme.path);
-        const fssText = await readTextFile(fssPath);
-        if (fssText !== null) {
-          iconThemeFss = fssText;
-          iconThemeBasePath = dirname(fssPath);
+        const rawPath = manifest.contributes.iconTheme.path;
+        const themePath = join(extDir, normalizePath(rawPath));
+        console.log('[ExtHost] iconTheme', extKey, { rawPath, themePath });
+        if (themePath.endsWith('.json')) {
+          vscodeIconThemePath = themePath;
+          vscodeIconThemeId = manifest.contributes.iconTheme.id;
+          console.log('[ExtHost] iconTheme (vscode json)', extKey, themePath);
+        } else {
+          const fssText = await readTextFile(themePath);
+          if (fssText !== null) {
+            iconThemeFss = fssText;
+            iconThemeBasePath = dirname(themePath);
+            console.log('[ExtHost] iconTheme (FSS) loaded', extKey, { themePath, iconThemeBasePath, length: fssText.length });
+          } else {
+            console.log('[ExtHost] iconTheme (FSS) read returned null', extKey, themePath);
+          }
         }
+      }
+      if (manifest.contributes?.iconThemes?.length && !vscodeIconThemePath) {
+        const first = manifest.contributes.iconThemes[0];
+        vscodeIconThemePath = join(extDir, first.path);
+        vscodeIconThemeId = first.id;
+        console.log('[ExtHost] iconThemes (vscode)', extKey, vscodeIconThemePath);
       }
 
       // Load language contributions
@@ -149,12 +189,24 @@ async function loadExtensions(homePath: string): Promise<WorkerLoadedExtension[]
         }
       }
 
-      loaded.push({ ref, manifest, dirPath: extDir, iconThemeFss, iconThemeBasePath, languages, grammars });
-    } catch {
+      loaded.push({
+        ref,
+        manifest,
+        dirPath: extDir,
+        iconThemeFss,
+        iconThemeBasePath,
+        vscodeIconThemePath,
+        vscodeIconThemeId,
+        languages,
+        grammars,
+      });
+    } catch (e) {
+      console.log('[ExtHost] load extension failed', extKey, e);
       continue;
     }
   }
 
+  console.log('[ExtHost] loaded', loaded.length, 'extensions; FSS:', loaded.filter((e) => e.iconThemeFss).map((e) => `${e.ref.publisher}.${e.ref.name}`), 'vscode:', loaded.filter((e) => e.vscodeIconThemePath).map((e) => `${e.ref.publisher}.${e.ref.name}`));
   return loaded;
 }
 
