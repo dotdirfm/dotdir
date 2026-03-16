@@ -1,4 +1,4 @@
-import { type ReactNode, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, memo, useCallback, useLayoutEffect, useRef } from 'react';
 import { ScrollableContainer } from './ScrollableContainer';
 import { useElementSize } from './useElementSize';
 
@@ -8,15 +8,33 @@ export interface ColumnsScrollerProps {
   totalCount: number;
   itemHeight: number;
   minColumnWidth?: number;
-  renderItem(index: number): ReactNode;
+  far?: boolean;
+  getItemKey?: (index: number) => string | number;
+  renderItem(index: number, isActive: boolean): ReactNode;
   onPosChange: (newTopmostItem: number, newActiveItem: number) => void;
   onItemsPerColumnChanged?: (count: number) => void;
   onColumnCountChanged?: (count: number) => void;
 }
 
+const ItemWrapper = memo(function ItemWrapper({
+  index, isActive, width, height, renderItem,
+}: {
+  index: number;
+  isActive: boolean;
+  width: string;
+  height: number;
+  renderItem: (index: number, isActive: boolean) => ReactNode;
+}) {
+  return (
+    <div style={{ width, height }}>
+      {renderItem(index, isActive)}
+    </div>
+  );
+});
+
 export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrollerProps) {
   let { topmostIndex } = props;
-  const { activeIndex, totalCount, itemHeight, minColumnWidth, renderItem, onPosChange, onItemsPerColumnChanged, onColumnCountChanged } = props;
+  const { activeIndex, totalCount, itemHeight, minColumnWidth, far = false, getItemKey, renderItem, onPosChange, onItemsPerColumnChanged, onColumnCountChanged } = props;
 
   if (!Number.isInteger(itemHeight) || itemHeight <= 0) {
     throw new Error('itemHeight should be positive');
@@ -56,44 +74,41 @@ export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrol
   topmostIndexRef.current = topmostIndex;
   activeIndexRef.current = activeIndex;
 
-  const items = useMemo(() => {
-    const end = Math.min(totalCount, topmostIndex + itemsPerColumn * columnCount);
-    const slice = [];
-    for (let i = topmostIndex; i < end; i++) {
-      slice.push(
-        <div key={i} style={{ width: `${100 / columnCount}%`, height: itemHeight }}>
-          {renderItem(i)}
-        </div>,
-      );
-    }
-    // Empty trailing columns to preserve flex layout
-    const usedItems = end - topmostIndex;
-    const emptyColumns = columnCount - Math.ceil(usedItems / itemsPerColumn);
-    for (let i = 0; i < emptyColumns; i++) {
-      slice.push(
-        <div key={`empty-${i}`} style={{ height: '100%', width: `${100 / columnCount}%` }} />,
-      );
-    }
-    return slice;
-  }, [columnCount, renderItem, itemHeight, itemsPerColumn, topmostIndex, totalCount]);
-
-  const [scrollTop, setScrollTop] = useState(0);
-
-  useEffect(() => {
-    setScrollTop(activeIndex * itemHeight);
-  }, [itemHeight, activeIndex]);
-
   const onScroll = useCallback(
     (scroll: number) => {
-      setScrollTop(scroll);
       const newActiveItem = Math.round(scroll / itemHeight);
       const delta = newActiveItem - activeIndexRef.current;
       if (delta) {
-        onPosChangeRef.current?.(topmostIndexRef.current + delta, newActiveItem);
+        const newTopmost = far ? topmostIndexRef.current + delta : topmostIndexRef.current;
+        onPosChangeRef.current?.(newTopmost, newActiveItem);
       }
     },
-    [itemHeight],
+    [itemHeight, far],
   );
+
+  const end = Math.min(totalCount, topmostIndex + itemsPerColumn * columnCount);
+  const widthPercent = `${100 / columnCount}%`;
+
+  const items = [];
+  for (let i = topmostIndex; i < end; i++) {
+    items.push(
+      <ItemWrapper
+        key={getItemKey ? getItemKey(i) : i}
+        index={i}
+        isActive={activeIndex === i}
+        width={widthPercent}
+        height={itemHeight}
+        renderItem={renderItem}
+      />,
+    );
+  }
+  const usedItems = end - topmostIndex;
+  const emptyColumns = columnCount - Math.ceil(usedItems / itemsPerColumn);
+  for (let i = 0; i < emptyColumns; i++) {
+    items.push(
+      <div key={`empty-${i}`} style={{ height: '100%', width: widthPercent }} />,
+    );
+  }
 
   return (
     <div className="columns-scroller-root" ref={rootRef}>
@@ -103,7 +118,7 @@ export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrol
         ))}
       </div>
       <ScrollableContainer
-        scrollTop={scrollTop}
+        scrollTop={activeIndex * itemHeight}
         scrollHeight={(totalCount - 1) * itemHeight}
         lineSize={itemHeight}
         style={{ height: '100%' }}

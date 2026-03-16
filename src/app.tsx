@@ -325,8 +325,8 @@ export function App() {
   const [rightTabs, setRightTabs] = useState<PanelTab[]>(() => [createFilelistTab('')]);
   const [leftActiveIndex, setLeftActiveIndex] = useState(0);
   const [rightActiveIndex, setRightActiveIndex] = useState(0);
-  const [leftSelectedName, setLeftSelectedName] = useState<string | undefined>(undefined);
-  const [rightSelectedName, setRightSelectedName] = useState<string | undefined>(undefined);
+  const leftSelectedNameRef = useRef<string | undefined>(undefined);
+  const rightSelectedNameRef = useRef<string | undefined>(undefined);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [themesReady, setThemesReady] = useState(false);
   const leftTabsRef = useRef(leftTabs);
@@ -633,7 +633,7 @@ export function App() {
 
   const handleLeftStateChange = useCallback(
     (selectedName: string | undefined, topmostName: string | undefined) => {
-      setLeftSelectedName((prev) => (prev === selectedName ? prev : selectedName));
+      leftSelectedNameRef.current = selectedName;
       pendingPanelStateRef.current.leftPanel = {
         currentPath: left.currentPath,
         ...buildPersistedTabs(leftTabsRef.current, leftActiveIndexRef.current),
@@ -662,7 +662,7 @@ export function App() {
 
   const handleRightStateChange = useCallback(
     (selectedName: string | undefined, topmostName: string | undefined) => {
-      setRightSelectedName((prev) => (prev === selectedName ? prev : selectedName));
+      rightSelectedNameRef.current = selectedName;
       pendingPanelStateRef.current.rightPanel = {
         currentPath: right.currentPath,
         ...buildPersistedTabs(rightTabsRef.current, rightActiveIndexRef.current),
@@ -823,7 +823,7 @@ export function App() {
   const handleOpenSelectedFolderInOppositeCurrentTab = useCallback(() => {
     const side = activePanelRef.current;
     const entries = side === 'left' ? left.entries : right.entries;
-    const selectedName = side === 'left' ? leftSelectedName : rightSelectedName;
+    const selectedName = side === 'left' ? leftSelectedNameRef.current : rightSelectedNameRef.current;
     const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
     if (!entry || entry.type !== 'folder') return;
     const path = entry.path as string;
@@ -843,12 +843,12 @@ export function App() {
     });
     panel.navigateTo(path);
     setActivePanel(opposite);
-  }, [left.entries, right.entries, leftSelectedName, rightSelectedName, leftTabs, rightTabs, leftActiveIndex, rightActiveIndex, left, right]);
+  }, [left.entries, right.entries, leftTabs, rightTabs, leftActiveIndex, rightActiveIndex, left, right]);
 
   const handleOpenSelectedFolderInOppositeNewTab = useCallback(() => {
     const side = activePanelRef.current;
     const entries = side === 'left' ? left.entries : right.entries;
-    const selectedName = side === 'left' ? leftSelectedName : rightSelectedName;
+    const selectedName = side === 'left' ? leftSelectedNameRef.current : rightSelectedNameRef.current;
     const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
     if (!entry || entry.type !== 'folder') return;
     const path = entry.path as string;
@@ -864,12 +864,12 @@ export function App() {
     });
     panel.navigateTo(path);
     setActivePanel(opposite);
-  }, [left.entries, right.entries, leftSelectedName, rightSelectedName, left, right]);
+  }, [left.entries, right.entries, left, right]);
 
   const handlePreviewInOppositePanel = useCallback(() => {
     const side = activePanelRef.current;
     const entries = side === 'left' ? left.entries : right.entries;
-    const selectedName = side === 'left' ? leftSelectedName : rightSelectedName;
+    const selectedName = side === 'left' ? leftSelectedNameRef.current : rightSelectedNameRef.current;
     const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
     if (!entry || entry.type !== 'file') return;
     const path = entry.path as string;
@@ -898,7 +898,7 @@ export function App() {
       setIdx(tabs.length);
     }
     setActivePanel(opposite);
-  }, [left.entries, right.entries, leftSelectedName, rightSelectedName, leftTabs, rightTabs]);
+  }, [left.entries, right.entries, leftTabs, rightTabs]);
 
   const handleTerminalCwd = useCallback((path: string) => {
     const normalizedPath = normalizeTerminalPath(path);
@@ -1542,6 +1542,15 @@ export function App() {
     return <div className="loading">Loading...</div>;
   }
 
+  const leftFilteredEntries = useMemo(
+    () => showHidden ? left.entries : left.entries.filter((e) => !e.meta.hidden),
+    [showHidden, left.entries],
+  );
+  const rightFilteredEntries = useMemo(
+    () => showHidden ? right.entries : right.entries.filter((e) => !e.meta.hidden),
+    [showHidden, right.entries],
+  );
+
   const actionBarHeight = 24;
   const collapsedTerminalVisibleHeight = 40;
   const activeCwd = requestedTerminalCwd ?? (activePanel === 'left' ? left.currentPath : right.currentPath);
@@ -1579,7 +1588,7 @@ export function App() {
               key={leftTabs[leftActiveIndex].id}
               currentPath={left.currentPath}
               parentNode={left.parentNode}
-              entries={showHidden ? left.entries : left.entries.filter((e) => !e.meta.hidden)}
+              entries={leftFilteredEntries}
               onNavigate={(path) => {
                 setActivePanel('left');
                 rememberExpectedTerminalCwd(path);
@@ -1647,7 +1656,7 @@ export function App() {
               key={rightTabs[rightActiveIndex].id}
               currentPath={right.currentPath}
               parentNode={right.parentNode}
-              entries={showHidden ? right.entries : right.entries.filter((e) => !e.meta.hidden)}
+              entries={rightFilteredEntries}
               onNavigate={(path) => {
                 setActivePanel('right');
                 rememberExpectedTerminalCwd(path);

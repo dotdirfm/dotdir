@@ -61,9 +61,29 @@ class CommandRegistry {
   private contextValues: Record<string, unknown> = {};
   private listeners = new Set<() => void>();
 
+  private batchDepth = 0;
+  private batchDirty = false;
+
+  beginBatch(): void {
+    this.batchDepth++;
+  }
+
+  endBatch(): void {
+    this.batchDepth--;
+    if (this.batchDepth === 0 && this.batchDirty) {
+      this.batchDirty = false;
+      this.notifyListeners();
+    }
+  }
+
   setContext(key: string, value: unknown): void {
+    if (this.contextValues[key] === value) return;
     this.contextValues[key] = value;
-    this.notifyListeners();
+    if (this.batchDepth > 0) {
+      this.batchDirty = true;
+    } else {
+      this.notifyListeners();
+    }
   }
 
   getContext(key: string): unknown {

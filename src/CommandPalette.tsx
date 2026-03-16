@@ -60,6 +60,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       setKeybindings(commandRegistry.getKeybindings());
     };
     updateCommands();
+    if (!open) return;
     return commandRegistry.onChange(updateCommands);
   }, [open, capturedContext]);
 

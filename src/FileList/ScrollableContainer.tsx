@@ -44,6 +44,7 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
       newScrollTop = Math.min(newScrollTop, scrollHeight);
       newScrollTop = Math.max(0, newScrollTop);
       if (scrollTopRef.current !== newScrollTop) {
+        scrollTopRef.current = newScrollTop;
         onScrollRef.current(newScrollTop);
       }
     };

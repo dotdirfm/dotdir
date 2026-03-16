@@ -239,12 +239,16 @@ export const FileList = memo(function FileList({
   const onStateChangeRef = useRef(onStateChange);
   onStateChangeRef.current = onStateChange;
 
-  // Report state changes to parent
+  // Report state changes to parent (debounced to avoid per-tick overhead during scroll)
+  const stateChangeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
     if (!onStateChangeRef.current) return;
-    const selectedName = displayEntries[activeIndex]?.entry.name;
-    const topmostName = displayEntries[topmostIndex]?.entry.name;
-    onStateChangeRef.current(selectedName, topmostName);
+    clearTimeout(stateChangeTimerRef.current);
+    stateChangeTimerRef.current = setTimeout(() => {
+      const selectedName = displayEntriesRef.current[activeIndexRef.current]?.entry.name;
+      const topmostName = displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
+      onStateChangeRef.current?.(selectedName, topmostName);
+    }, 150);
   }, [activeIndex, topmostIndex, displayEntries]);
 
   const navigateToEntry = useCallback(async (entry: FsNode): Promise<void> => {
@@ -288,20 +292,26 @@ export const FileList = memo(function FileList({
     const isFile = item?.entry.type === 'file';
     const isExecutable = isFile && item != null && !!(item.entry.meta as { executable?: boolean }).executable;
     const fileName = item?.entry.name ?? '';
+    commandRegistry.beginBatch();
     commandRegistry.setContext('listItemIsFile', isFile);
     commandRegistry.setContext('listItemIsFolder', !isFile && item != null);
     commandRegistry.setContext('listItemIsExecutable', isExecutable);
     commandRegistry.setContext('listItemHasViewer', isFile && viewerRegistry.resolve(fileName) !== null);
     commandRegistry.setContext('listItemHasEditor', isFile && editorRegistry.resolve(fileName) !== null);
+    commandRegistry.endBatch();
   }, []);
 
   useEffect(() => {
     if (!active) return;
     updateSelectionContext();
+  }, [active, activeIndex, displayEntries, updateSelectionContext]);
+
+  useEffect(() => {
+    if (!active) return;
     const unsubViewer = viewerRegistry.onChange(updateSelectionContext);
     const unsubEditor = editorRegistry.onChange(updateSelectionContext);
     return () => { unsubViewer(); unsubEditor(); };
-  }, [active, activeIndex, displayEntries, updateSelectionContext]);
+  }, [active, updateSelectionContext]);
 
   // Register navigation commands when panel is active
   useEffect(() => {
@@ -583,20 +593,23 @@ export const FileList = memo(function FileList({
     setColumnCount(count);
   }, []);
 
-  const handlePosChange: ColumnsScrollerProps['onPosChange'] = useCallback((_topmost: number, active: number) => {
-    actionQueue.enqueue(() => {
-      setActiveIndex(clamp(active, 0, displayEntriesRef.current.length - 1));
-    });
+  const handlePosChange: ColumnsScrollerProps['onPosChange'] = useCallback((topmost: number, active: number) => {
+    const len = displayEntriesRef.current.length;
+    setActiveIndex(clamp(active, 0, len - 1));
+    setTopmostIndex(clamp(topmost, 0, len - 1));
+  }, []);
+
+  const getItemKey = useCallback((index: number) => {
+    return displayEntriesRef.current[index]?.entry.name ?? index;
   }, []);
 
   const lastClickTimeRef = useRef(0);
 
   const renderItem = useCallback(
-    (index: number) => {
+    (index: number, isActive: boolean) => {
       const item = displayEntriesRef.current[index];
       if (!item) return null;
       const { entry, style, iconPath, iconFallbackUrl } = item;
-      const isActive = index === activeIndex;
       const iconUrl = getIconUrl(iconPath) ?? iconFallbackUrl;
 
       const isExecutable = entry.type === 'file' && !!(entry.meta as { executable?: boolean }).executable;
@@ -637,7 +650,7 @@ export const FileList = memo(function FileList({
         </div>
       );
     },
-    [activeIndex, navigateToEntry, iconsVersion],
+    [navigateToEntry, iconsVersion],
   );
 
   const activeEntry = displayEntries[activeIndex];
@@ -706,6 +719,8 @@ export const FileList = memo(function FileList({
           totalCount={displayEntries.length}
           itemHeight={ROW_HEIGHT}
           minColumnWidth={250}
+          far
+          getItemKey={getItemKey}
           renderItem={renderItem}
           onPosChange={handlePosChange}
           onItemsPerColumnChanged={handleItemsPerColumnChanged}
@@ -722,5 +737,17 @@ export const FileList = memo(function FileList({
         {totalFiles.toLocaleString()} file{totalFiles !== 1 ? 's' : ''}, {formatSize(totalSize)}
       </div>
     </div>
+  );
+}, (prev, next) => {
+  // Only compare data props — callbacks are stored in refs inside the component
+  return (
+    prev.currentPath === next.currentPath &&
+    prev.parentNode === next.parentNode &&
+    prev.entries === next.entries &&
+    prev.active === next.active &&
+    prev.resolver === next.resolver &&
+    prev.requestedActiveName === next.requestedActiveName &&
+    prev.requestedTopmostName === next.requestedTopmostName &&
+    prev.editorFileSizeLimit === next.editorFileSizeLimit
   );
 });

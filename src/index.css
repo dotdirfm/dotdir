@@ -810,6 +810,7 @@ body.terminal-resizing {
 
 .columns-scroller-content > div {
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .columns-borders {
