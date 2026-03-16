@@ -284,8 +284,8 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
       // Load color theme contributions
       let colorThemes: LoadedColorTheme[] | undefined;
       if (manifest.contributes?.themes?.length) {
-        colorThemes = manifest.contributes.themes.map((t) => ({
-          id: t.id || t.label,
+        colorThemes = manifest.contributes.themes.map((t, i) => ({
+          id: t.id || `${t.label}#${i}`,
           label: t.label,
           uiTheme: t.uiTheme,
           jsonPath: join(extDir, t.path),
