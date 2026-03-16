@@ -1586,6 +1586,39 @@ body.terminal-resizing {
   color: var(--fg-muted);
 }
 
+.ext-color-themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.ext-color-theme-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px !important;
+  font-size: 10px !important;
+}
+
+.ext-color-theme-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--fg-muted);
+}
+
+.ext-color-theme-indicator[data-ui-theme='vs-dark'],
+.ext-color-theme-indicator[data-ui-theme='hc-black'] {
+  background: #1e1e1e;
+}
+
+.ext-color-theme-indicator[data-ui-theme='vs'],
+.ext-color-theme-indicator[data-ui-theme='hc-light'] {
+  background: #f5f5f5;
+}
+
 /* Command Palette */
 .command-palette-dialog {
   position: fixed;

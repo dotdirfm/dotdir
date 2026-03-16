@@ -121,6 +121,69 @@ fn default_unix_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
 
+#[cfg(not(windows))]
+fn shell_display_name(shell: &str) -> String {
+    std::path::Path::new(shell)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(shell)
+        .to_string()
+}
+
+#[cfg(not(windows))]
+fn push_unique_profile(profiles: &mut Vec<TerminalProfile>, id: String, label: String, shell: String) {
+    if profiles.iter().any(|p| p.shell == shell || p.id == id) {
+        return;
+    }
+    profiles.push(TerminalProfile { id, label, shell });
+}
+
+#[cfg(not(windows))]
+fn discover_unix_profiles() -> Vec<TerminalProfile> {
+    let mut profiles = Vec::new();
+
+    // Always include the current default shell first to preserve existing behaviour.
+    let default_shell = default_unix_shell();
+    let default_name = shell_display_name(&default_shell);
+    push_unique_profile(
+        &mut profiles,
+        "default".to_string(),
+        format!("Default ({})", default_name),
+        default_shell.clone(),
+    );
+
+    // Add shells from /etc/shells (standard POSIX list of valid login shells).
+    if let Ok(contents) = std::fs::read_to_string("/etc/shells") {
+        for line in contents.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || !trimmed.starts_with('/') {
+                continue;
+            }
+            if !PathBuf::from(trimmed).is_file() {
+                continue;
+            }
+            let name = shell_display_name(trimmed);
+            let id = name.to_lowercase();
+            push_unique_profile(&mut profiles, id, name, trimmed.to_string());
+        }
+    }
+
+    // Common PowerShell Core locations on macOS/Homebrew that may not be listed in /etc/shells.
+    #[cfg(target_os = "macos")]
+    for candidate in ["/usr/local/bin/pwsh", "/opt/homebrew/bin/pwsh"] {
+        if PathBuf::from(candidate).is_file() {
+            push_unique_profile(
+                &mut profiles,
+                "pwsh".to_string(),
+                "pwsh".to_string(),
+                candidate.to_string(),
+            );
+        }
+    }
+
+    profiles
+}
+
 #[cfg(windows)]
 pub fn list_profiles() -> Vec<TerminalProfile> {
     vec![
@@ -139,11 +202,16 @@ pub fn list_profiles() -> Vec<TerminalProfile> {
 
 #[cfg(not(windows))]
 pub fn list_profiles() -> Vec<TerminalProfile> {
-    vec![TerminalProfile {
-        id: "default".to_string(),
-        label: "Default Shell".to_string(),
-        shell: default_unix_shell(),
-    }]
+    let mut profiles = discover_unix_profiles();
+    if profiles.is_empty() {
+        // Extremely defensive fallback: we should always have at least one profile.
+        profiles.push(TerminalProfile {
+            id: "default".to_string(),
+            label: "Default Shell".to_string(),
+            shell: default_unix_shell(),
+        });
+    }
+    profiles
 }
 
 fn resolve_profile(profile_id: Option<&str>) -> TerminalProfile {

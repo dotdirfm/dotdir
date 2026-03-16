@@ -12,12 +12,14 @@ import { basename, normalizePath } from './path';
 import { getExtensionScriptUrl } from './extensionLoader';
 import type {
   HostApi,
+  ColorThemeData,
   ViewerExtensionApi,
   EditorExtensionApi,
   ViewerProps,
   EditorProps,
   MediaFileRef,
 } from './extensionApi';
+import { getActiveColorThemeData, onColorThemeChange } from './vscodeColorTheme';
 import { focusContext } from './focusContext';
 import {
   getCachedEditorExtension,
@@ -145,6 +147,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     },
     async getTheme(): Promise<string> {
       return bridge.theme.get();
+    },
+    getColorTheme(): ColorThemeData | null {
+      return getActiveColorThemeData();
+    },
+    onThemeChange(callback: (theme: ColorThemeData) => void): () => void {
+      return onColorThemeChange(callback);
     },
     onClose(): void {
       onCloseRef.current();

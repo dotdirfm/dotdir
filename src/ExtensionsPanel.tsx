@@ -10,6 +10,7 @@ import {
   loadExtensions,
   type LoadedExtension,
   extensionIconThemeId,
+  colorThemeKey,
   readSettings,
   writeSettings,
 } from './extensions';
@@ -27,12 +28,14 @@ interface Props {
   onExtensionsChanged: () => void;
   activeIconTheme?: string;
   onIconThemeChange: (themeId: string | undefined) => void;
+  activeColorTheme?: string;
+  onColorThemeChange: (themeKey: string | undefined) => void;
 }
 
 type Tab = 'marketplace' | 'installed';
 type MarketplaceSource = 'faraday' | 'vscode';
 
-export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme, onIconThemeChange }: Props) {
+export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme, onIconThemeChange, activeColorTheme, onColorThemeChange }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<Tab>('marketplace');
   const [marketplaceSource, setMarketplaceSource] = useState<MarketplaceSource>('vscode');
@@ -133,12 +136,19 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
     setError('');
     try {
       await uninstallExtension(ref.publisher, ref.name);
+      const settings = await readSettings();
+      let settingsChanged = false;
       if (activeIconTheme === key) {
-        const settings = await readSettings();
         delete settings.iconTheme;
-        await writeSettings(settings);
         onIconThemeChange(undefined);
+        settingsChanged = true;
       }
+      if (activeColorTheme?.startsWith(key + ':')) {
+        delete settings.colorTheme;
+        onColorThemeChange(undefined);
+        settingsChanged = true;
+      }
+      if (settingsChanged) await writeSettings(settings);
       await refreshInstalled();
       onExtensionsChanged();
     } catch (err) {
@@ -159,6 +169,19 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
     }
     await writeSettings(settings);
     onIconThemeChange(newId);
+  };
+
+  const handleSetColorTheme = async (ext: LoadedExtension, themeId: string) => {
+    const key = colorThemeKey(ext, themeId);
+    const newKey = key === activeColorTheme ? undefined : key;
+    const settings = await readSettings();
+    if (newKey) {
+      settings.colorTheme = newKey;
+    } else {
+      delete settings.colorTheme;
+    }
+    await writeSettings(settings);
+    onColorThemeChange(newKey);
   };
 
   const formatSize = (bytes: number) => {
@@ -313,8 +336,9 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
             installed.map((ext) => {
               const key = `${ext.ref.publisher}.${ext.ref.name}`;
               const isBusy = installing === key;
-              const themeId = extensionIconThemeId(ext);
-              const isActiveTheme = themeId != null && themeId === activeIconTheme;
+              const iconThemeId = extensionIconThemeId(ext);
+              const isActiveIconTheme = iconThemeId != null && iconThemeId === activeIconTheme;
+              const hasColorThemes = ext.colorThemes && ext.colorThemes.length > 0;
               return (
                 <div key={key} className="ext-item">
                   <div className="ext-icon">
@@ -328,9 +352,14 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
                     <div className="ext-desc">{ext.manifest.description || ''}</div>
                     <div className="ext-meta">
                       <span>v{ext.ref.version}</span>
-                      {themeId && (
-                        <span className={`ext-theme-badge${isActiveTheme ? ' active' : ''}`}>
-                          {isActiveTheme ? '● Active theme' : 'Icon theme'}
+                      {iconThemeId && (
+                        <span className={`ext-theme-badge${isActiveIconTheme ? ' active' : ''}`}>
+                          {isActiveIconTheme ? '● Icon theme' : 'Icon theme'}
+                        </span>
+                      )}
+                      {hasColorThemes && (
+                        <span className="ext-theme-badge">
+                          {ext.colorThemes!.length} color theme{ext.colorThemes!.length > 1 ? 's' : ''}
                         </span>
                       )}
                       {ext.languages && ext.languages.length > 0 && (
@@ -344,14 +373,33 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
                         </span>
                       )}
                     </div>
+                    {hasColorThemes && (
+                      <div className="ext-color-themes">
+                        {ext.colorThemes!.map((ct) => {
+                          const ctKey = colorThemeKey(ext, ct.id);
+                          const isActive = ctKey === activeColorTheme;
+                          return (
+                            <button
+                              key={ct.id}
+                              className={`ext-btn ext-color-theme-btn ${isActive ? 'installed' : 'install'}`}
+                              onClick={() => handleSetColorTheme(ext, ct.id)}
+                            >
+                              <span className="ext-color-theme-indicator" data-ui-theme={ct.uiTheme} />
+                              {ct.label}
+                              {isActive && ' ●'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div className="ext-actions">
-                    {themeId && (
+                    {iconThemeId && (
                       <button
-                        className={`ext-btn ${isActiveTheme ? 'installed' : 'install'}`}
+                        className={`ext-btn ${isActiveIconTheme ? 'installed' : 'install'}`}
                         onClick={() => handleSetIconTheme(ext)}
                       >
-                        {isActiveTheme ? 'Deactivate' : 'Activate'}
+                        {isActiveIconTheme ? 'Deactivate' : 'Activate'}
                       </button>
                     )}
                     <button

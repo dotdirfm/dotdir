@@ -74,9 +74,17 @@ export interface ExtensionEditorContribution {
   priority?: number;
 }
 
+export interface ExtensionColorTheme {
+  id?: string;
+  label: string;
+  uiTheme: string; // 'vs-dark' | 'vs' | 'hc-black' | 'hc-light'
+  path: string; // relative path to JSON file
+}
+
 export interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme; // FSS format (single)
   iconThemes?: ExtensionIconThemeVSCode[]; // VS Code format (array)
+  themes?: ExtensionColorTheme[]; // VS Code color themes
   languages?: ExtensionLanguage[];
   grammars?: ExtensionGrammar[];
   commands?: ExtensionCommand[];
@@ -112,6 +120,13 @@ export interface LoadedGrammar {
   content: object; // parsed TextMate grammar JSON
 }
 
+export interface LoadedColorTheme {
+  id: string;
+  label: string;
+  uiTheme: string;
+  jsonPath: string; // absolute path to theme JSON
+}
+
 export interface LoadedExtension {
   ref: ExtensionRef;
   manifest: ExtensionManifest;
@@ -125,6 +140,8 @@ export interface LoadedExtension {
   vscodeIconThemePath?: string;
   /** VS Code icon theme ID */
   vscodeIconThemeId?: string;
+  /** Color theme contributions from this extension */
+  colorThemes?: LoadedColorTheme[];
   /** Language contributions from this extension */
   languages?: ExtensionLanguage[];
   /** Grammar contributions with their loaded content */
@@ -264,6 +281,17 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         }
       }
 
+      // Load color theme contributions
+      let colorThemes: LoadedColorTheme[] | undefined;
+      if (manifest.contributes?.themes?.length) {
+        colorThemes = manifest.contributes.themes.map((t) => ({
+          id: t.id || t.label,
+          label: t.label,
+          uiTheme: t.uiTheme,
+          jsonPath: join(extDir, t.path),
+        }));
+      }
+
       // Load command and keybinding contributions
       const commands = manifest.contributes?.commands;
       const keybindings = manifest.contributes?.keybindings;
@@ -281,6 +309,7 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         iconThemeBasePath,
         vscodeIconThemePath,
         vscodeIconThemeId,
+        colorThemes,
         languages,
         grammars,
         commands,
@@ -559,6 +588,7 @@ export interface PanelPersistedState {
 
 export interface FaradaySettings {
   iconTheme?: string; // "publisher.name" of the active icon theme
+  colorTheme?: string; // "publisher.name:themeId" of the active color theme
   editorFileSizeLimit?: number; // Max file size in bytes to open for editing (default: 1MB)
   leftPanel?: PanelPersistedState;
   rightPanel?: PanelPersistedState;
@@ -594,4 +624,23 @@ export function extensionIconThemeId(ext: LoadedExtension): string | null {
 
 export function isVSCodeIconTheme(ext: LoadedExtension): boolean {
   return ext.vscodeIconThemePath != null;
+}
+
+export function colorThemeKey(ext: LoadedExtension, themeId: string): string {
+  return `${ext.ref.publisher}.${ext.ref.name}:${themeId}`;
+}
+
+export function findColorTheme(
+  exts: LoadedExtension[],
+  key: string,
+): { ext: LoadedExtension; theme: LoadedColorTheme } | null {
+  for (const ext of exts) {
+    if (!ext.colorThemes) continue;
+    for (const theme of ext.colorThemes) {
+      if (colorThemeKey(ext, theme.id) === key) {
+        return { ext, theme };
+      }
+    }
+  }
+  return null;
 }

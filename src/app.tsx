@@ -24,7 +24,8 @@ import { commandRegistry } from './commands';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
-import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type LoadedExtension, type PanelPersistedState, type PersistedTab } from './extensions';
+import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, findColorTheme, type LoadedExtension, type PanelPersistedState, type PersistedTab } from './extensions';
+import { loadAndApplyColorTheme, clearColorTheme, uiThemeToKind } from './vscodeColorTheme';
 import { initUserSettings, onSettingsChange, updateSettings } from './userSettings';
 import { languageRegistry } from './languageRegistry';
 import { setIconTheme, setIconThemeKind } from './iconResolver';
@@ -315,6 +316,7 @@ export function App() {
   const cancelDeleteRef = useRef(false);
   const deleteProgressSpecRef = useRef<{ type: 'deleteProgress'; total: number; current: number; currentPath: string; onCancel: () => void } | null>(null);
   const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
+  const [activeColorTheme, setActiveColorTheme] = useState<string | undefined>(undefined);
   const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
   const [initialLeftPanel, setInitialLeftPanel] = useState<PanelPersistedState | undefined>(undefined);
   const [initialRightPanel, setInitialRightPanel] = useState<PanelPersistedState | undefined>(undefined);
@@ -336,6 +338,8 @@ export function App() {
   rightActiveIndexRef.current = rightActiveIndex;
   const activeIconThemeRef = useRef(activeIconTheme);
   activeIconThemeRef.current = activeIconTheme;
+  const activeColorThemeRef = useRef(activeColorTheme);
+  activeColorThemeRef.current = activeColorTheme;
   const commandPalette = useCommandPalette();
   const writeToTerminalRef = useRef<(data: string) => Promise<void>>(async () => {});
 
@@ -343,6 +347,7 @@ export function App() {
     // Initialize settings with watch
     initUserSettings().then((s) => {
       if (s.iconTheme) setActiveIconTheme(s.iconTheme);
+      if (s.colorTheme) setActiveColorTheme(s.colorTheme);
       if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
 
       // Restore tabs from persisted state
@@ -383,6 +388,7 @@ export function App() {
     // Listen for settings changes (but don't update panel state from external changes)
     const unsubscribe = onSettingsChange((s) => {
       if (s.iconTheme) setActiveIconTheme(s.iconTheme);
+      if (s.colorTheme !== undefined) setActiveColorTheme(s.colorTheme || undefined);
       if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
     });
 
@@ -932,9 +938,17 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    setIconThemeKind(theme === 'light' || theme === 'high-contrast-light' ? 'light' : 'dark');
-  }, [theme]);
+    // If a color theme is active, determine light/dark from its uiTheme.
+    // Otherwise fall back to OS/system theme.
+    const colorThemeMatch = activeColorTheme
+      ? findColorTheme(latestExtensionsRef.current, activeColorTheme)
+      : null;
+    const effectiveKind = colorThemeMatch
+      ? uiThemeToKind(colorThemeMatch.theme.uiTheme)
+      : (theme === 'light' || theme === 'high-contrast-light' ? 'light' : 'dark');
+    document.documentElement.dataset.theme = effectiveKind;
+    setIconThemeKind(effectiveKind);
+  }, [theme, activeColorTheme]);
 
   // Register built-in commands
   useEffect(() => {
@@ -1431,6 +1445,26 @@ export function App() {
       }
     };
 
+    const updateColorTheme = (exts: LoadedExtension[], themeKey: string | undefined) => {
+      if (!themeKey) {
+        clearColorTheme();
+        return;
+      }
+      const match = findColorTheme(exts, themeKey);
+      if (match) {
+        const kind = uiThemeToKind(match.theme.uiTheme);
+        document.documentElement.dataset.theme = kind;
+        setIconThemeKind(kind);
+        loadAndApplyColorTheme(match.theme.jsonPath, match.theme.uiTheme).catch((err) => {
+          console.warn('[ExtHost] Failed to load color theme:', themeKey, err);
+          clearColorTheme();
+        });
+      } else {
+        console.warn('[ExtHost] updateColorTheme: no match for', themeKey);
+        clearColorTheme();
+      }
+    };
+
     // Register extension commands and keybindings
     const registerExtensionCommands = (exts: LoadedExtension[]) => {
       for (const ext of exts) {
@@ -1465,6 +1499,7 @@ export function App() {
       populateRegistries(exts);
       setExtensionLayers(exts, activeIconThemeRef.current);
       updateIconTheme(exts, activeIconThemeRef.current);
+      updateColorTheme(exts, activeColorThemeRef.current);
       registerLanguages(exts);
       registerExtensionCommands(exts);
       // Force re-navigation to sync FSS layers with the new extension layers
@@ -1737,6 +1772,19 @@ export function App() {
             }
             if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
             if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
+          }}
+          activeColorTheme={activeColorTheme}
+          onColorThemeChange={(themeKey) => {
+            setActiveColorTheme(themeKey);
+            activeColorThemeRef.current = themeKey;
+            if (!themeKey) {
+              clearColorTheme();
+            } else {
+              const match = findColorTheme(latestExtensionsRef.current, themeKey);
+              if (match) {
+                loadAndApplyColorTheme(match.theme.jsonPath, match.theme.uiTheme).catch(() => clearColorTheme());
+              }
+            }
           }}
         />
       )}

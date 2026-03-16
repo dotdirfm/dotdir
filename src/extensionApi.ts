@@ -54,6 +54,15 @@ export interface MediaFileRef {
 
 // ── Host API (host exposes to iframe) ────────────────────────────────
 
+export interface ColorThemeData {
+  /** Theme kind: 'dark' or 'light'. */
+  kind: 'dark' | 'light';
+  /** VS Code color theme colors (e.g. 'editor.background' → '#1e1e2e'). Undefined when no VS Code theme active. */
+  colors?: Record<string, string>;
+  /** VS Code tokenColors for syntax highlighting. Undefined when no VS Code theme active. */
+  tokenColors?: unknown[];
+}
+
 export interface HostApi {
   readFile(path: string): Promise<ArrayBuffer>;
   readFileText(path: string): Promise<string>;
@@ -61,6 +70,10 @@ export interface HostApi {
   readFileRange?(path: string, offset: number, length: number): Promise<ArrayBuffer>;
   writeFile(path: string, content: string): Promise<void>;
   getTheme(): Promise<string>;
+  /** Get the active color theme data (colors + tokenColors). Returns null if no VS Code theme is active. */
+  getColorTheme?(): ColorThemeData | null;
+  /** Subscribe to theme changes. Callback fires when the color theme changes. Returns unsubscribe function. */
+  onThemeChange?(callback: (theme: ColorThemeData) => void): () => void;
   onClose(): void;
   onNavigateMedia?(file: MediaFileRef): void;
   /** Oniguruma WASM binary for TextMate grammars (optional). */

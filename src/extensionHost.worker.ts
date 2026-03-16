@@ -63,8 +63,16 @@ interface ExtensionEditorContribution {
   priority?: number;
 }
 
+interface ExtensionColorTheme {
+  id?: string;
+  label: string;
+  uiTheme: string;
+  path: string;
+}
+
 interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme;
+  themes?: ExtensionColorTheme[];
   languages?: ExtensionLanguage[];
   grammars?: ExtensionGrammar[];
   viewers?: ExtensionViewerContribution[];
@@ -88,6 +96,13 @@ interface ExtensionRef {
   path?: string;
 }
 
+interface WorkerLoadedColorTheme {
+  id: string;
+  label: string;
+  uiTheme: string;
+  jsonPath: string;
+}
+
 export interface WorkerLoadedExtension {
   ref: ExtensionRef;
   manifest: ExtensionManifest;
@@ -96,6 +111,7 @@ export interface WorkerLoadedExtension {
   iconThemeBasePath?: string;
   vscodeIconThemePath?: string;
   vscodeIconThemeId?: string;
+  colorThemes?: WorkerLoadedColorTheme[];
   languages?: ExtensionLanguage[];
   grammars?: LoadedGrammar[];
   viewers?: ExtensionViewerContribution[];
@@ -163,10 +179,20 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
       }
     }
 
+    let colorThemes: WorkerLoadedColorTheme[] | undefined;
+    if (manifest.contributes?.themes?.length) {
+      colorThemes = manifest.contributes.themes.map((t) => ({
+        id: t.id || t.label,
+        label: t.label,
+        uiTheme: t.uiTheme,
+        jsonPath: join(extDir, t.path),
+      }));
+    }
+
     const viewers = manifest.contributes?.viewers;
     const editors = manifest.contributes?.editors;
 
-    return { ref, manifest, dirPath: extDir, iconThemeFss, iconThemeBasePath, languages, grammars, viewers, editors };
+    return { ref, manifest, dirPath: extDir, iconThemeFss, iconThemeBasePath, colorThemes, languages, grammars, viewers, editors };
   } catch {
     return null;
   }
