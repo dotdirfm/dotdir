@@ -19,7 +19,7 @@ export function MakeFolderDialog({
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    dialog.showModal();
+    if (!dialog.open) dialog.showModal();
     focusContext.push('modal');
     inputRef.current?.focus();
     const handleClose = () => onCancel();

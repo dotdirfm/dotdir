@@ -20,7 +20,7 @@ export function DeleteProgressDialog({
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    dialog.showModal();
+    if (!dialog.open) dialog.showModal();
     focusContext.push('modal');
     return () => {
       focusContext.pop('modal');

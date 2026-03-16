@@ -21,7 +21,7 @@ export function ModalDialog({ title, message, variant = 'default', buttons, onCl
 
   useEffect(() => {
     const dialog = dialogRef.current!;
-    dialog.showModal();
+    if (!dialog.open) dialog.showModal();
     focusContext.push('modal');
     const handleClose = () => onClose();
     dialog.addEventListener('close', handleClose);

@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { createElement } from 'react';
 import { App } from './app';
 import { DialogProvider } from './dialogContext';
+import { ErrorBoundary } from './ErrorBoundary';
 
 declare global {
   interface Window {
@@ -40,14 +41,19 @@ function renderBootError(error: unknown): void {
   document.body.appendChild(pre);
 }
 
+// Track whether the app has booted successfully
+let appBooted = false;
+
 window.addEventListener('error', (event) => {
   void writeBootLog(`window.error: ${String(event.error ?? event.message)}`);
-  renderBootError(event.error ?? event.message);
+  if (!appBooted) renderBootError(event.error ?? event.message);
+  // After boot, let React ErrorBoundary and console handle it
 });
 
 window.addEventListener('unhandledrejection', (event) => {
   void writeBootLog(`unhandledrejection: ${String(event.reason)}`);
-  renderBootError(event.reason);
+  if (!appBooted) renderBootError(event.reason);
+  // After boot, just log — don't nuke the DOM
 });
 
 try {
@@ -62,7 +68,12 @@ try {
 
   document.getElementById('boot-status')?.remove();
   const root = createRoot(container);
-  root.render(createElement(DialogProvider, null, createElement(App)));
+  root.render(
+    createElement(ErrorBoundary, null,
+      createElement(DialogProvider, null, createElement(App)),
+    ),
+  );
+  appBooted = true;
   await writeBootLog('React render started');
 } catch (error) {
   await writeBootLog(`startup catch: ${String(error)}`);

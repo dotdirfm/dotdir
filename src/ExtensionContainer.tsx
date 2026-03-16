@@ -321,7 +321,7 @@ export function ViewerContainer({
     if (inline) return;
     const dialog = dialogRef.current;
     if (!dialog) return;
-    dialog.showModal();
+    if (!dialog.open) dialog.showModal();
     focusContext.push('viewer');
     const handleClose = () => onClose();
     dialog.addEventListener('close', handleClose);
@@ -412,7 +412,7 @@ export function EditorContainer({
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    dialog.showModal();
+    if (!dialog.open) dialog.showModal();
     focusContext.push('editor');
     const handleClose = () => onClose();
     dialog.addEventListener('close', handleClose);
