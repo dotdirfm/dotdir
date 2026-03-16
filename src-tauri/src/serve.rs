@@ -455,10 +455,20 @@ pub fn run(args: &[String]) {
             .fallback(embedded_asset_handler);
 
         let addr = format!("{}:{}", config.host, config.port);
+        let listener = match tokio::net::TcpListener::bind(&addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("Error: failed to bind {addr}: {e}");
+                if e.kind() == std::io::ErrorKind::AddrInUse {
+                    eprintln!("Hint: another process is using port {}. Kill it or use --port <N>.", config.port);
+                }
+                std::process::exit(1);
+            }
+        };
+
         eprintln!("Faraday server listening on http://{addr}");
         eprintln!("WebSocket endpoint: ws://{addr}/ws");
 
-        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
         axum::serve(listener, app).await.unwrap();
     });
 }
