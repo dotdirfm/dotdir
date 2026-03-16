@@ -17,7 +17,6 @@ import type {
   EditorExtensionApi,
   ViewerProps,
   EditorProps,
-  MediaFileRef,
 } from './extensionApi';
 import { getActiveColorThemeData, onColorThemeChange } from './vscodeColorTheme';
 import { focusContext } from './focusContext';
@@ -72,7 +71,7 @@ interface ViewerContainerProps extends ExtensionContainerProps {
   kind: 'viewer';
   props: ViewerProps;
   onClose: () => void;
-  onNavigateMedia?: (file: MediaFileRef) => void;
+  onExecuteCommand?: (command: string, args?: unknown) => Promise<unknown>;
 }
 
 interface EditorContainerProps extends ExtensionContainerProps {
@@ -107,11 +106,11 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const hasCachedEditor =
     kind === 'editor' && !!getCachedEditorExtension(extensionDirPath, entry);
 
-  const onNavigateMediaRef = useRef(
-    containerProps.kind === 'viewer' ? containerProps.onNavigateMedia : undefined,
+  const onExecuteCommandRef = useRef(
+    containerProps.kind === 'viewer' ? containerProps.onExecuteCommand : undefined,
   );
   if (containerProps.kind === 'viewer') {
-    onNavigateMediaRef.current = containerProps.onNavigateMedia;
+    onExecuteCommandRef.current = containerProps.onExecuteCommand;
   }
 
   const onDirtyChangeRef = useRef(
@@ -157,8 +156,10 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     onClose(): void {
       onCloseRef.current();
     },
-    onNavigateMedia(file: MediaFileRef): void {
-      onNavigateMediaRef.current?.(file);
+    async executeCommand<T = unknown>(command: string, args?: unknown): Promise<T> {
+      const handler = onExecuteCommandRef.current;
+      if (!handler) throw new Error(`No command handler registered`);
+      return handler(command, args) as Promise<T>;
     },
     async getOnigurumaWasm(): Promise<ArrayBuffer> {
       const r = await fetch(onigWasmUrl);
@@ -300,9 +301,8 @@ interface ViewerContainerWrapperProps {
   fileName: string;
   fileSize: number;
   inline?: boolean;
-  mediaFiles?: MediaFileRef[];
   onClose: () => void;
-  onNavigateMedia?: (file: MediaFileRef) => void;
+  onExecuteCommand?: (command: string, args?: unknown) => Promise<unknown>;
 }
 
 export function ViewerContainer({
@@ -312,9 +312,8 @@ export function ViewerContainer({
   fileName,
   fileSize,
   inline,
-  mediaFiles,
   onClose,
-  onNavigateMedia,
+  onExecuteCommand,
 }: ViewerContainerWrapperProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
 
@@ -332,7 +331,7 @@ export function ViewerContainer({
     };
   }, [inline, onClose]);
 
-  const viewerProps: ViewerProps = { filePath, fileName, fileSize, inline, mediaFiles };
+  const viewerProps: ViewerProps = { filePath, fileName, fileSize, inline };
 
   const toolbarHeight = 38;
   const toolbar = (
@@ -357,7 +356,7 @@ export function ViewerContainer({
       entry={entry}
       props={viewerProps}
       onClose={inline ? onClose : () => dialogRef.current?.close()}
-      onNavigateMedia={onNavigateMedia}
+      onExecuteCommand={onExecuteCommand}
       className="extension-viewer-frame"
       style={{ width: '100%', height: '100%' }}
     />

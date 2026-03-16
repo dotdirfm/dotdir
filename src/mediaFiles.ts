@@ -22,9 +22,3 @@ export function isVideoFile(name: string): boolean {
 export function isMediaFile(name: string): boolean {
   return isImageFile(name) || isVideoFile(name);
 }
-
-export interface MediaFileEntry {
-  path: string;
-  name: string;
-  size: number;
-}

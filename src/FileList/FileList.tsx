@@ -251,6 +251,10 @@ export const FileList = memo(function FileList({
     }, 150);
   }, [activeIndex, topmostIndex, displayEntries]);
 
+  const handleBreadcrumbNavigate = useCallback((path: string) => {
+    void onNavigateRef.current(path);
+  }, []);
+
   const navigateToEntry = useCallback(async (entry: FsNode): Promise<void> => {
     if (entry.name === '..') {
       await onNavigateRef.current(dirname(currentPathRef.current));
@@ -710,7 +714,7 @@ export const FileList = memo(function FileList({
   return (
     <div className="file-list">
       <div className="path-bar">
-        <Breadcrumbs currentPath={currentPath} onNavigate={(path) => { void onNavigate(path); }} />
+        <Breadcrumbs currentPath={currentPath} onNavigate={handleBreadcrumbNavigate} />
       </div>
       <div className="file-list-body">
         <ColumnsScroller

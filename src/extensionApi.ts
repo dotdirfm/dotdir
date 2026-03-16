@@ -12,7 +12,6 @@ export interface ViewerProps {
   fileName: string;
   fileSize: number;
   inline?: boolean;
-  mediaFiles?: MediaFileRef[];
   /** When set (e.g. Web VFS), extension can load scripts/workers from this base URL. */
   extensionScriptBaseUrl?: string;
 }
@@ -46,12 +45,6 @@ export interface EditorProps {
   extensionScriptBaseUrl?: string;
 }
 
-export interface MediaFileRef {
-  path: string;
-  name: string;
-  size: number;
-}
-
 // ── Host API (host exposes to iframe) ────────────────────────────────
 
 export interface ColorThemeData {
@@ -75,7 +68,8 @@ export interface HostApi {
   /** Subscribe to theme changes. Callback fires when the color theme changes. Returns unsubscribe function. */
   onThemeChange?(callback: (theme: ColorThemeData) => void): () => void;
   onClose(): void;
-  onNavigateMedia?(file: MediaFileRef): void;
+  /** Execute a host command (e.g. navigatePrev, navigateNext, getFileIndex). */
+  executeCommand?<T = unknown>(command: string, args?: unknown): Promise<T>;
   /** Oniguruma WASM binary for TextMate grammars (optional). */
   getOnigurumaWasm?(): Promise<ArrayBuffer>;
   /** URL to a file inside the extension dir (for lazy-loading workers). Returns blob URL. */

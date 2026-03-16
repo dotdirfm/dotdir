@@ -8,7 +8,7 @@ import type { FsChangeType } from './types';
 import { bridge } from './bridge';
 import { FileList } from './FileList';
 import { PanelTabs, type PanelTab } from './FileList/PanelTabs';
-import { isMediaFile, type MediaFileEntry } from './mediaFiles';
+import { isMediaFile } from './mediaFiles';
 import { ViewerContainer, EditorContainer } from './ExtensionContainer';
 import { clearEditorExtensionCache } from './editorExtensionCache';
 import { viewerRegistry, editorRegistry, populateRegistries } from './viewerEditorRegistry';
@@ -536,38 +536,54 @@ export function App() {
   }, []);
 
   const viewerPanelEntries = viewerFile ? (viewerFile.panel === 'left' ? left.entries : right.entries) : [];
-  const mediaFiles = useMemo(() => {
-    if (!viewerFile || !isMediaFile(viewerFile.name)) return [];
-    const entries = showHidden ? viewerPanelEntries : viewerPanelEntries.filter(e => !e.meta.hidden);
-    return entries
-      .filter(e => e.type === 'file' && isMediaFile(e.name))
-      .map(e => ({ path: e.path as string, name: e.name, size: Number(e.meta.size) }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [viewerFile, viewerPanelEntries, showHidden]);
 
-  const handleNavigateMedia = useCallback((file: MediaFileEntry) => {
-    setViewerFile(prev => prev ? { ...file, panel: prev.panel } : null);
+  // Helper: match a filename against simple glob patterns like "*.png"
+  const matchesPatterns = useCallback((name: string, patterns: string[]): boolean => {
+    return patterns.some((p) => {
+      if (p.startsWith('*.')) {
+        const ext = p.slice(1).toLowerCase();
+        return name.toLowerCase().endsWith(ext);
+      }
+      return name.toLowerCase() === p.toLowerCase();
+    });
   }, []);
 
-  // When image/media viewer is open, ArrowLeft/ArrowRight navigate between media files (host handles keys so they work even when iframe has no focus)
-  useEffect(() => {
-    if (!viewerFile || mediaFiles.length === 0) return;
-    const idx = mediaFiles.findIndex((f) => f.path === viewerFile.path);
-    if (idx < 0) return;
-    const handler = (e: KeyboardEvent) => {
-      const target = e.target as Node;
-      if (target && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable))) return;
-      if (e.key === 'ArrowLeft' && idx > 0) {
-        handleNavigateMedia(mediaFiles[idx - 1]!);
-        e.preventDefault();
-      } else if (e.key === 'ArrowRight' && idx < mediaFiles.length - 1) {
-        handleNavigateMedia(mediaFiles[idx + 1]!);
-        e.preventDefault();
+  // Compute filtered & sorted file list matching given patterns from the viewer's panel
+  const getMatchingFiles = useCallback((patterns: string[]) => {
+    if (!viewerFile) return [];
+    const entries = showHidden ? viewerPanelEntries : viewerPanelEntries.filter(e => !e.meta.hidden);
+    return entries
+      .filter(e => e.type === 'file' && matchesPatterns(e.name, patterns))
+      .map(e => ({ path: e.path as string, name: e.name, size: Number(e.meta.size) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [viewerFile, viewerPanelEntries, showHidden, matchesPatterns]);
+
+  // Generic command handler for viewer extensions
+  const handleExecuteCommand = useCallback(async (command: string, args?: unknown): Promise<unknown> => {
+    const { patterns } = (args as { patterns?: string[] } | undefined) ?? {};
+    if (!patterns || !viewerFile) return undefined;
+    const files = getMatchingFiles(patterns);
+    const idx = files.findIndex((f) => f.path === viewerFile.path);
+
+    if (command === 'navigatePrev') {
+      if (idx > 0) {
+        const file = files[idx - 1]!;
+        setViewerFile(prev => prev ? { ...file, panel: prev.panel } : null);
       }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [viewerFile, mediaFiles, handleNavigateMedia]);
+      return undefined;
+    }
+    if (command === 'navigateNext') {
+      if (idx >= 0 && idx < files.length - 1) {
+        const file = files[idx + 1]!;
+        setViewerFile(prev => prev ? { ...file, panel: prev.panel } : null);
+      }
+      return undefined;
+    }
+    if (command === 'getFileIndex') {
+      return { index: idx, total: files.length };
+    }
+    return undefined;
+  }, [viewerFile, getMatchingFiles]);
 
   const viewerActiveName = viewerFile && isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
   const leftRequestedCursor = viewerFile?.panel === 'left' ? viewerActiveName : undefined;
@@ -1538,10 +1554,6 @@ export function App() {
   }, []);
 
 
-  if (!left.currentPath || !right.currentPath || !themesReady) {
-    return <div className="loading">Loading...</div>;
-  }
-
   const leftFilteredEntries = useMemo(
     () => showHidden ? left.entries : left.entries.filter((e) => !e.meta.hidden),
     [showHidden, left.entries],
@@ -1550,6 +1562,10 @@ export function App() {
     () => showHidden ? right.entries : right.entries.filter((e) => !e.meta.hidden),
     [showHidden, right.entries],
   );
+
+  if (!left.currentPath || !right.currentPath || !themesReady) {
+    return <div className="loading">Loading...</div>;
+  }
 
   const actionBarHeight = 24;
   const collapsedTerminalVisibleHeight = 40;
@@ -1616,7 +1632,6 @@ export function App() {
               };
               const resolved = viewerRegistry.resolve(tab.name);
               if (resolved) {
-                const mediaFiles: MediaFileEntry[] = [];
                 return (
                   <ViewerContainer
                     extensionDirPath={resolved.extensionDirPath}
@@ -1625,7 +1640,6 @@ export function App() {
                     fileName={tab.name}
                     fileSize={tab.size}
                     inline
-                    mediaFiles={mediaFiles}
                     onClose={closeTab}
                   />
                 );
@@ -1684,7 +1698,6 @@ export function App() {
               };
               const resolved = viewerRegistry.resolve(tab.name);
               if (resolved) {
-                const mediaFiles: MediaFileEntry[] = [];
                 return (
                   <ViewerContainer
                     extensionDirPath={resolved.extensionDirPath}
@@ -1693,7 +1706,6 @@ export function App() {
                     fileName={tab.name}
                     fileSize={tab.size}
                     inline
-                    mediaFiles={mediaFiles}
                     onClose={closeTab}
                   />
                 );
@@ -1719,9 +1731,8 @@ export function App() {
               filePath={viewerFile.path}
               fileName={viewerFile.name}
               fileSize={viewerFile.size}
-              mediaFiles={mediaFiles}
               onClose={() => setViewerFile(null)}
-              onNavigateMedia={handleNavigateMedia}
+              onExecuteCommand={handleExecuteCommand}
             />
           );
         }
