@@ -23,7 +23,7 @@ export interface TerminalCapabilities {
 export type TerminalSessionEvent =
   | { type: 'data'; data: string }
   | { type: 'launch'; launch: PtyLaunchInfo }
-  | { type: 'cwd'; cwd: string }
+  | { type: 'cwd'; cwd: string; userInitiated: boolean }
   | { type: 'sync-start'; cwd: string }
   | { type: 'sync-complete'; cwd: string | null }
   | { type: 'status'; status: TerminalSessionStatus; error?: string }

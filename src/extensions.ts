@@ -544,8 +544,15 @@ export async function uninstallExtension(publisherUsername: string, extName: str
 
 // ── Settings ────────────────────────────────────────────────────────
 
+export interface PersistedTab {
+  type: 'filelist';
+  path: string;
+}
+
 export interface PanelPersistedState {
   currentPath: string;
+  tabs?: PersistedTab[];
+  activeTabIndex?: number;
   selectedName?: string;
   topmostName?: string;
 }

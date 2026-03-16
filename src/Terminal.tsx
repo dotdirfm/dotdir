@@ -79,7 +79,7 @@ export function TerminalPanel({ cwd, expanded = false, onCwdChange, onVisibleHei
 
   useEffect(() => {
     const active = snapshot.sessions.find((session) => session.id === snapshot.activeSessionId);
-    if (active?.cwd) {
+    if (active?.cwd && active.cwdUserInitiated) {
       const normalized = normalizePath(active.cwd);
       if (lastReportedCwdRef.current === normalized) return;
       lastReportedCwdRef.current = normalized;

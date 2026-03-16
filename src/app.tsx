@@ -24,7 +24,7 @@ import { commandRegistry } from './commands';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
-import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type LoadedExtension, type PanelPersistedState } from './extensions';
+import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type LoadedExtension, type PanelPersistedState, type PersistedTab } from './extensions';
 import { initUserSettings, onSettingsChange, updateSettings } from './userSettings';
 import { languageRegistry } from './languageRegistry';
 import { setIconTheme, setIconThemeKind } from './iconResolver';
@@ -310,7 +310,6 @@ export function App() {
   const [terminalVisibleHeight, setTerminalVisibleHeight] = useState(40);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
-  const expectedTerminalCwdsRef = useRef<Map<string, number>>(new Map());
   const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
   const cancelDeleteRef = useRef(false);
@@ -326,10 +325,15 @@ export function App() {
   const [rightActiveIndex, setRightActiveIndex] = useState(0);
   const [leftSelectedName, setLeftSelectedName] = useState<string | undefined>(undefined);
   const [rightSelectedName, setRightSelectedName] = useState<string | undefined>(undefined);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const leftTabsRef = useRef(leftTabs);
   leftTabsRef.current = leftTabs;
   const rightTabsRef = useRef(rightTabs);
   rightTabsRef.current = rightTabs;
+  const leftActiveIndexRef = useRef(leftActiveIndex);
+  leftActiveIndexRef.current = leftActiveIndex;
+  const rightActiveIndexRef = useRef(rightActiveIndex);
+  rightActiveIndexRef.current = rightActiveIndex;
   const activeIconThemeRef = useRef(activeIconTheme);
   activeIconThemeRef.current = activeIconTheme;
   const commandPalette = useCommandPalette();
@@ -340,19 +344,50 @@ export function App() {
     initUserSettings().then((s) => {
       if (s.iconTheme) setActiveIconTheme(s.iconTheme);
       if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
+
+      // Restore tabs from persisted state
+      const restoreTabs = (panel: PanelPersistedState | undefined) => {
+        if (panel?.tabs?.length) {
+          return panel.tabs.map(t => createFilelistTab(t.path));
+        }
+        if (panel?.currentPath) {
+          return [createFilelistTab(panel.currentPath)];
+        }
+        return null;
+      };
+
+      const restoredLeftTabs = restoreTabs(s.leftPanel);
+      const restoredRightTabs = restoreTabs(s.rightPanel);
+      const restoredLeftIndex = restoredLeftTabs
+        ? Math.min(s.leftPanel?.activeTabIndex ?? 0, restoredLeftTabs.length - 1)
+        : 0;
+      const restoredRightIndex = restoredRightTabs
+        ? Math.min(s.rightPanel?.activeTabIndex ?? 0, restoredRightTabs.length - 1)
+        : 0;
+
+      // Update prev refs so tab sync effects don't fire redundantly
+      prevLeftActiveIndexRef.current = restoredLeftIndex;
+      prevRightActiveIndexRef.current = restoredRightIndex;
+
+      if (restoredLeftTabs) setLeftTabs(restoredLeftTabs);
+      if (restoredRightTabs) setRightTabs(restoredRightTabs);
+      setLeftActiveIndex(restoredLeftIndex);
+      setRightActiveIndex(restoredRightIndex);
+
       if (s.leftPanel) setInitialLeftPanel(s.leftPanel);
       if (s.rightPanel) setInitialRightPanel(s.rightPanel);
       if (s.activePanel) setInitialActivePanel(s.activePanel);
+      setSettingsLoaded(true);
     });
-    
+
     // Listen for settings changes (but don't update panel state from external changes)
     const unsubscribe = onSettingsChange((s) => {
       if (s.iconTheme) setActiveIconTheme(s.iconTheme);
       if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
     });
-    
+
     initUserKeybindings();
-    
+
     return unsubscribe;
   }, []);
 
@@ -490,9 +525,7 @@ export function App() {
   );
 
   const rememberExpectedTerminalCwd = useCallback((path: string) => {
-    const normalized = normalizeTerminalPath(path);
-    expectedTerminalCwdsRef.current.set(normalized, Date.now() + 5000);
-    setRequestedTerminalCwd(normalized);
+    setRequestedTerminalCwd(normalizeTerminalPath(path));
   }, []);
 
   const viewerPanelEntries = viewerFile ? (viewerFile.panel === 'left' ? left.entries : right.entries) : [];
@@ -536,21 +569,40 @@ export function App() {
   // Panel state persistence with long debounce (10s) to avoid excessive writes
   const panelStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPanelStateRef = useRef<{
-    leftPanel?: { currentPath: string; selectedName?: string; topmostName?: string };
-    rightPanel?: { currentPath: string; selectedName?: string; topmostName?: string };
+    leftPanel?: PanelPersistedState;
+    rightPanel?: PanelPersistedState;
   }>({});
+
+  const buildPersistedTabs = useCallback((tabs: PanelTab[], activeIdx: number): { tabs: PersistedTab[]; activeTabIndex: number } => {
+    const persisted: PersistedTab[] = [];
+    let mappedIdx = 0;
+    for (let i = 0; i < tabs.length; i++) {
+      if (tabs[i].type === 'filelist') {
+        if (i === activeIdx) mappedIdx = persisted.length;
+        persisted.push({ type: 'filelist', path: tabs[i].path });
+      }
+    }
+    return { tabs: persisted, activeTabIndex: mappedIdx };
+  }, []);
 
   const flushPanelState = useCallback(() => {
     if (panelStateSaveTimerRef.current) {
       clearTimeout(panelStateSaveTimerRef.current);
       panelStateSaveTimerRef.current = null;
     }
+    // Always include fresh tab state in the flush
     const pending = pendingPanelStateRef.current;
-    if (pending.leftPanel || pending.rightPanel) {
-      updateSettings(pending);
-      pendingPanelStateRef.current = {};
+    if (!pending.leftPanel) {
+      pending.leftPanel = { currentPath: left.currentPath };
     }
-  }, []);
+    if (!pending.rightPanel) {
+      pending.rightPanel = { currentPath: right.currentPath };
+    }
+    Object.assign(pending.leftPanel, buildPersistedTabs(leftTabsRef.current, leftActiveIndexRef.current));
+    Object.assign(pending.rightPanel, buildPersistedTabs(rightTabsRef.current, rightActiveIndexRef.current));
+    updateSettings(pending);
+    pendingPanelStateRef.current = {};
+  }, [buildPersistedTabs, left.currentPath, right.currentPath]);
 
   const savePanelStateDebounced = useCallback(() => {
     if (panelStateSaveTimerRef.current) {
@@ -577,6 +629,7 @@ export function App() {
       setLeftSelectedName((prev) => (prev === selectedName ? prev : selectedName));
       pendingPanelStateRef.current.leftPanel = {
         currentPath: left.currentPath,
+        ...buildPersistedTabs(leftTabsRef.current, leftActiveIndexRef.current),
         selectedName,
         topmostName,
       };
@@ -605,6 +658,7 @@ export function App() {
       setRightSelectedName((prev) => (prev === selectedName ? prev : selectedName));
       pendingPanelStateRef.current.rightPanel = {
         currentPath: right.currentPath,
+        ...buildPersistedTabs(rightTabsRef.current, rightActiveIndexRef.current),
         selectedName,
         topmostName,
       };
@@ -627,10 +681,11 @@ export function App() {
     [right.currentPath, right.entries, savePanelStateDebounced]
   );
 
-  // Save active panel when it changes
+  // Save active panel when it changes (only after settings loaded to avoid overwriting on mount)
   useEffect(() => {
+    if (!settingsLoaded) return;
     updateSettings({ activePanel });
-  }, [activePanel]);
+  }, [activePanel, settingsLoaded]);
 
   const handleNewTab = useCallback(
     (side: PanelSide) => {
@@ -840,18 +895,9 @@ export function App() {
 
   const handleTerminalCwd = useCallback((path: string) => {
     const normalizedPath = normalizeTerminalPath(path);
-    const now = Date.now();
-    for (const [expectedPath, expiresAt] of expectedTerminalCwdsRef.current) {
-      if (expiresAt <= now) {
-        expectedTerminalCwdsRef.current.delete(expectedPath);
-      }
-    }
-    const expectedExpiry = expectedTerminalCwdsRef.current.get(normalizedPath);
-    if (expectedExpiry && expectedExpiry > now) return;
     const panel = activePanel === 'left' ? left : right;
     if (normalizedPath === normalizeTerminalPath(panel.currentPath)) return;
-    if (normalizedPath === normalizeTerminalPath(left.currentPath) || normalizedPath === normalizeTerminalPath(right.currentPath)) return;
-    if (normalizedPath !== panel.currentPath) panel.navigateTo(normalizedPath);
+    panel.navigateTo(normalizedPath);
     setRequestedTerminalCwd(null);
   }, []);
 
@@ -860,7 +906,6 @@ export function App() {
     const activePath = normalizeTerminalPath(activePanel === 'left' ? left.currentPath : right.currentPath);
     if (activePath === requestedTerminalCwd) {
       setRequestedTerminalCwd(null);
-      expectedTerminalCwdsRef.current.delete(requestedTerminalCwd);
     }
   }, [activePanel, left.currentPath, requestedTerminalCwd, right.currentPath]);
 
@@ -1279,8 +1324,10 @@ export function App() {
     });
   }, [right.currentPath, rightActiveIndex]);
 
-  // Navigate panels using persisted state or defaults
+  // Navigate panels using persisted state or defaults — fires once when settings are loaded
   useEffect(() => {
+    if (!settingsLoaded) return;
+
     const browserPath = (() => {
       if (!isBrowser) return '';
       const url = new URL(window.location.href);
@@ -1298,18 +1345,18 @@ export function App() {
       fallbackPath?: string
     ) => {
       let targetPath = persistedState?.currentPath ?? fallbackPath;
-      
+
       if (targetPath) {
         const exists = await bridge.fsa.exists(targetPath);
         if (!exists) {
           targetPath = await findExistingParent(targetPath);
         }
       }
-      
+
       if (!targetPath) {
         targetPath = await bridge.utils.getHomePath();
       }
-      
+
       await panel.navigateTo(targetPath);
     };
 
@@ -1325,14 +1372,13 @@ export function App() {
       });
       navigatePanel(right, initialRightPanel);
     } else {
-      // Use persisted state
       navigatePanel(left, initialLeftPanel);
       navigatePanel(right, initialRightPanel);
       if (initialActivePanel) {
         setActivePanel(initialActivePanel);
       }
     }
-    
+
     // Clear initial state after first navigation to prevent cursor jumping
     // when viewer is closed (was falling back to initial selectedName)
     setTimeout(() => {
@@ -1340,7 +1386,8 @@ export function App() {
       setInitialRightPanel(undefined);
       setInitialActivePanel(undefined);
     }, 500);
-  }, [initialLeftPanel, initialRightPanel, initialActivePanel]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally fires once when settingsLoaded becomes true
+  }, [settingsLoaded]);
 
   const latestExtensionsRef = useRef<LoadedExtension[]>([]);
 

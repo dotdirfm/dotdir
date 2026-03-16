@@ -20,6 +20,7 @@ export interface ManagedTerminalSession {
   profileId: string;
   profileLabel: string;
   cwd: string;
+  cwdUserInitiated: boolean;
   status: TerminalSessionStatus;
   error?: string;
 }
@@ -215,12 +216,14 @@ export class TerminalService {
       profileId: profile?.id ?? profileId,
       profileLabel: profile?.label ?? profileId,
       cwd: normalizeTerminalPath(cwd),
+      cwdUserInitiated: false,
       status: 'idle',
     };
 
     session.subscribe((event) => {
       if (event.type === 'cwd') {
         managed.cwd = normalizeTerminalPath(event.cwd);
+        managed.cwdUserInitiated = event.userInitiated;
       } else if (event.type === 'status') {
         managed.status = event.status;
         managed.error = event.error;

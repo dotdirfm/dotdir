@@ -194,7 +194,7 @@ export class TerminalSession {
       if (syncOscResult) {
         this.endSyncSuppression();
         const cwd = this.expectedVisibleSyncCwd ?? syncOscResult.cwd;
-        this.applyCwdUpdate(cwd);
+        this.applyCwdUpdate(cwd, false);
         this.processVisibleData(this.renderSuppressedPrompt(this.buildPromptForCwd(cwd)));
         this.emit({ type: 'sync-complete', cwd: this.currentCwd });
         return;
@@ -207,7 +207,7 @@ export class TerminalSession {
       this.endSyncSuppression();
       const resolvedPrompt = promptInfo ?? fallbackPrompt;
       const cwd = this.expectedVisibleSyncCwd ?? resolvedPrompt?.cwd ?? this.currentCwd;
-      this.applyCwdUpdate(cwd);
+      this.applyCwdUpdate(cwd, false);
       this.processVisibleData(this.renderSuppressedPrompt(this.buildPromptForCwd(cwd)));
       this.emit({ type: 'sync-complete', cwd: this.currentCwd });
       return;
@@ -226,11 +226,11 @@ export class TerminalSession {
     const cwdUpdates = extractOsc7Cwds(visibleData);
     const latestCwd = cwdUpdates[cwdUpdates.length - 1];
     if (latestCwd) {
-      this.applyCwdUpdate(latestCwd);
+      this.applyCwdUpdate(latestCwd, this.capabilities.commandRunning);
     } else {
       const promptInfo = extractPromptInfo(visibleData, this.capabilities.shellType);
       if (promptInfo?.cwd) {
-        this.applyCwdUpdate(promptInfo.cwd);
+        this.applyCwdUpdate(promptInfo.cwd, this.capabilities.commandRunning);
       }
     }
 
@@ -249,7 +249,7 @@ export class TerminalSession {
     }
   }
 
-  private applyCwdUpdate(cwd: string): void {
+  private applyCwdUpdate(cwd: string, userInitiated: boolean): void {
     const normalizedCwd = normalizeTerminalPath(cwd);
     if (normalizedCwd === this.currentCwd) return;
     this.currentCwd = normalizedCwd;
@@ -258,7 +258,7 @@ export class TerminalSession {
       cwd: normalizedCwd,
       hasOsc7Cwd: true,
     };
-    this.emit({ type: 'cwd', cwd: normalizedCwd });
+    this.emit({ type: 'cwd', cwd: normalizedCwd, userInitiated });
     this.emitCapabilities();
   }
 
@@ -314,11 +314,11 @@ export class TerminalSession {
         const fallbackPrompt = this.extractSuppressedPrompt(buffered);
         if (promptInfo?.cwd) {
           const cwd = this.expectedVisibleSyncCwd ?? promptInfo.cwd;
-          this.applyCwdUpdate(cwd);
+          this.applyCwdUpdate(cwd, false);
           this.processVisibleData(this.renderSuppressedPrompt(this.buildPromptForCwd(cwd)));
         } else if (fallbackPrompt) {
           const cwd = this.expectedVisibleSyncCwd ?? fallbackPrompt.cwd ?? this.currentCwd;
-          this.applyCwdUpdate(cwd);
+          this.applyCwdUpdate(cwd, false);
           this.processVisibleData(this.renderSuppressedPrompt(this.buildPromptForCwd(cwd)));
         } else if (!this.looksLikeSuppressedSyncEcho(buffered)) {
           this.processVisibleData(buffered);
@@ -336,7 +336,7 @@ export class TerminalSession {
       ...this.capabilities,
       cwd: nextCwd,
     };
-    this.emit({ type: 'cwd', cwd: nextCwd });
+    this.emit({ type: 'cwd', cwd: nextCwd, userInitiated: false });
     this.emit({ type: 'sync-start', cwd: nextCwd });
     this.emitCapabilities();
     this.pendingVisibleSyncEcho = true;
