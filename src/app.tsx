@@ -328,6 +328,7 @@ export function App() {
   const [leftSelectedName, setLeftSelectedName] = useState<string | undefined>(undefined);
   const [rightSelectedName, setRightSelectedName] = useState<string | undefined>(undefined);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [themesReady, setThemesReady] = useState(false);
   const leftTabsRef = useRef(leftTabs);
   leftTabsRef.current = leftTabs;
   const rightTabsRef = useRef(rightTabs);
@@ -1428,24 +1429,22 @@ export function App() {
       await languageRegistry.activateGrammars();
     };
 
-    const updateIconTheme = (exts: LoadedExtension[], themeId: string | undefined) => {
-      console.log('[ExtHost] updateIconTheme', { themeId, extsWithFss: exts.filter((e) => e.iconThemeFss).map((e) => `${e.ref.publisher}.${e.ref.name}`) });
+    const updateIconTheme = async (exts: LoadedExtension[], themeId: string | undefined): Promise<void> => {
       if (!themeId) {
-        setIconTheme('fss');
+        await setIconTheme('fss');
         return;
       }
       const ext = exts.find(e => `${e.ref.publisher}.${e.ref.name}` === themeId);
       if (ext?.vscodeIconThemePath) {
-        setIconTheme('vscode', ext.vscodeIconThemePath);
+        await setIconTheme('vscode', ext.vscodeIconThemePath);
       } else if (ext?.iconThemeFss) {
-        setIconTheme('fss');
+        await setIconTheme('fss');
       } else {
-        console.warn('[ExtHost] updateIconTheme: no match for', themeId, 'ext found:', !!ext, 'vscodePath:', ext?.vscodeIconThemePath, 'iconThemeFss:', !!ext?.iconThemeFss);
-        setIconTheme('none');
+        await setIconTheme('none');
       }
     };
 
-    const updateColorTheme = (exts: LoadedExtension[], themeKey: string | undefined) => {
+    const updateColorTheme = async (exts: LoadedExtension[], themeKey: string | undefined): Promise<void> => {
       if (!themeKey) {
         clearColorTheme();
         return;
@@ -1455,12 +1454,13 @@ export function App() {
         const kind = uiThemeToKind(match.theme.uiTheme);
         document.documentElement.dataset.theme = kind;
         setIconThemeKind(kind);
-        loadAndApplyColorTheme(match.theme.jsonPath, match.theme.uiTheme).catch((err) => {
+        try {
+          await loadAndApplyColorTheme(match.theme.jsonPath, match.theme.uiTheme);
+        } catch (err) {
           console.warn('[ExtHost] Failed to load color theme:', themeKey, err);
           clearColorTheme();
-        });
+        }
       } else {
-        console.warn('[ExtHost] updateColorTheme: no match for', themeKey);
         clearColorTheme();
       }
     };
@@ -1498,13 +1498,18 @@ export function App() {
       latestExtensionsRef.current = exts;
       populateRegistries(exts);
       setExtensionLayers(exts, activeIconThemeRef.current);
-      updateIconTheme(exts, activeIconThemeRef.current);
-      updateColorTheme(exts, activeColorThemeRef.current);
       registerLanguages(exts);
       registerExtensionCommands(exts);
-      // Force re-navigation to sync FSS layers with the new extension layers
-      if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
-      if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
+
+      // Load themes first, then refresh panels once themes are ready
+      Promise.all([
+        updateIconTheme(exts, activeIconThemeRef.current),
+        updateColorTheme(exts, activeColorThemeRef.current),
+      ]).then(() => {
+        setThemesReady(true);
+        if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
+        if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
+      });
     });
     extensionHost.start();
     return () => {
@@ -1533,7 +1538,7 @@ export function App() {
   }, []);
 
 
-  if (!left.currentPath || !right.currentPath) {
+  if (!left.currentPath || !right.currentPath || !themesReady) {
     return <div className="loading">Loading...</div>;
   }
 

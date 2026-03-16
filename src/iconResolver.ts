@@ -24,16 +24,17 @@ const DEFAULT_ICONS = {
 let currentThemeType: IconThemeType = 'fss';
 let themeChangeListeners: (() => void)[] = [];
 
-export function setIconTheme(type: IconThemeType, path?: string): void {
+export async function setIconTheme(type: IconThemeType, path?: string): Promise<void> {
   currentThemeType = type;
 
   if (type === 'vscode' && path) {
-    vscodeIconTheme.load(path).then(() => {
+    try {
+      await vscodeIconTheme.load(path);
       notifyThemeChange();
-    }).catch(() => {
+    } catch {
       currentThemeType = 'none';
       notifyThemeChange();
-    });
+    }
   } else {
     vscodeIconTheme.clear();
     notifyThemeChange();
