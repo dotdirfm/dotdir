@@ -47,10 +47,13 @@ body {
   color: var(--fg);
   overflow: hidden;
   height: 100vh;
+  height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 #app {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
 }
