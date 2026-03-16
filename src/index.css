@@ -448,7 +448,6 @@ body {
   display: flex;
   align-items: center;
   gap: 1px;
-  background: var(--border);
   font-size: 12px;
   user-select: none;
 }
@@ -463,7 +462,8 @@ body {
   cursor: pointer;
   min-width: 0;
   padding: 0 6px;
-  background: var(--bg-secondary);
+  background: var(--action-bar-bg);
+  border: 1px solid var(--action-bar-border);
   transition: background 0.1s;
 }
 
@@ -485,13 +485,16 @@ body {
 }
 
 .action-bar-key {
-  color: var(--accent);
+  color: var(--action-bar-badge-fg);
+  background: var(--action-bar-badge-bg);
   font-size: 11px;
   font-weight: 600;
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 .action-bar-label {
-  color: var(--fg-secondary);
+  color: var(--action-bar-fg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -799,9 +802,10 @@ body.terminal-resizing {
 }
 
 .columns-scroller-content {
-  column-fill: auto;
-  position: relative;
-  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  overflow: hidden;
 }
 
 .columns-scroller-content > div {
@@ -809,23 +813,19 @@ body.terminal-resizing {
 }
 
 .columns-borders {
+  display: grid;
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
+  inset: 0;
   pointer-events: none;
   z-index: 1;
 }
 
 .columns-border {
-  flex: 1;
-  border-right: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border);
 }
 
 .columns-border:last-child {
-  border-right: none;
+  border-inline-end: none;
 }
 
 .entry {
@@ -1411,7 +1411,7 @@ body.terminal-resizing {
 .ext-source-btn.active {
   background: var(--border-active);
   border-color: var(--border-active);
-  color: var(--bg);
+  color: var(--fg);
 }
 
 .ext-search input {

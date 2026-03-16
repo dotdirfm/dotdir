@@ -1,5 +1,5 @@
 import type React from 'react';
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react';
 
 interface ScrollableContainerProps {
   children: ReactNode;
@@ -9,7 +9,6 @@ interface ScrollableContainerProps {
   velocityFactor?: number;
   frictionFactor?: number;
   style?: CSSProperties;
-  innerContainerStyle?: CSSProperties;
   onScroll?: (scrollTop: number) => void;
 }
 
@@ -21,45 +20,18 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
   velocityFactor = 20,
   frictionFactor = 0.95,
   style,
-  innerContainerStyle,
   onScroll,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const scrollPaneRef = useRef<HTMLDivElement>(null);
   const scrollTopRef = useRef(scrollTop);
   const onScrollRef = useRef(onScroll);
-  const [scrollbarWidth, setScrollbarWidth] = useState(0);
 
   scrollTopRef.current = scrollTop;
   onScrollRef.current = onScroll;
 
-  if (scrollPaneRef.current) {
-    scrollPaneRef.current.scrollTop = scrollTop;
-  }
-
   useEffect(() => {
-    const scrollPane = scrollPaneRef.current;
-    if (!scrollPane) return;
-
-    const updateScrollbarWidth = () => {
-      setScrollbarWidth(Math.max(0, scrollPane.offsetWidth - scrollPane.clientWidth));
-    };
-
-    updateScrollbarWidth();
-    const resizeObserver = new ResizeObserver(updateScrollbarWidth);
-    resizeObserver.observe(scrollPane);
-    window.addEventListener('resize', updateScrollbarWidth);
-
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener('resize', updateScrollbarWidth);
-    };
-  }, []);
-
-  useEffect(() => {
-    const scrollPane = scrollPaneRef.current;
-    const innerContainer = containerRef.current;
-    if (!scrollPane || !innerContainer) return;
+    const container = containerRef.current;
+    if (!container) return;
 
     let touchStartY: number | undefined;
     let touchStartTime = 0;
@@ -67,13 +39,12 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
     let isInertiaScrolling = false;
 
     const updateScrollTop = (scrollDelta: number) => {
-      if (onScrollRef.current && scrollPaneRef.current) {
-        let newScrollTop = scrollTopRef.current + scrollDelta;
-        newScrollTop = Math.min(newScrollTop, scrollHeight);
-        newScrollTop = Math.max(0, newScrollTop);
-        if (scrollTopRef.current !== newScrollTop) {
-          onScrollRef.current(newScrollTop);
-        }
+      if (!onScrollRef.current) return;
+      let newScrollTop = scrollTopRef.current + scrollDelta;
+      newScrollTop = Math.min(newScrollTop, scrollHeight);
+      newScrollTop = Math.max(0, newScrollTop);
+      if (scrollTopRef.current !== newScrollTop) {
+        onScrollRef.current(newScrollTop);
       }
     };
 
@@ -82,7 +53,6 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
     const handleWheel = (event: WheelEvent) => {
       const delta = lineSize && isWindows ? Math.sign(event.deltaY) * lineSize : event.deltaY;
       updateScrollTop(delta);
-      event.preventDefault();
     };
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -98,7 +68,7 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
       const deltaY = touchStartY - touchCurrentY;
       if (Math.abs(deltaY) < 3) return;
 
-      innerContainer.setPointerCapture(event.pointerId);
+      container.setPointerCapture(event.pointerId);
       updateScrollTop(deltaY);
       touchStartY = touchCurrentY;
       const currentTime = performance.now();
@@ -111,7 +81,7 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
     const handlePointerUp = (event: PointerEvent) => {
       if (touchStartY == null) return;
       touchStartY = undefined;
-      innerContainer.releasePointerCapture(event.pointerId);
+      container.releasePointerCapture(event.pointerId);
       const inertiaScroll = () => {
         if (Math.abs(velocity) > 0.1) {
           updateScrollTop(velocity * velocityFactor);
@@ -129,21 +99,21 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
 
     const isTouchscreen = matchMedia('(pointer: coarse)').matches;
 
-    innerContainer.addEventListener('wheel', handleWheel);
+    container.addEventListener('wheel', handleWheel, { passive: true });
     if (isTouchscreen) {
-      innerContainer.addEventListener('pointerdown', handlePointerDown);
-      innerContainer.addEventListener('pointermove', handlePointerMove);
-      innerContainer.addEventListener('pointerup', handlePointerUp);
-      innerContainer.addEventListener('pointercancel', handlePointerUp);
+      container.addEventListener('pointerdown', handlePointerDown);
+      container.addEventListener('pointermove', handlePointerMove);
+      container.addEventListener('pointerup', handlePointerUp);
+      container.addEventListener('pointercancel', handlePointerUp);
     }
 
     return () => {
-      innerContainer.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('wheel', handleWheel);
       if (isTouchscreen) {
-        innerContainer.removeEventListener('pointerdown', handlePointerDown);
-        innerContainer.removeEventListener('pointermove', handlePointerMove);
-        innerContainer.removeEventListener('pointerup', handlePointerUp);
-        innerContainer.removeEventListener('pointercancel', handlePointerUp);
+        container.removeEventListener('pointerdown', handlePointerDown);
+        container.removeEventListener('pointermove', handlePointerMove);
+        container.removeEventListener('pointerup', handlePointerUp);
+        container.removeEventListener('pointercancel', handlePointerUp);
       }
     };
   }, [velocityFactor, frictionFactor, scrollHeight, lineSize]);
@@ -151,19 +121,8 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
   return (
     <div style={{ overflow: 'hidden', position: 'relative', touchAction: 'none', ...style }}>
       <div
-        ref={scrollPaneRef}
-        style={{ width: '100%', height: '100%', overflowY: 'scroll', position: 'absolute' }}
-      >
-        <div style={{ height: `${scrollHeight + (scrollPaneRef.current?.clientHeight ?? 0)}px` }} />
-      </div>
-      <div
         ref={containerRef}
-        style={{
-          position: 'absolute',
-          pointerEvents: 'auto',
-          ...innerContainerStyle,
-          width: `calc(100% - ${scrollbarWidth}px)`,
-        }}
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}
       >
         {children}
       </div>

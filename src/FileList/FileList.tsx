@@ -10,10 +10,8 @@ import { resolveIcon, loadIconsForPaths, getCachedIcon, onIconThemeChange } from
 import { dirname, join } from '../path';
 import { Breadcrumbs } from './Breadcrumbs';
 import { ColumnsScroller, type ColumnsScrollerProps } from './ColumnsScroller';
-import { useElementSize } from './useElementSize';
 
 const ROW_HEIGHT = 26;
-const COLUMN_WIDTH = 350;
 
 interface FileListProps {
   currentPath: string;
@@ -98,13 +96,10 @@ export const FileList = memo(function FileList({
   const [activeIndex, setActiveIndex] = useState(0);
   const [topmostIndex, setTopmostIndex] = useState(0);
   const [maxItemsPerColumn, setMaxItemsPerColumn] = useState(1);
+  const [columnCount, setColumnCount] = useState(1);
   const [iconsVersion, setIconsVersion] = useState(0);
-  const rootRef = useRef<HTMLDivElement>(null);
   const prevPathRef = useRef(currentPath);
   const navStackRef = useRef<NavigationState[]>([]);
-  const { width } = useElementSize(rootRef);
-
-  const columnCount = Math.max(1, width ? Math.ceil(width / COLUMN_WIDTH) : 1);
 
   const activeIndexRef = useRef(activeIndex);
   activeIndexRef.current = activeIndex;
@@ -584,6 +579,10 @@ export const FileList = memo(function FileList({
     setTopmostIndex((t) => Math.max(0, Math.min(t, displayEntriesRef.current.length - count * columnCountRef.current)));
   }, []);
 
+  const handleColumnCountChanged = useCallback((count: number) => {
+    setColumnCount(count);
+  }, []);
+
   const handlePosChange: ColumnsScrollerProps['onPosChange'] = useCallback((_topmost: number, active: number) => {
     actionQueue.enqueue(() => {
       setActiveIndex(clamp(active, 0, displayEntriesRef.current.length - 1));
@@ -700,16 +699,17 @@ export const FileList = memo(function FileList({
       <div className="path-bar">
         <Breadcrumbs currentPath={currentPath} onNavigate={(path) => { void onNavigate(path); }} />
       </div>
-      <div className="file-list-body" ref={rootRef}>
+      <div className="file-list-body">
         <ColumnsScroller
           topmostIndex={topmostIndex}
           activeIndex={activeIndex}
-          columnCount={columnCount}
           totalCount={displayEntries.length}
           itemHeight={ROW_HEIGHT}
+          minColumnWidth={250}
           renderItem={renderItem}
           onPosChange={handlePosChange}
           onItemsPerColumnChanged={handleItemsPerColumnChanged}
+          onColumnCountChanged={handleColumnCountChanged}
         />
       </div>
       <div className="file-info-footer">

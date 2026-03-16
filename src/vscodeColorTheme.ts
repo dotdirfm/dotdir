@@ -37,6 +37,11 @@ const COLOR_MAPPING: Array<{ cssVar: string; keys: string[] }> = [
   { cssVar: '--error-fg', keys: ['errorForeground', 'editorError.foreground'] },
   { cssVar: '--accent', keys: ['button.background', 'textLink.foreground', 'focusBorder'] },
   { cssVar: '--accent-fg', keys: ['button.foreground'] },
+  { cssVar: '--action-bar-border', keys: ['activityBar.border'] },
+  { cssVar: '--action-bar-bg', keys: ['activityBar.background'] },
+  { cssVar: '--action-bar-fg', keys: ['activityBar.foreground'] },
+  { cssVar: '--action-bar-badge-bg', keys: ['activityBarBadge.background'] },
+  { cssVar: '--action-bar-badge-fg', keys: ['activityBarBadge.foreground'] },
 ];
 
 async function readTextFile(path: string): Promise<string> {

@@ -5,25 +5,18 @@ import { useElementSize } from './useElementSize';
 export interface ColumnsScrollerProps {
   topmostIndex: number;
   activeIndex: number;
-  columnCount: number;
   totalCount: number;
   itemHeight: number;
+  minColumnWidth?: number;
   renderItem(index: number): ReactNode;
   onPosChange: (newTopmostItem: number, newActiveItem: number) => void;
   onItemsPerColumnChanged?: (count: number) => void;
-}
-
-function Borders({ columnCount }: { columnCount: number }) {
-  const borders = [];
-  for (let i = 0; i < columnCount; i++) {
-    borders.push(<div className="columns-border" key={i} />);
-  }
-  return <div className="columns-borders">{borders}</div>;
+  onColumnCountChanged?: (count: number) => void;
 }
 
 export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrollerProps) {
   let { topmostIndex } = props;
-  const { activeIndex, columnCount, totalCount, itemHeight, renderItem, onPosChange, onItemsPerColumnChanged } = props;
+  const { activeIndex, totalCount, itemHeight, minColumnWidth, renderItem, onPosChange, onItemsPerColumnChanged, onColumnCountChanged } = props;
 
   if (!Number.isInteger(itemHeight) || itemHeight <= 0) {
     throw new Error('itemHeight should be positive');
@@ -31,16 +24,24 @@ export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrol
 
   const onPosChangeRef = useRef(onPosChange);
   const onItemsPerColumnChangedRef = useRef(onItemsPerColumnChanged);
+  const onColumnCountChangedRef = useRef(onColumnCountChanged);
   onPosChangeRef.current = onPosChange;
   onItemsPerColumnChangedRef.current = onItemsPerColumnChanged;
+  onColumnCountChangedRef.current = onColumnCountChanged;
 
   const rootRef = useRef<HTMLDivElement>(null);
-  const { height } = useElementSize(rootRef);
+  const { width, height } = useElementSize(rootRef);
+
+  const columnCount = minColumnWidth != null && width > 0 ? Math.max(1, Math.floor(width / minColumnWidth)) : 1;
   const itemsPerColumn = Math.max(1, Math.floor(height / itemHeight));
 
   useLayoutEffect(() => {
     onItemsPerColumnChangedRef.current?.(itemsPerColumn);
   }, [itemsPerColumn]);
+
+  useLayoutEffect(() => {
+    onColumnCountChangedRef.current?.(columnCount);
+  }, [columnCount]);
 
   if (activeIndex < topmostIndex) {
     topmostIndex = activeIndex;
@@ -56,13 +57,21 @@ export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrol
   activeIndexRef.current = activeIndex;
 
   const items = useMemo(() => {
-    const slice = [];
     const end = Math.min(totalCount, topmostIndex + itemsPerColumn * columnCount);
+    const slice = [];
     for (let i = topmostIndex; i < end; i++) {
       slice.push(
-        <div key={i} style={{ height: itemHeight }}>
+        <div key={i} style={{ width: `${100 / columnCount}%`, height: itemHeight }}>
           {renderItem(i)}
         </div>,
+      );
+    }
+    // Empty trailing columns to preserve flex layout
+    const usedItems = end - topmostIndex;
+    const emptyColumns = columnCount - Math.ceil(usedItems / itemsPerColumn);
+    for (let i = 0; i < emptyColumns; i++) {
+      slice.push(
+        <div key={`empty-${i}`} style={{ height: '100%', width: `${100 / columnCount}%` }} />,
       );
     }
     return slice;
@@ -88,21 +97,22 @@ export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrol
 
   return (
     <div className="columns-scroller-root" ref={rootRef}>
-      <Borders columnCount={columnCount} />
+      <div className="columns-borders" style={{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }}>
+        {Array.from({ length: columnCount }, (_, i) => (
+          <div className="columns-border" key={i} />
+        ))}
+      </div>
       <ScrollableContainer
         scrollTop={scrollTop}
         scrollHeight={(totalCount - 1) * itemHeight}
         lineSize={itemHeight}
         style={{ height: '100%' }}
-        innerContainerStyle={{ width: '100%', height: '100%' }}
         onScroll={onScroll}
       >
         <div
           className="columns-scroller-content"
-          style={{ columnCount, height: itemsPerColumn * itemHeight }}
+          style={{ height: itemsPerColumn * itemHeight }}
         >
-          {/* Workaround for Chrome macOS column layout bug */}
-          {/* <div style={{ height: 0.1, overflow: 'hidden' }} /> */}
           {items}
         </div>
       </ScrollableContainer>
