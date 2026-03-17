@@ -6,9 +6,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileHandle } from './fsa';
 import { bridge } from './bridge';
-import { basename, normalizePath } from './path';
+import { basename, dirname, normalizePath } from './path';
 import { getExtensionScriptUrl } from './extensionLoader';
 import type {
   HostApi,
@@ -103,6 +102,11 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
+  // Single open file descriptor per container (viewer/editor).
+  // Bound to the currently viewed/edited file and closed on unmount or when file changes.
+  const currentFileRef = useRef<{ fd: number; size: number; path: string } | null>(null);
+  const currentFilePathRef = useRef<string | null>(null);
+
   const hasCachedEditor =
     kind === 'editor' && !!getCachedEditorExtension(extensionDirPath, entry);
 
@@ -126,20 +130,98 @@ export function ExtensionContainer(containerProps: ContainerProps) {
 
   const buildHostApi = useCallback((): HostApi => ({
     async readFile(path: string): Promise<ArrayBuffer> {
-      const handle = new FileHandle(path, basename(path));
-      const file = await handle.getFile();
-      return file.arrayBuffer();
+      const normalized = normalizePath(path);
+      const current = currentFileRef.current;
+      // Reuse existing fd when possible; otherwise open and remember a new one.
+      let target = current;
+      if (!target || target.path !== normalized) {
+        if (current) {
+          try {
+            await bridge.fsa.close(current.fd);
+          } catch {
+            // ignore close errors
+          }
+        }
+        const fd = await bridge.fsa.open(normalized);
+        const stat = await bridge.fsa.stat(normalized);
+        target = { fd, size: stat.size, path: normalized };
+        currentFileRef.current = target;
+      }
+      return bridge.fsa.read(target.fd, 0, target.size);
     },
     async readFileRange(path: string, offset: number, length: number): Promise<ArrayBuffer> {
-      const handle = new FileHandle(path, basename(path));
-      const file = await handle.getFile();
-      const slice = file.slice(offset, offset + length);
-      return slice.arrayBuffer();
+      const normalized = normalizePath(path);
+      const current = currentFileRef.current;
+      let target = current;
+      if (!target || target.path !== normalized) {
+        if (current) {
+          try {
+            await bridge.fsa.close(current.fd);
+          } catch {
+            // ignore close errors
+          }
+        }
+        const fd = await bridge.fsa.open(normalized);
+        const stat = await bridge.fsa.stat(normalized);
+        target = { fd, size: stat.size, path: normalized };
+        currentFileRef.current = target;
+      }
+      const safeOffset = Math.max(0, Math.floor(offset));
+      const maxLen = Math.max(0, Math.floor(length));
+      const remaining = Math.max(0, target.size - safeOffset);
+      const safeLen = Math.min(maxLen, remaining);
+      if (safeLen === 0) return new ArrayBuffer(0);
+      return bridge.fsa.read(target.fd, safeOffset, safeLen);
     },
     async readFileText(path: string): Promise<string> {
-      const handle = new FileHandle(path, basename(path));
-      const file = await handle.getFile();
-      return file.text();
+      const buf = await this.readFile(path);
+      return new TextDecoder().decode(buf);
+    },
+    async statFile(path: string): Promise<{ size: number; mtimeMs: number }> {
+      const normalized = normalizePath(path);
+      const stat = await bridge.fsa.stat(normalized);
+      const current = currentFileRef.current;
+      if (current && current.path === normalized && current.size !== stat.size) {
+        current.size = stat.size;
+      }
+      return stat;
+    },
+    onFileChange(callback: () => void): () => void {
+      const filePath = currentFilePathRef.current;
+      if (!filePath) return () => {};
+      const normalized = normalizePath(filePath);
+      const dir = dirname(normalized);
+      const name = basename(normalized);
+      const watchId = `viewer-${Math.random().toString(36).slice(2)}`;
+      let disposed = false;
+
+      const stopFsChange = bridge.fsa.onFsChange((event) => {
+        if (disposed) return;
+        if (event.watchId !== watchId || !event.name) return;
+        if (event.name === name && (event.type === 'modified' || event.type === 'appeared')) {
+          const current = currentFileRef.current;
+          if (current && current.path === normalized) {
+            void bridge.fsa.close(current.fd).catch(() => {});
+            currentFileRef.current = null;
+          }
+          callback();
+        }
+      });
+
+      void (async () => {
+        const ok = await bridge.fsa.watch(watchId, dir);
+        if (!ok) {
+          disposed = true;
+          stopFsChange();
+        }
+      })();
+
+      return () => {
+        if (disposed) return;
+        disposed = true;
+        bridge.fsa.unwatch(watchId);
+        stopFsChange();
+      };
     },
     async writeFile(path: string, content: string): Promise<void> {
       await bridge.fsa.writeFile(path, content);
@@ -208,6 +290,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
 
         api = resolvedApi;
         extensionApiRef.current = api;
+        // Track current file path for this container (viewer/editor).
+        if (kind === 'viewer') {
+          currentFilePathRef.current = (props as ViewerProps).filePath;
+        } else {
+          currentFilePathRef.current = (props as EditorProps).filePath;
+        }
         const hostApi = buildHostApi();
         if (kind === 'viewer') {
           await (api as ViewerExtensionApi).mount(mountEl, hostApi, props as ViewerProps);
@@ -238,6 +326,11 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         currentApi.unmount().catch(() => {});
         extensionApiRef.current = null;
       }
+      const currentFile = currentFileRef.current;
+      if (currentFile) {
+        bridge.fsa.close(currentFile.fd).catch(() => {});
+        currentFileRef.current = null;
+      }
       if (scriptUrlRef.current?.startsWith('blob:')) {
         URL.revokeObjectURL(scriptUrlRef.current);
       }
@@ -253,6 +346,11 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     if (!api || !mountEl || loading || error) return;
     if (prevPropsRef.current === props) return;
     prevPropsRef.current = props;
+    if (kind === 'viewer') {
+      currentFilePathRef.current = (props as ViewerProps).filePath;
+    } else {
+      currentFilePathRef.current = (props as EditorProps).filePath;
+    }
     const hostApi = buildHostApi();
     if (kind === 'viewer') {
       (api as ViewerExtensionApi).mount(mountEl, hostApi, props as ViewerProps).catch(() => {});

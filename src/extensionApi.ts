@@ -61,6 +61,10 @@ export interface HostApi {
   readFileText(path: string): Promise<string>;
   /** Read a byte range (for chunked viewing). */
   readFileRange?(path: string, offset: number, length: number): Promise<ArrayBuffer>;
+  /** Lightweight stat for the currently viewed file. */
+  statFile?(path: string): Promise<{ size: number; mtimeMs: number }>;
+  /** Subscribe to external changes of the currently viewed file. */
+  onFileChange?(callback: () => void): () => void;
   writeFile(path: string, content: string): Promise<void>;
   getTheme(): Promise<string>;
   /** Get the active color theme data (colors + tokenColors). Returns null if no VS Code theme is active. */
