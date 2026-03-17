@@ -1,19 +1,28 @@
+import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { normalizePath } from './path';
 import { bridge, type TerminalProfile } from './bridge';
 import { TerminalView } from './terminal/TerminalView';
 import { TerminalService, type TerminalServiceSnapshot } from './terminal/TerminalService';
 
-const COMPACT_VISIBLE_HEIGHT = 40;
-
 interface TerminalPanelProps {
   cwd: string;
   expanded?: boolean;
   onCwdChange?: (path: string) => void;
-  onVisibleHeight?: (px: number) => void;
   onPromptActive?: (active: boolean) => void;
   /** Called with a function that writes to the active terminal (for list.execute). */
   onWriteToTerminal?: (write: (data: string) => Promise<void>) => void;
+}
+
+interface TerminalToolbarProps {
+  snapshot: TerminalServiceSnapshot;
+  service: TerminalService;
+  activeSessionId: string | null;
+  activeProfileId: string | null;
+  activeProfileShell: string | null;
+  activeError: string | null;
+  profiles: TerminalProfile[];
+  profilesLoaded: boolean;
 }
 
 const emptySnapshot: TerminalServiceSnapshot = {
@@ -21,7 +30,91 @@ const emptySnapshot: TerminalServiceSnapshot = {
   activeSessionId: null,
 };
 
-export function TerminalPanel({ cwd, expanded = false, onCwdChange, onVisibleHeight, onPromptActive, onWriteToTerminal }: TerminalPanelProps) {
+export function TerminalToolbar({
+  snapshot,
+  service,
+  activeSessionId,
+  activeProfileId,
+  activeProfileShell,
+  activeError,
+  profiles,
+  profilesLoaded,
+}: TerminalToolbarProps) {
+  return (
+    <div className="terminal-toolbar">
+      <div className="terminal-tabs">
+        {snapshot.sessions.map((session) => (
+          <button
+            key={session.id}
+            type="button"
+            className={`terminal-tab ${session.id === snapshot.activeSessionId ? 'active' : ''}`}
+            onClick={() => service.activate(session.id)}
+          >
+            <span className={`terminal-tab-status status-${session.status}`} />
+            <span className="terminal-tab-label">{session.profileLabel}</span>
+            {snapshot.sessions.length > 1 && (
+              <span
+                className="terminal-tab-close"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  service.closeSession(session.id);
+                }}
+              >
+                x
+              </span>
+            )}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="terminal-tab terminal-tab-add"
+          onClick={() => service.createSession(activeProfileId ?? profiles[0]?.id)}
+        >
+          +
+        </button>
+      </div>
+      <label className="terminal-profile-picker">
+        <span className="terminal-profile-label">Shell</span>
+        <select
+          value={activeProfileId ?? ''}
+          disabled={!profilesLoaded || profiles.length === 0 || !activeSessionId}
+          onChange={(event) => {
+            service.switchActiveProfile(event.target.value);
+          }}
+        >
+          {profiles.map((profile) => (
+            <option key={profile.id} value={profile.id}>{profile.label}</option>
+          ))}
+        </select>
+      </label>
+      {activeSessionId && <div className="terminal-profile-shell">{activeProfileShell ?? ''}</div>}
+      {activeError && <div className="terminal-status-error">{activeError}</div>}
+    </div>
+  );
+}
+
+export function TerminalPanelBody({ activeSessionId, session, expanded = false }: { activeSessionId: string | null; session: unknown; expanded?: boolean }) {
+  return (
+    <div className="terminal-panel">
+      <div className="terminal-body">
+        {activeSessionId && session && typeof session === 'object' ? (
+          <TerminalView key={activeSessionId} session={session as never} expanded={expanded} />
+        ) : (
+          <div className="terminal-loading">Loading terminal...</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function TerminalController({
+  cwd,
+  expanded = false,
+  onCwdChange,
+  onPromptActive,
+  onWriteToTerminal,
+  children,
+}: TerminalPanelProps & { children: (slots: { body: ReactNode; toolbar: ReactNode }) => ReactNode }) {
   const lastReportedCwdRef = useRef<string | null>(null);
   const service = useMemo(() => new TerminalService(), []);
   const [profiles, setProfiles] = useState<TerminalProfile[]>([]);
@@ -29,9 +122,8 @@ export function TerminalPanel({ cwd, expanded = false, onCwdChange, onVisibleHei
   const [snapshot, setSnapshot] = useState<TerminalServiceSnapshot>(emptySnapshot);
 
   useEffect(() => {
-    onVisibleHeight?.(COMPACT_VISIBLE_HEIGHT);
     onPromptActive?.(true);
-  }, [onPromptActive, onVisibleHeight]);
+  }, [onPromptActive]);
 
   useEffect(() => {
     const cleanup = service.subscribe(() => {
@@ -95,65 +187,43 @@ export function TerminalPanel({ cwd, expanded = false, onCwdChange, onVisibleHei
   }, [service]);
 
   const activeSession = snapshot.sessions.find((session) => session.id === snapshot.activeSessionId) ?? null;
+  const activeProfileShell = activeSession
+    ? profiles.find((profile) => profile.id === activeSession.profileId)?.shell ?? null
+    : null;
 
+  const body = (
+    <TerminalPanelBody
+      activeSessionId={activeSession?.id ?? null}
+      session={activeSession?.session ?? null}
+      expanded={expanded}
+    />
+  );
+
+  const toolbar = (
+    <TerminalToolbar
+      snapshot={snapshot}
+      service={service}
+      activeSessionId={activeSession?.id ?? null}
+      activeProfileId={activeSession?.profileId ?? null}
+      activeProfileShell={activeProfileShell}
+      activeError={activeSession?.error ?? null}
+      profiles={profiles}
+      profilesLoaded={profilesLoaded}
+    />
+  );
+
+  return children({ body, toolbar });
+}
+
+export function TerminalPanel(props: TerminalPanelProps) {
   return (
-    <div className="terminal-panel">
-      <div className="terminal-body">
-        {activeSession ? (
-          <TerminalView key={activeSession.id} session={activeSession.session} expanded={expanded} />
-        ) : (
-          <div className="terminal-loading">Loading terminal...</div>
-        )}
-      </div>
-      <div className="terminal-toolbar">
-        <div className="terminal-tabs">
-          {snapshot.sessions.map((session) => (
-            <button
-              key={session.id}
-              type="button"
-              className={`terminal-tab ${session.id === snapshot.activeSessionId ? 'active' : ''}`}
-              onClick={() => service.activate(session.id)}
-            >
-              <span className={`terminal-tab-status status-${session.status}`} />
-              <span className="terminal-tab-label">{session.profileLabel}</span>
-              {snapshot.sessions.length > 1 && (
-                <span
-                  className="terminal-tab-close"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    service.closeSession(session.id);
-                  }}
-                >
-                  x
-                </span>
-              )}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="terminal-tab terminal-tab-add"
-            onClick={() => service.createSession(activeSession?.profileId ?? profiles[0]?.id)}
-          >
-            +
-          </button>
-        </div>
-        <label className="terminal-profile-picker">
-          <span className="terminal-profile-label">Shell</span>
-          <select
-            value={activeSession?.profileId ?? ''}
-            disabled={!profilesLoaded || profiles.length === 0 || !activeSession}
-            onChange={(event) => {
-              service.switchActiveProfile(event.target.value);
-            }}
-          >
-            {profiles.map((profile) => (
-              <option key={profile.id} value={profile.id}>{profile.label}</option>
-            ))}
-          </select>
-        </label>
-        {activeSession && <div className="terminal-profile-shell">{profiles.find((profile) => profile.id === activeSession.profileId)?.shell}</div>}
-        {activeSession?.error && <div className="terminal-status-error">{activeSession.error}</div>}
-      </div>
-    </div>
+    <TerminalController {...props}>
+      {({ body, toolbar }) => (
+        <>
+          {body}
+          {toolbar}
+        </>
+      )}
+    </TerminalController>
   );
 }

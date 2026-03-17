@@ -33,6 +33,10 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
   const lastFitSizeRef = useRef({ w: 0, h: 0 });
 
   useEffect(() => {
+    // A profile switch replaces the TerminalSession without remounting this component.
+    // Force a fresh measurement so FitAddon doesn't early-return on stale cached dimensions.
+    lastFitSizeRef.current = { w: 0, h: 0 };
+
     const container = containerRef.current;
     if (!container) return;
 
@@ -43,6 +47,8 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       scrollOnUserInput: true,
       scrollback: 1000,
+      cursorStyle: 'bar',
+      cursorInactiveStyle: 'none',
       theme: resolveTerminalTheme(),
     });
 

@@ -6,8 +6,7 @@ import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { FsChangeType } from './types';
 import { bridge } from './bridge';
-import { FileList } from './FileList';
-import { PanelTabs, type PanelTab } from './FileList/PanelTabs';
+import type { PanelTab } from './FileList/PanelTabs';
 import { isMediaFile } from './mediaFiles';
 import { ViewerContainer, EditorContainer } from './ExtensionContainer';
 import { clearEditorExtensionCache } from './editorExtensionCache';
@@ -16,9 +15,10 @@ import type { LanguageOption } from './OpenCreateFileDialog';
 import { collectPathsForDelete } from './deleteHelpers';
 import { useDialog, DialogHolder } from './dialogContext';
 import { ModalDialog } from './ModalDialog';
-import { TerminalPanel } from './Terminal';
+import { TerminalController } from './Terminal';
 import { ActionBar } from './ActionBar';
 import { ExtensionsPanel } from './ExtensionsPanel';
+import { PanelGroup } from './PanelGroup';
 import { CommandPalette, useCommandPalette } from './CommandPalette';
 import { commandRegistry } from './commands';
 import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
@@ -309,7 +309,6 @@ export function App() {
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [promptActive, setPromptActive] = useState(true);
   const promptHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [terminalVisibleHeight, setTerminalVisibleHeight] = useState(40);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
   const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
@@ -1568,159 +1567,83 @@ export function App() {
     return <div className="loading">Loading...</div>;
   }
 
-  const actionBarHeight = 24;
-  const collapsedTerminalVisibleHeight = 40;
   const activeCwd = requestedTerminalCwd ?? (activePanel === 'left' ? left.currentPath : right.currentPath);
 
   return (
     <div className="app">
-      <div className={`terminal-background${panelsVisible ? '' : ' expanded'}`}>
-        <TerminalPanel
-          cwd={activeCwd}
-          expanded={!panelsVisible}
-          onCwdChange={handleTerminalCwd}
-          onVisibleHeight={setTerminalVisibleHeight}
-          onPromptActive={handlePromptActive}
-          onWriteToTerminal={(write) => { writeToTerminalRef.current = write; }}
-        />
-      </div>
-      <div
-        className={`panels-overlay${panelsVisible && promptActive ? '' : ' hidden'}`}
-        style={{ bottom: `${Math.max(collapsedTerminalVisibleHeight, terminalVisibleHeight) + actionBarHeight}px` }}
+      <TerminalController
+        cwd={activeCwd}
+        expanded={!panelsVisible}
+        onCwdChange={handleTerminalCwd}
+        onPromptActive={handlePromptActive}
+        onWriteToTerminal={(write) => { writeToTerminalRef.current = write; }}
       >
-        <div className={`panel ${activePanel === 'left' ? 'active' : ''}`} onClick={() => setActivePanel('left')}>
-          {left.navigating && <div className="panel-progress" />}
-          <PanelTabs
-            tabs={leftTabs}
-            activeIndex={leftActiveIndex}
-            onSelectTab={setLeftActiveIndex}
-            onDoubleClickTab={(i) => handlePinTab('left', i)}
-            onCloseTab={(i) => handleCloseTab('left', i)}
-            onNewTab={() => handleNewTab('left')}
-            onReorderTabs={(from, to) => handleReorderTabs('left', from, to)}
-          />
-          <div className="panel-content">
-          {leftTabs[leftActiveIndex]?.type === 'filelist' ? (
-            <FileList
-              key={leftTabs[leftActiveIndex].id}
-              currentPath={left.currentPath}
-              parentNode={left.parentNode}
-              entries={leftFilteredEntries}
-              onNavigate={(path) => {
-                setActivePanel('left');
-                rememberExpectedTerminalCwd(path);
-                return left.navigateTo(path);
-              }}
-              onViewFile={handleViewFile}
-              onEditFile={handleEditFile}
-              onMoveToTrash={(path, name, isDir) => handleMoveToTrash(path, name, isDir, () => left.navigateTo(left.currentPath))}
-              onPermanentDelete={(path, name, isDir) => handlePermanentDelete(path, name, isDir, () => left.navigateTo(left.currentPath))}
-              onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
-              editorFileSizeLimit={editorFileSizeLimit}
-              active={activePanel === 'left'}
-              resolver={left.resolver}
-              requestedActiveName={leftRequestedCursor ?? initialLeftPanel?.selectedName}
-              requestedTopmostName={initialLeftPanel?.topmostName}
-              onStateChange={handleLeftStateChange}
-            />
-          ) : leftTabs[leftActiveIndex]?.type === 'preview' ? (
-            (() => {
-              const tab = leftTabs[leftActiveIndex];
-              if (tab.type !== 'preview') return null;
-              const closeTab = () => {
-                setLeftTabs((prev) => prev.filter((_, i) => i !== leftActiveIndex));
-                setLeftActiveIndex(Math.max(0, leftActiveIndex - 1));
-              };
-              const resolved = viewerRegistry.resolve(tab.name);
-              if (resolved) {
-                return (
-                  <ViewerContainer
-                    extensionDirPath={resolved.extensionDirPath}
-                    entry={resolved.contribution.entry}
-                    filePath={tab.path}
-                    fileName={tab.name}
-                    fileSize={tab.size}
-                    inline
-                    onClose={closeTab}
-                  />
-                );
-              }
-              return (
-                <div style={{ padding: 16, color: 'var(--fg-muted, #888)', textAlign: 'center' }}>
-                  No viewer extension for this file type. Install viewer extensions from the extensions panel.
-                </div>
-              );
-            })()
-          ) : null}
-          </div>
-        </div>
-        <div className={`panel ${activePanel === 'right' ? 'active' : ''}`} onClick={() => setActivePanel('right')}>
-          {right.navigating && <div className="panel-progress" />}
-          <PanelTabs
-            tabs={rightTabs}
-            activeIndex={rightActiveIndex}
-            onSelectTab={setRightActiveIndex}
-            onDoubleClickTab={(i) => handlePinTab('right', i)}
-            onCloseTab={(i) => handleCloseTab('right', i)}
-            onNewTab={() => handleNewTab('right')}
-            onReorderTabs={(from, to) => handleReorderTabs('right', from, to)}
-          />
-          <div className="panel-content">
-          {rightTabs[rightActiveIndex]?.type === 'filelist' ? (
-            <FileList
-              key={rightTabs[rightActiveIndex].id}
-              currentPath={right.currentPath}
-              parentNode={right.parentNode}
-              entries={rightFilteredEntries}
-              onNavigate={(path) => {
-                setActivePanel('right');
-                rememberExpectedTerminalCwd(path);
-                return right.navigateTo(path);
-              }}
-              onViewFile={handleViewFile}
-              onEditFile={handleEditFile}
-              onMoveToTrash={(path, name, isDir) => handleMoveToTrash(path, name, isDir, () => right.navigateTo(right.currentPath))}
-              onPermanentDelete={(path, name, isDir) => handlePermanentDelete(path, name, isDir, () => right.navigateTo(right.currentPath))}
-              onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
-              editorFileSizeLimit={editorFileSizeLimit}
-              active={activePanel === 'right'}
-              resolver={right.resolver}
-              requestedActiveName={rightRequestedCursor ?? initialRightPanel?.selectedName}
-              requestedTopmostName={initialRightPanel?.topmostName}
-              onStateChange={handleRightStateChange}
-            />
-          ) : rightTabs[rightActiveIndex]?.type === 'preview' ? (
-            (() => {
-              const tab = rightTabs[rightActiveIndex];
-              if (tab.type !== 'preview') return null;
-              const closeTab = () => {
-                setRightTabs((prev) => prev.filter((_, i) => i !== rightActiveIndex));
-                setRightActiveIndex(Math.max(0, rightActiveIndex - 1));
-              };
-              const resolved = viewerRegistry.resolve(tab.name);
-              if (resolved) {
-                return (
-                  <ViewerContainer
-                    extensionDirPath={resolved.extensionDirPath}
-                    entry={resolved.contribution.entry}
-                    filePath={tab.path}
-                    fileName={tab.name}
-                    fileSize={tab.size}
-                    inline
-                    onClose={closeTab}
-                  />
-                );
-              }
-              return (
-                <div style={{ padding: 16, color: 'var(--fg-muted, #888)', textAlign: 'center' }}>
-                  No viewer extension for this file type. Install viewer extensions from the extensions panel.
-                </div>
-              );
-            })()
-          ) : null}
-          </div>
-        </div>
-      </div>
+        {({ body, toolbar }) => (
+          <>
+            <div className="terminal-and-panels">
+              <div className={`terminal-background${panelsVisible ? '' : ' expanded'}`}>
+                {body}
+              </div>
+              <div className={`panels-overlay${panelsVisible && promptActive ? '' : ' hidden'}`}
+              >
+                <PanelGroup
+                  side="left"
+                  active={activePanel === 'left'}
+                  panel={left}
+                  tabs={leftTabs}
+                  activeIndex={leftActiveIndex}
+                  onSelectTab={setLeftActiveIndex}
+                  onDoubleClickTab={(i) => handlePinTab('left', i)}
+                  onCloseTab={(i) => { void handleCloseTab('left', i); }}
+                  onNewTab={() => handleNewTab('left')}
+                  onReorderTabs={(from, to) => handleReorderTabs('left', from, to)}
+                  filteredEntries={leftFilteredEntries}
+                  editorFileSizeLimit={editorFileSizeLimit}
+                  onActivatePanel={() => setActivePanel('left')}
+                  onRememberExpectedTerminalCwd={rememberExpectedTerminalCwd}
+                  onViewFile={handleViewFile}
+                  onEditFile={handleEditFile}
+                  onMoveToTrash={(path, name, isDir) => handleMoveToTrash(path, name, isDir, () => left.navigateTo(left.currentPath))}
+                  onPermanentDelete={(path, name, isDir) => handlePermanentDelete(path, name, isDir, () => left.navigateTo(left.currentPath))}
+                  onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
+                  requestedActiveName={leftRequestedCursor}
+                  requestedTopmostName={undefined}
+                  initialPanelState={initialLeftPanel}
+                  onStateChange={handleLeftStateChange}
+                />
+                <PanelGroup
+                  side="right"
+                  active={activePanel === 'right'}
+                  panel={right}
+                  tabs={rightTabs}
+                  activeIndex={rightActiveIndex}
+                  onSelectTab={setRightActiveIndex}
+                  onDoubleClickTab={(i) => handlePinTab('right', i)}
+                  onCloseTab={(i) => { void handleCloseTab('right', i); }}
+                  onNewTab={() => handleNewTab('right')}
+                  onReorderTabs={(from, to) => handleReorderTabs('right', from, to)}
+                  filteredEntries={rightFilteredEntries}
+                  editorFileSizeLimit={editorFileSizeLimit}
+                  onActivatePanel={() => setActivePanel('right')}
+                  onRememberExpectedTerminalCwd={rememberExpectedTerminalCwd}
+                  onViewFile={handleViewFile}
+                  onEditFile={handleEditFile}
+                  onMoveToTrash={(path, name, isDir) => handleMoveToTrash(path, name, isDir, () => right.navigateTo(right.currentPath))}
+                  onPermanentDelete={(path, name, isDir) => handlePermanentDelete(path, name, isDir, () => right.navigateTo(right.currentPath))}
+                  onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
+                  requestedActiveName={rightRequestedCursor}
+                  requestedTopmostName={undefined}
+                  initialPanelState={initialRightPanel}
+                  onStateChange={handleRightStateChange}
+                />
+              </div>
+            </div>
+            <div className="terminal-toolbar-overlay">
+              {toolbar}
+            </div>
+          </>
+        )}
+      </TerminalController>
       <ActionBar />
       {viewerFile && (() => {
         const resolved = viewerRegistry.resolve(viewerFile.name);
