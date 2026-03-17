@@ -4,6 +4,7 @@
 /// (for the elevated helper) or to napi JS values (for the addon) is
 /// handled by the respective callers.
 use crate::error::FsError;
+use log::{debug, warn};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
@@ -287,18 +288,25 @@ fn is_hidden(name: &str, #[allow(unused)] full_path: &Path) -> bool {
 
 pub fn entries(dir_path: &str) -> Result<Vec<EntryInfo>, FsError> {
     let path = path_for_fs(dir_path);
+    debug!("[ops::entries] start {:?}", path);
     let dir = fs::read_dir(&path).map_err(FsError::from_io)?;
     let mut result = Vec::new();
 
     for entry in dir {
         let entry = match entry {
             Ok(e) => e,
-            Err(_) => continue,
+            Err(e) => {
+                warn!("[ops::entries] skipping unreadable entry in {:?}: {}", path, e);
+                continue;
+            }
         };
         let name = entry.file_name().to_string_lossy().into_owned();
         let ft = match entry.file_type() {
             Ok(ft) => ft,
-            Err(_) => continue,
+            Err(e) => {
+                warn!("[ops::entries] skipping {:?}/{}: file_type failed: {}", path, name, e);
+                continue;
+            }
         };
         let kind = entry_kind(&ft);
 
@@ -306,7 +314,10 @@ pub fn entries(dir_path: &str) -> Result<Vec<EntryInfo>, FsError> {
         let full_path = entry.path();
         let (size, mtime_ms, mut mode) = match fs::metadata(&full_path) {
             Ok(meta) => (meta.len() as f64, metadata_mtime_ms(&meta), entry_mode(&meta)),
-            Err(_) => (0.0, 0.0, 0),
+            Err(e) => {
+                debug!("[ops::entries] metadata failed for {:?}: {}", full_path, e);
+                (0.0, 0.0, 0)
+            }
         };
         // On platforms without execute bits (e.g. Windows), use executable extension heuristic
         if kind == EntryKind::File && mode & 0o111 == 0 && is_executable_extension(&name) {
@@ -335,6 +346,7 @@ pub fn entries(dir_path: &str) -> Result<Vec<EntryInfo>, FsError> {
             link_target,
         });
     }
+    debug!("[ops::entries] done {:?} ({} entries)", path, result.len());
     Ok(result)
 }
 

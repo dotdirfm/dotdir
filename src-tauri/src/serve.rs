@@ -22,6 +22,7 @@ use faraday_core::{
     watch::{EventCallback, FsWatcher},
 };
 use futures::{SinkExt, StreamExt};
+use log::debug;
 use rust_embed::RustEmbed;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -281,10 +282,13 @@ fn rpc_error(id: &Value, e: &FsError) -> Message {
 }
 
 fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, FsError> {
+    debug!("[ws] dispatch method={}", method);
     match method {
         "fs.entries" => {
             let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
+            debug!("[ws] fs.entries {:?}", path);
             let entries: Vec<JsEntry> = ops::entries(path)?.into_iter().map(Into::into).collect();
+            debug!("[ws] fs.entries {:?} → {} entries", path, entries.len());
             Ok(serde_json::to_value(entries).unwrap())
         }
         "fs.stat" => {
@@ -319,10 +323,12 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
         "fs.watch" => {
             let watch_id = params["watchId"].as_str().ok_or(FsError::InvalidInput)?;
             let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
+            debug!("[ws] fs.watch id={} path={:?}", watch_id, path);
             Ok(json!(session.watcher.add(watch_id, path)))
         }
         "fs.unwatch" => {
             let watch_id = params["watchId"].as_str().ok_or(FsError::InvalidInput)?;
+            debug!("[ws] fs.unwatch id={}", watch_id);
             session.watcher.remove(watch_id);
             Ok(Value::Null)
         }

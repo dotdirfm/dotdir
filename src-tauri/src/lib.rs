@@ -1,6 +1,7 @@
 use faraday_core::error::FsError;
 use faraday_core::ops::{self, EntryInfo, FdTable, StatResult};
 use faraday_core::watch::{EventCallback, FsWatcher};
+use log::debug;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
@@ -169,16 +170,24 @@ impl AppState {
 
 #[tauri::command]
 fn fsa_entries(dir_path: String, state: State<'_, AppState>) -> CmdResult<Vec<FsEntry>> {
+    debug!("[cmd] fsa_entries {:?}", dir_path);
     match ops::entries(&dir_path) {
-        Ok(v) => Ok(v.into_iter().map(FsEntry::from).collect()),
+        Ok(v) => {
+            debug!("[cmd] fsa_entries {:?} → {} entries", dir_path, v.len());
+            Ok(v.into_iter().map(FsEntry::from).collect())
+        }
         Err(e) if is_eacces(&e) => {
+            debug!("[cmd] fsa_entries {:?} EACCES, trying proxy", dir_path);
             let proxy = state.get_or_launch_proxy()?;
             proxy
                 .entries(&dir_path)
                 .map(|v| v.into_iter().map(FsEntry::from).collect())
                 .map_err(Into::into)
         }
-        Err(e) => Err(e.into()),
+        Err(e) => {
+            debug!("[cmd] fsa_entries {:?} error: {}", dir_path, e);
+            Err(e.into())
+        }
     }
 }
 
@@ -246,11 +255,13 @@ fn fsa_close(fd: i32, state: State<'_, AppState>) {
 
 #[tauri::command]
 fn fsa_watch(watch_id: String, dir_path: String, state: State<'_, AppState>) -> bool {
+    debug!("[cmd] fsa_watch id={} path={:?}", watch_id, dir_path);
     state.watcher.add(&watch_id, &dir_path)
 }
 
 #[tauri::command]
 fn fsa_unwatch(watch_id: String, state: State<'_, AppState>) {
+    debug!("[cmd] fsa_unwatch id={}", watch_id);
     state.watcher.remove(&watch_id);
     if let Some(ref proxy) = *state.proxy.lock().unwrap() {
         proxy.unwatch(&watch_id);
@@ -453,13 +464,21 @@ pub fn run() {
         .setup(|app| {
             write_debug_log("tauri setup started");
             let handle = app.handle().clone();
+            // IMPORTANT: The notify callback runs on the FSEvents thread (macOS).
+            // handle.emit() dispatches to the main thread. If we block the
+            // FSEvents thread waiting for the main thread, and the main thread
+            // later calls watcher.unwatch() (which syncs with the FSEvents
+            // thread), we get a deadlock. Spawning a thread decouples them.
             let cb: EventCallback = Arc::new(move |watch_id, kind, name| {
                 let event = FsChangeEvent {
                     watch_id: watch_id.to_string(),
                     kind: kind.as_str().to_string(),
                     name: name.map(|s| s.to_string()),
                 };
-                let _ = handle.emit("fsa:change", event);
+                let h = handle.clone();
+                std::thread::spawn(move || {
+                    let _ = h.emit("fsa:change", event);
+                });
             });
 
             let watcher = FsWatcher::new(cb).expect("failed to create file watcher");

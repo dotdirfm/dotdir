@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 byteorder = "1"
+log = "0.4"
 notify = { version = "7", features = ["macos_fsevent"] }
 parking_lot = "0.12"
 thiserror = "2"

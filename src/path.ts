@@ -29,7 +29,7 @@ export function normalizePath(path: string): string {
     normalized = `${normalized}/`;
   }
 
-  if (normalized.length > 1 && normalized.endsWith('/') && !DRIVE_ROOT_RE.test(normalized) && !isUncRoot(normalized)) {
+  if (normalized.length > 1 && normalized.endsWith('/') && !DRIVE_ROOT_RE.test(normalized)) {
     normalized = normalized.replace(/\/+$/, '');
   }
 

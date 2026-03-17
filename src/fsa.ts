@@ -266,45 +266,89 @@ let nextWatchId = 0;
 export class FileSystemObserver {
   #callback: ObserverCallback;
   #watches = new Map<string, DirectoryHandle>(); // watchId → handle
+  #pathToId = new Map<string, string>(); // path → watchId (reverse lookup)
   #cleanup: (() => void) | null = null;
+  #generation = 0; // incremented on disconnect to discard stale observe() results
 
   constructor(callback: ObserverCallback) {
     this.#callback = callback;
   }
 
-  async observe(handle: DirectoryHandle): Promise<void> {
+  #ensureListener(): void {
     if (!this.#cleanup) {
       this.#cleanup = bridge.fsa.onFsChange((event: FsChangeEvent) => {
         this.#handleEvent(event);
       });
     }
+  }
 
+  async observe(handle: DirectoryHandle): Promise<void> {
+    this.#ensureListener();
+
+    // Already watching this path — skip
+    if (this.#pathToId.has(handle.path)) return;
+
+    const gen = this.#generation;
     const watchId = `fso-${nextWatchId++}`;
+
+    // Register synchronously so concurrent sync() calls see this path as watched
+    this.#watches.set(watchId, handle);
+    this.#pathToId.set(handle.path, watchId);
+
     const ok = await bridge.fsa.watch(watchId, handle.path);
 
-    if (!ok) {
-      this.#callback([{ root: handle, changedHandle: null, relativePathComponents: [], type: 'errored' }], this);
+    // Discard if observer was disconnected/updated while awaiting IPC
+    if (gen !== this.#generation) {
+      if (ok) bridge.fsa.unwatch(watchId);
       return;
     }
 
-    this.#watches.set(watchId, handle);
+    if (!ok) {
+      this.#watches.delete(watchId);
+      this.#pathToId.delete(handle.path);
+      this.#callback([{ root: handle, changedHandle: null, relativePathComponents: [], type: 'errored' }], this);
+    }
   }
 
   unobserve(handle: DirectoryHandle): void {
-    for (const [watchId, watched] of this.#watches) {
-      if (watched.path === handle.path) {
+    const watchId = this.#pathToId.get(handle.path);
+    if (watchId != null) {
+      bridge.fsa.unwatch(watchId);
+      this.#watches.delete(watchId);
+      this.#pathToId.delete(handle.path);
+    }
+  }
+
+  /** Update the set of watched paths, adding/removing only what changed. */
+  sync(paths: string[]): void {
+    this.#ensureListener();
+
+    const desired = new Set(paths);
+
+    // Remove watches no longer needed
+    for (const [path, watchId] of this.#pathToId) {
+      if (!desired.has(path)) {
         bridge.fsa.unwatch(watchId);
         this.#watches.delete(watchId);
-        break;
+        this.#pathToId.delete(path);
+      }
+    }
+
+    // Add watches for new paths
+    for (const path of desired) {
+      if (!this.#pathToId.has(path)) {
+        this.observe(new DirectoryHandle(path));
       }
     }
   }
 
   disconnect(): void {
+    this.#generation++;
     for (const watchId of this.#watches.keys()) {
       bridge.fsa.unwatch(watchId);
     }
     this.#watches.clear();
+    this.#pathToId.clear();
     if (this.#cleanup) {
       this.#cleanup();
       this.#cleanup = null;

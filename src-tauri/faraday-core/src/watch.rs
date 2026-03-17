@@ -4,6 +4,7 @@
 /// The `notify` crate abstracts all platform backends (FSEvents, kqueue,
 /// inotify, ReadDirectoryChangesW) behind a single RecommendedWatcher.
 use notify::{self, RecommendedWatcher, RecursiveMode, Watcher as NotifyWatcher};
+use log::debug;
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -68,19 +69,25 @@ impl FsWatcher {
                 _ => EventKind::Unknown,
             };
 
-            let map = path_map.lock();
-            for path in &event.paths {
-                // The event path is the full path to the changed file.
-                // Find which watched directory it belongs to and extract the filename.
-                if let Some(parent) = path.parent() {
-                    let parent_buf = parent.to_path_buf();
-                    if let Some(watch_ids) = map.get(&parent_buf) {
-                        let name = path.file_name().map(|n| n.to_string_lossy());
-                        for watch_id in watch_ids {
-                            cb(watch_id, kind, name.as_deref());
+            // Collect dispatch targets under the lock, then release before calling cb
+            let mut targets: Vec<(String, Option<String>)> = Vec::new();
+            {
+                let map = path_map.lock();
+                for path in &event.paths {
+                    if let Some(parent) = path.parent() {
+                        let parent_buf = parent.to_path_buf();
+                        if let Some(watch_ids) = map.get(&parent_buf) {
+                            let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+                            for watch_id in watch_ids {
+                                targets.push((watch_id.clone(), name.clone()));
+                            }
                         }
                     }
                 }
+            }
+            // Lock released — safe to invoke callbacks
+            for (watch_id, name) in &targets {
+                cb(watch_id, kind, name.as_deref());
             }
         })?;
 
@@ -99,22 +106,27 @@ impl FsWatcher {
             .canonicalize()
             .unwrap_or_else(|_| PathBuf::from(dir_path));
 
+        debug!("[watch] add id={} path={:?}", watch_id, path);
+
         // Remove existing watch with this ID first
         self.remove(watch_id);
 
-        // Only register with notify if this path isn't already watched
-        {
+        // Check if path is already watched (lock, read, release)
+        let already_watched = {
             let ids = self.path_to_ids.lock();
-            let already_watched = ids.get(&path).is_some_and(|s| !s.is_empty());
-            if !already_watched {
-                if self
-                    .watcher
-                    .lock()
-                    .watch(&path, RecursiveMode::NonRecursive)
-                    .is_err()
-                {
-                    return false;
-                }
+            ids.get(&path).is_some_and(|s| !s.is_empty())
+        };
+
+        // Register with notify OUTSIDE of any lock — notify may synchronize
+        // with the FSEvents thread, which also locks path_to_ids in its callback.
+        if !already_watched {
+            if self
+                .watcher
+                .lock()
+                .watch(&path, RecursiveMode::NonRecursive)
+                .is_err()
+            {
+                return false;
             }
         }
 
@@ -131,14 +143,26 @@ impl FsWatcher {
 
     /// Stop watching a directory by watch ID.
     pub fn remove(&self, watch_id: &str) {
-        if let Some(entry) = self.watches.lock().remove(watch_id) {
-            let mut ids = self.path_to_ids.lock();
-            if let Some(set) = ids.get_mut(&entry.path) {
-                set.remove(watch_id);
-                if set.is_empty() {
-                    ids.remove(&entry.path);
-                    let _ = self.watcher.lock().unwatch(&entry.path);
+        // Extract the path from watches (single lock, then release)
+        let entry = self.watches.lock().remove(watch_id);
+        if let Some(entry) = entry {
+            // Now lock path_to_ids separately (no nested locks)
+            let should_unwatch = {
+                let mut ids = self.path_to_ids.lock();
+                if let Some(set) = ids.get_mut(&entry.path) {
+                    set.remove(watch_id);
+                    if set.is_empty() {
+                        ids.remove(&entry.path);
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
                 }
+            };
+            if should_unwatch {
+                let _ = self.watcher.lock().unwatch(&entry.path);
             }
         }
     }

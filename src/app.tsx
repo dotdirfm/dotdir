@@ -131,12 +131,13 @@ function usePanel(theme: ThemeKind, showError: (message: string) => void) {
 
   const setupWatches = useCallback((dirPath: string) => {
     const observer = observerRef.current!;
-    observer.disconnect();
     const ancestors = getAncestors(dirPath);
+    const paths: string[] = [];
     for (const ancestor of ancestors) {
-      observer.observe(new DirectoryHandle(ancestor));
-      observer.observe(new DirectoryHandle(join(ancestor, '.faraday')));
+      paths.push(ancestor);
+      paths.push(join(ancestor, '.faraday'));
     }
+    observer.sync(paths);
   }, []);
 
   const navigateTo = useCallback(
