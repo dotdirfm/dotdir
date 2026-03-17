@@ -1,5 +1,6 @@
 import type React from 'react';
 import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 interface ScrollableContainerProps {
   children: ReactNode;
@@ -25,6 +26,7 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollTopRef = useRef(scrollTop);
   const onScrollRef = useRef(onScroll);
+  const isTouchscreen = useMediaQuery('(pointer: coarse)');
 
   scrollTopRef.current = scrollTop;
   onScrollRef.current = onScroll;
@@ -98,8 +100,6 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
       }
     };
 
-    const isTouchscreen = matchMedia('(pointer: coarse)').matches;
-
     container.addEventListener('wheel', handleWheel, { passive: true });
     if (isTouchscreen) {
       container.addEventListener('pointerdown', handlePointerDown);
@@ -117,7 +117,7 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
         container.removeEventListener('pointercancel', handlePointerUp);
       }
     };
-  }, [velocityFactor, frictionFactor, scrollHeight, lineSize]);
+  }, [velocityFactor, frictionFactor, scrollHeight, lineSize, isTouchscreen]);
 
   return (
     <div style={{ overflow: 'hidden', position: 'relative', touchAction: 'none', ...style }}>

@@ -843,7 +843,7 @@ body.terminal-resizing {
   overflow: hidden;
 }
 
-.entry:hover {
+.file-list:not(.no-hover) .entry:hover {
   background: var(--entry-hover);
 }
 

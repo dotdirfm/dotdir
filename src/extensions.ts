@@ -589,13 +589,18 @@ export interface PanelPersistedState {
 export interface FaradaySettings {
   iconTheme?: string; // "publisher.name" of the active icon theme
   colorTheme?: string; // "publisher.name:themeId" of the active color theme
-  editorFileSizeLimit?: number; // Max file size in bytes to open for editing (default: 1MB)
+  /**
+   * Max file size in bytes to open for editing.
+   * Use 0 (or any negative value) to disable the limit.
+   */
+  editorFileSizeLimit?: number;
   leftPanel?: PanelPersistedState;
   rightPanel?: PanelPersistedState;
   activePanel?: 'left' | 'right';
 }
 
-export const DEFAULT_EDITOR_FILE_SIZE_LIMIT = 1024 * 1024; // 1MB
+// 0 disables the limit (allows editing any size file).
+export const DEFAULT_EDITOR_FILE_SIZE_LIMIT = 0;
 
 async function getSettingsPath(): Promise<string> {
   const homePath = await bridge.utils.getHomePath();

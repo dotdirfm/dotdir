@@ -8,6 +8,7 @@ import { resolveEntryStyle } from '../fss';
 import type { ResolvedEntryStyle } from '../types';
 import { resolveIcon, loadIconsForPaths, getCachedIcon, onIconThemeChange } from '../iconResolver';
 import { dirname, join } from '../path';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { Breadcrumbs } from './Breadcrumbs';
 import { ColumnsScroller, type ColumnsScrollerProps } from './ColumnsScroller';
 
@@ -86,7 +87,7 @@ export const FileList = memo(function FileList({
   onMoveToTrash,
   onPermanentDelete,
   onExecuteInTerminal,
-  editorFileSizeLimit = 1024 * 1024,
+  editorFileSizeLimit = 0,
   active,
   resolver,
   requestedActiveName,
@@ -99,6 +100,10 @@ export const FileList = memo(function FileList({
   const [columnCount, setColumnCount] = useState(1);
   const [iconsVersion, setIconsVersion] = useState(0);
   const [selectedNames, setSelectedNames] = useState<ReadonlySet<string>>(new Set());
+  const [keyboardNavMode, setKeyboardNavMode] = useState(false);
+  const keyboardNavModeRef = useRef(keyboardNavMode);
+  keyboardNavModeRef.current = keyboardNavMode;
+  const isTouchscreen = useMediaQuery('(pointer: coarse)');
   const selectedNamesRef = useRef(selectedNames);
   selectedNamesRef.current = selectedNames;
   /** true = selecting, false = deselecting, undefined = no shift selection in progress */
@@ -126,6 +131,13 @@ export const FileList = memo(function FileList({
   onPermanentDeleteRef.current = onPermanentDelete;
   const editorFileSizeLimitRef = useRef(editorFileSizeLimit);
   editorFileSizeLimitRef.current = editorFileSizeLimit;
+  
+  const markKeyboardNav = useCallback(() => {
+    if (!keyboardNavModeRef.current) setKeyboardNavMode(true);
+  }, []);
+  const clearKeyboardNav = useCallback(() => {
+    if (keyboardNavModeRef.current) setKeyboardNavMode(false);
+  }, []);
 
   const sorted = useMemo(() => {
     const withStyle = entries.map((entry) => {
@@ -377,7 +389,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.cursorUp',
       'Cursor Up',
-      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - 1))),
+      () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.max(0, i - 1)); }),
       { when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -389,7 +401,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.cursorDown',
       'Cursor Down',
-      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + 1))),
+      () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + 1)); }),
       { when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -401,7 +413,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.cursorLeft',
       'Cursor Left (Previous Column)',
-      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - maxItemsPerColumnRef.current))),
+      () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.max(0, i - maxItemsPerColumnRef.current)); }),
       { when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -413,7 +425,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.cursorRight',
       'Cursor Right (Next Column)',
-      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + maxItemsPerColumnRef.current))),
+      () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + maxItemsPerColumnRef.current)); }),
       { when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -425,7 +437,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.cursorHome',
       'Cursor to First',
-      () => actionQueue.enqueue(() => setActiveIndex(0)),
+      () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex(0); }),
       { when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -437,7 +449,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.cursorEnd',
       'Cursor to Last',
-      () => actionQueue.enqueue(() => setActiveIndex(displayEntriesRef.current.length - 1)),
+      () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex(displayEntriesRef.current.length - 1); }),
       { when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -449,7 +461,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.cursorPageUp',
       'Cursor Page Up',
-      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.max(0, i - displayedItemsRef.current + 1))),
+      () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.max(0, i - displayedItemsRef.current + 1)); }),
       { when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -461,7 +473,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.cursorPageDown',
       'Cursor Page Down',
-      () => actionQueue.enqueue(() => setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + displayedItemsRef.current - 1))),
+      () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + displayedItemsRef.current - 1)); }),
       { when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -474,6 +486,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.selectUp', 'Select Up',
       () => actionQueue.enqueue(() => {
+        markKeyboardNav();
         const cur = activeIndexRef.current;
         const target = Math.max(0, cur - 1);
         applySelection(cur, target, cur === 0 ? 'include-active' : 'exclude-active');
@@ -485,6 +498,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.selectDown', 'Select Down',
       () => actionQueue.enqueue(() => {
+        markKeyboardNav();
         const cur = activeIndexRef.current;
         const last = displayEntriesRef.current.length - 1;
         const target = Math.min(last, cur + 1);
@@ -497,6 +511,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.selectLeft', 'Select Left',
       () => actionQueue.enqueue(() => {
+        markKeyboardNav();
         const cur = activeIndexRef.current;
         applySelection(cur, Math.max(0, cur - maxItemsPerColumnRef.current), 'include-active');
       }),
@@ -507,6 +522,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.selectRight', 'Select Right',
       () => actionQueue.enqueue(() => {
+        markKeyboardNav();
         const cur = activeIndexRef.current;
         applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + maxItemsPerColumnRef.current), 'include-active');
       }),
@@ -516,14 +532,14 @@ export const FileList = memo(function FileList({
 
     disposables.push(commandRegistry.registerCommand(
       'list.selectHome', 'Select to First',
-      () => actionQueue.enqueue(() => applySelection(activeIndexRef.current, 0, 'include-active')),
+      () => actionQueue.enqueue(() => { markKeyboardNav(); applySelection(activeIndexRef.current, 0, 'include-active'); }),
       { when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectHome', key: 'shift+home', when: 'focusPanel' }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.selectEnd', 'Select to Last',
-      () => actionQueue.enqueue(() => applySelection(activeIndexRef.current, displayEntriesRef.current.length - 1, 'include-active')),
+      () => actionQueue.enqueue(() => { markKeyboardNav(); applySelection(activeIndexRef.current, displayEntriesRef.current.length - 1, 'include-active'); }),
       { when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectEnd', key: 'shift+end', when: 'focusPanel' }));
@@ -531,6 +547,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.selectPageUp', 'Select Page Up',
       () => actionQueue.enqueue(() => {
+        markKeyboardNav();
         const cur = activeIndexRef.current;
         applySelection(cur, Math.max(0, cur - displayedItemsRef.current + 1), 'include-active');
       }),
@@ -541,6 +558,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerCommand(
       'list.selectPageDown', 'Select Page Down',
       () => actionQueue.enqueue(() => {
+        markKeyboardNav();
         const cur = activeIndexRef.current;
         applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + displayedItemsRef.current - 1), 'include-active');
       }),
@@ -608,7 +626,8 @@ export const FileList = memo(function FileList({
         const item = displayEntriesRef.current[activeIndexRef.current];
         if (item && item.entry.type === 'file' && onEditFileRef.current) {
           const fileSize = Number(item.entry.meta.size);
-          if (fileSize <= editorFileSizeLimitRef.current) {
+          const limit = editorFileSizeLimitRef.current;
+          if (limit <= 0 || fileSize <= limit) {
             const langId = typeof item.entry.lang === 'string' && item.entry.lang
               ? item.entry.lang
               : 'plaintext';
@@ -752,6 +771,7 @@ export const FileList = memo(function FileList({
           style={{ height: ROW_HEIGHT, opacity: style.opacity }}
           onMouseDown={(e) => {
             e.stopPropagation();
+            clearKeyboardNav();
             const now = Date.now();
             if (now - lastClickTimeRef.current < 300) {
               lastClickTimeRef.current = 0;
@@ -783,7 +803,7 @@ export const FileList = memo(function FileList({
         </div>
       );
     },
-    [navigateToEntry, iconsVersion],
+    [navigateToEntry, iconsVersion, clearKeyboardNav],
   );
 
   const activeEntry = displayEntries[activeIndex];
@@ -853,7 +873,11 @@ export const FileList = memo(function FileList({
   }, [selectedNames, displayEntries]);
 
   return (
-    <div className="file-list">
+    <div
+      className={`file-list${isTouchscreen || keyboardNavMode ? ' no-hover' : ''}`}
+      onMouseMoveCapture={clearKeyboardNav}
+      onMouseDownCapture={clearKeyboardNav}
+    >
       <div className="path-bar">
         <Breadcrumbs currentPath={currentPath} onNavigate={handleBreadcrumbNavigate} />
       </div>
