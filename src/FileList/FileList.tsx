@@ -98,6 +98,11 @@ export const FileList = memo(function FileList({
   const [maxItemsPerColumn, setMaxItemsPerColumn] = useState(1);
   const [columnCount, setColumnCount] = useState(1);
   const [iconsVersion, setIconsVersion] = useState(0);
+  const [selectedNames, setSelectedNames] = useState<ReadonlySet<string>>(new Set());
+  const selectedNamesRef = useRef(selectedNames);
+  selectedNamesRef.current = selectedNames;
+  /** true = selecting, false = deselecting, undefined = no shift selection in progress */
+  const prevSelectRef = useRef<boolean | undefined>(undefined);
   const prevPathRef = useRef(currentPath);
   const navStackRef = useRef<NavigationState[]>([]);
 
@@ -254,6 +259,52 @@ export const FileList = memo(function FileList({
   const handleBreadcrumbNavigate = useCallback((path: string) => {
     void onNavigateRef.current(path);
   }, []);
+
+  // Selection helpers
+  type SelectionType = 'include-active' | 'exclude-active';
+
+  const applySelection = useCallback((oldIndex: number, newIndex: number, selectType: SelectionType) => {
+    const entries = displayEntriesRef.current;
+    if (prevSelectRef.current === undefined) {
+      const currentName = entries[oldIndex]?.entry.name;
+      prevSelectRef.current = currentName ? !selectedNamesRef.current.has(currentName) : true;
+    }
+    const selecting = prevSelectRef.current;
+    const lo = Math.min(oldIndex, newIndex);
+    const hi = Math.max(oldIndex, newIndex);
+
+    setSelectedNames(prev => {
+      const next = new Set(prev);
+      for (let i = lo; i <= hi; i++) {
+        if (selectType === 'exclude-active' && i === newIndex) continue;
+        const name = entries[i]?.entry.name;
+        if (!name) continue;
+        if (selecting) next.add(name);
+        else next.delete(name);
+      }
+      return next;
+    });
+
+    setActiveIndex(clamp(newIndex, 0, entries.length - 1));
+  }, []);
+
+  // Reset shift selection state on keyup
+  useEffect(() => {
+    if (!active) return;
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (!e.shiftKey && prevSelectRef.current !== undefined) {
+        prevSelectRef.current = undefined;
+      }
+    };
+    window.addEventListener('keyup', handleKeyUp);
+    return () => window.removeEventListener('keyup', handleKeyUp);
+  }, [active]);
+
+  // Clear selection when navigating to a new directory
+  useEffect(() => {
+    setSelectedNames(new Set());
+    prevSelectRef.current = undefined;
+  }, [currentPath]);
 
   const navigateToEntry = useCallback(async (entry: FsNode): Promise<void> => {
     if (entry.name === '..') {
@@ -419,6 +470,84 @@ export const FileList = memo(function FileList({
       when: 'focusPanel',
     }));
 
+    // Selection commands (Shift+Arrow)
+    disposables.push(commandRegistry.registerCommand(
+      'list.selectUp', 'Select Up',
+      () => actionQueue.enqueue(() => {
+        const cur = activeIndexRef.current;
+        const target = Math.max(0, cur - 1);
+        applySelection(cur, target, cur === 0 ? 'include-active' : 'exclude-active');
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectUp', key: 'shift+up', when: 'focusPanel' }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.selectDown', 'Select Down',
+      () => actionQueue.enqueue(() => {
+        const cur = activeIndexRef.current;
+        const last = displayEntriesRef.current.length - 1;
+        const target = Math.min(last, cur + 1);
+        applySelection(cur, target, cur === last ? 'include-active' : 'exclude-active');
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectDown', key: 'shift+down', when: 'focusPanel' }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.selectLeft', 'Select Left',
+      () => actionQueue.enqueue(() => {
+        const cur = activeIndexRef.current;
+        applySelection(cur, Math.max(0, cur - maxItemsPerColumnRef.current), 'include-active');
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectLeft', key: 'shift+left', when: 'focusPanel' }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.selectRight', 'Select Right',
+      () => actionQueue.enqueue(() => {
+        const cur = activeIndexRef.current;
+        applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + maxItemsPerColumnRef.current), 'include-active');
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectRight', key: 'shift+right', when: 'focusPanel' }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.selectHome', 'Select to First',
+      () => actionQueue.enqueue(() => applySelection(activeIndexRef.current, 0, 'include-active')),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectHome', key: 'shift+home', when: 'focusPanel' }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.selectEnd', 'Select to Last',
+      () => actionQueue.enqueue(() => applySelection(activeIndexRef.current, displayEntriesRef.current.length - 1, 'include-active')),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectEnd', key: 'shift+end', when: 'focusPanel' }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.selectPageUp', 'Select Page Up',
+      () => actionQueue.enqueue(() => {
+        const cur = activeIndexRef.current;
+        applySelection(cur, Math.max(0, cur - displayedItemsRef.current + 1), 'include-active');
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectPageUp', key: 'shift+pageup', when: 'focusPanel' }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.selectPageDown', 'Select Page Down',
+      () => actionQueue.enqueue(() => {
+        const cur = activeIndexRef.current;
+        applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + displayedItemsRef.current - 1), 'include-active');
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectPageDown', key: 'shift+pagedown', when: 'focusPanel' }));
+
     disposables.push(commandRegistry.registerCommand(
       'list.execute',
       'Execute in Terminal',
@@ -583,7 +712,7 @@ export const FileList = memo(function FileList({
     return () => {
       for (const dispose of disposables) dispose();
     };
-  }, [active, navigateToEntry, onExecuteInTerminal, onMoveToTrash, onPermanentDelete]);
+  }, [active, navigateToEntry, applySelection, onExecuteInTerminal, onMoveToTrash, onPermanentDelete]);
 
   const columnCountRef = useRef(columnCount);
   columnCountRef.current = columnCount;
@@ -610,7 +739,7 @@ export const FileList = memo(function FileList({
   const lastClickTimeRef = useRef(0);
 
   const renderItem = useCallback(
-    (index: number, isActive: boolean) => {
+    (index: number, isActive: boolean, isSelected: boolean) => {
       const item = displayEntriesRef.current[index];
       if (!item) return null;
       const { entry, style, iconPath, iconFallbackUrl } = item;
@@ -619,7 +748,7 @@ export const FileList = memo(function FileList({
       const isExecutable = entry.type === 'file' && !!(entry.meta as { executable?: boolean }).executable;
       return (
         <div
-          className={`entry${isActive ? ' selected' : ''}`}
+          className={`entry${isActive ? ' selected' : ''}${isSelected ? ' marked' : ''}`}
           style={{ height: ROW_HEIGHT, opacity: style.opacity }}
           onMouseDown={(e) => {
             e.stopPropagation();
@@ -711,6 +840,18 @@ export const FileList = memo(function FileList({
     [displayEntries],
   );
 
+  const selectionSummary = useMemo(() => {
+    if (selectedNames.size === 0) return null;
+    let count = 0;
+    let size = 0;
+    for (const d of displayEntries) {
+      if (!selectedNames.has(d.entry.name)) continue;
+      count++;
+      if (d.entry.type === 'file' && typeof d.entry.meta.size === 'number') size += d.entry.meta.size;
+    }
+    return { count, size };
+  }, [selectedNames, displayEntries]);
+
   return (
     <div className="file-list">
       <div className="path-bar">
@@ -724,6 +865,7 @@ export const FileList = memo(function FileList({
           itemHeight={ROW_HEIGHT}
           minColumnWidth={250}
           far
+          selectedKeys={selectedNames}
           getItemKey={getItemKey}
           renderItem={renderItem}
           onPosChange={handlePosChange}
@@ -738,7 +880,10 @@ export const FileList = memo(function FileList({
         <span className="file-info-date">{footerDate}</span>
       </div>
       <div className="panel-summary">
-        {totalFiles.toLocaleString()} file{totalFiles !== 1 ? 's' : ''}, {formatSize(totalSize)}
+        {selectionSummary
+          ? `${selectionSummary.count} selected, ${formatSize(selectionSummary.size)}`
+          : `${totalFiles.toLocaleString()} file${totalFiles !== 1 ? 's' : ''}, ${formatSize(totalSize)}`
+        }
       </div>
     </div>
   );

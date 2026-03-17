@@ -9,32 +9,34 @@ export interface ColumnsScrollerProps {
   itemHeight: number;
   minColumnWidth?: number;
   far?: boolean;
+  selectedKeys?: ReadonlySet<string | number>;
   getItemKey?: (index: number) => string | number;
-  renderItem(index: number, isActive: boolean): ReactNode;
+  renderItem(index: number, isActive: boolean, isSelected: boolean): ReactNode;
   onPosChange: (newTopmostItem: number, newActiveItem: number) => void;
   onItemsPerColumnChanged?: (count: number) => void;
   onColumnCountChanged?: (count: number) => void;
 }
 
 const ItemWrapper = memo(function ItemWrapper({
-  index, isActive, width, height, renderItem,
+  index, isActive, isSelected, width, height, renderItem,
 }: {
   index: number;
   isActive: boolean;
+  isSelected: boolean;
   width: string;
   height: number;
-  renderItem: (index: number, isActive: boolean) => ReactNode;
+  renderItem: (index: number, isActive: boolean, isSelected: boolean) => ReactNode;
 }) {
   return (
     <div style={{ width, height }}>
-      {renderItem(index, isActive)}
+      {renderItem(index, isActive, isSelected)}
     </div>
   );
 });
 
 export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrollerProps) {
   let { topmostIndex } = props;
-  const { activeIndex, totalCount, itemHeight, minColumnWidth, far = false, getItemKey, renderItem, onPosChange, onItemsPerColumnChanged, onColumnCountChanged } = props;
+  const { activeIndex, totalCount, itemHeight, minColumnWidth, far = false, selectedKeys, getItemKey, renderItem, onPosChange, onItemsPerColumnChanged, onColumnCountChanged } = props;
 
   if (!Number.isInteger(itemHeight) || itemHeight <= 0) {
     throw new Error('itemHeight should be positive');
@@ -91,11 +93,13 @@ export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrol
 
   const items = [];
   for (let i = topmostIndex; i < end; i++) {
+    const key = getItemKey ? getItemKey(i) : i;
     items.push(
       <ItemWrapper
-        key={getItemKey ? getItemKey(i) : i}
+        key={key}
         index={i}
         isActive={activeIndex === i}
+        isSelected={selectedKeys?.has(key) ?? false}
         width={widthPercent}
         height={itemHeight}
         renderItem={renderItem}

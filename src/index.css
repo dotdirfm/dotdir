@@ -852,6 +852,27 @@ body.terminal-resizing {
   color: var(--entry-selected-fg);
 }
 
+.entry.marked::before {
+  content: '';
+  position: absolute;
+  inset: 0 4px;
+  background: var(--entry-marked-bg, rgba(229, 192, 123, 0.15));
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+/* Remove bottom radius when next sibling also has a marked entry */
+.columns-scroller-content > div:has(> .entry.marked) + div:has(> .entry.marked) > .entry.marked::before {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* Remove bottom radius on the first of consecutive marked entries */
+.columns-scroller-content > div:has(> .entry.marked):has(+ div > .entry.marked) > .entry.marked::before {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 .entry-icon {
   display: flex;
   align-items: center;
