@@ -1638,9 +1638,7 @@ export function App() {
                 />
               </div>
             </div>
-            <div className="terminal-toolbar-overlay">
-              {toolbar}
-            </div>
+            {toolbar}
           </>
         )}
       </TerminalController>
