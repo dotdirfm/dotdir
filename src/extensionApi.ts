@@ -103,5 +103,12 @@ export type FaradayHostReadyCallback = (api: ViewerExtensionApi | EditorExtensio
 declare global {
   interface Window {
     __faradayHostReady?: FaradayHostReadyCallback;
+    /**
+     * Host API exposed to isolated extensions (iframe) as a global.
+     * Extensions can call `window.frdy.readFile(...)`, etc.
+     *
+     * We'll later publish these typings via an npm package (`frdy`).
+     */
+    frdy?: HostApi;
   }
 }

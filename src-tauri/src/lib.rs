@@ -3,13 +3,13 @@ use faraday_core::ops::{self, EntryInfo, FdTable, StatResult};
 use faraday_core::watch::{EventCallback, FsWatcher};
 use log::debug;
 use serde::Serialize;
-use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::RwLock;
 use tauri::{Emitter, Manager, State};
+use tauri::http::header as http_header;
+use tauri::http::StatusCode as HttpStatusCode;
 
 #[cfg(unix)]
 mod elevate;
@@ -428,6 +428,69 @@ fn debug_log(message: String) {
     write_debug_log(&message);
 }
 
+// ── VFS protocol handler ─────────────────────────────────────────────
+
+#[cfg(unix)]
+fn vfs_request_path_to_os(path: &str) -> Option<PathBuf> {
+    let trimmed = path.trim_start_matches('/');
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from("/").join(trimmed))
+}
+
+#[cfg(windows)]
+fn vfs_request_path_to_os(path: &str) -> Option<PathBuf> {
+    // Windows: `/C/Program Files/...` where the first segment is the drive letter.
+    let trimmed = path.trim_start_matches('/');
+    let mut parts = trimmed.split('/').filter(|s| !s.is_empty());
+    let drive = parts.next()?;
+    if drive.len() != 1 || !drive.chars().all(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    let mut pb = PathBuf::from(format!("{}:\\", drive.to_ascii_uppercase()));
+    for seg in parts {
+        pb.push(seg);
+    }
+    Some(pb)
+}
+
+fn vfs_response_for_path(os_path: &Path) -> tauri::http::Response<Vec<u8>> {
+    let meta = match fs::metadata(os_path) {
+        Ok(m) => m,
+        Err(_) => {
+            return tauri::http::Response::builder()
+                .status(HttpStatusCode::NOT_FOUND)
+                .body(Vec::new())
+                .unwrap();
+        }
+    };
+
+    if meta.is_dir() {
+        return tauri::http::Response::builder()
+            .status(HttpStatusCode::NOT_FOUND)
+            .body(Vec::new())
+            .unwrap();
+    }
+
+    let bytes = match fs::read(os_path) {
+        Ok(b) => b,
+        Err(_) => {
+            return tauri::http::Response::builder()
+                .status(HttpStatusCode::NOT_FOUND)
+                .body(Vec::new())
+                .unwrap();
+        }
+    };
+
+    let mime = mime_guess::from_path(os_path).first_or_octet_stream();
+    tauri::http::Response::builder()
+        .status(HttpStatusCode::OK)
+        .header(http_header::CONTENT_TYPE, mime.as_ref())
+        .body(bytes)
+        .unwrap()
+}
+
 // ── Move to Trash & Permanent Delete ─────────────────────────────────
 
 #[tauri::command]
@@ -437,6 +500,258 @@ fn move_to_trash(path: String) -> CmdResult<()> {
         CmdError(FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))
     })?;
     Ok(())
+}
+
+fn vfs_with_cors(
+    mut builder: tauri::http::response::Builder,
+    origin: Option<&str>,
+) -> tauri::http::response::Builder {
+    // NOTE: Security/auth will come later. For now we allow the requesting origin
+    // (dev is usually http://localhost:1420) and fall back to "*".
+    let allow_origin = origin.unwrap_or("*");
+    builder = builder.header(http_header::ACCESS_CONTROL_ALLOW_ORIGIN, allow_origin);
+    builder = builder.header(http_header::VARY, "Origin");
+    builder = builder.header(http_header::ACCESS_CONTROL_ALLOW_METHODS, "GET, HEAD, OPTIONS");
+    builder = builder.header(http_header::ACCESS_CONTROL_ALLOW_HEADERS, "*");
+    builder
+}
+
+fn vfs_virtual_response(path: &str) -> Option<tauri::http::Response<Vec<u8>>> {
+    // Virtual mount for extension iframes:
+    // `vfs://vfs/__ext/<hash>/viewer.html`
+    // `vfs://vfs/__ext/<hash>/editor.html`
+    // `vfs://vfs/__ext/<hash>/bootstrap.js`
+    // `vfs://vfs/__ext/<hash>/comlink.mjs`
+    let p = path.trim_start_matches('/');
+    if !p.starts_with("__ext/") {
+        return None;
+    }
+    let mut parts = p.split('/');
+    let _prefix = parts.next()?;
+    let _hash = parts.next()?; // currently unused; reserved for future mount table
+    let file = parts.next()?;
+    if parts.next().is_some() {
+        return None;
+    }
+
+    match file {
+        "viewer.html" | "editor.html" => {
+            let html = format!(
+                r#"<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      html, body {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }}
+      #root {{ width: 100%; height: 100%; }}
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./bootstrap.js"></script>
+  </body>
+</html>"#
+            );
+            Some(
+                tauri::http::Response::builder()
+                    .status(HttpStatusCode::OK)
+                    .header(http_header::CONTENT_TYPE, "text/html; charset=utf-8")
+                    .body(html.into_bytes())
+                    .unwrap(),
+            )
+        }
+        "bootstrap.js" => {
+            let js = r#"
+import * as Comlink from './comlink.mjs';
+
+function postToHost(msg) {
+  try { window.parent?.postMessage(msg, '*'); } catch {}
+}
+
+function loadExtensionApi(scriptUrl) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Extension ready timed out (10s)')), 10000);
+    window.__faradayHostReady = (api) => {
+      clearTimeout(timeout);
+      delete window.__faradayHostReady;
+      resolve(api);
+    };
+    const script = document.createElement('script');
+    script.src = scriptUrl;
+    script.onerror = () => {
+      clearTimeout(timeout);
+      delete window.__faradayHostReady;
+      reject(new Error('Failed to load extension script'));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+let hostApi = null;
+let extApi = null;
+let currentProps = null;
+const root = document.getElementById('root');
+let iframeKind = null;
+let keyDownListener = null;
+
+async function mountWithProps(props) {
+  if (!extApi || !hostApi) return;
+  currentProps = props;
+  await extApi.mount(root, hostApi, props);
+}
+
+window.addEventListener('message', async (e) => {
+  const data = e?.data;
+  if (!data || typeof data !== 'object') return;
+
+  try {
+    if (data.type === 'faraday:themeVars') {
+      if (data.themeVars && typeof data.themeVars === 'object') {
+        for (const [k, v] of Object.entries(data.themeVars)) {
+          if (typeof k === 'string' && k.startsWith('--') && typeof v === 'string') {
+            document.documentElement.style.setProperty(k, v);
+          }
+        }
+      }
+      return;
+    }
+
+    if (data.type === 'faraday:init') {
+      const port = e.ports && e.ports[0];
+      if (!port) throw new Error('Missing MessagePort');
+      port.start?.();
+      hostApi = Comlink.wrap(port);
+      iframeKind = data.kind ?? null;
+
+      // Apply host theme vars into this iframe document.
+      if (data.themeVars && typeof data.themeVars === 'object') {
+        for (const [k, v] of Object.entries(data.themeVars)) {
+          if (typeof k === 'string' && k.startsWith('--') && typeof v === 'string') {
+            document.documentElement.style.setProperty(k, v);
+          }
+        }
+      }
+
+      // Global API for extensions: `frdy.*`
+      // Use a Proxy so we don't lose methods (Comlink proxies don't spread).
+      // Also wrap callback-taking methods so extensions don't need Comlink.proxy().
+      globalThis.frdy = new Proxy(hostApi, {
+        get(target, prop) {
+          if (prop === 'onThemeChange') {
+            const fn = target.onThemeChange;
+            if (typeof fn !== 'function') return undefined;
+            return (cb) => {
+              const unsubP = fn.call(target, Comlink.proxy(cb));
+              return () => {
+                try {
+                  if (typeof unsubP === 'function') {
+                    unsubP();
+                  } else {
+                    Promise.resolve(unsubP)
+                      .then((unsub) => { if (typeof unsub === 'function') unsub(); })
+                      .catch(() => {});
+                  }
+                } catch {
+                  // ignore
+                }
+              };
+            };
+          }
+          if (prop === 'onFileChange') {
+            const fn = target.onFileChange;
+            if (typeof fn !== 'function') return undefined;
+            return (cb) => {
+              const unsubP = fn.call(target, Comlink.proxy(cb));
+              return () => {
+                try {
+                  if (typeof unsubP === 'function') {
+                    unsubP();
+                  } else {
+                    Promise.resolve(unsubP)
+                      .then((unsub) => { if (typeof unsub === 'function') unsub(); })
+                      .catch(() => {});
+                  }
+                } catch {
+                  // ignore
+                }
+              };
+            };
+          }
+          // default passthrough
+          return target[prop];
+        },
+      });
+      extApi = await loadExtensionApi(data.entryUrl);
+
+      // Forward keydowns to the host frame for command keybindings.
+      // Note: We forward all keys; host will decide which keybindings match.
+      if (!keyDownListener) {
+        keyDownListener = (ev) => {
+          try {
+            postToHost({
+              type: 'faraday:iframeKeyDown',
+              kind: iframeKind,
+              key: ev.key,
+              ctrlKey: !!ev.ctrlKey,
+              metaKey: !!ev.metaKey,
+              altKey: !!ev.altKey,
+              shiftKey: !!ev.shiftKey,
+              repeat: !!ev.repeat,
+            });
+          } catch {}
+        };
+        window.addEventListener('keydown', keyDownListener, true);
+      }
+
+      await mountWithProps(data.props);
+      postToHost({ type: 'faraday:ready' });
+    } else if (data.type === 'faraday:update') {
+      if (!extApi) return;
+      await mountWithProps(data.props);
+    } else if (data.type === 'faraday:dispose') {
+      if (extApi?.unmount) await extApi.unmount();
+      extApi = null;
+      hostApi = null;
+      iframeKind = null;
+      if (keyDownListener) {
+        window.removeEventListener('keydown', keyDownListener, true);
+        keyDownListener = null;
+      }
+      try { delete globalThis.frdy; } catch {}
+    }
+  } catch (err) {
+    postToHost({ type: 'faraday:error', message: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// Tell the host we are ready to receive `faraday:init` (with MessagePort).
+postToHost({ type: 'faraday:bootstrap-ready' });
+
+window.addEventListener('beforeunload', () => {
+  try { extApi?.unmount?.(); } catch {}
+});
+"#;
+            Some(
+                tauri::http::Response::builder()
+                    .status(HttpStatusCode::OK)
+                    .header(http_header::CONTENT_TYPE, "application/javascript; charset=utf-8")
+                    .body(js.as_bytes().to_vec())
+                    .unwrap(),
+            )
+        }
+        "comlink.mjs" => {
+            let src = include_str!("vfs_virtual/comlink.mjs");
+            Some(
+                tauri::http::Response::builder()
+                    .status(HttpStatusCode::OK)
+                    .header(http_header::CONTENT_TYPE, "application/javascript; charset=utf-8")
+                    .body(src.as_bytes().to_vec())
+                    .unwrap(),
+            )
+        }
+        _ => None,
+    }
 }
 
 /// Remove a single file or empty directory. For recursive delete the frontend
@@ -461,6 +776,73 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
+        .register_uri_scheme_protocol("vfs", |_app, request| {
+            // macOS/Linux: typically `vfs://vfs/<abs path>`.
+            // Windows: WebView2 maps custom schemes to http(s) hosts like
+            // `http://vfs.localhost/<path>` (the scheme is not preserved).
+            let origin = request
+                .headers()
+                .get(http_header::ORIGIN)
+                .and_then(|v| v.to_str().ok());
+
+            // Preflight
+            if request.method() == tauri::http::Method::OPTIONS {
+                return vfs_with_cors(tauri::http::Response::builder().status(HttpStatusCode::NO_CONTENT), origin)
+                    .body(Vec::new())
+                    .unwrap();
+            }
+
+            if let Some(resp) = vfs_virtual_response(request.uri().path()) {
+                let mut resp = resp;
+                let allow_origin = origin.unwrap_or("*").to_string();
+                resp.headers_mut().insert(
+                    http_header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                    allow_origin.parse().unwrap(),
+                );
+                resp.headers_mut()
+                    .insert(http_header::VARY, "Origin".parse().unwrap());
+                resp.headers_mut().insert(
+                    http_header::ACCESS_CONTROL_ALLOW_METHODS,
+                    "GET, HEAD, OPTIONS".parse().unwrap(),
+                );
+                resp.headers_mut().insert(
+                    http_header::ACCESS_CONTROL_ALLOW_HEADERS,
+                    "*".parse().unwrap(),
+                );
+                return resp;
+            }
+
+            let os_path = match vfs_request_path_to_os(request.uri().path()) {
+                Some(p) => p,
+                None => {
+                    return vfs_with_cors(
+                        tauri::http::Response::builder().status(HttpStatusCode::BAD_REQUEST),
+                        origin,
+                    )
+                    .body(Vec::new())
+                    .unwrap();
+                }
+            };
+
+            let mut resp = vfs_response_for_path(&os_path);
+            // Add CORS headers to the final response
+            let allow_origin = origin.unwrap_or("*").to_string();
+            resp.headers_mut().insert(
+                http_header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                allow_origin.parse().unwrap(),
+            );
+            resp.headers_mut()
+                .insert(http_header::VARY, "Origin".parse().unwrap());
+            resp.headers_mut().insert(
+                http_header::ACCESS_CONTROL_ALLOW_METHODS,
+                "GET, HEAD, OPTIONS".parse().unwrap(),
+            );
+            resp.headers_mut().insert(
+                http_header::ACCESS_CONTROL_ALLOW_HEADERS,
+                "*".parse().unwrap(),
+            );
+            resp
+        })
         .setup(|app| {
             write_debug_log("tauri setup started");
             let handle = app.handle().clone();

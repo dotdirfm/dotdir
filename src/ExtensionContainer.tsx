@@ -1,61 +1,26 @@
 /**
  * ExtensionContainer
  *
- * Loads an extension entry script in the main window and gives it a mount root.
- * Extension renders into the provided div; no iframes, no Comlink.
+ * Loads viewer/editor extensions inside an iframe (VFS origin) and bridges HostApi via Comlink.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as Comlink from 'comlink';
 import { bridge } from './bridge';
-import { basename, dirname, normalizePath } from './path';
-import { getExtensionScriptUrl } from './extensionLoader';
+import { commandRegistry } from './commands';
+import { basename, dirname, join, normalizePath } from './path';
+import { vfsUrl } from './vfs';
 import type {
   HostApi,
   ColorThemeData,
-  ViewerExtensionApi,
-  EditorExtensionApi,
   ViewerProps,
   EditorProps,
 } from './extensionApi';
 import { getActiveColorThemeData, onColorThemeChange } from './vscodeColorTheme';
 import { focusContext } from './focusContext';
-import {
-  getCachedEditorExtension,
-  takeCachedEditorExtension,
-  setCachedEditorExtension,
-} from './editorExtensionCache';
 
 // Oniguruma WASM for TextMate grammars in editor extensions
 import onigWasmUrl from 'vscode-oniguruma/release/onig.wasm?url';
-
-// ── Load extension script and get API via __faradayHostReady ─────────────
-
-function loadExtensionApi(scriptUrl: string): Promise<ViewerExtensionApi | EditorExtensionApi> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error('Extension ready timed out (5s)')),
-      5000,
-    );
-    (window as Window & { __faradayHostReady?: (api: unknown) => void }).__faradayHostReady = (api) => {
-      clearTimeout(timeout);
-      delete (window as Window & { __faradayHostReady?: (api: unknown) => void }).__faradayHostReady;
-      resolve(api as ViewerExtensionApi | EditorExtensionApi);
-    };
-    const script = document.createElement('script');
-    script.src = scriptUrl;
-    script.onerror = () => {
-      clearTimeout(timeout);
-      delete (window as Window & { __faradayHostReady?: (api: unknown) => void }).__faradayHostReady;
-      reject(new Error('Failed to load extension script'));
-    };
-    document.head.appendChild(script);
-    script.onload = () => {
-      // Script runs synchronously; __faradayHostReady may have been called already
-      if (!script.parentNode) return;
-      script.remove();
-    };
-  });
-}
 
 // ── Container props ─────────────────────────────────────────────────────
 
@@ -78,10 +43,16 @@ interface EditorContainerProps extends ExtensionContainerProps {
   props: EditorProps;
   onClose: () => void;
   onDirtyChange?: (dirty: boolean) => void;
-  onEditorReady?: (api: EditorExtensionApi) => void;
 }
 
 export type ContainerProps = ViewerContainerProps | EditorContainerProps;
+
+function toHex(bytes: ArrayBuffer): string {
+  const u8 = new Uint8Array(bytes);
+  let out = '';
+  for (const b of u8) out += b.toString(16).padStart(2, '0');
+  return out;
+}
 
 export function ExtensionContainer(containerProps: ContainerProps) {
   const {
@@ -94,21 +65,103 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     style,
   } = containerProps;
 
-  const mountRef = useRef<HTMLDivElement | null>(null);
-  const extensionApiRef = useRef<ViewerExtensionApi | EditorExtensionApi | null>(null);
-  const scriptUrlRef = useRef<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const channelRef = useRef<MessageChannel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const [extHash, setExtHash] = useState<string | null>(null);
+  const isInlineViewer = kind === 'viewer' && !!(props as ViewerProps).inline;
+  const shouldAutoFocusIframe = kind === 'editor' || (kind === 'viewer' && !isInlineViewer);
+  const panelFocusElRef = useRef<HTMLElement | null>(null);
+  const inlineIframeFocusedRef = useRef(false);
+  const autoFocusOnceRef = useRef(false);
+
+  useEffect(() => {
+    if (!isInlineViewer) return;
+    panelFocusElRef.current = document.activeElement as HTMLElement | null;
+    inlineIframeFocusedRef.current = false;
+    autoFocusOnceRef.current = false;
+  }, [isInlineViewer]);
+
+  // For non-preview viewer/editor, focus iframe automatically when it appears.
+  useEffect(() => {
+    if (!shouldAutoFocusIframe) return;
+    if (!extHash) return;
+    if (loading) return;
+    if (autoFocusOnceRef.current) return;
+    autoFocusOnceRef.current = true;
+
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    // Delay to ensure the iframe content is mounted.
+    setTimeout(() => {
+      try {
+        iframe.focus();
+        iframe.contentWindow?.focus?.();
+      } catch {
+        // ignore
+      }
+    }, 0);
+  }, [shouldAutoFocusIframe, extHash, loading]);
+
+  // Inline/preview viewer: keep panel focused until user presses Tab.
+  // First Tab: focus preview iframe + route keybindings via focusViewer.
+  // Second Tab: return focus to the panel + route keybindings back.
+  useEffect(() => {
+    if (!isInlineViewer) return;
+
+    const shouldIgnoreTarget = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName?.toLowerCase();
+      const isForm =
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        tag === 'button' ||
+        el.isContentEditable;
+      return isForm;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.shiftKey) return; // keep simple: only Tab (not Shift+Tab) toggles per requirement
+      if (inlineIframeFocusedRef.current) {
+        // When iframe is focused, the iframe forwards keydown handling to the host.
+        // Prevent parent keybinding handlers from also acting on this Tab event.
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (focusContext.current !== 'panel') return;
+      if (shouldIgnoreTarget(e.target)) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      inlineIframeFocusedRef.current = true;
+      // Route keybindings as if focus is on viewer.
+      focusContext.push('viewer');
+
+      try {
+        iframeRef.current?.focus();
+        iframeRef.current?.contentWindow?.focus?.();
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [isInlineViewer]);
 
   // Single open file descriptor per container (viewer/editor).
   // Bound to the currently viewed/edited file and closed on unmount or when file changes.
   const currentFileRef = useRef<{ fd: number; size: number; path: string } | null>(null);
   const currentFilePathRef = useRef<string | null>(null);
-
-  const hasCachedEditor =
-    kind === 'editor' && !!getCachedEditorExtension(extensionDirPath, entry);
 
   const onExecuteCommandRef = useRef(
     containerProps.kind === 'viewer' ? containerProps.onExecuteCommand : undefined,
@@ -120,13 +173,24 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const onDirtyChangeRef = useRef(
     containerProps.kind === 'editor' ? containerProps.onDirtyChange : undefined,
   );
-  const onEditorReadyRef = useRef(
-    containerProps.kind === 'editor' ? containerProps.onEditorReady : undefined,
-  );
   if (containerProps.kind === 'editor') {
     onDirtyChangeRef.current = containerProps.onDirtyChange;
-    onEditorReadyRef.current = containerProps.onEditorReady;
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const key = `${normalizePath(extensionDirPath)}\0${entry}`;
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
+      const hex = toHex(buf);
+      if (!cancelled) setExtHash(hex);
+    })().catch((e) => {
+      if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [extensionDirPath, entry]);
 
   const buildHostApi = useCallback((): HostApi => ({
     async readFile(path: string): Promise<ArrayBuffer> {
@@ -188,7 +252,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     },
     onFileChange(callback: () => void): () => void {
       const filePath = currentFilePathRef.current;
-      if (!filePath) return () => {};
+      if (!filePath) return Comlink.proxy(() => {});
       const normalized = normalizePath(filePath);
       const dir = dirname(normalized);
       const name = basename(normalized);
@@ -216,12 +280,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         }
       })();
 
-      return () => {
+      return Comlink.proxy(() => {
         if (disposed) return;
         disposed = true;
         bridge.fsa.unwatch(watchId);
         stopFsChange();
-      };
+      });
     },
     async writeFile(path: string, content: string): Promise<void> {
       await bridge.fsa.writeFile(path, content);
@@ -233,7 +297,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       return getActiveColorThemeData();
     },
     onThemeChange(callback: (theme: ColorThemeData) => void): () => void {
-      return onColorThemeChange(callback);
+      const unsub = onColorThemeChange(callback);
+      return Comlink.proxy(() => unsub());
     },
     onClose(): void {
       onCloseRef.current();
@@ -255,95 +320,171 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     },
   }), []);
 
+  const getThemeVars = useCallback((): Record<string, string> => {
+    const out: Record<string, string> = {};
+    // Copy all CSS custom properties from the host document into the iframe.
+    // This keeps extensions compatible with existing `var(--bg)` styling.
+    try {
+      const cs = getComputedStyle(document.documentElement);
+      for (let i = 0; i < cs.length; i++) {
+        const name = cs[i];
+        if (!name || !name.startsWith('--')) continue;
+        const val = cs.getPropertyValue(name);
+        if (val) out[name] = val.trim();
+      }
+    } catch {
+      // ignore
+    }
+    return out;
+  }, []);
+
   useEffect(() => {
-    const mountEl = mountRef.current;
-    if (!mountEl) return;
-
     let cancelled = false;
-    let api: ViewerExtensionApi | EditorExtensionApi | null = null;
-    let scriptUrl: string | null = null;
+    const iframe = iframeRef.current;
+    if (!iframe || !extHash) return;
 
-    (async () => {
-      try {
-        let resolvedApi: ViewerExtensionApi | EditorExtensionApi;
+    setLoading(true);
+    setError(null);
 
-        if (kind === 'editor' && hasCachedEditor) {
-          const cached = takeCachedEditorExtension(extensionDirPath, entry);
-          if (cached?.api) {
-            resolvedApi = cached.api;
-            scriptUrl = cached.scriptUrl;
-            scriptUrlRef.current = scriptUrl;
-          } else {
-            const { scriptUrl: url } = await getExtensionScriptUrl(extensionDirPath, entry);
-            scriptUrl = url;
-            scriptUrlRef.current = url;
-            resolvedApi = await loadExtensionApi(url);
-          }
-        } else {
-          const { scriptUrl: url } = await getExtensionScriptUrl(extensionDirPath, entry);
-          scriptUrl = url;
-          scriptUrlRef.current = url;
-          resolvedApi = await loadExtensionApi(url);
-        }
+    const hostApi = buildHostApi();
+    const channel = new MessageChannel();
+    channelRef.current = channel;
+    Comlink.expose(hostApi, channel.port1);
 
-        if (cancelled) return;
+    const entryRel = normalizePath(entry.replace(/^\.\//, '')) || 'index.js';
+    const entryPath = join(extensionDirPath, entryRel);
+    const entryUrl = vfsUrl(entryPath);
 
-        api = resolvedApi;
-        extensionApiRef.current = api;
-        // Track current file path for this container (viewer/editor).
-        if (kind === 'viewer') {
-          currentFilePathRef.current = (props as ViewerProps).filePath;
-        } else {
-          currentFilePathRef.current = (props as EditorProps).filePath;
-        }
-        const hostApi = buildHostApi();
-        if (kind === 'viewer') {
-          await (api as ViewerExtensionApi).mount(mountEl, hostApi, props as ViewerProps);
-        } else {
-          await (api as EditorExtensionApi).mount(mountEl, hostApi, props as EditorProps);
-          onEditorReadyRef.current?.(api as EditorExtensionApi);
-        }
-
+    const handleMessage = (ev: MessageEvent) => {
+      if (ev.source !== iframe.contentWindow) return;
+      const data = ev.data as any;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'faraday:bootstrap-ready') {
+        init();
+      } else if (data.type === 'faraday:ready') {
         if (!cancelled) setLoading(false);
-      } catch (err) {
+      } else if (data.type === 'faraday:error') {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
+          setError(String(data.message ?? 'Extension error'));
           setLoading(false);
         }
+      } else if (data.type === 'faraday:iframeKeyDown') {
+        try {
+          const key = String(data.key ?? '').toLowerCase();
+          // Inline/preview viewer tab switching:
+          // - Tab while panel-focused (host listener) moves focus into iframe (first Tab)
+          // - Tab while iframe-focused (message handler) moves focus back to panel (second Tab)
+          if (isInlineViewer && key === 'tab' && inlineIframeFocusedRef.current) {
+            inlineIframeFocusedRef.current = false;
+            try {
+              focusContext.pop('viewer');
+            } catch {
+              // ignore
+            }
+            try {
+              panelFocusElRef.current?.focus?.();
+            } catch {
+              // ignore
+            }
+            return;
+          }
+
+          // When inline preview isn't focused, ignore forwarded keys from the iframe.
+          if (isInlineViewer && !inlineIframeFocusedRef.current) return;
+
+          const synthetic = {
+            key: data.key,
+            ctrlKey: !!data.ctrlKey,
+            metaKey: !!data.metaKey,
+            altKey: !!data.altKey,
+            shiftKey: !!data.shiftKey,
+            repeat: !!data.repeat,
+            preventDefault() {},
+            stopPropagation() {},
+          } as unknown as KeyboardEvent;
+          commandRegistry.handleKeyboardEvent(synthetic);
+        } catch {
+          // ignore
+        }
       }
-    })();
+    };
+    window.addEventListener('message', handleMessage);
+
+    // Keep iframe theme vars in sync with host theme changes.
+    const pushThemeVars = () => {
+      try {
+        iframe.contentWindow?.postMessage(
+          { type: 'faraday:themeVars', themeVars: getThemeVars() },
+          '*',
+        );
+      } catch {
+        // ignore
+      }
+    };
+    const stopTheme = onColorThemeChange(() => pushThemeVars());
+
+    let initSent = false;
+    const init = () => {
+      if (initSent) return;
+      initSent = true;
+      // Track current file path for this container (viewer/editor).
+      if (kind === 'viewer') {
+        currentFilePathRef.current = (props as ViewerProps).filePath;
+      } else {
+        currentFilePathRef.current = (props as EditorProps).filePath;
+      }
+      iframe.contentWindow?.postMessage(
+        { type: 'faraday:init', kind, entryUrl, props, themeVars: getThemeVars() },
+        '*',
+        [channel.port2],
+      );
+    };
+
+    // Deterministic handshake:
+    // - iframe bootstrap posts `faraday:bootstrap-ready` when its listener is installed
+    // - we respond with `faraday:init` exactly once (transferring MessagePort)
+    const onLoad = () => {
+      // If the bootstrap-ready message gets lost for any reason, reloading iframe should re-send it.
+      // Keep a small fallback: if we never receive bootstrap-ready, surface an error.
+      setTimeout(() => {
+        if (!cancelled && !initSent) {
+          setError('Extension bootstrap did not respond');
+          setLoading(false);
+        }
+      }, 3000);
+    };
+    iframe.addEventListener('load', onLoad);
 
     return () => {
       cancelled = true;
-      const currentApi = extensionApiRef.current;
-      const currentScriptUrl = scriptUrlRef.current;
-      if (kind === 'editor' && currentApi && currentScriptUrl) {
-        (currentApi as EditorExtensionApi).unmount().catch(() => {});
-        setCachedEditorExtension(extensionDirPath, entry, { api: currentApi as EditorExtensionApi, scriptUrl: currentScriptUrl });
-        extensionApiRef.current = null;
-        scriptUrlRef.current = null;
-      } else if (currentApi) {
-        currentApi.unmount().catch(() => {});
-        extensionApiRef.current = null;
+      window.removeEventListener('message', handleMessage);
+      iframe.removeEventListener('load', onLoad);
+      stopTheme();
+      try {
+        iframe.contentWindow?.postMessage({ type: 'faraday:dispose' }, '*');
+      } catch {
+        // ignore
       }
+      try {
+        channel.port1.close();
+        channel.port2.close();
+      } catch {
+        // ignore
+      }
+      channelRef.current = null;
       const currentFile = currentFileRef.current;
       if (currentFile) {
         bridge.fsa.close(currentFile.fd).catch(() => {});
         currentFileRef.current = null;
       }
-      if (scriptUrlRef.current?.startsWith('blob:')) {
-        URL.revokeObjectURL(scriptUrlRef.current);
-      }
-      scriptUrlRef.current = null;
     };
-  }, [extensionDirPath, entry, kind, buildHostApi]); // intentionally exclude props
+  }, [extensionDirPath, entry, kind, buildHostApi, extHash, getThemeVars]); // intentionally exclude props
 
   // Re-mount when props change (e.g. file path)
   const prevPropsRef = useRef(props);
   useEffect(() => {
-    const api = extensionApiRef.current;
-    const mountEl = mountRef.current;
-    if (!api || !mountEl || loading || error) return;
+    const iframe = iframeRef.current;
+    if (!iframe || loading || error) return;
     if (prevPropsRef.current === props) return;
     prevPropsRef.current = props;
     if (kind === 'viewer') {
@@ -351,13 +492,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     } else {
       currentFilePathRef.current = (props as EditorProps).filePath;
     }
-    const hostApi = buildHostApi();
-    if (kind === 'viewer') {
-      (api as ViewerExtensionApi).mount(mountEl, hostApi, props as ViewerProps).catch(() => {});
-    } else {
-      (api as EditorExtensionApi).mount(mountEl, hostApi, props as EditorProps).catch(() => {});
+    try {
+      iframe.contentWindow?.postMessage({ type: 'faraday:update', props }, '*');
+    } catch {
+      // ignore
     }
-  }, [props, kind, loading, error, buildHostApi]);
+  }, [props, kind, loading, error]);
 
   if (error) {
     return (
@@ -367,6 +507,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     );
   }
 
+  const iframeSrc = extHash ? vfsUrl(`/__ext/${extHash}/${kind}.html`) : null;
+
   return (
     <div className={className} style={{ ...style, position: 'relative' }}>
       {loading && (
@@ -374,18 +516,22 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           Loading {kind}…
         </div>
       )}
-      <div
-        ref={mountRef}
-        style={{
-          width: '100%',
-          height: '100%',
-          minHeight: 0,
-          display: loading ? 'none' : 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-        tabIndex={kind === 'viewer' && (props as ViewerProps).inline ? -1 : 0}
-      />
+      {iframeSrc && (
+        <iframe
+          ref={iframeRef}
+          src={iframeSrc}
+          tabIndex={0}
+          sandbox="allow-scripts allow-same-origin"
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            display: loading ? 'none' : 'block',
+            background: 'transparent',
+          }}
+          title={`${kind} extension`}
+        />
+      )}
     </div>
   );
 }
@@ -500,7 +646,6 @@ export function EditorContainer({
   grammars,
 }: EditorContainerWrapperProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
-  const editorApiRef = useRef<EditorExtensionApi | null>(null);
   const [currentLangId, setCurrentLangId] = useState(langId);
 
   useEffect(() => {
@@ -517,17 +662,14 @@ export function EditorContainer({
     return () => {
       dialog.removeEventListener('close', handleClose);
       focusContext.pop('editor');
-      editorApiRef.current = null;
     };
   }, [onClose]);
 
-  const editorProps: EditorProps = { filePath, fileName, langId, extensionDirPath, languages, grammars, inline: false };
+  const editorProps: EditorProps = { filePath, fileName, langId: currentLangId, extensionDirPath, languages, grammars, inline: false };
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const next = e.target.value;
     setCurrentLangId(next);
-    const api = editorApiRef.current;
-    if (api && typeof api.setLanguage === 'function') api.setLanguage(next);
   };
 
   const langList = useMemo(() => {
@@ -581,7 +723,6 @@ export function EditorContainer({
           props={editorProps}
           onClose={() => dialogRef.current?.close()}
           onDirtyChange={onDirtyChange}
-          onEditorReady={(api) => { editorApiRef.current = api; }}
           className="extension-editor-frame"
           style={{ width: '100%', height: '100%' }}
         />
