@@ -70,6 +70,20 @@ interface ExtensionColorTheme {
   path: string;
 }
 
+interface ExtensionCommand {
+  command: string;
+  title: string;
+  category?: string;
+  icon?: string;
+}
+
+interface ExtensionKeybinding {
+  command: string;
+  key: string;
+  mac?: string;
+  when?: string;
+}
+
 interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme;
   themes?: ExtensionColorTheme[];
@@ -77,6 +91,8 @@ interface ExtensionContributions {
   grammars?: ExtensionGrammar[];
   viewers?: ExtensionViewerContribution[];
   editors?: ExtensionEditorContribution[];
+  commands?: ExtensionCommand[];
+  keybindings?: ExtensionKeybinding[];
 }
 
 interface ExtensionManifest {
@@ -85,6 +101,11 @@ interface ExtensionManifest {
   publisher: string;
   displayName?: string;
   description?: string;
+  /**
+   * Optional browser activation script entry.
+   * If present, the host will load it and call exported `activate()` / `deactivate()`.
+   */
+  browser?: string;
   contributes?: ExtensionContributions;
 }
 
@@ -116,6 +137,10 @@ export interface WorkerLoadedExtension {
   grammars?: LoadedGrammar[];
   viewers?: ExtensionViewerContribution[];
   editors?: ExtensionEditorContribution[];
+  /** Command contributions from this extension */
+  commands?: ExtensionCommand[];
+  /** Keybinding contributions from this extension */
+  keybindings?: ExtensionKeybinding[];
 }
 
 // ── File reading via RPC to main thread ─────────────────────────────
@@ -191,8 +216,10 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
 
     const viewers = manifest.contributes?.viewers;
     const editors = manifest.contributes?.editors;
+    const commands = manifest.contributes?.commands;
+    const keybindings = manifest.contributes?.keybindings;
 
-    return { ref, manifest, dirPath: extDir, iconThemeFss, iconThemeBasePath, colorThemes, languages, grammars, viewers, editors };
+    return { ref, manifest, dirPath: extDir, iconThemeFss, iconThemeBasePath, colorThemes, languages, grammars, viewers, editors, commands, keybindings };
   } catch {
     return null;
   }

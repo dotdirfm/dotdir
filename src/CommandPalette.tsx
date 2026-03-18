@@ -156,18 +156,6 @@ export function useCommandPalette() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+Shift+P or Ctrl+Shift+P to open command palette
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
-        setOpen(o => !o);
-        return;
-      }
-      // Cmd+P or Ctrl+P (quick open - for now, same as command palette)
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
-        setOpen(o => !o);
-        return;
-      }
       // Escape closes palette
       if (open && e.key === 'Escape') {
         e.preventDefault();
@@ -175,6 +163,15 @@ export function useCommandPalette() {
         setOpen(false);
         return;
       }
+
+      // When palette is already open, Ctrl/Cmd+P (and Ctrl/Cmd+Shift+P) should close it.
+      if (open && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen((o) => !o);
+        return;
+      }
+
       // Let command registry handle other shortcuts when palette is closed
       if (!open) {
         const target = e.target as HTMLElement;

@@ -308,6 +308,39 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       if (!handler) throw new Error(`No command handler registered`);
       return handler(command, args) as Promise<T>;
     },
+
+    registerCommand(
+      commandId: string,
+      handler: (...args: unknown[]) => void | Promise<void>,
+      options?: { title?: string; category?: string; icon?: string; when?: string }
+    ): () => void {
+      const existing = commandRegistry.getCommand(commandId);
+      const title = options?.title ?? existing?.title ?? commandId;
+      const category = options?.category ?? existing?.category;
+      const icon = options?.icon ?? existing?.icon;
+      const when = options?.when ?? existing?.when;
+
+      const dispose = commandRegistry.registerCommand(
+        commandId,
+        title,
+        handler,
+        { category, icon, when }
+      );
+      // Wrap disposer so extensions can call it safely across the Comlink boundary.
+      return Comlink.proxy(dispose);
+    },
+
+    registerKeybinding(
+      binding: { command: string; key: string; mac?: string; when?: string }
+    ): () => void {
+      const dispose = commandRegistry.registerKeybinding(
+        { command: binding.command, key: binding.key, mac: binding.mac, when: binding.when },
+        'extension'
+      );
+      // Wrap disposer so extensions can call it safely across the Comlink boundary.
+      return Comlink.proxy(dispose);
+    },
+
     async getOnigurumaWasm(): Promise<ArrayBuffer> {
       const r = await fetch(onigWasmUrl);
       return r.arrayBuffer();
@@ -575,7 +608,12 @@ export function ViewerContainer({
     };
   }, [inline, onClose]);
 
-  const viewerProps: ViewerProps = { filePath, fileName, fileSize, inline };
+  // Keep props identity stable across app rerenders (e.g. opening command palette),
+  // so the iframe doesn't get a `faraday:update` and remount/reload the extension.
+  const viewerProps: ViewerProps = useMemo(
+    () => ({ filePath, fileName, fileSize, inline }),
+    [filePath, fileName, fileSize, inline],
+  );
 
   const toolbarHeight = 38;
   const toolbar = (
@@ -665,7 +703,19 @@ export function EditorContainer({
     };
   }, [onClose]);
 
-  const editorProps: EditorProps = { filePath, fileName, langId: currentLangId, extensionDirPath, languages, grammars, inline: false };
+  // Keep props identity stable to avoid unnecessary `faraday:update`.
+  const editorProps: EditorProps = useMemo(
+    () => ({
+      filePath,
+      fileName,
+      langId: currentLangId,
+      extensionDirPath,
+      languages,
+      grammars,
+      inline: false,
+    }),
+    [filePath, fileName, currentLangId, extensionDirPath, languages, grammars],
+  );
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const next = e.target.value;

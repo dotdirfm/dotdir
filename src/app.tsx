@@ -32,6 +32,7 @@ import { setIconTheme, setIconThemeKind } from './iconResolver';
 import { basename, dirname, isFileExecutable, isRootPath, join } from './path';
 import { normalizeTerminalPath } from './terminal/path';
 import { initUserKeybindings } from './userKeybindings';
+import { BrowserExtensionHost } from './browserExtensionHost';
 
 function buildParentChain(dirPath: string): FsNode | undefined {
   if (dirname(dirPath) === dirPath) return undefined;
@@ -1226,9 +1227,19 @@ export function App() {
     disposables.push(commandRegistry.registerCommand(
       'faraday.showCommandPalette',
       'Show All Commands',
-      () => commandPalette.setOpen(true),
+      () => commandPalette.setOpen((o) => !o),
       { category: 'View' }
     ));
+
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.showCommandPalette',
+      key: 'cmd+shift+p',
+    }));
+
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'faraday.showCommandPalette',
+      key: 'cmd+p',
+    }));
 
     // Close viewer/editor commands
     disposables.push(commandRegistry.registerCommand(
@@ -1421,6 +1432,8 @@ export function App() {
   }, [settingsLoaded]);
 
   const latestExtensionsRef = useRef<LoadedExtension[]>([]);
+  const browserExtensionHostRef = useRef(new BrowserExtensionHost());
+  const extensionContributionDisposersRef = useRef<(() => void)[]>([]);
 
   // Start Extension Host lazily — re-navigate panels when extensions load
   useEffect(() => {
@@ -1483,10 +1496,16 @@ export function App() {
 
     // Register extension commands and keybindings
     const registerExtensionCommands = (exts: LoadedExtension[]) => {
+      // Avoid duplicate registrations on extension host restart.
+      for (const d of extensionContributionDisposersRef.current) {
+        try { d(); } catch { /* ignore */ }
+      }
+      extensionContributionDisposersRef.current = [];
+
       for (const ext of exts) {
         if (ext.commands) {
           for (const cmd of ext.commands) {
-            commandRegistry.registerCommand(
+            const disposeCmd = commandRegistry.registerCommand(
               cmd.command,
               cmd.title,
               () => {
@@ -1494,16 +1513,18 @@ export function App() {
               },
               { category: cmd.category, icon: cmd.icon }
             );
+            extensionContributionDisposersRef.current.push(disposeCmd);
           }
         }
         if (ext.keybindings) {
           for (const kb of ext.keybindings) {
-            commandRegistry.registerKeybinding({
+            const disposeKb = commandRegistry.registerKeybinding({
               command: kb.command,
               key: kb.key,
               mac: kb.mac,
               when: kb.when,
-            });
+            }, 'extension');
+            extensionContributionDisposersRef.current.push(disposeKb);
           }
         }
       }
@@ -1516,6 +1537,7 @@ export function App() {
       setExtensionLayers(exts, activeIconThemeRef.current);
       registerLanguages(exts);
       registerExtensionCommands(exts);
+      void browserExtensionHostRef.current.reconcile(exts);
 
       // Load themes first, then refresh panels once themes are ready
       Promise.all([
@@ -1530,6 +1552,11 @@ export function App() {
     extensionHost.start();
     return () => {
       unsub();
+      void browserExtensionHostRef.current.dispose();
+      for (const d of extensionContributionDisposersRef.current) {
+        try { d(); } catch { /* ignore */ }
+      }
+      extensionContributionDisposersRef.current = [];
       extensionHost.dispose();
     };
   }, []);
@@ -1697,7 +1724,10 @@ export function App() {
         <ExtensionsPanel
           onClose={() => setShowExtensions(false)}
           onExtensionsChanged={() => {
-            extensionHost.restart();
+            void (async () => {
+              await browserExtensionHostRef.current.dispose();
+              await extensionHost.restart();
+            })();
           }}
           activeIconTheme={activeIconTheme}
           onIconThemeChange={(themeId) => {

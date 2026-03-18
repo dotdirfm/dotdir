@@ -104,6 +104,11 @@ export interface ExtensionManifest {
   displayName?: string;
   description?: string;
   icon?: string; // relative path to icon image
+  /**
+   * Optional browser activation script entry.
+   * If present, the host will load it and call its exported `activate()` / `deactivate()`.
+   */
+  browser?: string;
   contributes?: ExtensionContributions;
 }
 

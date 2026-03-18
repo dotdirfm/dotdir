@@ -245,14 +245,18 @@ class CommandRegistry {
     const keyCombo = this.eventToKeyCombo(e);
     if (!keyCombo) return false;
 
-    const keybindings = this.getKeybindings();
-    for (const binding of keybindings) {
-      const bindingKey = this.normalizeKey(this.isMac() ? (binding.mac ?? binding.key) : binding.key);
-      if (bindingKey === keyCombo && this.evaluateWhen(binding.when)) {
-        e.preventDefault();
-        e.stopPropagation();
-        this.executeCommand(binding.command);
-        return true;
+    // Priority: later layers override earlier ones.
+    // Evaluate from highest → lowest and stop on first match.
+    const layers: KeybindingLayer[] = ['user', 'extension', 'default'];
+    for (const layer of layers) {
+      for (const binding of this.keybindingLayers[layer]) {
+        const bindingKey = this.normalizeKey(this.isMac() ? (binding.mac ?? binding.key) : binding.key);
+        if (bindingKey === keyCombo && this.evaluateWhen(binding.when)) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.executeCommand(binding.command);
+          return true;
+        }
       }
     }
     return false;

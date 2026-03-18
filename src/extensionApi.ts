@@ -74,6 +74,22 @@ export interface HostApi {
   onClose(): void;
   /** Execute a host command (e.g. navigatePrev, navigateNext, getFileIndex). */
   executeCommand?<T = unknown>(command: string, args?: unknown): Promise<T>;
+
+  /**
+   * Commands API exposed to extensions running inside the iframe.
+   * Implemented to mimic VS Code: `registerCommand(id, callback) -> Disposable`.
+   */
+  registerCommand?(
+    commandId: string,
+    handler: (...args: unknown[]) => void | Promise<void>,
+    options?: { title?: string; category?: string; icon?: string; when?: string }
+  ): () => void;
+
+  /** Contribute a keybinding (extension layer). */
+  registerKeybinding?(
+    binding: { command: string; key: string; mac?: string; when?: string }
+  ): () => void;
+
   /** Oniguruma WASM binary for TextMate grammars (optional). */
   getOnigurumaWasm?(): Promise<ArrayBuffer>;
   /** URL to a file inside the extension dir (for lazy-loading workers). Returns blob URL. */
@@ -109,6 +125,17 @@ declare global {
      *
      * We'll later publish these typings via an npm package (`frdy`).
      */
-    frdy?: HostApi;
+    frdy?: HostApi & {
+      commands?: {
+        registerCommand: (
+          commandId: string,
+          handler: (...args: unknown[]) => void | Promise<void>,
+          options?: { title?: string; category?: string; icon?: string; when?: string }
+        ) => { dispose: () => void };
+        registerKeybinding: (
+          binding: { command: string; key: string; mac?: string; when?: string }
+        ) => { dispose: () => void };
+      };
+    };
   }
 }

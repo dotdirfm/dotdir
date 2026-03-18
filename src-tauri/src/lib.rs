@@ -678,6 +678,54 @@ window.addEventListener('message', async (e) => {
               };
             };
           }
+          if (prop === 'commands') {
+            return {
+              registerCommand: (id, cb, options) => {
+                const fn = target.registerCommand;
+                if (typeof fn !== 'function') {
+                  throw new Error('frdy.commands.registerCommand is not supported');
+                }
+                const disposeP = fn.call(target, id, Comlink.proxy(cb), options);
+                return {
+                  dispose: () => {
+                  try {
+                    if (typeof disposeP === 'function') {
+                      disposeP();
+                    } else {
+                      Promise.resolve(disposeP)
+                        .then((dispose) => { if (typeof dispose === 'function') dispose(); })
+                        .catch(() => {});
+                    }
+                  } catch {
+                    // ignore
+                  }
+                  },
+                };
+              },
+              registerKeybinding: (binding) => {
+                const fn = target.registerKeybinding;
+                if (typeof fn !== 'function') {
+                  throw new Error('frdy.commands.registerKeybinding is not supported');
+                }
+                const disposeP = fn.call(target, binding);
+                return {
+                  dispose: () => {
+                  try {
+                    if (typeof disposeP === 'function') {
+                      disposeP();
+                    } else {
+                      Promise.resolve(disposeP)
+                        .then((dispose) => { if (typeof dispose === 'function') dispose(); })
+                        .catch(() => {});
+                    }
+                  } catch {
+                    // ignore
+                  }
+                  },
+                };
+              },
+            };
+          }
           // default passthrough
           return target[prop];
         },
