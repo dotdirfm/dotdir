@@ -1,5 +1,5 @@
 /**
- * Shared types for the host ↔ extension iframe communication via Comlink.
+ * Shared types for the host ↔ extension iframe communication (postMessage RPC).
  *
  * Host exposes HostApi to the iframe.
  * Viewer extensions expose ViewerExtensionApi; editor extensions expose EditorExtensionApi.
@@ -19,7 +19,10 @@ export interface ViewerProps {
 /** Grammar contribution + loaded content (from host, for custom syntax highlighting). */
 export interface EditorGrammarPayload {
   contribution: { language: string; scopeName: string; path: string; embeddedLanguages?: Record<string, string> };
-  content: object;
+  /** Absolute path to grammar JSON file (used for lazy loading). */
+  path?: string;
+  /** Parsed TextMate grammar JSON (optional; host may lazy-load and fill it). */
+  content?: object;
 }
 
 export interface EditorLanguagePayload {

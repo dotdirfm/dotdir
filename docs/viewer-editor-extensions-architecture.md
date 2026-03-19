@@ -70,7 +70,7 @@ In `package.json` (extension manifest):
 ```
 
 - **Patterns**: Glob-style (`*.ext` or `*`). Match against `fileName` (e.g. `doc.pdf`). Longest/match-all or explicit ordering can decide ties; `priority` disambiguates.
-- **entry**: Relative to extension dir. Path to a **JS file** (e.g. `./viewer.js`). The host reads this file, turns it into a blob URL, and loads it inside a **host-provided shell HTML** in the iframe (see §4.3). All loading is done on the frontend; no Tauri custom protocol or static file serving.
+- **entry**: Relative to extension dir. Path to a **JS file** (e.g. `./viewer.js`). The iframe bootstrap loads this entry script from the VFS mount and then calls `mount(...)` (see §4.3). No Comlink or blob URLs are required.
 
 ### 3.2 Registries in the Host
 
@@ -84,11 +84,11 @@ When the user opens a file (view or edit):
 
 So the **core app** only knows:
 - How to resolve (fileName, mime?) → viewer contribution or editor contribution
-- How to load the contribution’s entry in an iframe and establish Comlink RPC (see below).
+- How to load the contribution’s entry in an iframe and establish the postMessage RPC bridge (see below).
 
-## 4. Loading Extension UI — Iframe + Comlink
+## 4. Loading Extension UI — Iframe + postMessage RPC
 
-Viewer/editor UI runs in an **iframe**. The host and the iframe communicate via **[Comlink](https://github.com/GoogleChromeLabs/comlink)** so that each side exposes an API and gets a promise-based RPC proxy to the other, without manual `postMessage` handling.
+Viewer/editor UI runs in an **iframe**. The host and the iframe communicate via a small **postMessage RPC** layer so each side can call methods on the other (no Comlink).
 
 ### 4.1 Why iframe
 
@@ -96,60 +96,45 @@ Viewer/editor UI runs in an **iframe**. The host and the iframe communicate via 
 - **Security**: Malicious or buggy extensions are sandboxed (same-origin but separate document).
 - **Stability**: Crashes or heavy work in the iframe don’t block the main app.
 
-### 4.2 Why Comlink
+### 4.2 Why postMessage RPC
 
-- **RPC over postMessage**: Comlink turns the iframe boundary into async method calls (e.g. `await hostApi.readFile(path)` in the iframe, `await extensionApi.mount(props)` in the host).
-- **Small, well-supported**: ~1.1kB, works with any `postMessage`-like endpoint; supports `MessageChannel` and `Comlink.windowEndpoint()` for window/iframe.
-- **TypeScript**: Types can be shared so both host and extension know the API shape.
+- **RPC over postMessage**: We turn the iframe boundary into async method calls (e.g. `frdy.readFileText()` / `frdy.getTheme()` inside the iframe).
+- **No dependency**: We don't require Comlink or `MessagePort`s; the bootstrap logic lives in a single inline script.
+- **TypeScript-friendly**: Extensions still implement the same `mount/unmount` API, and host APIs remain source-compatible via `globalThis.frdy`.
 
-Add as a dependency: `pnpm add comlink` (host app); default extensions can use the same dependency or a shared `extension-api` package that re-exports Comlink and the shared types.
+### 4.3 VFS-served iframe bootstrap (no Comlink)
 
-### 4.3 All frontend: blob URL + host shell HTML (no Tauri serving)
+Extension UI is loaded via our stateless VFS mount:
 
-We do **not** use Tauri to serve extension dirs (no custom protocol, no static file server). All loading is on the **frontend**:
+1. The host sets the iframe `src` to `vfsUrl('/_ext/<abs extension dir>/')` (or the equivalent for the runtime).
+2. The VFS response returns a generated `index.html` that inlines the iframe bootstrap (`inline_bootstrap_postmsg.js`).
+3. The host then sends `faraday:init` with the extension `entryUrl`.
+4. The iframe bootstrap creates a `<script src="entryUrl">` tag to load the extension entry JS, then calls `api.mount(...)`.
 
-1. **Read entry JS**: The host reads the extension entry file (e.g. `viewer.js`) from disk via the existing **bridge** (e.g. `bridge.fsa` or a dedicated “read extension file” that takes extension dir + relative path). So we need one bridge call that returns the file content as text or `ArrayBuffer`.
-2. **Script blob**: Create a blob from that content and an object URL:
-   - `const scriptBlob = new Blob([jsContent], { type: 'application/javascript' });`
-   - `const scriptUrl = URL.createObjectURL(scriptBlob);`
-3. **Shell HTML**: The host owns a minimal **shell HTML** string (e.g. in code or a small template). It contains a single `<script src="…">` whose `src` is the extension script blob URL. Example:
-   - `const html = \`<!DOCTYPE html><html><head><script src="${scriptUrl}"></script></head><body></body></html>\`;`
-4. **Iframe from HTML blob**: Create a blob from the shell HTML and set the iframe’s `src` to that blob URL:
-   - `const htmlBlob = new Blob([html], { type: 'text/html' });`
-   - `iframe.src = URL.createObjectURL(htmlBlob);`
+**Cleanup**: When the viewer/editor is closed, the host sends `faraday:dispose` and unmounts the extension API; the iframe is destroyed as part of the UI lifecycle.
 
-The iframe’s origin is the **same as the host** (the blob was created by the host document), so we can pass `MessagePort`s and use Comlink without cross-origin issues. No Tauri, no dev-server routes for extensions—only bridge to read the entry file once, then blobs.
+### 4.4 Handshake (postMessage)
+We use a lightweight message protocol between host and iframe:
 
-**Cleanup**: When the viewer/editor is closed, revoke the blob URLs (`URL.revokeObjectURL(scriptUrl)` and the HTML blob URL) to avoid leaks.
-
-### 4.4 Handshake (MessageChannel)
-
-Two-way Comlink needs one channel host→iframe and one iframe→host. Using a **MessageChannel** handshake is straightforward:
-
-1. **Host** creates iframe, sets `src` to the shell HTML blob URL (which loads the extension JS), waits for `load`.
-2. **Host** creates `MessageChannel()` → `port1`, `port2`. Host calls `Comlink.expose(hostApi, port1)` and sends `port2` to the iframe via `iframe.contentWindow.postMessage({ type: 'faraday-init', port: port2 }, '*', [port2])`.
-3. **Iframe** (in its script) listens for `faraday-init`, receives `port2`, then `hostApi = Comlink.wrap(port2)`.
-4. **Iframe** creates a second `MessageChannel()` → `portA`, `portB`. Iframe calls `Comlink.expose(extensionApi, portA)` and sends `portB` to the host via `window.parent.postMessage({ type: 'faraday-ready', port: portB }, '*', [portB])`.
-5. **Host** listens for `faraday-ready`, receives `portB`, then `extensionApi = Comlink.wrap(portB)`. Host can now call `await extensionApi.mount(props)` etc.
-
-Result: iframe has a proxy to `hostApi`; host has a proxy to `extensionApi`. All methods are async across the boundary.
+1. The iframe bootstrap installs a `message` listener and immediately notifies the host via `type: "faraday:bootstrap-ready"`.
+2. The host responds by sending `type: "faraday:init"` with `{ kind, entryUrl, props, themeVars, colorTheme }`.
+3. The iframe loads the extension entry script (`entryUrl`), receives the extension API through `window.__faradayHostReady(api)`, then calls `api.mount(root, hostApi, props)`.
+4. Subsequent host updates are sent as `type: "faraday:update"`; cleanup as `type: "faraday:dispose"`.
+5. The iframe calls host methods via `type: "ext:call"`, and the host replies with `type: "host:reply"`. Subscriptions use `ext:subscribe` / `host:callback`.
 
 ### 4.5 Extension entry JS shape
 
-- **entry** in the manifest is the path to a **JS file** (e.g. `./viewer.js`). That script runs inside the host’s shell HTML (no separate HTML in the extension). The script:
-  - Loads or inlines Comlink (e.g. bundled with the extension or loaded from a host-provided blob for a shared “guest” runtime).
-  - Listens for the host’s `faraday-init` message (with the port) and performs the handshake above.
-  - Gets `hostApi = Comlink.wrap(port)` and builds `extensionApi` (e.g. `{ mount(props), unmount() }` for viewers; plus `setDirty?` for editors).
-  - Exposes `extensionApi` on the second channel and sends the port back to the host (`faraday-ready`).
-  - Renders its UI in the iframe document (e.g. mount a root into `document.body`); uses `hostApi` for file I/O and host callbacks (e.g. `hostApi.onClose()`).
+- **entry** in the manifest is the path to a **JS file** (e.g. `./viewer.js`). That script runs inside the iframe. The script:
+  - Implements the extension API (`mount`, `unmount`, and optionally `setLanguage`) and registers it by calling `window.__faradayHostReady(api)`.
+  - Uses `globalThis.frdy` (provided by the iframe bootstrap) for file I/O, theme access, and host actions (e.g. `onClose()`).
 
-## 5. API Contract (Comlink)
+## 5. API Contract (postMessage RPC)
 
-The **host** exposes a **host API** to the iframe (via Comlink). The **iframe** exposes an **extension API** to the host. Types can live in a shared package or in-repo module (e.g. `extension-api.ts` or `@faraday/extension-api`).
+The **host** exposes a **host API** to the iframe (via postMessage RPC). The **iframe** exposes an **extension API** to the host. Types can live in a shared package or in-repo module (e.g. `extension-api.ts` or `@faraday/extension-api`).
 
 ### 5.1 Host API (host → iframe)
 
-The host exposes an object the iframe can call (all methods async over Comlink):
+The host exposes an object the iframe can call (all methods async over our postMessage RPC):
 
 ```ts
 interface HostApi {
@@ -223,7 +208,7 @@ interface EditorProps {
 Default viewers and editor live **inside this repo** as regular extensions, so they are versioned and built with the app.
 
 - **Layout**: e.g. `extensions/faraday-viewers-basic/` and `extensions/faraday-editor-monaco/` (or a single `extensions/` folder with one subfolder per default extension).
-- **faraday-viewers-basic**: Contains the current `FileViewer` (text) and `ImageViewer` (image/video) logic, each as a **JS entry** (e.g. `text-viewer.js`, `image-viewer.js`). The extension’s `package.json` contributes two viewers with different `patterns` and `entry` paths. The host loads each entry via bridge, creates a script blob + shell HTML blob, and runs it in an iframe.
+- **faraday-viewers-basic**: Contains the current `FileViewer` (text) and `ImageViewer` (image/video) logic, each as a **JS entry** (e.g. `text-viewer.js`, `image-viewer.js`). The extension’s `package.json` contributes two viewers with different `patterns` and `entry` paths. The host provides the iframe with an `entryUrl` under the VFS `_ext` mount; the iframe bootstrap loads and mounts the entry.
 - **faraday-editor-monaco**: Contains the current Monaco-based `FileEditor` as a JS entry (e.g. `editor.js`), contributes one editor with a catch-all or broad pattern and lower priority.
 
 **Loading built-ins**: The host treats these as built-in by either:
@@ -232,7 +217,7 @@ Default viewers and editor live **inside this repo** as regular extensions, so t
 
 Recommendation: **Option A** — resolve built-in extension dirs from app resources; when building the list of extensions to load, merge “built-in dirs” with `~/.faraday/extensions`. Same manifest/contribution format; only the source path differs.
 
-**Implementation**: Built-in dirs are returned by the Tauri command `get_builtin_extension_dirs` (dev: repo `extensions/`; production: `$RESOURCE/extensions/` via `bundle.resources: ["../extensions/"]`). The extension host worker receives `builtInDirs` and loads them with `loadExtensionFromDir()` before user extensions. The host shell HTML loads `comlink.js` from the same origin (copied to `public/` at build/postinstall) so entry scripts can use `window.Comlink`. The core app keeps `FileViewer`, `ImageViewer`, and `FileEditor` as **fallbacks** when no extension matches (e.g. headless with no built-in dirs).
+**Implementation**: Built-in dirs are returned by the Tauri command `get_builtin_extension_dirs` (dev: repo `extensions/`; production: `$RESOURCE/extensions/` via `bundle.resources: ["../extensions/"]`). The extension host worker receives `builtInDirs` and loads them with `loadExtensionFromDir()` before user extensions. The iframe bootstrap injects the `frdy.*` API, so no `comlink.js` is needed. The core app keeps `FileViewer`, `ImageViewer`, and `FileEditor` as **fallbacks** when no extension matches (e.g. headless with no built-in dirs).
 
 ## 7. Resolution and Precedence
 
@@ -247,25 +232,25 @@ Recommendation: **Option A** — resolve built-in extension dirs from app resour
   - Keeps `viewerFile` and `editorFile` state.
   - Instead of branching on `isMediaFile()` and rendering `<ImageViewer>` vs `<FileViewer>`, it calls **viewerRegistry.resolve(fileName)** (and optionally mime), then **ViewerContainer** with the resolved contribution + props.
   - Same for editor: **editorRegistry.resolve(fileName)** → **EditorContainer** with contribution + props.
-- **ViewerContainer / EditorContainer**: Resolve contribution, read entry JS file via bridge, build script blob + shell HTML blob, set iframe `src` to HTML blob URL, run Comlink handshake (expose hostApi, receive extensionApi), call `extensionApi.mount(props)`, render iframe in a wrapper. On load/handshake error or timeout, show “Failed to load viewer/editor” and onClose. On unmount/close, call `extensionApi.unmount()`, revoke blob URLs, and destroy iframe.
+- **ViewerContainer / EditorContainer**: Resolve contribution, load the extension entry URL, mount it inside an iframe, let the iframe bootstrap establish the postMessage RPC bridge and call `extensionApi.mount(props)`. On load/handshake error or timeout, show “Failed to load viewer/editor” and onClose. On unmount/close, call `extensionApi.unmount()` and destroy the iframe.
 
 ## 9. Extension Host Worker
 
 - The worker loads manifest + languages + grammars and returns `WorkerLoadedExtension`. Viewer/editor **entry code** runs only in the iframe; the worker (or main-thread `loadExtensions`) only parses **contribution metadata** (id, label, patterns, mimeTypes, entry HTML path, priority).
-- So: worker or `loadExtensions` parses `contributes.viewers` and `contributes.editors` and attaches them to `LoadedExtension`. The main thread maintains **viewerRegistry** and **editorRegistry** and fills them when extensions load (same as for commands/keybindings). No Comlink or iframe logic in the worker.
+- So: worker or `loadExtensions` parses `contributes.viewers` and `contributes.editors` and attaches them to `LoadedExtension`. The main thread maintains **viewerRegistry** and **editorRegistry** and fills them when extensions load (same as for commands/keybindings). No iframe logic in the worker.
 
 ## 10. Summary
 
 | Piece | Responsibility |
 |-------|----------------|
-| **Core app** | Extension host, viewer + editor registries, resolution, ViewerContainer/EditorContainer (iframe + Comlink handshake), hostApi implementation (bridge + theme + onClose) |
+| **Core app** | Extension host, viewer + editor registries, resolution, ViewerContainer/EditorContainer (iframe + postMessage RPC), hostApi implementation (bridge + theme + onClose) |
 | **Manifest** | `contributes.viewers` / `contributes.editors` with id, label, patterns, entry (JS file path), priority |
 | **Default extensions** | In-repo `extensions/faraday-viewers-basic`, `extensions/faraday-editor-monaco`; loaded from app resources, same format as user extensions |
-| **Third-party extensions** | Add viewers/editors for other formats; same contract (entry JS + Comlink hostApi/extensionApi) |
-| **Loading** | Frontend-only: read entry JS via bridge → script blob URL → host shell HTML (with script src=blob) → iframe src=HTML blob; Comlink handshake (MessageChannel); no Tauri serving |
+| **Third-party extensions** | Add viewers/editors for other formats; same contract (entry JS + hostApi/extensionApi over postMessage RPC) |
+| **Loading** | Frontend-only: load entry JS + iframe bootstrap; host/iframe establish the postMessage RPC bridge (no MessageChannel); no Tauri serving |
 | **API** | HostApi (readFile, writeFile, getTheme, onClose, …) from host to iframe; ViewerExtensionApi / EditorExtensionApi (mount, unmount) from iframe to host; shared types in extension-api module |
 
-This keeps the app UI-agnostic for viewing/editing and makes File/Image Viewer and Editor first-class extension points with isolation (iframe) and a clear RPC contract (Comlink).
+This keeps the app UI-agnostic for viewing/editing and makes File/Image Viewer and Editor first-class extension points with isolation (iframe) and a clear RPC contract (postMessage).
 
 ---
 
@@ -290,22 +275,22 @@ VSCode’s [Webview API](https://code.visualstudio.com/api/extension-guides/webv
 | **Contribution** | `customEditors`: viewType, displayName, selector, priority | `viewers` / `editors`: id, label, patterns, entry, priority | Same idea; we use numeric priority for tie-breaking; can add "default" vs "option" semantics later (e.g. `priority: "option"` = don’t use by default). |
 | **Selector** | `selector: [{ filenamePattern: "*.png" }]` | `patterns: ["*.png", "*.jpg"]` | Equivalent; we use a single array of globs. |
 | **Isolation** | Webview in separate context | Iframe (same-origin blob) | Both isolate extension UI from host. |
-| **Host → extension comms** | `webview.postMessage()` | Comlink over MessageChannel (host exposes `hostApi`) | We use Comlink for typed RPC instead of ad-hoc message protocol. |
-| **Extension → host comms** | `acquireVsCodeApi().postMessage()` + `onDidReceiveMessage` | Comlink (iframe exposes `extensionApi`) | Same direction; we use a single RPC surface (mount, unmount, setDirty). |
+| **Host → extension comms** | `webview.postMessage()` | postMessage RPC (host exposes `frdy.*`) | Typed-ish RPC via our postMessage protocol (no Comlink). |
+| **Extension → host comms** | `acquireVsCodeApi().postMessage()` + `onDidReceiveMessage` | postMessage RPC (iframe calls back into host) | Same direction; we use a single RPC surface (mount, unmount, setLanguage/setDirty). |
 | **Theme** | Body class + CSS variables | `getTheme(): Promise<'light' \| 'dark'>` | We can add body class (and optionally CSS variables) in the **host shell HTML** so extension content matches host theme without extra RPC for initial paint. |
 | **Local resources** | `asWebviewUri` + `localResourceRoots` | Entry is one JS bundle; host reads file via bridge | We don’t serve extension dir. Assets either live in the bundle or are fetched via HostApi (e.g. `readFile` for the opened file). For extension-owned assets (icons, CSS), we could add a HostApi such as `readExtensionFile(extensionId, relativePath)` and pass blob/data URLs. |
 
 ### 11.3 Intentional Differences
 
 - **No extension host process**: In VSCode the extension runs in Node; the webview is only the view. In Faraday the “extension” is the code inside the iframe; there is no separate Node process. So we don’t have activation events like `onCustomEditor:viewType`; we load extension manifests (and contribution metadata) up front and only spin up the iframe when a viewer/editor is opened.
-- **Loading mechanism**: VSCode sets `webview.html` (full HTML, often with inline script or script src to extension-bundled JS). We use blob URLs: host reads entry JS via bridge → script blob → minimal shell HTML with that script → iframe. No custom protocol or static file server; keeps loading on the frontend and avoids serving from extension dirs.
+- **Loading mechanism**: VSCode sets `webview.html` (full HTML, often with inline script or script src to extension-bundled JS). In Faraday, we load a generated iframe bootstrap from our stateless `_ext` VFS mount and then load the extension entry script via `entryUrl`. No custom protocol or static file server; keeps loading on the frontend.
 - **Document model**: VSCode separates **document** (one per resource, can have undo/save) from **webview** (one per tab). We currently have one iframe per open view/edit and no explicit CustomDocument. For simple viewers and single-tab editors this is enough. If we later add split view or host-driven undo/save, we can introduce a document abstraction (e.g. host holds document ref, multiple iframes get the same document id and sync via HostApi).
 
 ### 11.4 Takeaways for Implementation
 
 1. **Contribution format**: Keep `contributes.viewers` / `contributes.editors` with id, label, patterns, mimeTypes?, entry, priority — aligned with VSCode’s contribution idea.
 2. **Shell HTML**: In the host-owned shell that wraps the extension script, inject theme (e.g. `<body class="faraday-light">` or `faraday-dark`) and optionally a small set of CSS variables so extensions can style without calling `getTheme()` for initial render.
-3. **Comlink**: Keep Comlink for host ↔ iframe; no need to switch to raw postMessage unless we hit a concrete limitation.
+3. **postMessage RPC**: Use the built-in postMessage RPC bootstrap (no Comlink).
 4. **Extension assets**: If an extension needs its own images/fonts/CSS, either (a) bundle them into the entry JS (e.g. inline or import), or (b) add `HostApi.readExtensionFile(extensionId, path)` and expose URLs (e.g. blob) to the iframe. Avoid adding a custom protocol or file server if possible.
 5. **Optional “option” priority**: Reserve a convention (e.g. `priority: "option"` or a separate `default: false` flag) so some contributions are “Reopen with…” only and don’t take over a file type by default.
 6. **Future**: If we need multiple views per document or host-managed undo/save, introduce a document handle (and optionally edit events) in the HostApi/ExtensionApi contract, similar in spirit to VSCode’s CustomDocument.

@@ -367,9 +367,9 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
                           {ext.languages.length} language{ext.languages.length > 1 ? 's' : ''}
                         </span>
                       )}
-                      {ext.grammars && ext.grammars.length > 0 && (
+                      {ext.grammarRefs && ext.grammarRefs.length > 0 && (
                         <span className="ext-theme-badge">
-                          {ext.grammars.length} grammar{ext.grammars.length > 1 ? 's' : ''}
+                          {ext.grammarRefs.length} grammar{ext.grammarRefs.length > 1 ? 's' : ''}
                         </span>
                       )}
                     </div>

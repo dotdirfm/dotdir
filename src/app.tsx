@@ -9,7 +9,6 @@ import { bridge } from './bridge';
 import type { PanelTab } from './FileList/PanelTabs';
 import { isMediaFile } from './mediaFiles';
 import { ViewerContainer, EditorContainer } from './ExtensionContainer';
-import { clearEditorExtensionCache } from './editorExtensionCache';
 import { viewerRegistry, editorRegistry, populateRegistries } from './viewerEditorRegistry';
 import type { LanguageOption } from './OpenCreateFileDialog';
 import { collectPathsForDelete } from './deleteHelpers';
@@ -21,7 +20,7 @@ import { ExtensionsPanel } from './ExtensionsPanel';
 import { PanelGroup } from './PanelGroup';
 import { CommandPalette, useCommandPalette } from './CommandPalette';
 import { commandRegistry } from './commands';
-import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
+import { DirectoryHandle, FileHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
 import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, findColorTheme, type LoadedExtension, type PanelPersistedState, type PersistedTab } from './extensions';
@@ -311,7 +310,9 @@ export function App() {
   const [promptActive, setPromptActive] = useState(true);
   const promptHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
   const cancelDeleteRef = useRef(false);
@@ -415,10 +416,12 @@ export function App() {
 
   const handleViewFile = useCallback((filePath: string, fileName: string, fileSize: number) => {
     setViewerFile({ path: filePath, name: fileName, size: fileSize, panel: activePanelRef.current });
+    setViewerOpen(true);
   }, []);
 
   const handleEditFile = useCallback((filePath: string, fileName: string, fileSize: number, langId: string) => {
     setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
+    setEditorOpen(true);
   }, []);
 
   const handleOpenCreateFileConfirm = useCallback(
@@ -429,6 +432,7 @@ export function App() {
       }
       const size = exists ? (await bridge.fsa.stat(filePath)).size : 0;
       setEditorFile({ path: filePath, name: fileName, size, langId });
+      setEditorOpen(true);
     },
     []
   );
@@ -1245,7 +1249,7 @@ export function App() {
     disposables.push(commandRegistry.registerCommand(
       'faraday.closeViewer',
       'Close Viewer',
-      () => setViewerFile(null),
+      () => setViewerOpen(false),
       { category: 'View', when: 'focusViewer' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -1257,7 +1261,7 @@ export function App() {
     disposables.push(commandRegistry.registerCommand(
       'faraday.closeEditor',
       'Close Editor',
-      () => setEditorFile(null),
+      () => setEditorOpen(false),
       { category: 'View', when: 'focusEditor' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -1435,8 +1439,33 @@ export function App() {
   const browserExtensionHostRef = useRef(new BrowserExtensionHost());
   const extensionContributionDisposersRef = useRef<(() => void)[]>([]);
 
+  const readTextFileAbs = useCallback(async (absPath: string): Promise<string> => {
+    const normalized = absPath;
+    const name = normalized.split('/').pop() ?? normalized;
+    const handle = new FileHandle(normalized, name);
+    const file = await handle.getFile();
+    return file.text();
+  }, []);
+
+  const ensureActiveIconThemeFssLoaded = useCallback(
+    async (exts: LoadedExtension[], themeId: string | undefined): Promise<void> => {
+      if (!themeId) return;
+      const ext = exts.find((e) => `${e.ref.publisher}.${e.ref.name}` === themeId);
+      if (!ext?.iconThemeFssPath) return;
+      if (ext.iconThemeFss) return; // already loaded
+      try {
+        ext.iconThemeFss = await readTextFileAbs(ext.iconThemeFssPath);
+        if (!ext.iconThemeBasePath) ext.iconThemeBasePath = dirname(ext.iconThemeFssPath);
+      } catch {
+        // Ignore theme load errors; resolver will fall back.
+      }
+    },
+    [readTextFileAbs]
+  );
+
   // Start Extension Host lazily — re-navigate panels when extensions load
   useEffect(() => {
+    if (!settingsLoaded) return;
     languageRegistry.initialize();
 
     const registerLanguages = async (exts: LoadedExtension[]) => {
@@ -1446,11 +1475,6 @@ export function App() {
         if (ext.languages) {
           for (const lang of ext.languages) {
             languageRegistry.registerLanguage(lang);
-          }
-        }
-        if (ext.grammars) {
-          for (const grammar of ext.grammars) {
-            languageRegistry.registerGrammar(grammar);
           }
         }
       }
@@ -1466,7 +1490,7 @@ export function App() {
       const ext = exts.find(e => `${e.ref.publisher}.${e.ref.name}` === themeId);
       if (ext?.vscodeIconThemePath) {
         await setIconTheme('vscode', ext.vscodeIconThemePath);
-      } else if (ext?.iconThemeFss) {
+      } else if (ext?.iconThemeFssPath) {
         await setIconTheme('fss');
       } else {
         await setIconTheme('none');
@@ -1531,23 +1555,28 @@ export function App() {
     };
 
     const unsub = extensionHost.onLoaded((exts) => {
-      clearEditorExtensionCache();
-      latestExtensionsRef.current = exts;
-      populateRegistries(exts);
-      setExtensionLayers(exts, activeIconThemeRef.current);
-      registerLanguages(exts);
-      registerExtensionCommands(exts);
-      void browserExtensionHostRef.current.reconcile(exts);
+      void (async () => {
+        latestExtensionsRef.current = exts;
+        populateRegistries(exts);
 
-      // Load themes first, then refresh panels once themes are ready
-      Promise.all([
-        updateIconTheme(exts, activeIconThemeRef.current),
-        updateColorTheme(exts, activeColorThemeRef.current),
-      ]).then(() => {
-        setThemesReady(true);
-        if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
-        if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
-      });
+        // Load only the active FSS icon theme contents (lazy).
+        await ensureActiveIconThemeFssLoaded(exts, activeIconThemeRef.current);
+        setExtensionLayers(exts, activeIconThemeRef.current);
+
+        registerLanguages(exts);
+        registerExtensionCommands(exts);
+        void browserExtensionHostRef.current.reconcile(exts);
+
+        // Load themes first, then refresh panels once themes are ready
+        Promise.all([
+          updateIconTheme(exts, activeIconThemeRef.current),
+          updateColorTheme(exts, activeColorThemeRef.current),
+        ]).then(() => {
+          setThemesReady(true);
+          if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
+          if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
+        });
+      })();
     });
     extensionHost.start();
     return () => {
@@ -1559,7 +1588,7 @@ export function App() {
       extensionContributionDisposersRef.current = [];
       extensionHost.dispose();
     };
-  }, []);
+  }, [settingsLoaded]);
 
   const activePath = activePanel === 'left' ? left.currentPath : right.currentPath;
   useEffect(() => {
@@ -1680,7 +1709,8 @@ export function App() {
               filePath={viewerFile.path}
               fileName={viewerFile.name}
               fileSize={viewerFile.size}
-              onClose={() => setViewerFile(null)}
+              open={viewerOpen}
+              onClose={() => setViewerOpen(false)}
               onExecuteCommand={handleExecuteCommand}
             />
           );
@@ -1689,7 +1719,10 @@ export function App() {
           <ModalDialog
             title="No viewer"
             message="No viewer extension found for this file type. Install viewer extensions (e.g. Image Viewer, File Viewer) from the extensions panel."
-            onClose={() => setViewerFile(null)}
+            onClose={() => {
+              setViewerOpen(false);
+              setViewerFile(null);
+            }}
           />
         );
       })()}
@@ -1698,7 +1731,11 @@ export function App() {
         if (resolved) {
           const exts = latestExtensionsRef.current;
           const allLanguages = exts.flatMap((e) => e.languages ?? []);
-          const allGrammars = exts.flatMap((e) => e.grammars ?? []);
+          const allGrammarRefs = exts.flatMap((e) => e.grammarRefs ?? []);
+          const grammars = allGrammarRefs.map((gr) => ({
+            contribution: gr.contribution,
+            path: gr.path,
+          }));
           return (
             <EditorContainer
               extensionDirPath={resolved.extensionDirPath}
@@ -1706,9 +1743,10 @@ export function App() {
               filePath={editorFile.path}
               fileName={editorFile.name}
               langId={editorFile.langId}
-              onClose={() => setEditorFile(null)}
+              open={editorOpen}
+              onClose={() => setEditorOpen(false)}
               languages={allLanguages}
-              grammars={allGrammars}
+              grammars={grammars}
             />
           );
         }
@@ -1716,7 +1754,10 @@ export function App() {
           <ModalDialog
             title="No editor"
             message="No editor extension found for this file type. Install an editor extension (e.g. Monaco Editor) from the extensions panel."
-            onClose={() => setEditorFile(null)}
+            onClose={() => {
+              setEditorOpen(false);
+              setEditorFile(null);
+            }}
           />
         );
       })()}
@@ -1733,22 +1774,25 @@ export function App() {
           onIconThemeChange={(themeId) => {
             setActiveIconTheme(themeId);
             activeIconThemeRef.current = themeId;
-            setExtensionLayers(latestExtensionsRef.current, themeId);
-            // Update icon resolver
-            if (!themeId) {
-              setIconTheme('fss');
-            } else {
-              const ext = latestExtensionsRef.current.find(e => `${e.ref.publisher}.${e.ref.name}` === themeId);
-              if (ext?.vscodeIconThemePath) {
-                setIconTheme('vscode', ext.vscodeIconThemePath);
-              } else if (ext?.iconThemeFss) {
+            void (async () => {
+              await ensureActiveIconThemeFssLoaded(latestExtensionsRef.current, themeId);
+              setExtensionLayers(latestExtensionsRef.current, themeId);
+              // Update icon resolver
+              if (!themeId) {
                 setIconTheme('fss');
               } else {
-                setIconTheme('none');
+                const ext = latestExtensionsRef.current.find(e => `${e.ref.publisher}.${e.ref.name}` === themeId);
+                if (ext?.vscodeIconThemePath) {
+                  setIconTheme('vscode', ext.vscodeIconThemePath);
+                } else if (ext?.iconThemeFssPath) {
+                  setIconTheme('fss');
+                } else {
+                  setIconTheme('none');
+                }
               }
-            }
-            if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
-            if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
+              if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
+              if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
+            })();
           }}
           activeColorTheme={activeColorTheme}
           onColorThemeChange={(themeKey) => {

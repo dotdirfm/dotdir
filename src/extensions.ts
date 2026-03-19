@@ -125,6 +125,12 @@ export interface LoadedGrammar {
   content: object; // parsed TextMate grammar JSON
 }
 
+export interface LoadedGrammarRef {
+  contribution: ExtensionGrammar;
+  /** Absolute path to the grammar JSON file on disk. */
+  path: string;
+}
+
 export interface LoadedColorTheme {
   id: string;
   label: string;
@@ -137,8 +143,10 @@ export interface LoadedExtension {
   manifest: ExtensionManifest;
   dirPath: string;
   iconUrl?: string;
-  /** FSS-based icon theme content */
+  /** FSS-based icon theme content (lazy-loaded when active). */
   iconThemeFss?: string;
+  /** Absolute path to the FSS icon theme file on disk (lazy-loaded). */
+  iconThemeFssPath?: string;
   /** Directory containing the icon theme FSS file, for resolving relative url() paths */
   iconThemeBasePath?: string;
   /** VS Code icon theme JSON path (absolute) */
@@ -149,7 +157,9 @@ export interface LoadedExtension {
   colorThemes?: LoadedColorTheme[];
   /** Language contributions from this extension */
   languages?: ExtensionLanguage[];
-  /** Grammar contributions with their loaded content */
+  /** Grammar contributions (lazy JSON loading for editor). */
+  grammarRefs?: LoadedGrammarRef[];
+  /** Previously loaded grammars (kept for compatibility). */
   grammars?: LoadedGrammar[];
   /** Command contributions from this extension */
   commands?: ExtensionCommand[];
@@ -223,6 +233,7 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
       );
 
       let iconThemeFss: string | undefined;
+      let iconThemeFssPath: string | undefined;
       let iconThemeBasePath: string | undefined;
       let vscodeIconThemePath: string | undefined;
       let vscodeIconThemeId: string | undefined;
@@ -235,7 +246,8 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
           vscodeIconThemePath = themePath;
           vscodeIconThemeId = manifest.contributes.iconTheme.id;
         } else {
-          iconThemeFss = await readTextFile(themePath);
+          // Lazy: don't read FSS contents for all extensions.
+          iconThemeFssPath = themePath;
           iconThemeBasePath = dirname(themePath);
         }
       }
@@ -251,15 +263,13 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
       const languages = manifest.contributes?.languages;
 
       // Load grammar contributions
-      let grammars: LoadedGrammar[] | undefined;
+      let grammarRefs: LoadedGrammarRef[] | undefined;
       if (manifest.contributes?.grammars?.length) {
-        grammars = [];
+        grammarRefs = [];
         for (const grammarContrib of manifest.contributes.grammars) {
           try {
             const grammarPath = join(extDir, grammarContrib.path);
-            const grammarText = await readTextFile(grammarPath);
-            const grammarContent = JSON.parse(grammarText);
-            grammars.push({ contribution: grammarContrib, content: grammarContent });
+            grammarRefs.push({ contribution: grammarContrib, path: grammarPath });
           } catch {
             // Skip grammars that fail to load
           }
@@ -311,12 +321,13 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         dirPath: extDir,
         iconUrl,
         iconThemeFss,
+        iconThemeFssPath,
         iconThemeBasePath,
         vscodeIconThemePath,
         vscodeIconThemeId,
         colorThemes,
         languages,
-        grammars,
+        grammarRefs,
         commands,
         keybindings,
         viewers,
@@ -626,7 +637,7 @@ export async function writeSettings(settings: FaradaySettings): Promise<void> {
 }
 
 export function extensionIconThemeId(ext: LoadedExtension): string | null {
-  if (ext.iconThemeFss || ext.vscodeIconThemePath) {
+  if (ext.iconThemeFss || ext.iconThemeFssPath || ext.vscodeIconThemePath) {
     return `${ext.ref.publisher}.${ext.ref.name}`;
   }
   return null;

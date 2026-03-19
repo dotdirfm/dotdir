@@ -518,288 +518,54 @@ fn vfs_with_cors(
 
 fn vfs_virtual_response(path: &str) -> Option<tauri::http::Response<Vec<u8>>> {
     // Virtual mount for extension iframes:
-    // `vfs://vfs/__ext/<hash>/viewer.html`
-    // `vfs://vfs/__ext/<hash>/editor.html`
-    // `vfs://vfs/__ext/<hash>/bootstrap.js`
-    // `vfs://vfs/__ext/<hash>/comlink.mjs`
+    // `vfs://vfs/_ext/<abs extension dir>/` -> generated index.html (+ inline postMessage bootstrap)
+    // `vfs://vfs/_ext/<abs extension dir>/<relative file>` -> served from the real dir
     let p = path.trim_start_matches('/');
-    if !p.starts_with("__ext/") {
-        return None;
-    }
-    let mut parts = p.split('/');
-    let _prefix = parts.next()?;
-    let _hash = parts.next()?; // currently unused; reserved for future mount table
-    let file = parts.next()?;
-    if parts.next().is_some() {
+    if !p.starts_with("_ext/") {
         return None;
     }
 
-    match file {
-        "viewer.html" | "editor.html" => {
-            let html = format!(
-                r#"<!doctype html>
+    let rest = &p["_ext/".len()..];
+    if rest.is_empty() {
+        return None;
+    }
+
+    let wants_index = p.ends_with('/')
+        || rest.ends_with("/index.html")
+        || rest == "index.html";
+
+    let os_path = vfs_request_path_to_os(rest)?;
+    let meta_is_dir = fs::metadata(&os_path).map(|m| m.is_dir()).unwrap_or(false);
+
+    if wants_index || meta_is_dir {
+        let bootstrap_js = include_str!("vfs_virtual/inline_bootstrap_postmsg.js"); // postMessage RPC bootstrap
+
+        let html = r#"<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
-      html, body {{ margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }}
-      #root {{ width: 100%; height: 100%; }}
+      html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+      #root { width: 100%; height: 100%; }
     </style>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="./bootstrap.js"></script>
+    <script type="module">__FARADAY_BOOTSTRAP_INLINE__</script>
   </body>
-</html>"#
-            );
-            Some(
-                tauri::http::Response::builder()
-                    .status(HttpStatusCode::OK)
-                    .header(http_header::CONTENT_TYPE, "text/html; charset=utf-8")
-                    .body(html.into_bytes())
-                    .unwrap(),
-            )
-        }
-        "bootstrap.js" => {
-            let js = r#"
-import * as Comlink from './comlink.mjs';
-
-function postToHost(msg) {
-  try { window.parent?.postMessage(msg, '*'); } catch {}
-}
-
-function loadExtensionApi(scriptUrl) {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Extension ready timed out (10s)')), 10000);
-    window.__faradayHostReady = (api) => {
-      clearTimeout(timeout);
-      delete window.__faradayHostReady;
-      resolve(api);
-    };
-    const script = document.createElement('script');
-    script.src = scriptUrl;
-    script.onerror = () => {
-      clearTimeout(timeout);
-      delete window.__faradayHostReady;
-      reject(new Error('Failed to load extension script'));
-    };
-    document.head.appendChild(script);
-  });
-}
-
-let hostApi = null;
-let extApi = null;
-let currentProps = null;
-const root = document.getElementById('root');
-let iframeKind = null;
-let keyDownListener = null;
-
-async function mountWithProps(props) {
-  if (!extApi || !hostApi) return;
-  currentProps = props;
-  await extApi.mount(root, hostApi, props);
-}
-
-window.addEventListener('message', async (e) => {
-  const data = e?.data;
-  if (!data || typeof data !== 'object') return;
-
-  try {
-    if (data.type === 'faraday:themeVars') {
-      if (data.themeVars && typeof data.themeVars === 'object') {
-        for (const [k, v] of Object.entries(data.themeVars)) {
-          if (typeof k === 'string' && k.startsWith('--') && typeof v === 'string') {
-            document.documentElement.style.setProperty(k, v);
-          }
-        }
-      }
-      return;
+</html>"#;
+        let html = html.replace("__FARADAY_BOOTSTRAP_INLINE__", bootstrap_js);
+        return Some(
+            tauri::http::Response::builder()
+                .status(HttpStatusCode::OK)
+                .header(http_header::CONTENT_TYPE, "text/html; charset=utf-8")
+                .body(html.as_bytes().to_vec())
+                .unwrap(),
+        );
     }
 
-    if (data.type === 'faraday:init') {
-      const port = e.ports && e.ports[0];
-      if (!port) throw new Error('Missing MessagePort');
-      port.start?.();
-      hostApi = Comlink.wrap(port);
-      iframeKind = data.kind ?? null;
-
-      // Apply host theme vars into this iframe document.
-      if (data.themeVars && typeof data.themeVars === 'object') {
-        for (const [k, v] of Object.entries(data.themeVars)) {
-          if (typeof k === 'string' && k.startsWith('--') && typeof v === 'string') {
-            document.documentElement.style.setProperty(k, v);
-          }
-        }
-      }
-
-      // Global API for extensions: `frdy.*`
-      // Use a Proxy so we don't lose methods (Comlink proxies don't spread).
-      // Also wrap callback-taking methods so extensions don't need Comlink.proxy().
-      globalThis.frdy = new Proxy(hostApi, {
-        get(target, prop) {
-          if (prop === 'onThemeChange') {
-            const fn = target.onThemeChange;
-            if (typeof fn !== 'function') return undefined;
-            return (cb) => {
-              const unsubP = fn.call(target, Comlink.proxy(cb));
-              return () => {
-                try {
-                  if (typeof unsubP === 'function') {
-                    unsubP();
-                  } else {
-                    Promise.resolve(unsubP)
-                      .then((unsub) => { if (typeof unsub === 'function') unsub(); })
-                      .catch(() => {});
-                  }
-                } catch {
-                  // ignore
-                }
-              };
-            };
-          }
-          if (prop === 'onFileChange') {
-            const fn = target.onFileChange;
-            if (typeof fn !== 'function') return undefined;
-            return (cb) => {
-              const unsubP = fn.call(target, Comlink.proxy(cb));
-              return () => {
-                try {
-                  if (typeof unsubP === 'function') {
-                    unsubP();
-                  } else {
-                    Promise.resolve(unsubP)
-                      .then((unsub) => { if (typeof unsub === 'function') unsub(); })
-                      .catch(() => {});
-                  }
-                } catch {
-                  // ignore
-                }
-              };
-            };
-          }
-          if (prop === 'commands') {
-            return {
-              registerCommand: (id, cb, options) => {
-                const fn = target.registerCommand;
-                if (typeof fn !== 'function') {
-                  throw new Error('frdy.commands.registerCommand is not supported');
-                }
-                const disposeP = fn.call(target, id, Comlink.proxy(cb), options);
-                return {
-                  dispose: () => {
-                  try {
-                    if (typeof disposeP === 'function') {
-                      disposeP();
-                    } else {
-                      Promise.resolve(disposeP)
-                        .then((dispose) => { if (typeof dispose === 'function') dispose(); })
-                        .catch(() => {});
-                    }
-                  } catch {
-                    // ignore
-                  }
-                  },
-                };
-              },
-              registerKeybinding: (binding) => {
-                const fn = target.registerKeybinding;
-                if (typeof fn !== 'function') {
-                  throw new Error('frdy.commands.registerKeybinding is not supported');
-                }
-                const disposeP = fn.call(target, binding);
-                return {
-                  dispose: () => {
-                  try {
-                    if (typeof disposeP === 'function') {
-                      disposeP();
-                    } else {
-                      Promise.resolve(disposeP)
-                        .then((dispose) => { if (typeof dispose === 'function') dispose(); })
-                        .catch(() => {});
-                    }
-                  } catch {
-                    // ignore
-                  }
-                  },
-                };
-              },
-            };
-          }
-          // default passthrough
-          return target[prop];
-        },
-      });
-      extApi = await loadExtensionApi(data.entryUrl);
-
-      // Forward keydowns to the host frame for command keybindings.
-      // Note: We forward all keys; host will decide which keybindings match.
-      if (!keyDownListener) {
-        keyDownListener = (ev) => {
-          try {
-            postToHost({
-              type: 'faraday:iframeKeyDown',
-              kind: iframeKind,
-              key: ev.key,
-              ctrlKey: !!ev.ctrlKey,
-              metaKey: !!ev.metaKey,
-              altKey: !!ev.altKey,
-              shiftKey: !!ev.shiftKey,
-              repeat: !!ev.repeat,
-            });
-          } catch {}
-        };
-        window.addEventListener('keydown', keyDownListener, true);
-      }
-
-      await mountWithProps(data.props);
-      postToHost({ type: 'faraday:ready' });
-    } else if (data.type === 'faraday:update') {
-      if (!extApi) return;
-      await mountWithProps(data.props);
-    } else if (data.type === 'faraday:dispose') {
-      if (extApi?.unmount) await extApi.unmount();
-      extApi = null;
-      hostApi = null;
-      iframeKind = null;
-      if (keyDownListener) {
-        window.removeEventListener('keydown', keyDownListener, true);
-        keyDownListener = null;
-      }
-      try { delete globalThis.frdy; } catch {}
-    }
-  } catch (err) {
-    postToHost({ type: 'faraday:error', message: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-// Tell the host we are ready to receive `faraday:init` (with MessagePort).
-postToHost({ type: 'faraday:bootstrap-ready' });
-
-window.addEventListener('beforeunload', () => {
-  try { extApi?.unmount?.(); } catch {}
-});
-"#;
-            Some(
-                tauri::http::Response::builder()
-                    .status(HttpStatusCode::OK)
-                    .header(http_header::CONTENT_TYPE, "application/javascript; charset=utf-8")
-                    .body(js.as_bytes().to_vec())
-                    .unwrap(),
-            )
-        }
-        "comlink.mjs" => {
-            let src = include_str!("vfs_virtual/comlink.mjs");
-            Some(
-                tauri::http::Response::builder()
-                    .status(HttpStatusCode::OK)
-                    .header(http_header::CONTENT_TYPE, "application/javascript; charset=utf-8")
-                    .body(src.as_bytes().to_vec())
-                    .unwrap(),
-            )
-        }
-        _ => None,
-    }
+    Some(vfs_response_for_path(&os_path))
 }
 
 /// Remove a single file or empty directory. For recursive delete the frontend

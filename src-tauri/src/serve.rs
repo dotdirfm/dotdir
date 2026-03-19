@@ -27,9 +27,6 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-// Used by the VFS virtual mount (`/vfs/__ext/...`) served in headless mode.
-#[allow(dead_code)]
-const _VFS_VIRTUAL_COMLINK: &str = include_str!("vfs_virtual/comlink.mjs");
 use tokio::sync::mpsc;
 
 #[derive(RustEmbed)]
@@ -441,20 +438,30 @@ fn vfs_path_to_os(path: &str) -> Option<PathBuf> {
 }
 
 async fn vfs_handler(Path(path): Path<String>) -> Response {
-    // Virtual mount for extension iframes:
-    // `/vfs/__ext/<hash>/viewer.html` etc.
+    // Virtual mount for extension iframes (stateless):
+    // - `/vfs/_ext/<abs extension dir>/` -> generated index.html (+ inline postMessage bootstrap)
+    // - `/vfs/_ext/<abs extension dir>/<relative file>` -> served from the real dir
     let p = path.trim_start_matches('/');
-    if p.starts_with("__ext/") {
-        let mut parts = p.split('/');
-        let _prefix = parts.next();
-        let _hash = parts.next();
-        let file = parts.next();
-        let extra = parts.next();
-        if extra.is_none() {
-            if let Some(file) = file {
-                match file {
-                    "viewer.html" | "editor.html" => {
-                        let html = r#"<!doctype html>
+    if p.starts_with("_ext/") {
+        // Stateless extension mount:
+        //  - `/vfs/_ext/<abs extension dir>/` -> generated index.html
+        //  - `/vfs/_ext/<abs extension dir>/<relative file>` -> served from real dir
+        let rest = &p["_ext/".len()..];
+        if rest.is_empty() {
+            return Response::builder().status(StatusCode::NOT_FOUND).body(Body::empty()).unwrap();
+        }
+
+        let wants_index = p.ends_with('/')
+            || rest.ends_with("/index.html")
+            || rest == "index.html";
+
+        let os_path = match vfs_path_to_os(rest) {
+            Some(p) => p,
+            None => return Response::builder().status(StatusCode::BAD_REQUEST).body(Body::empty()).unwrap(),
+        };
+
+        let bootstrap_js = include_str!("vfs_virtual/inline_bootstrap_postmsg.js"); // postMessage RPC bootstrap
+        let html = r#"<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -466,244 +473,62 @@ async fn vfs_handler(Path(path): Path<String>) -> Response {
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="./bootstrap.js"></script>
+    <script type="module">__FARADAY_BOOTSTRAP_INLINE__</script>
   </body>
 </html>"#;
-                        return Response::builder()
-                            .status(StatusCode::OK)
-                            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
-                            .body(Body::from(html.as_bytes().to_vec()))
-                            .unwrap();
-                    }
-                    "bootstrap.js" => {
-                        let js = r#"
-import * as Comlink from './comlink.mjs';
+        let html = html.replace("__FARADAY_BOOTSTRAP_INLINE__", bootstrap_js);
 
-function postToHost(msg) {
-  try { window.parent?.postMessage(msg, '*'); } catch {}
-}
-
-function loadExtensionApi(scriptUrl) {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Extension ready timed out (10s)')), 10000);
-    window.__faradayHostReady = (api) => {
-      clearTimeout(timeout);
-      delete window.__faradayHostReady;
-      resolve(api);
-    };
-    const script = document.createElement('script');
-    script.src = scriptUrl;
-    script.onerror = () => {
-      clearTimeout(timeout);
-      delete window.__faradayHostReady;
-      reject(new Error('Failed to load extension script'));
-    };
-    document.head.appendChild(script);
-  });
-}
-
-let hostApi = null;
-let extApi = null;
-const root = document.getElementById('root');
-let iframeKind = null;
-let keyDownListener = null;
-
-async function mountWithProps(props) {
-  if (!extApi || !hostApi) return;
-  await extApi.mount(root, hostApi, props);
-}
-
-window.addEventListener('message', async (e) => {
-  const data = e?.data;
-  if (!data || typeof data !== 'object') return;
-  try {
-    if (data.type === 'faraday:themeVars') {
-      if (data.themeVars && typeof data.themeVars === 'object') {
-        for (const [k, v] of Object.entries(data.themeVars)) {
-          if (typeof k === 'string' && k.startsWith('--') && typeof v === 'string') {
-            document.documentElement.style.setProperty(k, v);
-          }
+        if wants_index {
+            return Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+                .body(Body::from(html.as_bytes().to_vec()))
+                .unwrap();
         }
-      }
-      return;
-    }
 
-    if (data.type === 'faraday:init') {
-      const port = e.ports && e.ports[0];
-      if (!port) throw new Error('Missing MessagePort');
-      port.start?.();
-      hostApi = Comlink.wrap(port);
-      iframeKind = data.kind ?? null;
-
-      // Apply host theme vars into this iframe document.
-      if (data.themeVars && typeof data.themeVars === 'object') {
-        for (const [k, v] of Object.entries(data.themeVars)) {
-          if (typeof k === 'string' && k.startsWith('--') && typeof v === 'string') {
-            document.documentElement.style.setProperty(k, v);
-          }
+        // If the request points to a directory without an explicit trailing slash,
+        // still return index.html.
+        if tokio::fs::metadata(&os_path).await.map(|m| m.is_dir()).unwrap_or(false) {
+            return Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+                .body(Body::from(html.as_bytes().to_vec()))
+                .unwrap();
         }
-      }
 
-      // Global API for extensions: `frdy.*`
-      // Use a Proxy so we don't lose methods (Comlink proxies don't spread).
-      // Also wrap callback-taking methods so extensions don't need Comlink.proxy().
-      globalThis.frdy = new Proxy(hostApi, {
-        get(target, prop) {
-          if (prop === 'onThemeChange') {
-            const fn = target.onThemeChange;
-            if (typeof fn !== 'function') return undefined;
-            return (cb) => {
-              const unsubP = fn.call(target, Comlink.proxy(cb));
-              return () => {
-                try {
-                  if (typeof unsubP === 'function') {
-                    unsubP();
-                  } else {
-                    Promise.resolve(unsubP)
-                      .then((unsub) => { if (typeof unsub === 'function') unsub(); })
-                      .catch(() => {});
-                  }
-                } catch {
-                  // ignore
-                }
-              };
-            };
-          }
-          if (prop === 'onFileChange') {
-            const fn = target.onFileChange;
-            if (typeof fn !== 'function') return undefined;
-            return (cb) => {
-              const unsubP = fn.call(target, Comlink.proxy(cb));
-              return () => {
-                try {
-                  if (typeof unsubP === 'function') {
-                    unsubP();
-                  } else {
-                    Promise.resolve(unsubP)
-                      .then((unsub) => { if (typeof unsub === 'function') unsub(); })
-                      .catch(() => {});
-                  }
-                } catch {
-                  // ignore
-                }
-              };
-            };
-          }
-          if (prop === 'commands') {
-            return {
-              registerCommand: (id, cb, options) => {
-                const fn = target.registerCommand;
-                if (typeof fn !== 'function') {
-                  throw new Error('frdy.commands.registerCommand is not supported');
-                }
-                const disposeP = fn.call(target, id, Comlink.proxy(cb), options);
-                return {
-                  dispose: () => {
-                  try {
-                    if (typeof disposeP === 'function') {
-                      disposeP();
-                    } else {
-                      Promise.resolve(disposeP)
-                        .then((dispose) => { if (typeof dispose === 'function') dispose(); })
-                        .catch(() => {});
-                    }
-                  } catch {
-                    // ignore
-                  }
-                  },
-                };
-              },
-              registerKeybinding: (binding) => {
-                const fn = target.registerKeybinding;
-                if (typeof fn !== 'function') {
-                  throw new Error('frdy.commands.registerKeybinding is not supported');
-                }
-                const disposeP = fn.call(target, binding);
-                return {
-                  dispose: () => {
-                  try {
-                    if (typeof disposeP === 'function') {
-                      disposeP();
-                    } else {
-                      Promise.resolve(disposeP)
-                        .then((dispose) => { if (typeof dispose === 'function') dispose(); })
-                        .catch(() => {});
-                    }
-                  } catch {
-                    // ignore
-                  }
-                  },
-                };
-              },
-            };
-          }
-          return target[prop];
-        },
-      });
-      extApi = await loadExtensionApi(data.entryUrl);
-
-      // Forward keydowns to the host frame for command keybindings.
-      // Note: We forward all keys; host will decide which keybindings match.
-      if (!keyDownListener) {
-        keyDownListener = (ev) => {
-          try {
-            postToHost({
-              type: 'faraday:iframeKeyDown',
-              kind: iframeKind,
-              key: ev.key,
-              ctrlKey: !!ev.ctrlKey,
-              metaKey: !!ev.metaKey,
-              altKey: !!ev.altKey,
-              shiftKey: !!ev.shiftKey,
-              repeat: !!ev.repeat,
-            });
-          } catch {}
-        };
-        window.addEventListener('keydown', keyDownListener, true);
-      }
-
-      await mountWithProps(data.props);
-      postToHost({ type: 'faraday:ready' });
-    } else if (data.type === 'faraday:update') {
-      await mountWithProps(data.props);
-    } else if (data.type === 'faraday:dispose') {
-      if (extApi?.unmount) await extApi.unmount();
-      extApi = null;
-      hostApi = null;
-      iframeKind = null;
-      if (keyDownListener) {
-        window.removeEventListener('keydown', keyDownListener, true);
-        keyDownListener = null;
-      }
-      try { delete globalThis.frdy; } catch {}
-    }
-  } catch (err) {
-    postToHost({ type: 'faraday:error', message: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-// Tell the host we are ready to receive `faraday:init` (with MessagePort).
-postToHost({ type: 'faraday:bootstrap-ready' });
-"#;
-                        return Response::builder()
-                            .status(StatusCode::OK)
-                            .header(header::CONTENT_TYPE, "application/javascript; charset=utf-8")
-                            .body(Body::from(js.as_bytes().to_vec()))
-                            .unwrap();
-                    }
-                    "comlink.mjs" => {
-                        let src = include_str!("vfs_virtual/comlink.mjs");
-                        return Response::builder()
-                            .status(StatusCode::OK)
-                            .header(header::CONTENT_TYPE, "application/javascript; charset=utf-8")
-                            .body(Body::from(src.as_bytes().to_vec()))
-                            .unwrap();
-                    }
-                    _ => {}
-                }
+        // Serve the file directly from disk.
+        let meta = match tokio::fs::metadata(&os_path).await {
+            Ok(m) => m,
+            Err(_) => {
+                return Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::empty())
+                    .unwrap();
             }
+        };
+        if meta.is_dir() {
+            return Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::empty())
+                .unwrap();
         }
+        let bytes = match tokio::fs::read(&os_path).await {
+            Ok(b) => b,
+            Err(_) => {
+                return Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::empty())
+                    .unwrap();
+            }
+        };
+        let mime = mime_guess::from_path(&os_path).first_or_octet_stream();
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, mime.as_ref())
+            .body(Body::from(bytes))
+            .unwrap();
     }
+  
 
     let os_path = match vfs_path_to_os(&path) {
         Some(p) => p,

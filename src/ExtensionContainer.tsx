@@ -1,11 +1,10 @@
 /**
  * ExtensionContainer
  *
- * Loads viewer/editor extensions inside an iframe (VFS origin) and bridges HostApi via Comlink.
+ * Loads viewer/editor extensions inside an iframe (VFS origin) and bridges HostApi via postMessage RPC.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import * as Comlink from 'comlink';
 import { bridge } from './bridge';
 import { commandRegistry } from './commands';
 import { basename, dirname, join, normalizePath } from './path';
@@ -66,7 +65,6 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   } = containerProps;
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const channelRef = useRef<MessageChannel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const onCloseRef = useRef(onClose);
@@ -252,7 +250,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     },
     onFileChange(callback: () => void): () => void {
       const filePath = currentFilePathRef.current;
-      if (!filePath) return Comlink.proxy(() => {});
+      if (!filePath) return () => {};
       const normalized = normalizePath(filePath);
       const dir = dirname(normalized);
       const name = basename(normalized);
@@ -280,12 +278,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         }
       })();
 
-      return Comlink.proxy(() => {
+      return () => {
         if (disposed) return;
         disposed = true;
         bridge.fsa.unwatch(watchId);
         stopFsChange();
-      });
+      };
     },
     async writeFile(path: string, content: string): Promise<void> {
       await bridge.fsa.writeFile(path, content);
@@ -298,7 +296,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     },
     onThemeChange(callback: (theme: ColorThemeData) => void): () => void {
       const unsub = onColorThemeChange(callback);
-      return Comlink.proxy(() => unsub());
+      return () => unsub();
     },
     onClose(): void {
       onCloseRef.current();
@@ -326,8 +324,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         handler,
         { category, icon, when }
       );
-      // Wrap disposer so extensions can call it safely across the Comlink boundary.
-      return Comlink.proxy(dispose);
+      return dispose;
     },
 
     registerKeybinding(
@@ -337,8 +334,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         { command: binding.command, key: binding.key, mac: binding.mac, when: binding.when },
         'extension'
       );
-      // Wrap disposer so extensions can call it safely across the Comlink boundary.
-      return Comlink.proxy(dispose);
+      return dispose;
     },
 
     async getOnigurumaWasm(): Promise<ArrayBuffer> {
@@ -380,18 +376,175 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     setError(null);
 
     const hostApi = buildHostApi();
-    const channel = new MessageChannel();
-    channelRef.current = channel;
-    Comlink.expose(hostApi, channel.port1);
+    const iframeWin = iframe.contentWindow;
+    if (!iframeWin) return;
 
     const entryRel = normalizePath(entry.replace(/^\.\//, '')) || 'index.js';
     const entryPath = join(extensionDirPath, entryRel);
     const entryUrl = vfsUrl(entryPath);
 
+    // postMessage RPC state
+    let nextCallId = 1;
+    const pendingCommandCalls = new Map<number, { resolve: () => void; reject: (err: unknown) => void }>();
+    const rpcSubscriptions = new Map<string, () => void>(); // cbId -> disposer()
+    const extensionCommandDisposers = new Map<string, () => void>(); // handlerId -> disposer()
+    const extensionKeybindingDisposers = new Map<string, () => void>(); // bindingId -> disposer()
+
     const handleMessage = (ev: MessageEvent) => {
-      if (ev.source !== iframe.contentWindow) return;
+      if (ev.source !== iframeWin) return;
       const data = ev.data as any;
       if (!data || typeof data !== 'object') return;
+
+      if (data.type === 'ext:commandResult') {
+        const callId = Number(data.callId);
+        const pending = pendingCommandCalls.get(callId);
+        if (!pending) return;
+        pendingCommandCalls.delete(callId);
+        if (data.error) pending.reject(new Error(String(data.error)));
+        else pending.resolve();
+        return;
+      }
+
+      if (data.type === 'ext:call') {
+        const id = data.id;
+        const method = String(data.method ?? '');
+        const args = Array.isArray(data.args) ? data.args : [];
+        (async () => {
+          try {
+            const fn = (hostApi as any)[method];
+            if (typeof fn !== 'function') throw new Error(`Host method not found: ${method}`);
+            // Important: some hostApi methods (e.g. readFileText) use `this.*`.
+            // Extracting the method loses `this`, so we must re-bind it.
+            const result = await fn.apply(hostApi, args);
+            iframeWin.postMessage({ type: 'host:reply', id, result }, '*');
+          } catch (err) {
+            iframeWin.postMessage({ type: 'host:reply', id, error: err instanceof Error ? err.message : String(err) }, '*');
+          }
+        })().catch(() => {});
+        return;
+      }
+
+      if (data.type === 'ext:subscribe') {
+        const cbId = String(data.cbId ?? '');
+        const method = String(data.method ?? '');
+        if (!cbId) return;
+        if (rpcSubscriptions.has(cbId)) return;
+        if (method === 'onFileChange') {
+          if (!hostApi.onFileChange) return;
+          const disposer = hostApi.onFileChange(() => {
+            try {
+              iframeWin.postMessage({ type: 'host:callback', cbId }, '*');
+            } catch {
+              // ignore
+            }
+          });
+          rpcSubscriptions.set(cbId, disposer);
+          return;
+        }
+        if (method === 'onThemeChange') {
+          if (!hostApi.onThemeChange) return;
+          const disposer = hostApi.onThemeChange((theme) => {
+            try {
+              iframeWin.postMessage({ type: 'host:callback', cbId, payload: theme }, '*');
+            } catch {
+              // ignore
+            }
+          });
+          rpcSubscriptions.set(cbId, disposer);
+          return;
+        }
+        // Unknown subscription methods are ignored.
+        return;
+      }
+
+      if (data.type === 'ext:unsubscribe') {
+        const cbId = String(data.cbId ?? '');
+        const disposer = rpcSubscriptions.get(cbId);
+        if (disposer) {
+          try {
+            disposer();
+          } catch {
+            // ignore
+          }
+          rpcSubscriptions.delete(cbId);
+        }
+        return;
+      }
+
+      if (data.type === 'ext:registerCommand') {
+        const handlerId = String(data.handlerId ?? '');
+        const commandId = String(data.commandId ?? '');
+        const options = data.options ?? {};
+        if (!handlerId || !commandId) return;
+        if (extensionCommandDisposers.has(handlerId)) return;
+
+        const existing = commandRegistry.getCommand(commandId);
+        const title = options?.title ?? existing?.title ?? commandId;
+        const category = options?.category ?? existing?.category;
+        const icon = options?.icon ?? existing?.icon;
+        const when = options?.when ?? existing?.when;
+
+        const dispose = commandRegistry.registerCommand(
+          commandId,
+          title,
+          async (...args: unknown[]) => {
+            const callId = nextCallId++;
+            await new Promise<void>((resolve, reject) => {
+              pendingCommandCalls.set(callId, { resolve, reject });
+              iframeWin.postMessage(
+                { type: 'host:runCommand', handlerId, callId, args },
+                '*',
+              );
+            });
+          },
+          { category, icon, when }
+        );
+        extensionCommandDisposers.set(handlerId, dispose);
+        return;
+      }
+
+      if (data.type === 'ext:unregisterCommand') {
+        const handlerId = String(data.handlerId ?? '');
+        const dispose = extensionCommandDisposers.get(handlerId);
+        if (dispose) {
+          try {
+            dispose();
+          } catch {
+            // ignore
+          }
+          extensionCommandDisposers.delete(handlerId);
+        }
+        return;
+      }
+
+      if (data.type === 'ext:registerKeybinding') {
+        const bindingId = String(data.bindingId ?? '');
+        const binding = data.binding;
+        if (!bindingId || !binding || typeof binding !== 'object') return;
+        if (extensionKeybindingDisposers.has(bindingId)) return;
+
+        const dispose = commandRegistry.registerKeybinding(
+          { command: binding.command, key: binding.key, mac: binding.mac, when: binding.when },
+          'extension'
+        );
+        extensionKeybindingDisposers.set(bindingId, dispose);
+        return;
+      }
+
+      if (data.type === 'ext:unregisterKeybinding') {
+        const bindingId = String(data.bindingId ?? '');
+        const dispose = extensionKeybindingDisposers.get(bindingId);
+        if (dispose) {
+          try {
+            dispose();
+          } catch {
+            // ignore
+          }
+          extensionKeybindingDisposers.delete(bindingId);
+        }
+        return;
+      }
+
       if (data.type === 'faraday:bootstrap-ready') {
         init();
       } else if (data.type === 'faraday:ready') {
@@ -467,15 +620,21 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         currentFilePathRef.current = (props as EditorProps).filePath;
       }
       iframe.contentWindow?.postMessage(
-        { type: 'faraday:init', kind, entryUrl, props, themeVars: getThemeVars() },
+        {
+          type: 'faraday:init',
+          kind,
+          entryUrl,
+          props,
+          themeVars: getThemeVars(),
+          colorTheme: hostApi.getColorTheme?.() ?? null,
+        },
         '*',
-        [channel.port2],
       );
     };
 
     // Deterministic handshake:
     // - iframe bootstrap posts `faraday:bootstrap-ready` when its listener is installed
-    // - we respond with `faraday:init` exactly once (transferring MessagePort)
+    // - we respond with `faraday:init` exactly once via `postMessage` (no MessagePort)
     const onLoad = () => {
       // If the bootstrap-ready message gets lost for any reason, reloading iframe should re-send it.
       // Keep a small fallback: if we never receive bootstrap-ready, surface an error.
@@ -498,13 +657,37 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       } catch {
         // ignore
       }
-      try {
-        channel.port1.close();
-        channel.port2.close();
-      } catch {
-        // ignore
+
+      // Cleanup extension-level subscriptions/registrations.
+      for (const [, dispose] of rpcSubscriptions) {
+        try {
+          dispose();
+        } catch {
+          // ignore
+        }
       }
-      channelRef.current = null;
+      rpcSubscriptions.clear();
+
+      for (const [, dispose] of extensionCommandDisposers) {
+        try {
+          dispose();
+        } catch {
+          // ignore
+        }
+      }
+      extensionCommandDisposers.clear();
+
+      for (const [, dispose] of extensionKeybindingDisposers) {
+        try {
+          dispose();
+        } catch {
+          // ignore
+        }
+      }
+      extensionKeybindingDisposers.clear();
+
+      pendingCommandCalls.clear();
+
       const currentFile = currentFileRef.current;
       if (currentFile) {
         bridge.fsa.close(currentFile.fd).catch(() => {});
@@ -540,7 +723,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     );
   }
 
-  const iframeSrc = extHash ? vfsUrl(`/__ext/${extHash}/${kind}.html`) : null;
+  // Serve extension iframe `index.html` from the same `_ext/<bundleDir>/` VFS directory
+  // as the extension entry bundle. This keeps relative asset URLs working.
+  const entryRelForIframe = normalizePath(entry.replace(/^\.\//, '')) || 'index.js';
+  const entryPathForIframe = join(extensionDirPath, entryRelForIframe);
+  const entryDirForIframe = dirname(entryPathForIframe);
+  const iframeSrc = extHash ? vfsUrl(`/_ext${entryDirForIframe}/`) : null;
 
   return (
     <div className={className} style={{ ...style, position: 'relative' }}>
@@ -578,6 +766,7 @@ interface ViewerContainerWrapperProps {
   fileName: string;
   fileSize: number;
   inline?: boolean;
+  open?: boolean;
   onClose: () => void;
   onExecuteCommand?: (command: string, args?: unknown) => Promise<unknown>;
 }
@@ -589,24 +778,48 @@ export function ViewerContainer({
   fileName,
   fileSize,
   inline,
+  open,
   onClose,
   onExecuteCommand,
 }: ViewerContainerWrapperProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const focusPushedRef = useRef(false);
 
   useEffect(() => {
     if (inline) return;
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
-    focusContext.push('viewer');
     const handleClose = () => onClose();
     dialog.addEventListener('close', handleClose);
     return () => {
       dialog.removeEventListener('close', handleClose);
-      focusContext.pop('viewer');
+      if (focusPushedRef.current) {
+        try { focusContext.pop('viewer'); } catch { /* ignore */ }
+        focusPushedRef.current = false;
+      }
     };
   }, [inline, onClose]);
+
+  useEffect(() => {
+    if (inline) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const isOpen = open ?? true;
+
+    if (isOpen) {
+      if (!dialog.open) dialog.showModal();
+      if (!focusPushedRef.current) {
+        focusContext.push('viewer');
+        focusPushedRef.current = true;
+      }
+    } else {
+      if (dialog.open) dialog.close();
+      if (focusPushedRef.current) {
+        try { focusContext.pop('viewer'); } catch { /* ignore */ }
+        focusPushedRef.current = false;
+      }
+    }
+  }, [inline, open]);
 
   // Keep props identity stable across app rerenders (e.g. opening command palette),
   // so the iframe doesn't get a `faraday:update` and remount/reload the extension.
@@ -666,6 +879,7 @@ interface EditorContainerWrapperProps {
   filePath: string;
   fileName: string;
   langId: string;
+  open?: boolean;
   onClose: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   languages?: EditorProps['languages'];
@@ -678,6 +892,7 @@ export function EditorContainer({
   filePath,
   fileName,
   langId,
+  open,
   onClose,
   onDirtyChange,
   languages,
@@ -685,6 +900,7 @@ export function EditorContainer({
 }: EditorContainerWrapperProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const [currentLangId, setCurrentLangId] = useState(langId);
+  const focusPushedRef = useRef(false);
 
   useEffect(() => {
     setCurrentLangId(langId);
@@ -693,15 +909,36 @@ export function EditorContainer({
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
-    focusContext.push('editor');
     const handleClose = () => onClose();
     dialog.addEventListener('close', handleClose);
     return () => {
       dialog.removeEventListener('close', handleClose);
-      focusContext.pop('editor');
+      if (focusPushedRef.current) {
+        try { focusContext.pop('editor'); } catch { /* ignore */ }
+        focusPushedRef.current = false;
+      }
     };
   }, [onClose]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const isOpen = open ?? true;
+
+    if (isOpen) {
+      if (!dialog.open) dialog.showModal();
+      if (!focusPushedRef.current) {
+        focusContext.push('editor');
+        focusPushedRef.current = true;
+      }
+    } else {
+      if (dialog.open) dialog.close();
+      if (focusPushedRef.current) {
+        try { focusContext.pop('editor'); } catch { /* ignore */ }
+        focusPushedRef.current = false;
+      }
+    }
+  }, [open]);
 
   // Keep props identity stable to avoid unnecessary `faraday:update`.
   const editorProps: EditorProps = useMemo(

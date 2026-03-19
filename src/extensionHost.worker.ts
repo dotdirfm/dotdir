@@ -44,6 +44,12 @@ interface LoadedGrammar {
   content: object;
 }
 
+interface LoadedGrammarRef {
+  contribution: ExtensionGrammar;
+  /** Absolute path to the grammar JSON file on disk. */
+  path: string;
+}
+
 interface ExtensionViewerContribution {
   id: string;
   label: string;
@@ -129,11 +135,15 @@ export interface WorkerLoadedExtension {
   manifest: ExtensionManifest;
   dirPath: string;
   iconThemeFss?: string;
+  iconThemeFssPath?: string;
   iconThemeBasePath?: string;
   vscodeIconThemePath?: string;
   vscodeIconThemeId?: string;
   colorThemes?: WorkerLoadedColorTheme[];
   languages?: ExtensionLanguage[];
+  /** Grammar contributions (lazy JSON loading for editor). */
+  grammarRefs?: LoadedGrammarRef[];
+  /** Previously loaded grammars (kept for compatibility). */
   grammars?: LoadedGrammar[];
   viewers?: ExtensionViewerContribution[];
   editors?: ExtensionEditorContribution[];
@@ -175,29 +185,25 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
     };
 
     let iconThemeFss: string | undefined;
+    let iconThemeFssPath: string | undefined;
     let iconThemeBasePath: string | undefined;
     if (manifest.contributes?.iconTheme?.path) {
       const fssPath = join(extDir, manifest.contributes.iconTheme.path);
-      const fssText = await readTextFile(fssPath);
-      if (fssText !== null) {
-        iconThemeFss = fssText;
-        iconThemeBasePath = dirname(fssPath);
-      }
+      // Lazy: don't read FSS contents for all extensions.
+      iconThemeFssPath = fssPath;
+      iconThemeBasePath = dirname(fssPath);
     }
 
     const languages = manifest.contributes?.languages;
 
-    let grammars: LoadedGrammar[] | undefined;
+    let grammarRefs: LoadedGrammarRef[] | undefined;
     if (manifest.contributes?.grammars?.length) {
-      grammars = [];
+      grammarRefs = [];
       for (const grammarContrib of manifest.contributes.grammars) {
         try {
           const grammarPath = join(extDir, grammarContrib.path);
-          const grammarText = await readTextFile(grammarPath);
-          if (grammarText !== null) {
-            const grammarContent = JSON.parse(grammarText);
-            grammars.push({ contribution: grammarContrib, content: grammarContent });
-          }
+          // Lazy: don't parse JSON yet; Monaco will load per-language on demand.
+          grammarRefs.push({ contribution: grammarContrib, path: grammarPath });
         } catch {
           // Skip grammars that fail to load
         }
@@ -219,7 +225,21 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
     const commands = manifest.contributes?.commands;
     const keybindings = manifest.contributes?.keybindings;
 
-    return { ref, manifest, dirPath: extDir, iconThemeFss, iconThemeBasePath, colorThemes, languages, grammars, viewers, editors, commands, keybindings };
+    return {
+      ref,
+      manifest,
+      dirPath: extDir,
+      iconThemeFss,
+      iconThemeFssPath,
+      iconThemeBasePath,
+      colorThemes,
+      languages,
+      grammarRefs,
+      viewers,
+      editors,
+      commands,
+      keybindings,
+    };
   } catch {
     return null;
   }

@@ -37,9 +37,10 @@ export function setExtensionLayers(extensions: LoadedExtension[], activeIconThem
     (ext): ext is LoadedExtension & { iconThemeFss: string; iconThemeBasePath: string } =>
       ext.iconThemeFss != null && ext.iconThemeBasePath != null,
   );
+  // If no active icon theme is selected, do not include any extension-specific icon layers.
   const filtered = activeIconTheme
     ? withFss.filter((ext) => `${ext.ref.publisher}.${ext.ref.name}` === activeIconTheme)
-    : withFss;
+    : [];
   console.log('[FSS] setExtensionLayers', {
     total: extensions.length,
     withFss: withFss.map((e) => `${e.ref.publisher}.${e.ref.name}`),
