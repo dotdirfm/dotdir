@@ -107,6 +107,7 @@ body {
 
 .panel:not(.active) .entry.selected {
   background: var(--entry-selected-inactive);
+  color: var(--entry-selected-inactive-fg);
 }
 
 .panel-progress {

@@ -23,6 +23,13 @@ import {
   getVSCodeIconUrl,
 } from './vscodeMarketplace';
 
+/** Extract a message from Tauri invoke errors (plain {errno,message} objects) or Error instances. */
+function errMsg(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object' && 'message' in err) return String((err as { message: unknown }).message);
+  return String(err);
+}
+
 interface Props {
   onClose: () => void;
   onExtensionsChanged: () => void;
@@ -108,7 +115,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
       await refreshInstalled();
       onExtensionsChanged();
     } catch (err) {
-      setError(`Install failed: ${err instanceof Error ? err.message : String(err)}`);
+      setError(`Install failed: ${errMsg(err)}`);
     }
     setInstalling(null);
   };
@@ -125,7 +132,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
       await refreshInstalled();
       onExtensionsChanged();
     } catch (err) {
-      setError(`Install failed: ${err instanceof Error ? err.message : String(err)}`);
+      setError(`Install failed: ${errMsg(err)}`);
     }
     setInstalling(null);
   };
@@ -152,7 +159,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
       await refreshInstalled();
       onExtensionsChanged();
     } catch (err) {
-      setError(`Uninstall failed: ${err instanceof Error ? err.message : String(err)}`);
+      setError(`Uninstall failed: ${errMsg(err)}`);
     }
     setInstalling(null);
   };

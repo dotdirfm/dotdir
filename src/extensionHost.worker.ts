@@ -288,7 +288,8 @@ self.onmessage = (e: MessageEvent) => {
         self.postMessage({ type: 'loaded', extensions });
       })
       .catch((err: unknown) => {
-        self.postMessage({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+        const msg = err instanceof Error ? err.message : (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message) : String(err);
+        self.postMessage({ type: 'error', message: msg });
       });
   } else if (msg.type === 'readFileResult') {
     const pending = pendingReads.get(msg.id);

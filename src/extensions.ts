@@ -541,7 +541,8 @@ export async function installVSCodeExtension(publisherName: string, extName: str
     if (err instanceof Error && err.name === 'AbortError') {
       throw new Error('Download timed out - VS Code marketplace may be blocked by CORS');
     }
-    throw new Error(`Download failed: ${err instanceof Error ? err.message : String(err)}`);
+    const msg = err instanceof Error ? err.message : (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message) : String(err);
+    throw new Error(`Download failed: ${msg}`);
   }
   clearTimeout(timeoutId);
   

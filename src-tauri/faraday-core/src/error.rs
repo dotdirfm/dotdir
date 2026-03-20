@@ -21,7 +21,7 @@ pub enum FsError {
     BadFd,
     #[error("EINVAL")]
     InvalidInput,
-    #[error("EIO")]
+    #[error("{0}")]
     Io(#[from] std::io::Error),
 }
 

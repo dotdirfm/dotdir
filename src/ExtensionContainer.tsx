@@ -435,7 +435,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
             const result = await fn.apply(hostApi, args);
             iframeWin.postMessage({ type: 'host:reply', id, result }, '*');
           } catch (err) {
-            iframeWin.postMessage({ type: 'host:reply', id, error: err instanceof Error ? err.message : String(err) }, '*');
+            const msg = err instanceof Error ? err.message : (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message) : String(err);
+            iframeWin.postMessage({ type: 'host:reply', id, error: msg }, '*');
           }
         })().catch(() => {});
         return;
@@ -653,7 +654,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           }
         } catch (err) {
           if (!cancelled) {
-            setError(`Failed to read ESM entry: ${err instanceof Error ? err.message : String(err)}`);
+            const msg = err instanceof Error ? err.message : (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message) : String(err);
+            setError(`Failed to read ESM entry: ${msg}`);
             setLoading(false);
           }
           return;
