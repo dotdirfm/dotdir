@@ -178,6 +178,7 @@ fn socket_path() -> String {
         .into_owned()
 }
 
+#[cfg(target_os = "macos")]
 fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
