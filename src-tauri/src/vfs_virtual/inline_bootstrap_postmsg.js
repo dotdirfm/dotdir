@@ -19,7 +19,13 @@ function applyThemeVars(themeVars) {
   }
 }
 
-function loadExtensionApi(scriptUrl) {
+function detectModuleFormat(url) {
+  if (/\.iife\.js(?:\?|$)/i.test(url)) return 'iife';
+  if (/\.mjs(?:\?|$)/i.test(url)) return 'esm';
+  return 'cjs';
+}
+
+function loadExtensionApiIife(scriptUrl) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('Extension ready timed out (10s)')), 10000);
     window.__faradayHostReady = (api) => {
@@ -36,6 +42,62 @@ function loadExtensionApi(scriptUrl) {
     };
     document.head.appendChild(script);
   });
+}
+
+function loadExtensionApiCjs(scriptUrl) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Extension ready timed out (10s)')), 10000);
+    const mod = { exports: {} };
+    window.module = mod;
+    window.exports = mod.exports;
+    const script = document.createElement('script');
+    script.src = scriptUrl;
+    script.onload = () => {
+      clearTimeout(timeout);
+      delete window.module;
+      delete window.exports;
+      const api = mod.exports && mod.exports.__esModule
+        ? (mod.exports.default || mod.exports)
+        : mod.exports;
+      resolve(api);
+    };
+    script.onerror = () => {
+      clearTimeout(timeout);
+      delete window.module;
+      delete window.exports;
+      reject(new Error('Failed to load extension script'));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+function loadExtensionApiEsm(scriptTextOrUrl, scriptText) {
+  // The sandbox (allow-scripts only, no allow-same-origin) gives the iframe an
+  // opaque origin, so import() of cross-origin URLs fails. The host sends the
+  // script content via postMessage; we create a local blob URL to import().
+  var text = scriptText ?? scriptTextOrUrl;
+  if (typeof text !== 'string') {
+    return Promise.reject(new Error('ESM extensions require script content (entryScript)'));
+  }
+  var blob = new Blob([text], { type: 'application/javascript' });
+  var blobUrl = URL.createObjectURL(blob);
+  return import(/* @vite-ignore */ blobUrl).then(function(mod) {
+    URL.revokeObjectURL(blobUrl);
+    return mod.default || mod;
+  }, function(err) {
+    URL.revokeObjectURL(blobUrl);
+    throw err;
+  });
+}
+
+function loadExtensionApi(scriptUrl, scriptText) {
+  var format = detectModuleFormat(scriptUrl);
+  switch (format) {
+    case 'esm': return loadExtensionApiEsm(scriptUrl, scriptText);
+    case 'iife': return loadExtensionApiIife(scriptUrl);
+    case 'cjs':
+    default: return loadExtensionApiCjs(scriptUrl);
+  }
 }
 
 let hostApi = null;
@@ -93,7 +155,7 @@ function cleanupIFrameState() {
 
 async function mountWithProps(props) {
   if (!extApi || !hostApi) return;
-  await extApi.mount(root, hostApi, props);
+  await extApi.mount(root, props);
 }
 
 function createFrdyApi() {
@@ -224,7 +286,7 @@ window.addEventListener('message', async (e) => {
         hostApi = createFrdyApi();
         globalThis.frdy = hostApi;
 
-        extApi = await loadExtensionApi(data.entryUrl);
+        extApi = await loadExtensionApi(data.entryUrl, data.entryScript);
 
         if (data.props && typeof data.props === 'object') {
           lastFilePath = data.props.filePath ?? null;

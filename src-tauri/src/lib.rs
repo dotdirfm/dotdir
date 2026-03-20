@@ -483,10 +483,13 @@ fn vfs_response_for_path(os_path: &Path) -> tauri::http::Response<Vec<u8>> {
         }
     };
 
-    let mime = mime_guess::from_path(os_path).first_or_octet_stream();
+    let mime_str: String = match os_path.extension().and_then(|e| e.to_str()) {
+        Some("cjs" | "mjs") => "application/javascript".to_owned(),
+        _ => mime_guess::from_path(os_path).first_or_octet_stream().to_string(),
+    };
     tauri::http::Response::builder()
         .status(HttpStatusCode::OK)
-        .header(http_header::CONTENT_TYPE, mime.as_ref())
+        .header(http_header::CONTENT_TYPE, mime_str.as_str())
         .body(bytes)
         .unwrap()
 }

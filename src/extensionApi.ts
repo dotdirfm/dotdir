@@ -103,13 +103,13 @@ export interface HostApi {
 
 export interface ViewerExtensionApi {
   /** Render viewer UI into the provided root. */
-  mount(root: HTMLElement, hostApi: HostApi, props: ViewerProps): Promise<void>;
+  mount(root: HTMLElement, props: ViewerProps): Promise<void>;
   unmount(): Promise<void>;
 }
 
 export interface EditorExtensionApi {
   /** Render editor UI into the provided root. */
-  mount(root: HTMLElement, hostApi: HostApi, props: EditorProps): Promise<void>;
+  mount(root: HTMLElement, props: EditorProps): Promise<void>;
   unmount(): Promise<void>;
   setDirty?(dirty: boolean): void;
   /** Change the editor language (e.g. for syntax highlighting). */

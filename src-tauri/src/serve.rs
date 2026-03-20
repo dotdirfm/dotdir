@@ -521,10 +521,13 @@ async fn vfs_handler(Path(path): Path<String>) -> Response {
                     .unwrap();
             }
         };
-        let mime = mime_guess::from_path(&os_path).first_or_octet_stream();
+        let mime_str: String = match os_path.extension().and_then(|e| e.to_str()) {
+            Some("cjs" | "mjs") => "application/javascript".to_owned(),
+            _ => mime_guess::from_path(&os_path).first_or_octet_stream().to_string(),
+        };
         return Response::builder()
             .status(StatusCode::OK)
-            .header(header::CONTENT_TYPE, mime.as_ref())
+            .header(header::CONTENT_TYPE, mime_str.as_str())
             .body(Body::from(bytes))
             .unwrap();
     }
@@ -567,10 +570,13 @@ async fn vfs_handler(Path(path): Path<String>) -> Response {
         }
     };
 
-    let mime = mime_guess::from_path(&os_path).first_or_octet_stream();
+    let mime_str: String = match os_path.extension().and_then(|e| e.to_str()) {
+        Some("cjs" | "mjs") => "application/javascript".to_owned(),
+        _ => mime_guess::from_path(&os_path).first_or_octet_stream().to_string(),
+    };
     Response::builder()
         .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, mime.as_ref())
+        .header(header::CONTENT_TYPE, mime_str.as_str())
         .body(Body::from(bytes))
         .unwrap()
 }

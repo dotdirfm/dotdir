@@ -398,6 +398,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     const entryRel = normalizePath(entry.replace(/^\.\//, '')) || 'index.js';
     const entryPath = join(extensionDirPath, entryRel);
     const entryUrl = vfsUrl(entryPath);
+    const isEsm = /\.mjs(?:\?|$)/i.test(entryRel);
 
     // postMessage RPC state
     let nextCallId = 1;
@@ -626,7 +627,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     const stopTheme = onColorThemeChange(() => pushThemeVars());
 
     let initSent = false;
-    const init = () => {
+    const init = async () => {
       if (initSent) return;
       initSent = true;
       // Track current file path for this container (viewer/editor).
@@ -635,11 +636,36 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       } else {
         currentFilePathRef.current = (props as EditorProps).filePath;
       }
+
+      // ESM: the sandboxed iframe (no allow-same-origin) can't import() cross-origin
+      // URLs, so we read the script content and send it via postMessage. The bootstrap
+      // creates a local blob URL and import()s it.
+      let entryScript: string | undefined;
+      if (isEsm) {
+        try {
+          const fd = await bridge.fsa.open(entryPath);
+          try {
+            const stat = await bridge.fsa.stat(entryPath);
+            const buf = await bridge.fsa.read(fd, 0, Math.max(0, Math.floor(stat.size)));
+            entryScript = new TextDecoder().decode(buf);
+          } finally {
+            await bridge.fsa.close(fd);
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setError(`Failed to read ESM entry: ${err instanceof Error ? err.message : String(err)}`);
+            setLoading(false);
+          }
+          return;
+        }
+      }
+
       iframe.contentWindow?.postMessage(
         {
           type: 'faraday:init',
           kind,
           entryUrl,
+          entryScript,
           props,
           themeVars: getThemeVars(),
           colorTheme: hostApi.getColorTheme?.() ?? null,
@@ -762,7 +788,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         <iframe
           ref={iframeRef}
           src={iframeSrc}
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts"
           style={{
             width: '100%',
             height: '100%',
