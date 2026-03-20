@@ -981,7 +981,14 @@ body.terminal-resizing {
   min-height: 0;
 }
 
-.file-viewer::backdrop {
+.file-viewer-overlay,
+.file-editor-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: rgba(0, 0, 0, 0.5);
 }
 
@@ -1065,9 +1072,6 @@ body.terminal-resizing {
   overflow: hidden;
 }
 
-.file-editor::backdrop {
-  background: rgba(0, 0, 0, 0.5);
-}
 
 .file-editor-header {
   position: relative;

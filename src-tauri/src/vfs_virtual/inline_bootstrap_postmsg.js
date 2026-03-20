@@ -45,6 +45,15 @@ let keyDownListener = null;
 let cachedColorTheme = null;
 let lastFilePath = null;
 let lastLangId = null;
+let lifecycleChain = Promise.resolve();
+
+function serializeErr(err) {
+  if (err instanceof Error) return err.stack || err.message || String(err);
+  if (err && typeof err === 'object') {
+    try { return JSON.stringify(err); } catch { return String(err); }
+  }
+  return String(err);
+}
 
 const root = document.getElementById('root');
 
@@ -133,9 +142,6 @@ function createFrdyApi() {
     // Commands (host side)
     executeCommand: (command, args) => rpcCall('executeCommand', [command, args]),
 
-    // Oniguruma (used by TextMate scanner fallback)
-    getOnigurumaWasm: () => rpcCall('getOnigurumaWasm', []),
-
     // VS Code-like commands API (functions remain inside iframe)
     commands: {
       registerCommand: (commandId, handler, options) => {
@@ -209,67 +215,83 @@ window.addEventListener('message', async (e) => {
     }
 
     if (data.type === 'faraday:init') {
-      iframeKind = data.kind ?? null;
-      applyThemeVars(data.themeVars);
+      lifecycleChain = lifecycleChain.then(async () => {
+        iframeKind = data.kind ?? null;
+        applyThemeVars(data.themeVars);
 
-      // Global API for extensions: `frdy.*`
-      cachedColorTheme = data.colorTheme ?? null;
-      hostApi = createFrdyApi();
-      globalThis.frdy = hostApi;
+        // Global API for extensions: `frdy.*`
+        cachedColorTheme = data.colorTheme ?? null;
+        hostApi = createFrdyApi();
+        globalThis.frdy = hostApi;
 
-      extApi = await loadExtensionApi(data.entryUrl);
+        extApi = await loadExtensionApi(data.entryUrl);
 
-      if (data.props && typeof data.props === 'object') {
-        lastFilePath = data.props.filePath ?? null;
-        lastLangId = data.props.langId ?? null;
-      }
+        if (data.props && typeof data.props === 'object') {
+          lastFilePath = data.props.filePath ?? null;
+          lastLangId = data.props.langId ?? null;
+        }
 
-      // Forward keydowns to the host frame for command keybindings.
-      if (!keyDownListener) {
-        keyDownListener = (ev) => {
-          try {
-            postToHost({
-              type: 'faraday:iframeKeyDown',
-              kind: iframeKind,
-              key: ev.key,
-              ctrlKey: !!ev.ctrlKey,
-              metaKey: !!ev.metaKey,
-              altKey: !!ev.altKey,
-              shiftKey: !!ev.shiftKey,
-              repeat: !!ev.repeat,
-            });
-          } catch {}
-        };
-        window.addEventListener('keydown', keyDownListener, true);
-      }
+        // Forward keydowns to the host frame for command keybindings.
+        if (!keyDownListener) {
+          keyDownListener = (ev) => {
+            try {
+              postToHost({
+                type: 'faraday:iframeKeyDown',
+                kind: iframeKind,
+                key: ev.key,
+                ctrlKey: !!ev.ctrlKey,
+                metaKey: !!ev.metaKey,
+                altKey: !!ev.altKey,
+                shiftKey: !!ev.shiftKey,
+                repeat: !!ev.repeat,
+              });
+            } catch {}
+          };
+          window.addEventListener('keydown', keyDownListener, true);
+        }
 
-      await mountWithProps(data.props);
-      postToHost({ type: 'faraday:ready' });
+        await mountWithProps(data.props);
+        postToHost({ type: 'faraday:ready' });
+      });
+      await lifecycleChain;
       return;
     }
 
     if (data.type === 'faraday:update') {
-      if (!extApi || !data.props || typeof data.props !== 'object') return;
+      lifecycleChain = lifecycleChain.then(async () => {
+        if (!extApi || !data.props || typeof data.props !== 'object') return;
 
-      const nextFilePath = data.props.filePath ?? null;
-      const nextLangId = data.props.langId ?? null;
+        const nextFilePath = data.props.filePath ?? null;
+        const nextLangId = data.props.langId ?? null;
 
-      if (iframeKind === 'editor') {
-        if (nextFilePath && nextFilePath !== lastFilePath) {
+        // Empty filePath means the host is hiding this container — unmount to clear content.
+        if (!nextFilePath) {
+          if (lastFilePath) {
+            try { await extApi.unmount?.(); } catch {}
+            lastFilePath = null;
+          }
+          return;
+        }
+
+        if (iframeKind === 'editor') {
+          if (nextFilePath !== lastFilePath) {
+            await mountWithProps(data.props);
+            lastFilePath = nextFilePath;
+          } else if (nextLangId && nextLangId !== lastLangId) {
+            try { extApi.setLanguage?.(nextLangId); } catch {}
+          }
+          lastLangId = nextLangId;
+          return;
+        }
+
+        // viewer
+        if (nextFilePath !== lastFilePath) {
           await mountWithProps(data.props);
           lastFilePath = nextFilePath;
-        } else if (nextLangId && nextLangId !== lastLangId) {
-          try { extApi.setLanguage?.(nextLangId); } catch {}
         }
-        lastLangId = nextLangId;
-        return;
-      }
+      });
 
-      // viewer
-      if (nextFilePath && nextFilePath !== lastFilePath) {
-        await mountWithProps(data.props);
-        lastFilePath = nextFilePath;
-      }
+      await lifecycleChain;
       return;
     }
 
@@ -279,7 +301,7 @@ window.addEventListener('message', async (e) => {
       return;
     }
   } catch (err) {
-    postToHost({ type: 'faraday:error', message: err instanceof Error ? err.message : String(err) });
+    postToHost({ type: 'faraday:error', message: serializeErr(err) });
   }
 });
 

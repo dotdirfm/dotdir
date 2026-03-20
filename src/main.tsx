@@ -56,6 +56,25 @@ window.addEventListener('unhandledrejection', (event) => {
   // After boot, just log — don't nuke the DOM
 });
 
+// Disable native tab navigation — Faraday uses its own key handling engine.
+const FOCUSABLE = 'a[href],button,input,select,textarea,dialog,iframe,[tabindex]:not([tabindex="-1"])';
+function defocusAll(root: ParentNode) {
+  for (const el of root.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+    el.tabIndex = -1;
+  }
+}
+defocusAll(document);
+new MutationObserver((mutations) => {
+  for (const m of mutations) {
+    for (const node of m.addedNodes) {
+      if (node.nodeType !== 1) continue;
+      const el = node as HTMLElement;
+      if (el.matches?.(FOCUSABLE)) el.tabIndex = -1;
+      defocusAll(el);
+    }
+  }
+}).observe(document.body, { childList: true, subtree: true });
+
 try {
   await writeBootLog('main.tsx starting');
   await initBridge();

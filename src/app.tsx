@@ -310,9 +310,9 @@ export function App() {
   const [promptActive, setPromptActive] = useState(true);
   const promptHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
-  const [viewerOpen, setViewerOpen] = useState(false);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [viewerExt, setViewerExt] = useState<{ dirPath: string; entry: string } | null>(null);
+  const [editorExt, setEditorExt] = useState<{ dirPath: string; entry: string } | null>(null);
   const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
   const cancelDeleteRef = useRef(false);
@@ -416,12 +416,10 @@ export function App() {
 
   const handleViewFile = useCallback((filePath: string, fileName: string, fileSize: number) => {
     setViewerFile({ path: filePath, name: fileName, size: fileSize, panel: activePanelRef.current });
-    setViewerOpen(true);
   }, []);
 
   const handleEditFile = useCallback((filePath: string, fileName: string, fileSize: number, langId: string) => {
     setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
-    setEditorOpen(true);
   }, []);
 
   const handleOpenCreateFileConfirm = useCallback(
@@ -432,7 +430,6 @@ export function App() {
       }
       const size = exists ? (await bridge.fsa.stat(filePath)).size : 0;
       setEditorFile({ path: filePath, name: fileName, size, langId });
-      setEditorOpen(true);
     },
     []
   );
@@ -589,6 +586,27 @@ export function App() {
     }
     return undefined;
   }, [viewerFile, getMatchingFiles]);
+
+  // Resolve extension for current viewer/editor file. Cache the identity so the
+  // overlay + iframe persist after the file is closed, enabling iframe reuse.
+  const viewerResolved = viewerFile ? viewerRegistry.resolve(viewerFile.name) : null;
+  const editorResolved = editorFile ? editorRegistry.resolve(editorFile.name) : null;
+
+  useEffect(() => {
+    if (!viewerResolved) return;
+    setViewerExt(prev => {
+      if (prev?.dirPath === viewerResolved.extensionDirPath && prev?.entry === viewerResolved.contribution.entry) return prev;
+      return { dirPath: viewerResolved.extensionDirPath, entry: viewerResolved.contribution.entry };
+    });
+  }, [viewerResolved?.extensionDirPath, viewerResolved?.contribution.entry]);
+
+  useEffect(() => {
+    if (!editorResolved) return;
+    setEditorExt(prev => {
+      if (prev?.dirPath === editorResolved.extensionDirPath && prev?.entry === editorResolved.contribution.entry) return prev;
+      return { dirPath: editorResolved.extensionDirPath, entry: editorResolved.contribution.entry };
+    });
+  }, [editorResolved?.extensionDirPath, editorResolved?.contribution.entry]);
 
   const viewerActiveName = viewerFile && isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
   const leftRequestedCursor = viewerFile?.panel === 'left' ? viewerActiveName : undefined;
@@ -1249,7 +1267,7 @@ export function App() {
     disposables.push(commandRegistry.registerCommand(
       'faraday.closeViewer',
       'Close Viewer',
-      () => setViewerOpen(false),
+      () => setViewerFile(null),
       { category: 'View', when: 'focusViewer' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -1261,7 +1279,7 @@ export function App() {
     disposables.push(commandRegistry.registerCommand(
       'faraday.closeEditor',
       'Close Editor',
-      () => setEditorOpen(false),
+      () => setEditorFile(null),
       { category: 'View', when: 'focusEditor' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -1699,65 +1717,53 @@ export function App() {
         )}
       </TerminalController>
       <ActionBar />
-      {viewerFile && (() => {
-        const resolved = viewerRegistry.resolve(viewerFile.name);
-        if (resolved) {
-          return (
-            <ViewerContainer
-              extensionDirPath={resolved.extensionDirPath}
-              entry={resolved.contribution.entry}
-              filePath={viewerFile.path}
-              fileName={viewerFile.name}
-              fileSize={viewerFile.size}
-              open={viewerOpen}
-              onClose={() => setViewerOpen(false)}
-              onExecuteCommand={handleExecuteCommand}
-            />
-          );
-        }
+      {viewerFile && !viewerResolved && (
+        <ModalDialog
+          title="No viewer"
+          message="No viewer extension found for this file type. Install viewer extensions (e.g. Image Viewer, File Viewer) from the extensions panel."
+          onClose={() => setViewerFile(null)}
+        />
+      )}
+      {viewerExt && (
+        <ViewerContainer
+          key={`viewer:${viewerExt.dirPath}:${viewerExt.entry}`}
+          extensionDirPath={viewerExt.dirPath}
+          entry={viewerExt.entry}
+          filePath={viewerFile?.path ?? ''}
+          fileName={viewerFile?.name ?? ''}
+          fileSize={viewerFile?.size ?? 0}
+          visible={viewerFile != null && viewerResolved != null}
+          onClose={() => setViewerFile(null)}
+          onExecuteCommand={handleExecuteCommand}
+        />
+      )}
+      {editorFile && !editorResolved && (
+        <ModalDialog
+          title="No editor"
+          message="No editor extension found for this file type. Install an editor extension (e.g. Monaco Editor) from the extensions panel."
+          onClose={() => setEditorFile(null)}
+        />
+      )}
+      {editorExt && (() => {
+        const exts = latestExtensionsRef.current;
+        const allLanguages = exts.flatMap((e) => e.languages ?? []);
+        const allGrammarRefs = exts.flatMap((e) => e.grammarRefs ?? []);
+        const grammars = allGrammarRefs.map((gr) => ({
+          contribution: gr.contribution,
+          path: gr.path,
+        }));
         return (
-          <ModalDialog
-            title="No viewer"
-            message="No viewer extension found for this file type. Install viewer extensions (e.g. Image Viewer, File Viewer) from the extensions panel."
-            onClose={() => {
-              setViewerOpen(false);
-              setViewerFile(null);
-            }}
-          />
-        );
-      })()}
-      {editorFile && (() => {
-        const resolved = editorRegistry.resolve(editorFile.name);
-        if (resolved) {
-          const exts = latestExtensionsRef.current;
-          const allLanguages = exts.flatMap((e) => e.languages ?? []);
-          const allGrammarRefs = exts.flatMap((e) => e.grammarRefs ?? []);
-          const grammars = allGrammarRefs.map((gr) => ({
-            contribution: gr.contribution,
-            path: gr.path,
-          }));
-          return (
-            <EditorContainer
-              extensionDirPath={resolved.extensionDirPath}
-              entry={resolved.contribution.entry}
-              filePath={editorFile.path}
-              fileName={editorFile.name}
-              langId={editorFile.langId}
-              open={editorOpen}
-              onClose={() => setEditorOpen(false)}
-              languages={allLanguages}
-              grammars={grammars}
-            />
-          );
-        }
-        return (
-          <ModalDialog
-            title="No editor"
-            message="No editor extension found for this file type. Install an editor extension (e.g. Monaco Editor) from the extensions panel."
-            onClose={() => {
-              setEditorOpen(false);
-              setEditorFile(null);
-            }}
+          <EditorContainer
+            key={`editor:${editorExt.dirPath}:${editorExt.entry}`}
+            extensionDirPath={editorExt.dirPath}
+            entry={editorExt.entry}
+            filePath={editorFile?.path ?? ''}
+            fileName={editorFile?.name ?? ''}
+            langId={editorFile?.langId ?? 'plaintext'}
+            visible={editorFile != null && editorResolved != null}
+            onClose={() => setEditorFile(null)}
+            languages={allLanguages}
+            grammars={grammars}
           />
         );
       })()}

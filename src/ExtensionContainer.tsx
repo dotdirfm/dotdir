@@ -18,14 +18,12 @@ import type {
 import { getActiveColorThemeData, onColorThemeChange } from './vscodeColorTheme';
 import { focusContext } from './focusContext';
 
-// Oniguruma WASM for TextMate grammars in editor extensions
-import onigWasmUrl from 'vscode-oniguruma/release/onig.wasm?url';
-
 // ── Container props ─────────────────────────────────────────────────────
 
 interface ExtensionContainerProps {
   extensionDirPath: string;
   entry: string;
+  active?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -62,6 +60,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     onClose,
     className,
     style,
+    active,
   } = containerProps;
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -160,6 +159,27 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   // Bound to the currently viewed/edited file and closed on unmount or when file changes.
   const currentFileRef = useRef<{ fd: number; size: number; path: string } | null>(null);
   const currentFilePathRef = useRef<string | null>(null);
+
+  // When hidden: tell the extension to clear its content, then close the file handle.
+  useEffect(() => {
+    if (active !== false) return;
+    const iframe = iframeRef.current;
+    if (iframe) {
+      const emptyProps = kind === 'viewer'
+        ? { filePath: '', fileName: '', fileSize: 0 }
+        : { filePath: '', fileName: '', langId: 'plaintext' };
+      try {
+        iframe.contentWindow?.postMessage({ type: 'faraday:update', props: emptyProps }, '*');
+      } catch {
+        // ignore
+      }
+    }
+    const current = currentFileRef.current;
+    if (current) {
+      bridge.fsa.close(current.fd).catch(() => {});
+      currentFileRef.current = null;
+    }
+  }, [active, kind]);
 
   const onExecuteCommandRef = useRef(
     containerProps.kind === 'viewer' ? containerProps.onExecuteCommand : undefined,
@@ -337,10 +357,6 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       return dispose;
     },
 
-    async getOnigurumaWasm(): Promise<ArrayBuffer> {
-      const r = await fetch(onigWasmUrl);
-      return r.arrayBuffer();
-    },
     async getExtensionResourceUrl(relativePath: string): Promise<string> {
       const safe = normalizePath(relativePath).replace(/^\/+/, '');
       if (safe.includes('..')) throw new Error('Invalid extension resource path');
@@ -696,9 +712,14 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     };
   }, [extensionDirPath, entry, kind, buildHostApi, extHash, getThemeVars]); // intentionally exclude props
 
-  // Re-mount when props change (e.g. file path)
+  // Re-mount when props change (e.g. file path). Skip when inactive.
+  // Reset prevProps when hiding so the next activation always sends an update.
   const prevPropsRef = useRef(props);
   useEffect(() => {
+    if (active === false) {
+      prevPropsRef.current = null as any;
+      return;
+    }
     const iframe = iframeRef.current;
     if (!iframe || loading || error) return;
     if (prevPropsRef.current === props) return;
@@ -713,7 +734,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     } catch {
       // ignore
     }
-  }, [props, kind, loading, error]);
+  }, [props, kind, loading, error, active]);
 
   if (error) {
     return (
@@ -741,7 +762,6 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         <iframe
           ref={iframeRef}
           src={iframeSrc}
-          tabIndex={0}
           sandbox="allow-scripts allow-same-origin"
           style={{
             width: '100%',
@@ -766,7 +786,7 @@ interface ViewerContainerWrapperProps {
   fileName: string;
   fileSize: number;
   inline?: boolean;
-  open?: boolean;
+  visible?: boolean;
   onClose: () => void;
   onExecuteCommand?: (command: string, args?: unknown) => Promise<unknown>;
 }
@@ -778,48 +798,38 @@ export function ViewerContainer({
   fileName,
   fileSize,
   inline,
-  open,
+  visible,
   onClose,
   onExecuteCommand,
 }: ViewerContainerWrapperProps) {
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const focusPushedRef = useRef(false);
+  const isVisible = visible ?? true;
 
+  // Manage focus context for non-inline overlay mode.
   useEffect(() => {
     if (inline) return;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const handleClose = () => onClose();
-    dialog.addEventListener('close', handleClose);
-    return () => {
-      dialog.removeEventListener('close', handleClose);
-      if (focusPushedRef.current) {
-        try { focusContext.pop('viewer'); } catch { /* ignore */ }
-        focusPushedRef.current = false;
-      }
-    };
-  }, [inline, onClose]);
-
-  useEffect(() => {
-    if (inline) return;
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const isOpen = open ?? true;
-
-    if (isOpen) {
-      if (!dialog.open) dialog.showModal();
+    if (isVisible) {
       if (!focusPushedRef.current) {
         focusContext.push('viewer');
         focusPushedRef.current = true;
       }
     } else {
-      if (dialog.open) dialog.close();
       if (focusPushedRef.current) {
         try { focusContext.pop('viewer'); } catch { /* ignore */ }
         focusPushedRef.current = false;
       }
     }
-  }, [inline, open]);
+  }, [inline, isVisible]);
+
+  // Cleanup focus context on unmount.
+  useEffect(() => {
+    return () => {
+      if (focusPushedRef.current) {
+        try { focusContext.pop('viewer'); } catch { /* ignore */ }
+        focusPushedRef.current = false;
+      }
+    };
+  }, []);
 
   // Keep props identity stable across app rerenders (e.g. opening command palette),
   // so the iframe doesn't get a `faraday:update` and remount/reload the extension.
@@ -835,7 +845,7 @@ export function ViewerContainer({
       <button
         type="button"
         title="Close (Esc)"
-        onClick={inline ? onClose : () => dialogRef.current?.close()}
+        onClick={onClose}
         style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, padding: '0 8px', flexShrink: 0, color: 'inherit' }}
         aria-label="Close"
       >
@@ -850,7 +860,8 @@ export function ViewerContainer({
       extensionDirPath={extensionDirPath}
       entry={entry}
       props={viewerProps}
-      onClose={inline ? onClose : () => dialogRef.current?.close()}
+      active={isVisible}
+      onClose={onClose}
       onExecuteCommand={onExecuteCommand}
       className="extension-viewer-frame"
       style={{ width: '100%', height: '100%' }}
@@ -866,10 +877,12 @@ export function ViewerContainer({
   }
 
   return (
-    <dialog ref={dialogRef} className="file-viewer" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
-      {toolbar}
-      <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
-    </dialog>
+    <div className="file-viewer-overlay" style={{ display: isVisible ? 'flex' : 'none' }}>
+      <div className="file-viewer" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
+        {toolbar}
+        <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
+      </div>
+    </div>
   );
 }
 
@@ -879,7 +892,7 @@ interface EditorContainerWrapperProps {
   filePath: string;
   fileName: string;
   langId: string;
-  open?: boolean;
+  visible?: boolean;
   onClose: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   languages?: EditorProps['languages'];
@@ -892,53 +905,44 @@ export function EditorContainer({
   filePath,
   fileName,
   langId,
-  open,
+  visible,
   onClose,
   onDirtyChange,
   languages,
   grammars,
 }: EditorContainerWrapperProps) {
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const [currentLangId, setCurrentLangId] = useState(langId);
   const focusPushedRef = useRef(false);
+  const isVisible = visible ?? true;
 
   useEffect(() => {
     setCurrentLangId(langId);
   }, [langId]);
 
+  // Manage focus context for overlay mode.
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const handleClose = () => onClose();
-    dialog.addEventListener('close', handleClose);
-    return () => {
-      dialog.removeEventListener('close', handleClose);
-      if (focusPushedRef.current) {
-        try { focusContext.pop('editor'); } catch { /* ignore */ }
-        focusPushedRef.current = false;
-      }
-    };
-  }, [onClose]);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const isOpen = open ?? true;
-
-    if (isOpen) {
-      if (!dialog.open) dialog.showModal();
+    if (isVisible) {
       if (!focusPushedRef.current) {
         focusContext.push('editor');
         focusPushedRef.current = true;
       }
     } else {
-      if (dialog.open) dialog.close();
       if (focusPushedRef.current) {
         try { focusContext.pop('editor'); } catch { /* ignore */ }
         focusPushedRef.current = false;
       }
     }
-  }, [open]);
+  }, [isVisible]);
+
+  // Cleanup focus context on unmount.
+  useEffect(() => {
+    return () => {
+      if (focusPushedRef.current) {
+        try { focusContext.pop('editor'); } catch { /* ignore */ }
+        focusPushedRef.current = false;
+      }
+    };
+  }, []);
 
   // Keep props identity stable to avoid unnecessary `faraday:update`.
   const editorProps: EditorProps = useMemo(
@@ -971,49 +975,52 @@ export function EditorContainer({
   const showLangSelect = langList.length > 0;
 
   return (
-    <dialog ref={dialogRef} className="file-editor" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
-      <div className="extension-dialog-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border, #333)', flexShrink: 0, minHeight: 38, boxSizing: 'border-box' }}>
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={fileName}>{fileName}</span>
-        {showLangSelect && (
-          <>
-            <label htmlFor="editor-lang-select" style={{ whiteSpace: 'nowrap' }}>Language:</label>
-            <select
-              id="editor-lang-select"
-              value={currentLangId}
-              onChange={handleLanguageChange}
-              style={{ minWidth: 120, padding: '2px 6px' }}
-            >
-              <option value="plaintext">Plain Text</option>
-              {langList.map((lang) => (
-                <option key={lang.id} value={lang.id}>
-                  {lang.aliases?.[0] ?? lang.id}
-                </option>
-              ))}
-            </select>
-          </>
-        )}
-        <button
-          type="button"
-          title="Close (Esc)"
-          onClick={() => dialogRef.current?.close()}
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, padding: '0 8px', flexShrink: 0, color: 'inherit' }}
-          aria-label="Close"
-        >
-          ×
-        </button>
+    <div className="file-editor-overlay" style={{ display: isVisible ? 'flex' : 'none' }}>
+      <div className="file-editor" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
+        <div className="extension-dialog-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border, #333)', flexShrink: 0, minHeight: 38, boxSizing: 'border-box' }}>
+          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={fileName}>{fileName}</span>
+          {showLangSelect && (
+            <>
+              <label htmlFor="editor-lang-select" style={{ whiteSpace: 'nowrap' }}>Language:</label>
+              <select
+                id="editor-lang-select"
+                value={currentLangId}
+                onChange={handleLanguageChange}
+                style={{ minWidth: 120, padding: '2px 6px' }}
+              >
+                <option value="plaintext">Plain Text</option>
+                {langList.map((lang) => (
+                  <option key={lang.id} value={lang.id}>
+                    {lang.aliases?.[0] ?? lang.id}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+          <button
+            type="button"
+            title="Close (Esc)"
+            onClick={onClose}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18, padding: '0 8px', flexShrink: 0, color: 'inherit' }}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <ExtensionContainer
+            kind="editor"
+            extensionDirPath={extensionDirPath}
+            entry={entry}
+            props={editorProps}
+            active={isVisible}
+            onClose={onClose}
+            onDirtyChange={onDirtyChange}
+            className="extension-editor-frame"
+            style={{ width: '100%', height: '100%' }}
+          />
+        </div>
       </div>
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <ExtensionContainer
-          kind="editor"
-          extensionDirPath={extensionDirPath}
-          entry={entry}
-          props={editorProps}
-          onClose={() => dialogRef.current?.close()}
-          onDirtyChange={onDirtyChange}
-          className="extension-editor-frame"
-          style={{ width: '100%', height: '100%' }}
-        />
-      </div>
-    </dialog>
+    </div>
   );
 }

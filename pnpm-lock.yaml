@@ -23,9 +23,6 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      comlink:
-        specifier: ^4.4.2
-        version: 4.4.2
       fss-lang:
         specifier: ^0.0.5
         version: 0.0.5
@@ -38,9 +35,6 @@ importers:
       react-dom:
         specifier: ^19.1.0
         version: 19.2.4(react@19.2.4)
-      vscode-oniguruma:
-        specifier: ^2.0.1
-        version: 2.0.1
     devDependencies:
       '@tauri-apps/cli':
         specifier: ^2
@@ -654,9 +648,6 @@ packages:
       react: ^18 || ^19 || ^19.0.0-rc
       react-dom: ^18 || ^19 || ^19.0.0-rc
 
-  comlink@4.4.2:
-    resolution: {integrity: sha512-OxGdvBmJuNKSCMO4NTl1L47VRp6xn2wG4F/2hYzB6tiCb709otOxtEYCSvK80PtjODfXXZu8ds+Nw5kVCjqd2g==}
-
   css-tree@3.2.1:
     resolution: {integrity: sha512-X7sjQzceUhu1u7Y/ylrRZFU2FS6LRiFVp6rKLPg23y3x3c3DOKAwuXGDp+PAGjh6CSnCjYeAul8pcT8bAl+lSA==}
     engines: {node: ^10 || ^12.20.0 || ^14.13.0 || >=15.0.0}
@@ -918,9 +909,6 @@ packages:
         optional: true
       yaml:
         optional: true
-
-  vscode-oniguruma@2.0.1:
-    resolution: {integrity: sha512-poJU8iHIWnC3vgphJnrLZyI3YdqRlR27xzqDmpPXYzA93R4Gk8z7T6oqDzDoHjoikA2aS82crdXFkjELCdJsjQ==}
 
 snapshots:
 
@@ -1330,8 +1318,6 @@ snapshots:
       - '@types/react'
       - '@types/react-dom'
 
-  comlink@4.4.2: {}
-
   css-tree@3.2.1:
     dependencies:
       mdn-data: 2.27.1
@@ -1545,5 +1531,3 @@ snapshots:
     optionalDependencies:
       esbuild: 0.27.3
       fsevents: 2.3.3
-
-  vscode-oniguruma@2.0.1: {}
