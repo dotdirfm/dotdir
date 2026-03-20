@@ -306,6 +306,15 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
             ops::write_text(path, data)?;
             Ok(Value::Null)
         }
+        "fs.writeBinary" => {
+            let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
+            let arr = params["data"].as_array().ok_or(FsError::InvalidInput)?;
+            let bytes: Vec<u8> = arr.iter()
+                .map(|v| v.as_u64().unwrap_or(0) as u8)
+                .collect();
+            ops::write_bytes(path, &bytes)?;
+            Ok(Value::Null)
+        }
         "fs.createDir" => {
             let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
             std::fs::create_dir_all(path).map_err(FsError::Io)?;

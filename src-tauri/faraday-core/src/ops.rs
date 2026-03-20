@@ -372,6 +372,15 @@ pub fn write_text(file_path: &str, data: &str) -> Result<(), FsError> {
   file.write_all(data.as_bytes()).map_err(FsError::from_io)
 }
 
+pub fn write_bytes(file_path: &str, data: &[u8]) -> Result<(), FsError> {
+  let path = path_for_fs(file_path);
+  if let Some(parent) = path.parent() {
+    fs::create_dir_all(parent).map_err(FsError::from_io)?;
+  }
+  let mut file = fs::File::create(&path).map_err(FsError::from_io)?;
+  file.write_all(data).map_err(FsError::from_io)
+}
+
 #[cfg(unix)]
 pub fn open(file_path: &str, fdt: &FdTable) -> Result<i32, FsError> {
     use std::os::unix::io::IntoRawFd;

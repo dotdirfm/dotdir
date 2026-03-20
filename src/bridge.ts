@@ -33,6 +33,7 @@ export interface Bridge {
     unwatch(watchId: string): Promise<void>;
     onFsChange(callback: (event: FsChangeEvent) => void): () => void;
     writeFile(filePath: string, data: string): Promise<void>;
+    writeBinaryFile(filePath: string, data: Uint8Array): Promise<void>;
     /** Create directory (and parents). */
     createDir?(dirPath: string): Promise<void>;
     /** Move file or folder to OS trash (Tauri only). */

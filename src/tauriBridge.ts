@@ -68,6 +68,9 @@ export const tauriBridge = {
     async writeFile(filePath: string, data: string): Promise<void> {
       return invoke<void>('fsa_write_text', { filePath, data });
     },
+    async writeBinaryFile(filePath: string, data: Uint8Array): Promise<void> {
+      return invoke<void>('fsa_write_binary', { filePath, data: Array.from(data) });
+    },
     async createDir(dirPath: string): Promise<void> {
       return invoke<void>('fsa_create_dir', { dirPath });
     },

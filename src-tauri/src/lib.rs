@@ -214,6 +214,11 @@ fn fsa_write_text(file_path: String, data: String) -> CmdResult<()> {
 }
 
 #[tauri::command]
+fn fsa_write_binary(file_path: String, data: Vec<u8>) -> CmdResult<()> {
+  ops::write_bytes(&file_path, &data).map_err(Into::into)
+}
+
+#[tauri::command]
 fn fsa_create_dir(dir_path: String) -> CmdResult<()> {
     fs::create_dir_all(&dir_path).map_err(|e| CmdError(FsError::from_io(e)))?;
     Ok(())
@@ -698,6 +703,7 @@ pub fn run() {
             fsa_stat,
             fsa_exists,
             fsa_write_text,
+            fsa_write_binary,
             fsa_create_dir,
             fsa_open,
             fsa_read,

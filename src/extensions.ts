@@ -572,7 +572,7 @@ export async function installVSCodeExtension(publisherName: string, extName: str
     if (isTextFile) {
       await bridge.fsa.writeFile(filePath, new TextDecoder().decode(content));
     } else {
-      await bridge.fsa.writeFile(filePath, new TextDecoder().decode(content));
+      await bridge.fsa.writeBinaryFile(filePath, content);
     }
   }
 
