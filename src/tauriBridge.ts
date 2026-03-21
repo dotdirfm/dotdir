@@ -4,7 +4,7 @@
 /// Uses Tauri's invoke() for commands and listen() for events.
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { PtyLaunchInfo, TerminalProfile, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent } from './bridge';
+import type { PtyLaunchInfo, TerminalProfile, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent, FspEntry } from './bridge';
 import type { FsaRawEntry, FsChangeEvent } from './types';
 import { normalizePath } from './path';
 
@@ -253,6 +253,26 @@ export const tauriBridge = {
       const handler = (e: MediaQueryListEvent) => callback(e.matches ? 'dark' : 'light');
       mq.addEventListener('change', handler);
       return () => mq.removeEventListener('change', handler);
+    },
+  },
+  fsProvider: {
+    async load(wasmPath: string): Promise<void> {
+      return invoke<void>('fsp_load', { wasmPath });
+    },
+    async listEntries(wasmPath: string, containerPath: string, innerPath: string): Promise<FspEntry[]> {
+      const raw = await invoke<Array<{ name: string; kind: string; size?: number; mtime_ms?: number }>>(
+        'fsp_list_entries', { wasmPath, containerPath, innerPath }
+      );
+      return raw.map((e) => ({
+        name: e.name,
+        kind: e.kind as FspEntry['kind'],
+        size: e.size,
+        mtimeMs: e.mtime_ms,
+      }));
+    },
+    async readFileRange(wasmPath: string, containerPath: string, innerPath: string, offset: number, length: number): Promise<ArrayBuffer> {
+      const bytes = await invoke<number[]>('fsp_read_file_range', { wasmPath, containerPath, innerPath, offset, length });
+      return new Uint8Array(bytes).buffer;
     },
   },
 };

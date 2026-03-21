@@ -1,11 +1,11 @@
 /**
- * Viewer & Editor Registries
+ * Viewer, Editor & FsProvider Registries
  *
- * Resolves which viewer/editor extension should handle a given file
+ * Resolves which extension should handle a given file
  * based on glob patterns and priority.
  */
 
-import type { ExtensionViewerContribution, ExtensionEditorContribution, LoadedExtension } from './extensions';
+import type { ExtensionViewerContribution, ExtensionEditorContribution, ExtensionFsProviderContribution, LoadedExtension } from './extensions';
 
 export interface ResolvedViewer {
   contribution: ExtensionViewerContribution;
@@ -14,6 +14,11 @@ export interface ResolvedViewer {
 
 export interface ResolvedEditor {
   contribution: ExtensionEditorContribution;
+  extensionDirPath: string;
+}
+
+export interface ResolvedFsProvider {
+  contribution: ExtensionFsProviderContribution;
   extensionDirPath: string;
 }
 
@@ -110,13 +115,41 @@ class EditorRegistry {
   }
 }
 
+class FsProviderRegistry {
+  private entries: RegistryEntry<ExtensionFsProviderContribution>[] = [];
+  private listeners = new Set<RegistryListener>();
+
+  clear(): void {
+    this.entries = [];
+  }
+
+  register(contribution: ExtensionFsProviderContribution, extensionDirPath: string): void {
+    this.entries.push({ contribution, extensionDirPath });
+  }
+
+  resolve(fileName: string): ResolvedFsProvider | null {
+    return resolve(this.entries, fileName);
+  }
+
+  onChange(listener: RegistryListener): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+
+  notifyListeners(): void {
+    for (const listener of this.listeners) listener();
+  }
+}
+
 export const viewerRegistry = new ViewerRegistry();
 export const editorRegistry = new EditorRegistry();
+export const fsProviderRegistry = new FsProviderRegistry();
 
 /** Populate registries from loaded extensions. Called when extensions finish loading. */
 export function populateRegistries(extensions: LoadedExtension[]): void {
   viewerRegistry.clear();
   editorRegistry.clear();
+  fsProviderRegistry.clear();
 
   for (const ext of extensions) {
     if (ext.viewers) {
@@ -129,8 +162,14 @@ export function populateRegistries(extensions: LoadedExtension[]): void {
         editorRegistry.register(e, ext.dirPath);
       }
     }
+    if (ext.fsProviders) {
+      for (const p of ext.fsProviders) {
+        fsProviderRegistry.register(p, ext.dirPath);
+      }
+    }
   }
 
   viewerRegistry.notifyListeners();
   editorRegistry.notifyListeners();
+  fsProviderRegistry.notifyListeners();
 }

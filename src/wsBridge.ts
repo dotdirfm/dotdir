@@ -3,7 +3,7 @@
 /// Implements the same Bridge interface as tauriBridge.ts, using JSON-RPC 2.0
 /// over WebSocket. Binary frames are used for fs.read responses.
 /// Automatically reconnects on disconnection with exponential backoff.
-import type { Bridge, PtyLaunchInfo, TerminalProfile, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent } from './bridge';
+import type { Bridge, PtyLaunchInfo, TerminalProfile, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent, FspEntry } from './bridge';
 import type { FsaRawEntry, FsChangeEvent, FsChangeType } from './types';
 
 type Pending = {
@@ -304,6 +304,25 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
     onReconnect(callback: () => void): () => void {
       reconnectCallbacks.add(callback);
       return () => { reconnectCallbacks.delete(callback); };
+    },
+    fsProvider: {
+      load: (wasmPath: string) =>
+        rpc('fsp.load', { wasmPath }) as Promise<void>,
+      listEntries: async (wasmPath: string, containerPath: string, innerPath: string) => {
+        const raw = await rpc('fsp.listEntries', { wasmPath, containerPath, innerPath }) as Array<{
+          name: string; kind: string; size?: number; mtimeMs?: number;
+        }>;
+        return raw.map((e) => ({
+          name: e.name,
+          kind: e.kind as FspEntry['kind'],
+          size: e.size,
+          mtimeMs: e.mtimeMs,
+        }));
+      },
+      readFileRange: async (wasmPath: string, containerPath: string, innerPath: string, offset: number, length: number) => {
+        const bytes = await rpc('fsp.readFileRange', { wasmPath, containerPath, innerPath, offset, length }) as number[];
+        return new Uint8Array(bytes).buffer;
+      },
     },
   };
 }

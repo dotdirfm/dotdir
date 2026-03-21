@@ -101,6 +101,7 @@ struct Session {
     next_move_id: AtomicU32,
     delete_jobs: std::sync::Mutex<HashMap<u32, DeleteJobHandle>>,
     next_delete_id: AtomicU32,
+    fsp_manager: crate::fsprovider::FsProviderManager,
 }
 
 // ── WebSocket handler ───────────────────────────────────────────────
@@ -141,6 +142,7 @@ async fn handle_socket(socket: WebSocket) {
         next_move_id: AtomicU32::new(0),
         delete_jobs: std::sync::Mutex::new(HashMap::new()),
         next_delete_id: AtomicU32::new(0),
+        fsp_manager: crate::fsprovider::FsProviderManager::new(),
     });
 
     let write_task = tokio::spawn(async move {
@@ -720,6 +722,38 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
                 job.cancel_token.cancel();
             }
             Ok(Value::Null)
+        }
+        "fsp.load" => {
+            let wasm_path = params["wasmPath"].as_str().ok_or(FsError::InvalidInput)?;
+            session.fsp_manager.load(wasm_path)
+                .map_err(|e| FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            Ok(Value::Null)
+        }
+        "fsp.listEntries" => {
+            let wasm_path = params["wasmPath"].as_str().ok_or(FsError::InvalidInput)?;
+            let container_path = params["containerPath"].as_str().ok_or(FsError::InvalidInput)?;
+            let inner_path = params["innerPath"].as_str().ok_or(FsError::InvalidInput)?;
+            let entries = session.fsp_manager
+                .list_entries(wasm_path, container_path, inner_path)
+                .map_err(|e| FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            let js: Vec<serde_json::Value> = entries.iter().map(|e| json!({
+                "name": e.name,
+                "kind": e.kind,
+                "size": e.size,
+                "mtimeMs": e.mtime_ms,
+            })).collect();
+            Ok(serde_json::to_value(js).unwrap())
+        }
+        "fsp.readFileRange" => {
+            let wasm_path = params["wasmPath"].as_str().ok_or(FsError::InvalidInput)?;
+            let container_path = params["containerPath"].as_str().ok_or(FsError::InvalidInput)?;
+            let inner_path = params["innerPath"].as_str().ok_or(FsError::InvalidInput)?;
+            let offset = params["offset"].as_u64().ok_or(FsError::InvalidInput)?;
+            let length = params["length"].as_u64().ok_or(FsError::InvalidInput)? as usize;
+            let bytes = session.fsp_manager
+                .read_file_range(wasm_path, container_path, inner_path, offset, length)
+                .map_err(|e| FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            Ok(serde_json::to_value(bytes).unwrap())
         }
         "ping" => Ok(Value::Null),
         "utils.getHomePath" => Ok(json!(

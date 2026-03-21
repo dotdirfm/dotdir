@@ -86,6 +86,16 @@ export interface TerminalProfile {
   shell: string;
 }
 
+// ── FsProvider (WASM backend) types ─────────────────────────────────
+
+export interface FspEntry {
+  name: string;
+  /** "file" or "directory" */
+  kind: 'file' | 'directory';
+  size?: number;
+  mtimeMs?: number;
+}
+
 export interface Bridge {
   fsa: {
     entries(dirPath: string): Promise<FsaRawEntry[]>;
@@ -143,6 +153,15 @@ export interface Bridge {
     onChange(callback: (theme: string) => void): () => void;
   };
   onReconnect?(callback: () => void): () => void;
+  /** Backend WASM fsProvider. Present only when the runtime supports it. */
+  fsProvider?: {
+    /** Compile and cache a WASM plugin. Safe to call multiple times (idempotent). */
+    load(wasmPath: string): Promise<void>;
+    /** List entries at innerPath inside the container at containerPath. */
+    listEntries(wasmPath: string, containerPath: string, innerPath: string): Promise<FspEntry[]>;
+    /** Read a byte range of a file inside the container. */
+    readFileRange(wasmPath: string, containerPath: string, innerPath: string, offset: number, length: number): Promise<ArrayBuffer>;
+  };
 }
 
 // Live-binding: fsa.ts and iconCache.ts import `bridge` and always get the current value.

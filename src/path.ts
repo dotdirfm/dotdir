@@ -88,7 +88,10 @@ export function basename(path: string): string {
 
   const trimmed = normalized.replace(/\/+$/, '');
   const index = trimmed.lastIndexOf('/');
-  return index < 0 ? trimmed : trimmed.slice(index + 1);
+  const result = index < 0 ? trimmed : trimmed.slice(index + 1);
+  // Strip the container-path separator (null byte) that appears when the path
+  // ends at a container root, e.g. "/path/archive.zip\0" → "archive.zip\0" → "archive.zip".
+  return result.endsWith('\0') ? result.slice(0, -1) : result;
 }
 
 /** Executable extensions when mode has no execute bits (e.g. Windows). */
@@ -108,11 +111,44 @@ export function isFileExecutable(mode: number, fileName: string): boolean {
   return EXECUTABLE_EXTENSIONS.has(ext);
 }
 
+/** Null-byte separator used by container paths (see containerPath.ts). */
+const CONTAINER_SEP = '\0';
+
 /**
  * Returns breadcrumb segments for a path. On Windows, first segment is the drive (e.g. "C:").
  * Each segment has a display label and the full path up to that segment (for navigation).
+ * Container paths (real-file\0inner-path) produce a mixed breadcrumb: the real ancestors
+ * first, then the container-root segment, then the inner-path segments.
  */
 export function getBreadcrumbSegments(path: string): { label: string; path: string }[] {
+  // Container path: split on the first null byte.
+  const sepIdx = path.indexOf(CONTAINER_SEP);
+  if (sepIdx >= 0) {
+    const hostFile = path.slice(0, sepIdx);
+    const inner = path.slice(sepIdx + 1); // may be empty or '/inner/sub'
+
+    // Build the real-path breadcrumbs up to (but not past) the container file.
+    const hostSegments = getBreadcrumbSegments(hostFile);
+    // Rewrite the last host segment so it navigates to the container root.
+    if (hostSegments.length > 0) {
+      hostSegments[hostSegments.length - 1] = {
+        label: hostSegments[hostSegments.length - 1].label,
+        path: hostFile + CONTAINER_SEP,
+      };
+    }
+
+    // Append inner-path segments.
+    if (inner && inner !== '/') {
+      const parts = inner.replace(/^\//, '').split('/').filter(Boolean);
+      let acc = '';
+      for (const part of parts) {
+        acc = acc + '/' + part;
+        hostSegments.push({ label: part, path: hostFile + CONTAINER_SEP + acc });
+      }
+    }
+    return hostSegments;
+  }
+
   const normalized = normalizePath(path);
   if (!normalized) return [];
 

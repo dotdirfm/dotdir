@@ -74,6 +74,25 @@ export interface ExtensionEditorContribution {
   priority?: number;
 }
 
+/**
+ * An fsProvider contribution allows an extension to expose the contents of a
+ * file (e.g. a ZIP archive) as a browsable directory tree.
+ * Patterns match the container file name (same glob syntax as viewers/editors).
+ */
+export interface ExtensionFsProviderContribution {
+  id: string;
+  label: string;
+  patterns: string[];
+  entry: string;
+  priority?: number;
+  /**
+   * Where the provider runs.
+   * - 'frontend' (default): a JS/CJS bundle loaded in the browser context.
+   * - 'backend': a WASM module executed by the Rust host via wasmtime.
+   */
+  runtime?: 'frontend' | 'backend';
+}
+
 export interface ExtensionColorTheme {
   id?: string;
   label: string;
@@ -95,6 +114,7 @@ export interface ExtensionContributions {
   };
   viewers?: ExtensionViewerContribution[];
   editors?: ExtensionEditorContribution[];
+  fsProviders?: ExtensionFsProviderContribution[];
 }
 
 export interface ExtensionManifest {
@@ -169,6 +189,8 @@ export interface LoadedExtension {
   viewers?: ExtensionViewerContribution[];
   /** Editor contributions from this extension */
   editors?: ExtensionEditorContribution[];
+  /** FsProvider contributions from this extension */
+  fsProviders?: ExtensionFsProviderContribution[];
 }
 
 export interface MarketplaceExtension {
@@ -311,9 +333,10 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
       const commands = manifest.contributes?.commands;
       const keybindings = manifest.contributes?.keybindings;
 
-      // Load viewer and editor contributions
+      // Load viewer, editor, and fsProvider contributions
       const viewers = manifest.contributes?.viewers;
       const editors = manifest.contributes?.editors;
+      const fsProviders = manifest.contributes?.fsProviders;
 
       loaded.push({
         ref,
@@ -332,6 +355,7 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         keybindings,
         viewers,
         editors,
+        fsProviders,
       });
     } catch {
       continue;

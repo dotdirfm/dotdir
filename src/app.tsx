@@ -10,7 +10,9 @@ import type { CopyOptions, CopyProgressEvent, ConflictResolution, MoveOptions, M
 import type { PanelTab } from './FileList/PanelTabs';
 import { isMediaFile } from './mediaFiles';
 import { ViewerContainer, EditorContainer } from './ExtensionContainer';
-import { viewerRegistry, editorRegistry, populateRegistries } from './viewerEditorRegistry';
+import { viewerRegistry, editorRegistry, fsProviderRegistry, populateRegistries } from './viewerEditorRegistry';
+import { isContainerPath, parseContainerPath, buildContainerPath, CONTAINER_SEP } from './containerPath';
+import { loadFsProvider, clearFsProviderCache } from './browserFsProvider';
 import type { LanguageOption } from './OpenCreateFileDialog';
 import { useDialog, DialogHolder } from './dialogContext';
 import { ModalDialog } from './ModalDialog';
@@ -154,18 +156,66 @@ function usePanel(theme: ThemeKind, showError: (message: string) => void) {
       try {
         const work = (async () => {
           currentPathRef.current = path;
-          await syncLayers(resolverRef.current!, path);
-          if (abort.signal.aborted) return;
-          const dirHandle = new DirectoryHandle(path);
-          const parent = buildParentChain(path);
-          const nodes: FsNode[] = [];
-          for await (const [, handle] of dirHandle.entries()) {
+
+          if (isContainerPath(path)) {
+            // ── Container path: delegate listing to the fsProvider extension ──
+            const { containerFile: hostFile, innerPath } = parseContainerPath(path);
+            const providerMatch = fsProviderRegistry.resolve(basename(hostFile));
+            if (!providerMatch) {
+              throw new Error(`No fsProvider registered for "${basename(hostFile)}"`);
+            }
+            let entries: import('./extensionApi').FsProviderEntry[];
+            if (providerMatch.contribution.runtime === 'backend' && bridge.fsProvider) {
+              const wasmPath = join(providerMatch.extensionDirPath, providerMatch.contribution.entry);
+              const raw = await bridge.fsProvider.listEntries(wasmPath, hostFile, innerPath);
+              if (abort.signal.aborted) return;
+              entries = raw.map((e) => ({ name: e.name, type: e.kind, size: e.size, mtimeMs: e.mtimeMs }));
+            } else {
+              const provider = await loadFsProvider(
+                providerMatch.extensionDirPath,
+                providerMatch.contribution.entry,
+              );
+              if (abort.signal.aborted) return;
+              entries = await provider.listEntries(hostFile, innerPath);
+              if (abort.signal.aborted) return;
+            }
+
+            const parent = buildParentChain(path);
+            const nodes: FsNode[] = entries.map((entry) => {
+              const entryInner = (innerPath === '/' ? '' : innerPath) + '/' + entry.name;
+              return createFsNode({
+                name: entry.name,
+                type: entry.type === 'directory' ? 'folder' : 'file',
+                lang: entry.type === 'file' ? languageRegistry.detectLanguage(entry.name) : '',
+                meta: {
+                  size: entry.size ?? 0,
+                  mtimeMs: entry.mtimeMs ?? 0,
+                  executable: false,
+                  hidden: entry.name.startsWith('.'),
+                  nlink: 1,
+                  entryKind: entry.type === 'directory' ? 'directory' : 'file',
+                },
+                path: buildContainerPath(hostFile, entryInner),
+                parent,
+              });
+            });
+            setState({ currentPath: path, parentNode: parent, entries: nodes });
+            // No filesystem watches inside containers.
+          } else {
+            // ── Normal filesystem path ─────────────────────────────────────────
+            await syncLayers(resolverRef.current!, path);
             if (abort.signal.aborted) return;
-            nodes.push(handleToFsNode(handle, path, parent));
+            const dirHandle = new DirectoryHandle(path);
+            const parent = buildParentChain(path);
+            const nodes: FsNode[] = [];
+            for await (const [, handle] of dirHandle.entries()) {
+              if (abort.signal.aborted) return;
+              nodes.push(handleToFsNode(handle, path, parent));
+            }
+            if (abort.signal.aborted) return;
+            setState({ currentPath: path, parentNode: parent, entries: nodes });
+            setupWatches(path);
           }
-          if (abort.signal.aborted) return;
-          setState({ currentPath: path, parentNode: parent, entries: nodes });
-          setupWatches(path);
         })();
         work.catch(() => {});
         await Promise.race([
@@ -407,6 +457,9 @@ export function App() {
 
   const activePanelRef = useRef(activePanel);
   activePanelRef.current = activePanel;
+  // Points to the active panel's navigateTo so handleViewFile can enter containers.
+  const activePanelNavigateRef = useRef(left.navigateTo);
+  activePanelNavigateRef.current = activePanel === 'left' ? left.navigateTo : right.navigateTo;
 
   // Set context for which panel is active
   useEffect(() => {
@@ -420,6 +473,11 @@ export function App() {
   }, [dialog]);
 
   const handleViewFile = useCallback((filePath: string, fileName: string, fileSize: number) => {
+    // If an fsProvider is registered for this file type, enter it like a directory.
+    if (fsProviderRegistry.resolve(basename(filePath))) {
+      void activePanelNavigateRef.current(filePath + CONTAINER_SEP);
+      return;
+    }
     setViewerFile({ path: filePath, name: fileName, size: fileSize, panel: activePanelRef.current });
   }, []);
 
@@ -1902,6 +1960,19 @@ export function App() {
       void (async () => {
         latestExtensionsRef.current = exts;
         populateRegistries(exts);
+        clearFsProviderCache();
+
+        // Pre-compile backend WASM providers so first navigation is fast.
+        if (bridge.fsProvider) {
+          for (const ext of exts) {
+            for (const p of ext.fsProviders ?? []) {
+              if (p.runtime === 'backend') {
+                const wasmPath = join(ext.dirPath, p.entry);
+                bridge.fsProvider!.load(wasmPath).catch(() => {});
+              }
+            }
+          }
+        }
 
         // Load only the active FSS icon theme contents (lazy).
         await ensureActiveIconThemeFssLoaded(exts, activeIconThemeRef.current);

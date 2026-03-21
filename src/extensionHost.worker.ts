@@ -90,6 +90,15 @@ interface ExtensionKeybinding {
   when?: string;
 }
 
+interface ExtensionFsProviderContribution {
+  id: string;
+  label: string;
+  patterns: string[];
+  entry: string;
+  priority?: number;
+  runtime?: 'frontend' | 'backend';
+}
+
 interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme;
   themes?: ExtensionColorTheme[];
@@ -99,6 +108,7 @@ interface ExtensionContributions {
   editors?: ExtensionEditorContribution[];
   commands?: ExtensionCommand[];
   keybindings?: ExtensionKeybinding[];
+  fsProviders?: ExtensionFsProviderContribution[];
 }
 
 interface ExtensionManifest {
@@ -151,6 +161,8 @@ export interface WorkerLoadedExtension {
   commands?: ExtensionCommand[];
   /** Keybinding contributions from this extension */
   keybindings?: ExtensionKeybinding[];
+  /** FsProvider contributions from this extension */
+  fsProviders?: ExtensionFsProviderContribution[];
 }
 
 // ── File reading via RPC to main thread ─────────────────────────────
@@ -224,6 +236,7 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
     const editors = manifest.contributes?.editors;
     const commands = manifest.contributes?.commands;
     const keybindings = manifest.contributes?.keybindings;
+    const fsProviders = manifest.contributes?.fsProviders;
 
     return {
       ref,
@@ -239,6 +252,7 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
       editors,
       commands,
       keybindings,
+      fsProviders,
     };
   } catch {
     return null;

@@ -116,12 +116,75 @@ export interface EditorExtensionApi {
   setLanguage?(langId: string): void | Promise<void>;
 }
 
+// ── FsProvider API ────────────────────────────────────────────────────
+
+/** A single entry returned by an fsProvider. */
+export interface FsProviderEntry {
+  name: string;
+  type: 'file' | 'directory';
+  size?: number;
+  mtimeMs?: number;
+}
+
+/**
+ * Host API available to fsProvider extensions (injected as `window.__faradayProviderHostApi`
+ * before the provider bundle is evaluated).
+ */
+export interface FsProviderHostApi {
+  /** Read the entire container file from the real filesystem. */
+  readFile(realPath: string): Promise<ArrayBuffer>;
+  /** Read a byte range from the real filesystem. */
+  readFileRange(realPath: string, offset: number, length: number): Promise<ArrayBuffer>;
+}
+
+/**
+ * API that an fsProvider extension bundle must expose.
+ *
+ * Protocol: the bundle assigns a factory to `window.__faradayProviderReady`.
+ * The host evaluates the bundle, then calls `window.__faradayProviderReady(hostApi)`
+ * and stores the returned object.
+ *
+ * Example bundle (CommonJS):
+ * ```js
+ * window.__faradayProviderReady = function(hostApi) {
+ *   return {
+ *     async listEntries(containerPath, innerPath) {
+ *       const bytes = await hostApi.readFile(containerPath);
+ *       // ... parse format, return entries
+ *       return [{ name: 'README.md', type: 'file', size: 1234 }];
+ *     }
+ *   };
+ * };
+ * ```
+ */
+export interface FsProviderExtensionApi {
+  /**
+   * List the entries at `innerPath` inside the container at `containerPath`.
+   * `containerPath` is always a real filesystem path.
+   * `innerPath` is always absolute, e.g. '/' for the root.
+   */
+  listEntries(containerPath: string, innerPath: string): Promise<FsProviderEntry[]>;
+  /**
+   * Read a byte range of a file inside the container.
+   * Optional — only needed if the host should be able to open files inside containers.
+   */
+  readFileRange?(containerPath: string, innerPath: string, offset: number, length: number): Promise<ArrayBuffer>;
+}
+
 /** Extension calls this when loaded; host sets it before injecting the script. */
 export type FaradayHostReadyCallback = (api: ViewerExtensionApi | EditorExtensionApi) => void;
+
+/** Factory signature for fsProvider bundles. */
+export type FsProviderFactory = (hostApi: FsProviderHostApi) => FsProviderExtensionApi;
 
 declare global {
   interface Window {
     __faradayHostReady?: FaradayHostReadyCallback;
+    /**
+     * Set by the fsProvider bundle. The host calls it after the bundle loads,
+     * passing the HostApi, and stores the returned FsProviderExtensionApi.
+     */
+    __faradayProviderReady?: FsProviderFactory;
     /**
      * Host API exposed to isolated extensions (iframe) as a global.
      * Extensions can call `window.frdy.readFile(...)`, etc.

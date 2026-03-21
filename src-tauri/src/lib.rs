@@ -22,6 +22,7 @@ mod elevate;
 #[path = "elevate_stub.rs"]
 mod elevate;
 
+mod fsprovider;
 mod pty;
 pub mod rpc;
 pub mod serve;
@@ -164,6 +165,7 @@ pub struct AppState {
     pub(crate) next_move_id: AtomicU32,
     pub(crate) delete_jobs: std::sync::Mutex<HashMap<u32, DeleteJobHandle>>,
     pub(crate) next_delete_id: AtomicU32,
+    pub fsp_manager: fsprovider::FsProviderManager,
 }
 
 impl AppState {
@@ -895,6 +897,35 @@ fn fsa_delete_path(path: String) -> CmdResult<()> {
     Ok(())
 }
 
+// ── FsProvider (WASM) commands ───────────────────────────────────────
+
+#[tauri::command]
+fn fsp_load(wasm_path: String, state: State<'_, AppState>) -> Result<(), String> {
+    state.fsp_manager.load(&wasm_path)
+}
+
+#[tauri::command]
+fn fsp_list_entries(
+    wasm_path: String,
+    container_path: String,
+    inner_path: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<fsprovider::FspEntry>, String> {
+    state.fsp_manager.list_entries(&wasm_path, &container_path, &inner_path)
+}
+
+#[tauri::command]
+fn fsp_read_file_range(
+    wasm_path: String,
+    container_path: String,
+    inner_path: String,
+    offset: u64,
+    length: usize,
+    state: State<'_, AppState>,
+) -> Result<Vec<u8>, String> {
+    state.fsp_manager.read_file_range(&wasm_path, &container_path, &inner_path, offset, length)
+}
+
 // ── App setup ────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1004,6 +1035,7 @@ pub fn run() {
                 next_move_id: AtomicU32::new(0),
                 delete_jobs: std::sync::Mutex::new(HashMap::new()),
                 next_delete_id: AtomicU32::new(0),
+                fsp_manager: fsprovider::FsProviderManager::new(),
             };
             app.manage(state);
             write_debug_log("tauri setup completed");
@@ -1040,6 +1072,9 @@ pub fn run() {
             delete_start,
             delete_cancel,
             rename_item,
+            fsp_load,
+            fsp_list_entries,
+            fsp_read_file_range,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
