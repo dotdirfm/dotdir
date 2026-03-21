@@ -3,16 +3,14 @@ import { focusContext } from './focusContext';
 import { useEffect } from 'react';
 
 export interface DeleteProgressDialogProps {
-  total: number;
-  current: number;
-  currentPath: string;
+  filesDone: number;
+  currentFile: string;
   onCancel: () => void;
 }
 
 export function DeleteProgressDialog({
-  total,
-  current,
-  currentPath,
+  filesDone,
+  currentFile,
   onCancel,
 }: DeleteProgressDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -32,10 +30,10 @@ export function DeleteProgressDialog({
       <div className="modal-dialog-header">Permanently deleting</div>
       <div className="modal-dialog-body">
         <div className="delete-progress-text">
-          {current} of {total} items
+          {filesDone.toLocaleString()} items deleted
         </div>
-        <div className="delete-progress-path" title={currentPath}>
-          {currentPath}
+        <div className="delete-progress-path" title={currentFile}>
+          {currentFile}
         </div>
         <p className="delete-progress-hint">Already deleted items cannot be recovered.</p>
       </div>

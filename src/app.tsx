@@ -6,13 +6,12 @@ import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { FsChangeType } from './types';
 import { bridge } from './bridge';
-import type { CopyOptions, CopyProgressEvent, ConflictResolution, MoveOptions, MoveProgressEvent } from './bridge';
+import type { CopyOptions, CopyProgressEvent, ConflictResolution, MoveOptions, MoveProgressEvent, DeleteProgressEvent } from './bridge';
 import type { PanelTab } from './FileList/PanelTabs';
 import { isMediaFile } from './mediaFiles';
 import { ViewerContainer, EditorContainer } from './ExtensionContainer';
 import { viewerRegistry, editorRegistry, populateRegistries } from './viewerEditorRegistry';
 import type { LanguageOption } from './OpenCreateFileDialog';
-import { collectPathsForDelete } from './deleteHelpers';
 import { useDialog, DialogHolder } from './dialogContext';
 import { ModalDialog } from './ModalDialog';
 import { TerminalController } from './Terminal';
@@ -88,7 +87,7 @@ interface PanelState {
 const emptyPanel: PanelState = { currentPath: '', parentNode: undefined, entries: [] };
 
 async function findExistingParent(startPath: string): Promise<string> {
-  let cur = dirname(startPath);
+  let cur = startPath;
   while (true) {
     if (await bridge.fsa.exists(cur)) return cur;
     const parent = dirname(cur);
@@ -316,8 +315,8 @@ export function App() {
   const [editorExt, setEditorExt] = useState<{ dirPath: string; entry: string } | null>(null);
   const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
-  const cancelDeleteRef = useRef(false);
-  const deleteProgressSpecRef = useRef<{ type: 'deleteProgress'; total: number; current: number; currentPath: string; onCancel: () => void } | null>(null);
+  const activeDeleteIdRef = useRef<number | null>(null);
+  const deleteProgressSpecRef = useRef<{ type: 'deleteProgress'; filesDone: number; currentFile: string; onCancel: () => void } | null>(null);
   const activeCopyIdRef = useRef<number | null>(null);
   const copyProgressSpecRef = useRef<{ type: 'copyProgress'; bytesCopied: number; bytesTotal: number; filesDone: number; filesTotal: number; currentFile: string; onCancel: () => void } | null>(null);
   const activeMoveIdRef = useRef<number | null>(null);
@@ -344,6 +343,7 @@ export function App() {
   leftActiveIndexRef.current = leftActiveIndex;
   const rightActiveIndexRef = useRef(rightActiveIndex);
   rightActiveIndexRef.current = rightActiveIndex;
+  const [selectionKey, setSelectionKey] = useState(0);
   const activeIconThemeRef = useRef(activeIconTheme);
   activeIconThemeRef.current = activeIconTheme;
   const activeColorThemeRef = useRef(activeColorTheme);
@@ -467,7 +467,7 @@ export function App() {
   );
 
   const handlePermanentDelete = useCallback(
-    (sourcePaths: string[], refresh: () => void) => {
+    (sourcePaths: string[], _refresh: () => void) => {
       if (sourcePaths.length === 0) return;
       const label = sourcePaths.length === 1
         ? `Permanently delete "${basename(sourcePaths[0])}"? This cannot be undone.`
@@ -481,68 +481,39 @@ export function App() {
           { label: 'Cancel' },
           { label: 'Delete', default: true, onClick: async () => {
             try {
-              // Collect all paths (expanding directories recursively)
-              const allPaths: string[] = [];
-              for (const p of sourcePaths) {
-                const stat = await bridge.fsa.stat(p).catch(() => null);
-                if (stat === null) continue;
-                // Check if directory by trying to list entries
-                try {
-                  const { files, dirs } = await collectPathsForDelete(p);
-                  allPaths.push(...files, ...dirs);
-                } catch {
-                  // Not a directory or empty dir — just delete the path itself
-                  allPaths.push(p);
-                }
-              }
-
-              if (allPaths.length === 0) {
-                refresh();
-                return;
-              }
-
-              if (allPaths.length === 1) {
-                await bridge.fsa.deletePath(allPaths[0]);
-                refresh();
-                return;
-              }
-
-              cancelDeleteRef.current = false;
-              const initialSpec = {
-                type: 'deleteProgress' as const,
-                total: allPaths.length,
-                current: 0,
-                currentPath: allPaths[0] ?? '',
-                onCancel: () => {
-                  showDialog({
-                    type: 'cancelDeleteConfirm',
-                    onResume: () => {
-                      if (deleteProgressSpecRef.current) showDialog(deleteProgressSpecRef.current);
-                    },
-                    onCancelDeletion: () => {
-                      cancelDeleteRef.current = true;
-                      closeDialog();
-                    },
-                  });
-                },
+              const onCancel = () => {
+                showDialog({
+                  type: 'cancelDeleteConfirm',
+                  onResume: () => {
+                    if (deleteProgressSpecRef.current) showDialog(deleteProgressSpecRef.current);
+                  },
+                  onCancelDeletion: () => {
+                    if (activeDeleteIdRef.current !== null) {
+                      void bridge.delete.cancel(activeDeleteIdRef.current);
+                    }
+                    activeDeleteIdRef.current = null;
+                    deleteProgressSpecRef.current = null;
+                    closeDialog();
+                  },
+                });
               };
-              deleteProgressSpecRef.current = { ...initialSpec };
-              showDialog(initialSpec);
-              for (let i = 0; i < allPaths.length; i++) {
-                if (cancelDeleteRef.current) {
-                  closeDialog();
-                  refresh();
-                  return;
-                }
-                updateDialog({ current: i, currentPath: allPaths[i] });
-                if (deleteProgressSpecRef.current) {
-                  deleteProgressSpecRef.current = { ...deleteProgressSpecRef.current, current: i, currentPath: allPaths[i] };
-                }
-                await bridge.fsa.deletePath(allPaths[i]);
+
+              const progressSpec = {
+                type: 'deleteProgress' as const,
+                filesDone: 0,
+                currentFile: 'Preparing...',
+                onCancel,
+              };
+              deleteProgressSpecRef.current = progressSpec;
+              showDialog(progressSpec);
+
+              const deleteId = await bridge.delete.start(sourcePaths);
+              if (deleteProgressSpecRef.current !== null) {
+                activeDeleteIdRef.current = deleteId;
               }
-              closeDialog();
-              refresh();
             } catch (e) {
+              activeDeleteIdRef.current = null;
+              deleteProgressSpecRef.current = null;
               closeDialog();
               showDialog({ type: 'message', title: 'Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
             }
@@ -550,7 +521,7 @@ export function App() {
         ],
       });
     },
-    [showDialog, closeDialog, updateDialog]
+    [showDialog, closeDialog]
   );
 
   // ── Copy handler ────────────────────────────────────────────────────
@@ -599,9 +570,13 @@ export function App() {
             copyProgressSpecRef.current = progressSpec;
             showDialog(progressSpec);
 
-            // Now start the copy — events may arrive before this resolves
+            // Now start the copy — events may arrive before this resolves.
+            // Only write back the ID if the done/error event hasn't already
+            // cleared copyProgressSpecRef (race condition for fast copies).
             const copyId = await bridge.copy.start(sourcePaths, destDir, options);
-            activeCopyIdRef.current = copyId;
+            if (copyProgressSpecRef.current !== null) {
+              activeCopyIdRef.current = copyId;
+            }
           } catch (e) {
             activeCopyIdRef.current = null;
             copyProgressSpecRef.current = null;
@@ -667,9 +642,9 @@ export function App() {
           activeCopyIdRef.current = null;
           copyProgressSpecRef.current = null;
           closeDialog();
-          // Refresh both panels
-          left.navigateTo(left.currentPath);
-          right.navigateTo(right.currentPath);
+          setSelectionKey((k) => k + 1);
+          leftRef.current.navigateTo(leftRef.current.currentPath);
+          rightRef.current.navigateTo(rightRef.current.currentPath);
           break;
         }
         case 'error': {
@@ -677,15 +652,14 @@ export function App() {
           copyProgressSpecRef.current = null;
           closeDialog();
           showDialog({ type: 'message', title: 'Copy Error', message: event.message, variant: 'error' });
-          // Refresh both panels even on error
-          left.navigateTo(left.currentPath);
-          right.navigateTo(right.currentPath);
+          leftRef.current.navigateTo(leftRef.current.currentPath);
+          rightRef.current.navigateTo(rightRef.current.currentPath);
           break;
         }
       }
     });
     return unsub;
-  }, [showDialog, closeDialog, updateDialog, left, right]);
+  }, [showDialog, closeDialog, updateDialog]);
 
   // ── Move handler ─────────────────────────────────────────────────────
 
@@ -732,7 +706,9 @@ export function App() {
             showDialog(progressSpec);
 
             const moveId = await bridge.move.start(sourcePaths, destDir, options);
-            activeMoveIdRef.current = moveId;
+            if (moveProgressSpecRef.current !== null) {
+              activeMoveIdRef.current = moveId;
+            }
           } catch (e) {
             activeMoveIdRef.current = null;
             moveProgressSpecRef.current = null;
@@ -796,8 +772,9 @@ export function App() {
           activeMoveIdRef.current = null;
           moveProgressSpecRef.current = null;
           closeDialog();
-          left.navigateTo(left.currentPath);
-          right.navigateTo(right.currentPath);
+          setSelectionKey((k) => k + 1);
+          leftRef.current.navigateTo(leftRef.current.currentPath);
+          rightRef.current.navigateTo(rightRef.current.currentPath);
           break;
         }
         case 'error': {
@@ -805,14 +782,61 @@ export function App() {
           moveProgressSpecRef.current = null;
           closeDialog();
           showDialog({ type: 'message', title: 'Move Error', message: event.message, variant: 'error' });
-          left.navigateTo(left.currentPath);
-          right.navigateTo(right.currentPath);
+          leftRef.current.navigateTo(leftRef.current.currentPath);
+          rightRef.current.navigateTo(rightRef.current.currentPath);
           break;
         }
       }
     });
     return unsub;
-  }, [showDialog, closeDialog, updateDialog, left, right]);
+  }, [showDialog, closeDialog, updateDialog]);
+
+  // ── Delete progress listener ─────────────────────────────────────────
+
+  useEffect(() => {
+    const unsub = bridge.delete.onProgress((payload: DeleteProgressEvent) => {
+      if (activeDeleteIdRef.current === null) {
+        if (deleteProgressSpecRef.current !== null) {
+          activeDeleteIdRef.current = payload.deleteId;
+        } else {
+          return;
+        }
+      } else if (payload.deleteId !== activeDeleteIdRef.current) {
+        return;
+      }
+      const event = payload.event;
+
+      switch (event.kind) {
+        case 'progress': {
+          const update = { filesDone: event.filesDone, currentFile: event.currentFile };
+          if (deleteProgressSpecRef.current) {
+            deleteProgressSpecRef.current = { ...deleteProgressSpecRef.current, ...update };
+          }
+          updateDialog(update);
+          break;
+        }
+        case 'done': {
+          activeDeleteIdRef.current = null;
+          deleteProgressSpecRef.current = null;
+          closeDialog();
+          setSelectionKey((k) => k + 1);
+          leftRef.current.navigateTo(leftRef.current.currentPath);
+          rightRef.current.navigateTo(rightRef.current.currentPath);
+          break;
+        }
+        case 'error': {
+          activeDeleteIdRef.current = null;
+          deleteProgressSpecRef.current = null;
+          closeDialog();
+          showDialog({ type: 'message', title: 'Delete Error', message: event.message, variant: 'error' });
+          leftRef.current.navigateTo(leftRef.current.currentPath);
+          rightRef.current.navigateTo(rightRef.current.currentPath);
+          break;
+        }
+      }
+    });
+    return unsub;
+  }, [showDialog, closeDialog, updateDialog]);
 
   // ── Rename handler ───────────────────────────────────────────────────
 
@@ -1985,6 +2009,7 @@ export function App() {
                   onMove={(sourcePaths, refresh) => handleMove(sourcePaths, refresh)}
                   onRename={(sourcePath, currentName, refresh) => handleRename(sourcePath, currentName, refresh)}
                   onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
+                  selectionKey={selectionKey}
                   requestedActiveName={leftRequestedCursor}
                   requestedTopmostName={undefined}
                   initialPanelState={initialLeftPanel}
@@ -2013,6 +2038,7 @@ export function App() {
                   onMove={(sourcePaths, refresh) => handleMove(sourcePaths, refresh)}
                   onRename={(sourcePath, currentName, refresh) => handleRename(sourcePath, currentName, refresh)}
                   onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
+                  selectionKey={selectionKey}
                   requestedActiveName={rightRequestedCursor}
                   requestedTopmostName={undefined}
                   initialPanelState={initialRightPanel}

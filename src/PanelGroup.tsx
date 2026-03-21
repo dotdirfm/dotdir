@@ -40,6 +40,7 @@ interface PanelGroupProps {
   onMove?: (sourcePaths: string[], refresh: () => void) => void;
   onRename?: (sourcePath: string, currentName: string, refresh: () => void) => void;
   onExecuteInTerminal: (cmd: string) => Promise<void>;
+  selectionKey?: number;
   requestedActiveName?: string;
   requestedTopmostName?: string;
   initialPanelState?: PanelPersistedState;
@@ -68,6 +69,7 @@ export function PanelGroup({
   onMove,
   onRename,
   onExecuteInTerminal,
+  selectionKey,
   requestedActiveName,
   requestedTopmostName,
   initialPanelState,
@@ -107,6 +109,7 @@ export function PanelGroup({
             onMove={onMove}
             onRename={onRename}
             onExecuteInTerminal={onExecuteInTerminal}
+            selectionKey={selectionKey}
             editorFileSizeLimit={editorFileSizeLimit}
             active={active}
             resolver={panel.resolver}

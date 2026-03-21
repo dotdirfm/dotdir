@@ -17,6 +17,7 @@ use axum::{
 use crate::pty;
 use faraday_core::{
     copy::{self, CancelToken, ConflictResolution, CopyEvent, CopyOptions},
+    delete::{self, DeleteEvent},
     move_op::{self, MoveOptions},
     error::FsError,
     ops::{self, FdTable},
@@ -85,6 +86,10 @@ struct MoveJobHandle {
     conflict_tx: std::sync::mpsc::SyncSender<ConflictResolution>,
 }
 
+struct DeleteJobHandle {
+    cancel_token: CancelToken,
+}
+
 struct Session {
     fdt: FdTable,
     watcher: FsWatcher,
@@ -94,6 +99,8 @@ struct Session {
     next_copy_id: AtomicU32,
     move_jobs: std::sync::Mutex<HashMap<u32, MoveJobHandle>>,
     next_move_id: AtomicU32,
+    delete_jobs: std::sync::Mutex<HashMap<u32, DeleteJobHandle>>,
+    next_delete_id: AtomicU32,
 }
 
 // ── WebSocket handler ───────────────────────────────────────────────
@@ -132,6 +139,8 @@ async fn handle_socket(socket: WebSocket) {
         next_copy_id: AtomicU32::new(0),
         move_jobs: std::sync::Mutex::new(HashMap::new()),
         next_move_id: AtomicU32::new(0),
+        delete_jobs: std::sync::Mutex::new(HashMap::new()),
+        next_delete_id: AtomicU32::new(0),
     });
 
     let write_task = tokio::spawn(async move {
@@ -211,6 +220,11 @@ async fn process_message(
     // move.start needs tx for progress streaming
     if method == "move.start" {
         return Some(handle_move_start(session, &id, &params, tx));
+    }
+
+    // delete.start needs tx for progress streaming
+    if method == "delete.start" {
+        return Some(handle_delete_start(session, &id, &params, tx));
     }
 
     let session = session.clone();
@@ -494,6 +508,49 @@ fn serve_mtime_ms(meta: &std::fs::Metadata) -> f64 {
         .unwrap_or(0.0)
 }
 
+fn handle_delete_start(
+    session: &Arc<Session>,
+    id: &Value,
+    params: &Value,
+    tx: &mpsc::UnboundedSender<Message>,
+) -> Message {
+    let paths: Vec<String> = match serde_json::from_value(params["paths"].clone()) {
+        Ok(v) => v,
+        Err(_) => return rpc_error(id, &FsError::InvalidInput),
+    };
+
+    let delete_id = session.next_delete_id.fetch_add(1, Ordering::Relaxed);
+    let cancel_token = CancelToken::new();
+
+    session.delete_jobs.lock().unwrap().insert(
+        delete_id,
+        DeleteJobHandle { cancel_token: cancel_token.clone() },
+    );
+
+    let source_paths: Vec<std::path::PathBuf> = paths.iter().map(std::path::PathBuf::from).collect();
+    let tx_del = tx.clone();
+    let session_ref = session.clone();
+
+    std::thread::spawn(move || {
+        let tx_progress = tx_del.clone();
+        let emit_progress = move |event: DeleteEvent| {
+            let payload = json!({
+                "jsonrpc": "2.0",
+                "method": "delete.progress",
+                "params": { "deleteId": delete_id, "event": event }
+            });
+            let _ = tx_progress.send(Message::Text(payload.to_string()));
+        };
+
+        delete::delete_recursive(&source_paths, &cancel_token, &emit_progress)
+            .unwrap_or_else(|e| emit_progress(DeleteEvent::Error { message: e.to_string() }));
+
+        session_ref.delete_jobs.lock().unwrap().remove(&delete_id);
+    });
+
+    Message::Text(json!({ "jsonrpc": "2.0", "id": id, "result": delete_id }).to_string())
+}
+
 fn rpc_error(id: &Value, e: &FsError) -> Message {
     Message::Text(
         json!({
@@ -654,6 +711,13 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
                 std::fs::remove_dir(p).map_err(FsError::from_io)?;
             } else {
                 std::fs::remove_file(p).map_err(FsError::from_io)?;
+            }
+            Ok(Value::Null)
+        }
+        "delete.cancel" => {
+            let delete_id = params["deleteId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
+            if let Some(job) = session.delete_jobs.lock().unwrap().get(&delete_id) {
+                job.cancel_token.cancel();
             }
             Ok(Value::Null)
         }

@@ -1,4 +1,5 @@
 use faraday_core::copy::{self, CancelToken, ConflictResolution, CopyEvent, CopyOptions};
+use faraday_core::delete::{self, DeleteEvent};
 use faraday_core::move_op::{self, MoveOptions};
 use faraday_core::error::FsError;
 use faraday_core::ops::{self, EntryInfo, FdTable, StatResult};
@@ -144,6 +145,10 @@ struct MoveJobHandle {
     conflict_tx: std_mpsc::SyncSender<ConflictResolution>,
 }
 
+struct DeleteJobHandle {
+    cancel_token: CancelToken,
+}
+
 // ── Managed state ────────────────────────────────────────────────────
 
 pub struct AppState {
@@ -157,6 +162,8 @@ pub struct AppState {
     pub(crate) next_copy_id: AtomicU32,
     pub(crate) move_jobs: std::sync::Mutex<HashMap<u32, MoveJobHandle>>,
     pub(crate) next_move_id: AtomicU32,
+    pub(crate) delete_jobs: std::sync::Mutex<HashMap<u32, DeleteJobHandle>>,
+    pub(crate) next_delete_id: AtomicU32,
 }
 
 impl AppState {
@@ -669,6 +676,58 @@ fn move_resolve_conflict(move_id: u32, resolution: ConflictResolution, state: St
     }
 }
 
+// ── Delete commands ──────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DeleteProgressEvent {
+    delete_id: u32,
+    event: DeleteEvent,
+}
+
+#[tauri::command]
+fn delete_start(
+    paths: Vec<String>,
+    state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> CmdResult<u32> {
+    let delete_id = state.next_delete_id.fetch_add(1, Ordering::Relaxed);
+    let cancel_token = CancelToken::new();
+
+    state.delete_jobs.lock().unwrap().insert(
+        delete_id,
+        DeleteJobHandle { cancel_token: cancel_token.clone() },
+    );
+
+    let source_paths: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
+
+    std::thread::spawn(move || {
+        let handle = app_handle.clone();
+        let emit_progress = move |event: DeleteEvent| {
+            let _ = handle.emit(
+                "delete:progress",
+                DeleteProgressEvent { delete_id, event },
+            );
+        };
+
+        delete::delete_recursive(&source_paths, &cancel_token, &emit_progress)
+            .unwrap_or_else(|e| emit_progress(DeleteEvent::Error { message: e.to_string() }));
+
+        if let Some(app) = tauri::Manager::try_state::<AppState>(&app_handle) {
+            app.delete_jobs.lock().unwrap().remove(&delete_id);
+        }
+    });
+
+    Ok(delete_id)
+}
+
+#[tauri::command]
+fn delete_cancel(delete_id: u32, state: State<'_, AppState>) {
+    if let Some(job) = state.delete_jobs.lock().unwrap().get(&delete_id) {
+        job.cancel_token.cancel();
+    }
+}
+
 #[tauri::command]
 fn rename_item(source: String, new_name: String) -> CmdResult<()> {
     let source_path = PathBuf::from(&source);
@@ -943,6 +1002,8 @@ pub fn run() {
                 next_copy_id: AtomicU32::new(0),
                 move_jobs: std::sync::Mutex::new(HashMap::new()),
                 next_move_id: AtomicU32::new(0),
+                delete_jobs: std::sync::Mutex::new(HashMap::new()),
+                next_delete_id: AtomicU32::new(0),
             };
             app.manage(state);
             write_debug_log("tauri setup completed");
@@ -976,6 +1037,8 @@ pub fn run() {
             move_start,
             move_cancel,
             move_resolve_conflict,
+            delete_start,
+            delete_cancel,
             rename_item,
         ])
         .run(tauri::generate_context!())

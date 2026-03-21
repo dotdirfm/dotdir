@@ -62,6 +62,16 @@ export type MoveProgressEvent = {
     | { kind: 'error'; message: string };
 };
 
+// ── Delete types ─────────────────────────────────────────────────────
+
+export type DeleteProgressEvent = {
+  deleteId: number;
+  event:
+    | { kind: 'progress'; filesDone: number; currentFile: string }
+    | { kind: 'done'; filesDone: number }
+    | { kind: 'error'; message: string };
+};
+
 export interface PtyLaunchInfo {
   ptyId: number;
   cwd: string;
@@ -119,6 +129,11 @@ export interface Bridge {
     cancel(moveId: number): Promise<void>;
     resolveConflict(moveId: number, resolution: ConflictResolution): Promise<void>;
     onProgress(callback: (event: MoveProgressEvent) => void): () => void;
+  };
+  delete: {
+    start(paths: string[]): Promise<number>;
+    cancel(deleteId: number): Promise<void>;
+    onProgress(callback: (event: DeleteProgressEvent) => void): () => void;
   };
   rename: {
     rename(source: string, newName: string): Promise<void>;

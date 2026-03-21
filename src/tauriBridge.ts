@@ -4,7 +4,7 @@
 /// Uses Tauri's invoke() for commands and listen() for events.
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { PtyLaunchInfo, TerminalProfile, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent } from './bridge';
+import type { PtyLaunchInfo, TerminalProfile, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent } from './bridge';
 import type { FsaRawEntry, FsChangeEvent } from './types';
 import { normalizePath } from './path';
 
@@ -219,6 +219,21 @@ export const tauriBridge = {
     onProgress(callback: (event: MoveProgressEvent) => void): () => void {
       let unlisten: (() => void) | null = null;
       listen<MoveProgressEvent>('move:progress', (event) => {
+        callback(event.payload);
+      }).then((fn) => { unlisten = fn; });
+      return () => { unlisten?.(); };
+    },
+  },
+  delete: {
+    async start(paths: string[]): Promise<number> {
+      return invoke<number>('delete_start', { paths });
+    },
+    async cancel(deleteId: number): Promise<void> {
+      return invoke<void>('delete_cancel', { deleteId });
+    },
+    onProgress(callback: (event: DeleteProgressEvent) => void): () => void {
+      let unlisten: (() => void) | null = null;
+      listen<DeleteProgressEvent>('delete:progress', (event) => {
         callback(event.payload);
       }).then((fn) => { unlisten = fn; });
       return () => { unlisten?.(); };

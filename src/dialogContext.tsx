@@ -41,9 +41,8 @@ export type DialogSpec =
     }
   | {
       type: 'deleteProgress';
-      total: number;
-      current: number;
-      currentPath: string;
+      filesDone: number;
+      currentFile: string;
       onCancel: () => void;
     }
   | {
@@ -127,7 +126,7 @@ export type DialogSpec =
     };
 
 export type DialogUpdate =
-  | Partial<Pick<DialogSpec & { type: 'deleteProgress' }, 'current' | 'currentPath'>>
+  | Partial<Pick<DialogSpec & { type: 'deleteProgress' }, 'filesDone' | 'currentFile'>>
   | Partial<Pick<DialogSpec & { type: 'copyProgress' }, 'bytesCopied' | 'bytesTotal' | 'filesDone' | 'filesTotal' | 'currentFile'>>
   | Partial<Pick<DialogSpec & { type: 'moveProgress' }, 'bytesCopied' | 'bytesTotal' | 'filesDone' | 'filesTotal' | 'currentFile'>>;
 
@@ -208,9 +207,8 @@ export function DialogHolder() {
     case 'deleteProgress':
       return (
         <DeleteProgressDialog
-          total={dialog.total}
-          current={dialog.current}
-          currentPath={dialog.currentPath}
+          filesDone={dialog.filesDone}
+          currentFile={dialog.currentFile}
           onCancel={dialog.onCancel}
         />
       );

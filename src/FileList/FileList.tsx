@@ -34,6 +34,7 @@ interface FileListProps {
   /** Run executable in terminal: receives (command) and should write command + newline to terminal. */
   onExecuteInTerminal?: (command: string) => Promise<void>;
   editorFileSizeLimit?: number;
+  selectionKey?: number;
   active: boolean;
   resolver: LayeredResolver;
   requestedActiveName?: string;
@@ -97,6 +98,7 @@ export const FileList = memo(function FileList({
   onRename,
   onExecuteInTerminal,
   editorFileSizeLimit = 0,
+  selectionKey,
   active,
   resolver,
   requestedActiveName,
@@ -327,11 +329,11 @@ export const FileList = memo(function FileList({
     return () => window.removeEventListener('keyup', handleKeyUp);
   }, [active]);
 
-  // Clear selection when navigating to a new directory
+  // Clear selection when navigating to a new directory or after copy/move
   useEffect(() => {
     setSelectedNames(new Set());
     prevSelectRef.current = undefined;
-  }, [currentPath]);
+  }, [currentPath, selectionKey]);
 
   const navigateToEntry = useCallback(async (entry: FsNode): Promise<void> => {
     if (entry.name === '..') {

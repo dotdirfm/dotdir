@@ -3,7 +3,7 @@
 /// Implements the same Bridge interface as tauriBridge.ts, using JSON-RPC 2.0
 /// over WebSocket. Binary frames are used for fs.read responses.
 /// Automatically reconnects on disconnection with exponential backoff.
-import type { Bridge, PtyLaunchInfo, TerminalProfile, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent } from './bridge';
+import type { Bridge, PtyLaunchInfo, TerminalProfile, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent } from './bridge';
 import type { FsaRawEntry, FsChangeEvent, FsChangeType } from './types';
 
 type Pending = {
@@ -25,6 +25,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
   const ptyExitListeners = new Set<PtyExitCallback>();
   const copyProgressListeners = new Set<(event: CopyProgressEvent) => void>();
   const moveProgressListeners = new Set<(event: MoveProgressEvent) => void>();
+  const deleteProgressListeners = new Set<(event: DeleteProgressEvent) => void>();
   const reconnectCallbacks = new Set<() => void>();
 
   let wsReady: Promise<void>;
@@ -64,6 +65,9 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       } else if (msg.method === 'move.progress') {
         const event: MoveProgressEvent = { moveId: msg.params.moveId, event: msg.params.event };
         for (const cb of moveProgressListeners) cb(event);
+      } else if (msg.method === 'delete.progress') {
+        const event: DeleteProgressEvent = { deleteId: msg.params.deleteId, event: msg.params.event };
+        for (const cb of deleteProgressListeners) cb(event);
       }
       return;
     }
@@ -275,6 +279,14 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       onProgress(callback: (event: MoveProgressEvent) => void): () => void {
         moveProgressListeners.add(callback);
         return () => { moveProgressListeners.delete(callback); };
+      },
+    },
+    delete: {
+      start: (paths: string[]) => rpc('delete.start', { paths }) as Promise<number>,
+      cancel: (deleteId: number) => rpc('delete.cancel', { deleteId }) as Promise<void>,
+      onProgress(callback: (event: DeleteProgressEvent) => void): () => void {
+        deleteProgressListeners.add(callback);
+        return () => { deleteProgressListeners.delete(callback); };
       },
     },
     rename: {
