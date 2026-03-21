@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { focusContext } from './focusContext';
 import { languageRegistry } from './languageRegistry';
+import { SmartLabel } from './dialogHotkeys';
 
 export interface LanguageOption {
   id: string;
@@ -67,7 +68,7 @@ export function OpenCreateFileDialog({
       <form className="open-create-file-form" onSubmit={handleSubmit}>
         <div className="modal-dialog-body">
           <div className="open-create-file-field">
-            <label htmlFor="open-create-filename">Filename</label>
+            <label htmlFor="open-create-filename"><SmartLabel>Filename</SmartLabel></label>
             <input
               ref={inputRef}
               id="open-create-filename"
@@ -83,7 +84,7 @@ export function OpenCreateFileDialog({
             </span>
           </div>
           <div className="open-create-file-field">
-            <label htmlFor="open-create-language">Language</label>
+            <label htmlFor="open-create-language"><SmartLabel>Language</SmartLabel></label>
             <select
               id="open-create-language"
               value={langId}
@@ -103,10 +104,10 @@ export function OpenCreateFileDialog({
         </div>
         <div className="modal-dialog-buttons">
           <button type="button" onClick={handleCancel}>
-            Cancel
+            <SmartLabel>Cancel</SmartLabel>
           </button>
           <button type="submit" disabled={!filename.trim()}>
-            OK
+            <SmartLabel>OK</SmartLabel>
           </button>
         </div>
       </form>

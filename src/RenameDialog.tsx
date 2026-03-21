@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { focusContext } from './focusContext';
+import { SmartLabel } from './dialogHotkeys';
 
 export interface RenameDialogProps {
   currentName: string;
@@ -55,7 +56,7 @@ export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogP
       <form className="rename-form" onSubmit={handleSubmit}>
         <div className="modal-dialog-body">
           <div className="rename-field">
-            <label htmlFor="rename-input">New name</label>
+            <label htmlFor="rename-input"><SmartLabel>New name</SmartLabel></label>
             <input
               ref={inputRef}
               id="rename-input"
@@ -67,9 +68,9 @@ export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogP
           </div>
         </div>
         <div className="modal-dialog-buttons">
-          <button type="button" onClick={handleCancel}>Cancel</button>
+          <button type="button" onClick={handleCancel}><SmartLabel>Cancel</SmartLabel></button>
           <button type="submit" disabled={!newName.trim() || newName.trim() === currentName}>
-            Rename
+            <SmartLabel>Rename</SmartLabel>
           </button>
         </div>
       </form>

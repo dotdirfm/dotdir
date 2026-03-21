@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { focusContext } from './focusContext';
+import { SmartLabel } from './dialogHotkeys';
 
 export interface MakeFolderDialogProps {
   currentPath: string;
@@ -49,7 +50,7 @@ export function MakeFolderDialog({
       <form className="make-folder-form" onSubmit={handleSubmit}>
         <div className="modal-dialog-body">
           <div className="make-folder-field">
-            <label htmlFor="make-folder-name">Folder name</label>
+            <label htmlFor="make-folder-name"><SmartLabel>Folder name</SmartLabel></label>
             <input
               ref={inputRef}
               id="make-folder-name"
@@ -63,10 +64,10 @@ export function MakeFolderDialog({
         </div>
         <div className="modal-dialog-buttons">
           <button type="button" onClick={handleCancel}>
-            Cancel
+            <SmartLabel>Cancel</SmartLabel>
           </button>
           <button type="submit" disabled={!folderName.trim()}>
-            OK
+            <SmartLabel>OK</SmartLabel>
           </button>
         </div>
       </form>

@@ -523,6 +523,14 @@ body.terminal-resizing {
   color: var(--fg-muted);
 }
 
+/* ── Dialog hotkey highlight ──────────────────────────────────────── */
+.hotkey-char {
+  /* color: var(--accent); */
+  color: var(--fg-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .modal-dialog {
   width: 400px;
   max-width: 90vw;
@@ -685,22 +693,46 @@ body.terminal-resizing {
 /* ── Copy config dialog ───────────────────────────────────────────── */
 
 .copy-config-dialog {
-  width: 480px;
+  width: 440px;
 }
 
-.copy-config-dest {
-  font-size: 12px;
-  color: var(--fg-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-bottom: 12px;
+.move-config-dialog {
+  width: 380px;
 }
 
-.copy-config-grid {
+.copy-config-dialog .modal-dialog-body,
+.move-config-dialog .modal-dialog-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+
+/* label + input/select rows used in copy/move config dialogs */
+.copy-config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.copy-config-field label {
+  font-size: 12px;
+  color: var(--fg-secondary);
+}
+
+.copy-config-field input,
+.copy-config-field select {
+  padding: 6px 8px;
+  font-size: 13px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+}
+
+.copy-config-field input:focus,
+.copy-config-field select:focus {
+  outline: 2px solid var(--border-active);
+  outline-offset: 0;
 }
 
 .copy-config-section {
@@ -726,7 +758,6 @@ body.terminal-resizing {
   cursor: pointer;
 }
 
-.copy-config-section input[type="radio"],
 .copy-config-section input[type="checkbox"] {
   margin: 0;
 }
@@ -1934,4 +1965,115 @@ body.terminal-resizing {
   padding: 2px 6px;
   border-radius: 4px;
   margin-left: 12px;
+}
+
+/* ── Help dialog ──────────────────────────────────────────────────── */
+.help-dialog {
+  width: 560px;
+  max-width: 90vw;
+  margin: auto;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border-active);
+  border-radius: 6px;
+  padding: 0;
+}
+
+.help-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.help-dialog-header {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.help-dialog-body {
+  padding: 16px 18px;
+  max-height: 60vh;
+  overflow-y: auto;
+  line-height: 1.6;
+  outline: none;
+}
+
+/* Markdown content styles inside help dialog */
+.help-dialog-body h1 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--fg);
+}
+
+.help-dialog-body h2 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-secondary);
+  margin-top: 16px;
+  margin-bottom: 6px;
+}
+
+.help-dialog-body p {
+  margin-bottom: 8px;
+  color: var(--fg);
+}
+
+.help-dialog-body ul {
+  padding-left: 18px;
+  margin-bottom: 8px;
+}
+
+.help-dialog-body li {
+  margin-bottom: 4px;
+  color: var(--fg);
+}
+
+.help-dialog-body strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.help-dialog-body code {
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--fg);
+}
+
+.help-dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.help-dialog-buttons button {
+  padding: 4px 16px;
+  border: 1px solid var(--border-active);
+  border-radius: 3px;
+  background: var(--bg-secondary);
+  color: var(--fg);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.help-dialog-buttons button:hover {
+  background: var(--entry-hover);
+}
+
+.help-dialog-buttons button:focus {
+  outline: 2px solid var(--border-active);
+  outline-offset: 1px;
 }

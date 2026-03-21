@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { focusContext } from './focusContext';
 import { useDialogButtonNav } from './useDialogButtonNav';
+import { SmartLabel } from './dialogHotkeys';
 
 interface ModalButton {
   label: string;
@@ -50,7 +51,7 @@ export function ModalDialog({ title, message, variant = 'default', buttons, onCl
               dialogRef.current?.close();
             }}
           >
-            {btn.label}
+            <SmartLabel>{btn.label}</SmartLabel>
           </button>
         ))}
       </div>

@@ -1,6 +1,6 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { focusContext } from './focusContext';
-import { useEffect } from 'react';
+import { SmartLabel } from './dialogHotkeys';
 
 export interface DeleteProgressDialogProps {
   filesDone: number;
@@ -39,7 +39,7 @@ export function DeleteProgressDialog({
       </div>
       <div className="modal-dialog-buttons">
         <button type="button" onClick={onCancel}>
-          Cancel
+          <SmartLabel>Cancel</SmartLabel>
         </button>
       </div>
     </dialog>

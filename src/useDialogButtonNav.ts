@@ -28,13 +28,19 @@ export function useDialogButtonNav(
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      // Don't steal arrows from text inputs, textareas, or selects.
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLSelectElement
+      ) return;
       const container = containerRef.current;
       if (!container) return;
 
       const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
       if (buttons.length === 0) return;
 
-      const active = document.activeElement as HTMLElement;
       const idx = buttons.indexOf(active as HTMLButtonElement);
 
       let next: number;

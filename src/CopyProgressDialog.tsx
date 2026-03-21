@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { focusContext } from './focusContext';
+import { SmartLabel } from './dialogHotkeys';
 
 export interface CopyProgressDialogProps {
   bytesCopied: number;
@@ -52,7 +53,7 @@ export function CopyProgressDialog({
         <div className="copy-progress-current" title={currentFile}>{currentFile}</div>
       </div>
       <div className="modal-dialog-buttons">
-        <button type="button" onClick={onCancel}>Cancel</button>
+        <button type="button" onClick={onCancel}><SmartLabel>Cancel</SmartLabel></button>
       </div>
     </dialog>
   );

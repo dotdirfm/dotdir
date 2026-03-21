@@ -536,7 +536,7 @@ export function App() {
         type: 'copyConfig',
         itemCount: sourcePaths.length,
         destPath: destDir,
-        onConfirm: async (options: CopyOptions) => {
+        onConfirm: async (options: CopyOptions, newDestDir: string) => {
           try {
             // Set up progress dialog and refs BEFORE starting copy to avoid
             // race condition where Done event arrives before copyId is set.
@@ -573,7 +573,7 @@ export function App() {
             // Now start the copy — events may arrive before this resolves.
             // Only write back the ID if the done/error event hasn't already
             // cleared copyProgressSpecRef (race condition for fast copies).
-            const copyId = await bridge.copy.start(sourcePaths, destDir, options);
+            const copyId = await bridge.copy.start(sourcePaths, newDestDir, options);
             if (copyProgressSpecRef.current !== null) {
               activeCopyIdRef.current = copyId;
             }
@@ -673,7 +673,7 @@ export function App() {
         type: 'moveConfig',
         itemCount: sourcePaths.length,
         destPath: destDir,
-        onConfirm: async (options: MoveOptions) => {
+        onConfirm: async (options: MoveOptions, newDestDir: string) => {
           try {
             const onCancel = () => {
               showDialog({
@@ -705,7 +705,7 @@ export function App() {
             moveProgressSpecRef.current = progressSpec;
             showDialog(progressSpec);
 
-            const moveId = await bridge.move.start(sourcePaths, destDir, options);
+            const moveId = await bridge.move.start(sourcePaths, newDestDir, options);
             if (moveProgressSpecRef.current !== null) {
               activeMoveIdRef.current = moveId;
             }

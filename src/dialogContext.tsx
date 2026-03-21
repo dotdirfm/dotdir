@@ -1,4 +1,4 @@
-import {
+import React, {
   createContext,
   useCallback,
   useContext,
@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { HotkeyProvider } from './dialogHotkeys';
 import { ModalDialog } from './ModalDialog';
 import { OpenCreateFileDialog } from './OpenCreateFileDialog';
 import { DeleteProgressDialog } from './DeleteProgressDialog';
@@ -60,7 +61,7 @@ export type DialogSpec =
       type: 'copyConfig';
       itemCount: number;
       destPath: string;
-      onConfirm: (options: CopyOptions) => void;
+      onConfirm: (options: CopyOptions, destDir: string) => void;
       onCancel: () => void;
     }
   | {
@@ -91,7 +92,7 @@ export type DialogSpec =
       type: 'moveConfig';
       itemCount: number;
       destPath: string;
-      onConfirm: (options: MoveOptions) => void;
+      onConfirm: (options: MoveOptions, destDir: string) => void;
       onCancel: () => void;
     }
   | {
@@ -172,12 +173,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function DialogHolder() {
-  const ctx = useContext(DialogContext);
-  const dialog = ctx?.dialog ?? null;
-
-  if (!dialog) return null;
-
+function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React.ReactElement | null {
   switch (dialog.type) {
     case 'message':
       return (
@@ -246,8 +242,8 @@ export function DialogHolder() {
          <CopyConfigDialog
            itemCount={dialog.itemCount}
            destPath={dialog.destPath}
-           onConfirm={(options) => {
-             dialog.onConfirm(options);
+           onConfirm={(options, destDir) => {
+             dialog.onConfirm(options, destDir);
            }}
            onCancel={() => {
              dialog.onCancel();
@@ -301,8 +297,8 @@ export function DialogHolder() {
          <MoveConfigDialog
            itemCount={dialog.itemCount}
            destPath={dialog.destPath}
-           onConfirm={(options) => {
-             dialog.onConfirm(options);
+           onConfirm={(options, destDir) => {
+             dialog.onConfirm(options, destDir);
            }}
            onCancel={() => {
              dialog.onCancel();
@@ -368,6 +364,146 @@ export function DialogHolder() {
     default:
       return null;
   }
+}
+
+const HELP_TEXTS: Partial<Record<DialogSpec['type'], string>> = {
+  copyConfig: `# Copy
+
+Copies the selected items into the destination directory.
+
+## Destination
+
+The target directory path. You can edit it directly before confirming.
+
+## Conflict handling
+
+What to do when a file with the same name already exists at the destination:
+
+- **Ask** — show a conflict dialog for each file (default)
+- **Overwrite** — always replace the existing file
+- **Skip** — leave existing files untouched, skip the source
+- **Auto-rename** — append a numeric suffix to avoid overwriting (e.g. \`file (2).txt\`)
+- **Only newer** — overwrite only when the source was modified more recently
+
+## Symlinks
+
+How to handle symbolic links found in the source:
+
+- **Smart** — links pointing inside the source tree become relative links at the destination; links pointing outside are followed and their target content is copied
+- **Copy link** — always recreate the symlink as-is at the destination
+- **Copy target** — always follow the link and copy the actual file content
+
+## Options
+
+- **Copy permissions** — preserve file mode bits (read/write/execute)
+- **Copy extended attributes** — preserve macOS/Linux xattrs (e.g. resource forks, ACLs)
+- **Sparse files** — use sparse allocation for files with large zero-filled regions
+- **Use CoW** — use copy-on-write cloning when the filesystem supports it (fast, zero extra disk usage until modified)
+- **Disable write cache** — bypass the OS write-back cache; slower but ensures data is flushed to disk immediately
+`,
+
+  moveConfig: `# Move
+
+Moves the selected items into the destination directory.
+
+## Destination
+
+The target directory path. You can edit it directly before confirming.
+
+## Conflict handling
+
+What to do when a file with the same name already exists at the destination:
+
+- **Ask** — show a conflict dialog for each file (default)
+- **Overwrite** — always replace the existing file
+- **Skip** — leave existing files untouched, skip the source
+- **Auto-rename** — append a numeric suffix to avoid overwriting (e.g. \`file (2).txt\`)
+- **Only newer** — overwrite only when the source was modified more recently
+
+**Note:** When source and destination are on the same filesystem, move is an atomic rename with no data copying. Across filesystems, the file is copied then the source is deleted.
+`,
+
+  copyConflict: `# File conflict
+
+A file with the same name already exists at the destination. Choose how to resolve it:
+
+- **Overwrite** — replace the existing destination file with the source file
+- **Skip** — keep the existing file and skip this source file
+- **Rename** — copy with a custom name you specify
+- **Overwrite All** — overwrite this and all remaining conflicts automatically
+- **Skip All** — skip this and all remaining conflicts automatically
+- **Cancel** — abort the entire copy operation
+
+The source and destination file sizes and modification times are shown above to help you decide.
+`,
+
+  moveConflict: `# File conflict
+
+A file with the same name already exists at the destination. Choose how to resolve it:
+
+- **Overwrite** — replace the existing destination file with the source file
+- **Skip** — keep the existing file and skip this source file
+- **Rename** — move with a custom name you specify
+- **Overwrite All** — overwrite this and all remaining conflicts automatically
+- **Skip All** — skip this and all remaining conflicts automatically
+- **Cancel** — abort the entire move operation
+
+The source and destination file sizes and modification times are shown above to help you decide.
+`,
+
+  makeFolder: `# New folder
+
+Enter a name for the new folder. The folder will be created in the active panel's current directory.
+
+Intermediate directories are not created automatically — the parent directory must already exist.
+`,
+
+  rename: `# Rename
+
+Enter a new name for the selected item.
+
+The name must not be empty and must not contain path separator characters (\`/\` on Unix, \`\\\\\` on Windows).
+`,
+
+  openCreateFile: `# Open / create file
+
+Type a file path to open an existing file or create a new one.
+
+- If the path is relative, it is resolved against the active panel's current directory.
+- If the file does not exist, it will be created when you confirm.
+- Choose a **language** to set the syntax highlighting mode for the editor.
+`,
+
+  deleteProgress: `# Deleting
+
+Files are being permanently deleted.
+
+Press **Cancel** to stop the deletion. Items that have already been deleted cannot be recovered.
+`,
+
+  copyProgress: `# Copying
+
+Files are being copied to the destination.
+
+Press **Cancel** to stop. Files already copied will remain at the destination.
+`,
+
+  moveProgress: `# Moving
+
+Files are being moved to the destination.
+
+Press **Cancel** to stop. Files already moved will remain at the destination and will not be restored automatically.
+`,
+};
+
+export function DialogHolder() {
+  const ctx = useContext(DialogContext);
+  const dialog = ctx?.dialog ?? null;
+  if (!dialog) return null;
+  const content = renderDialogContent(dialog, ctx!);
+  if (!content) return null;
+  const helpText = HELP_TEXTS[dialog.type];
+  return <HotkeyProvider helpText={helpText}>{content}</HotkeyProvider>;
 }
 
 export function useDialog(): DialogContextValue {

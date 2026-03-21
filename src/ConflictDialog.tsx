@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { focusContext } from './focusContext';
 import { useDialogButtonNav } from './useDialogButtonNav';
 import type { ConflictResolution } from './bridge';
+import { SmartLabel } from './dialogHotkeys';
 
 export interface ConflictDialogProps {
   src: string;
@@ -64,8 +65,9 @@ export function ConflictDialog({
         <div className="modal-dialog-header">Rename</div>
         <div className="modal-dialog-body">
           <div className="conflict-rename-field">
-            <label>New name:</label>
+            <label htmlFor="conflict-rename-input"><SmartLabel>New name</SmartLabel></label>
             <input
+              id="conflict-rename-input"
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
@@ -79,8 +81,8 @@ export function ConflictDialog({
           </div>
         </div>
         <div className="modal-dialog-buttons" ref={renameButtonsRef}>
-          <button type="button" onClick={() => setRenaming(false)}>Back</button>
-          <button type="button" onClick={() => onResolve({ type: 'rename', newName: newName.trim() })} disabled={!newName.trim()}>OK</button>
+          <button type="button" onClick={() => setRenaming(false)}><SmartLabel>Back</SmartLabel></button>
+          <button type="button" onClick={() => onResolve({ type: 'rename', newName: newName.trim() })} disabled={!newName.trim()}><SmartLabel>OK</SmartLabel></button>
         </div>
       </dialog>
     );
@@ -102,12 +104,12 @@ export function ConflictDialog({
         </div>
       </div>
       <div className="modal-dialog-buttons conflict-buttons" ref={buttonsRef}>
-        <button type="button" onClick={() => onResolve({ type: 'overwrite' })}>Overwrite</button>
-        <button type="button" onClick={() => onResolve({ type: 'skip' })}>Skip</button>
-        <button type="button" onClick={() => setRenaming(true)}>Rename</button>
-        <button type="button" onClick={() => onResolve({ type: 'overwriteAll' })}>Overwrite All</button>
-        <button type="button" onClick={() => onResolve({ type: 'skipAll' })}>Skip All</button>
-        <button type="button" onClick={() => onResolve({ type: 'cancel' })}>Cancel</button>
+        <button type="button" onClick={() => onResolve({ type: 'overwrite' })}><SmartLabel>Overwrite</SmartLabel></button>
+        <button type="button" onClick={() => onResolve({ type: 'skip' })}><SmartLabel>Skip</SmartLabel></button>
+        <button type="button" onClick={() => setRenaming(true)}><SmartLabel>Rename</SmartLabel></button>
+        <button type="button" onClick={() => onResolve({ type: 'overwriteAll' })}><SmartLabel>Overwrite All</SmartLabel></button>
+        <button type="button" onClick={() => onResolve({ type: 'skipAll' })}><SmartLabel>Skip All</SmartLabel></button>
+        <button type="button" onClick={() => onResolve({ type: 'cancel' })}><SmartLabel>Cancel</SmartLabel></button>
       </div>
     </dialog>
   );
