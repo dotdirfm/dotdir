@@ -26,6 +26,8 @@ use wasmtime::{Engine, Linker, Module, Store};
 /// Data available to host-imported functions during a WASM call.
 struct HostData {
     container_path: String,
+    /// Accumulates bytes sent by the plugin via host_receive_bytes.
+    output_data: Vec<u8>,
 }
 
 /// A compiled WASM plugin. `Engine` and `Module` are thread-safe.
@@ -161,6 +163,30 @@ fn make_linker(engine: &Engine) -> Result<Linker<HostData>, String> {
         )
         .map_err(|e| format!("Failed to link host_log: {}", e))?;
 
+    // host_receive_bytes(ptr: i32, len: i32) -> i32
+    // Streams plugin_read output to the host without the OUTPUT_BUF size limit.
+    linker
+        .func_wrap(
+            "env",
+            "host_receive_bytes",
+            |mut caller: wasmtime::Caller<'_, HostData>, ptr: i32, len: i32| -> i32 {
+                if len <= 0 {
+                    return 0;
+                }
+                let mem = match caller.get_export("memory") {
+                    Some(wasmtime::Extern::Memory(m)) => m,
+                    _ => return -1,
+                };
+                let mut buf = vec![0u8; len as usize];
+                if mem.read(&caller, ptr as usize, &mut buf).is_err() {
+                    return -1;
+                }
+                caller.data_mut().output_data.extend_from_slice(&buf);
+                len
+            },
+        )
+        .map_err(|e| format!("Failed to link host_receive_bytes: {}", e))?;
+
     Ok(linker)
 }
 
@@ -187,7 +213,7 @@ fn call_plugin_list(
     container_path: &str,
     inner_path: &str,
 ) -> Result<Vec<FspEntry>, String> {
-    let mut store = Store::new(&plugin.engine, HostData { container_path: container_path.to_string() });
+    let mut store = Store::new(&plugin.engine, HostData { container_path: container_path.to_string(), output_data: Vec::new() });
     let linker = make_linker(&plugin.engine)?;
     let instance = linker
         .instantiate(&mut store, &plugin.module)
@@ -239,7 +265,7 @@ fn call_plugin_read(
     offset: u64,
     length: usize,
 ) -> Result<Vec<u8>, String> {
-    let mut store = Store::new(&plugin.engine, HostData { container_path: container_path.to_string() });
+    let mut store = Store::new(&plugin.engine, HostData { container_path: container_path.to_string(), output_data: Vec::new() });
     let linker = make_linker(&plugin.engine)?;
     let instance = linker
         .instantiate(&mut store, &plugin.module)
@@ -269,6 +295,13 @@ fn call_plugin_read(
         .map_err(|e| format!("plugin_read: {}", e))?;
     if bytes_written < 0 {
         return Err(format!("plugin_read returned error code {}", bytes_written));
+    }
+
+    // New plugins stream data via host_receive_bytes (no OUTPUT_BUF size limit).
+    // Old plugins write to OUTPUT_BUF directly — fall back to reading from there.
+    let streamed = std::mem::take(&mut store.data_mut().output_data);
+    if !streamed.is_empty() {
+        return Ok(streamed);
     }
 
     let mut out = vec![0u8; bytes_written as usize];

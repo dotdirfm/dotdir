@@ -17,6 +17,9 @@ import type {
 } from './extensionApi';
 import { getActiveColorThemeData, onColorThemeChange } from './vscodeColorTheme';
 import { focusContext } from './focusContext';
+import { isContainerPath, parseContainerPath } from './containerPath';
+import { fsProviderRegistry } from './viewerEditorRegistry';
+import { loadFsProvider } from './browserFsProvider';
 
 // ── Container props ─────────────────────────────────────────────────────
 
@@ -49,6 +52,20 @@ function toHex(bytes: ArrayBuffer): string {
   let out = '';
   for (const b of u8) out += b.toString(16).padStart(2, '0');
   return out;
+}
+
+/** Read a byte range from a file inside a container (e.g. ZIP) via the fsProvider. */
+async function readFromContainer(path: string, offset: number, length: number): Promise<ArrayBuffer> {
+  const { containerFile: hostFile, innerPath } = parseContainerPath(path);
+  const match = fsProviderRegistry.resolve(basename(hostFile));
+  if (!match) throw new Error(`No fsProvider registered for "${basename(hostFile)}"`);
+  if (match.contribution.runtime === 'backend' && bridge.fsProvider) {
+    const wasmPath = join(match.extensionDirPath, match.contribution.entry);
+    return bridge.fsProvider.readFileRange(wasmPath, hostFile, innerPath, offset, length);
+  }
+  const provider = await loadFsProvider(match.extensionDirPath, match.contribution.entry);
+  if (!provider.readFileRange) throw new Error('Provider does not support readFileRange');
+  return provider.readFileRange(hostFile, innerPath, offset, length);
 }
 
 export function ExtensionContainer(containerProps: ContainerProps) {
@@ -213,6 +230,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const buildHostApi = useCallback((): HostApi => ({
     async readFile(path: string): Promise<ArrayBuffer> {
       const normalized = normalizePath(path);
+      if (isContainerPath(normalized)) return readFromContainer(normalized, 0, 64 * 1024 * 1024);
       const current = currentFileRef.current;
       // Reuse existing fd when possible; otherwise open and remember a new one.
       let target = current;
@@ -233,6 +251,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     },
     async readFileRange(path: string, offset: number, length: number): Promise<ArrayBuffer> {
       const normalized = normalizePath(path);
+      if (isContainerPath(normalized)) return readFromContainer(normalized, offset, length);
       const current = currentFileRef.current;
       let target = current;
       if (!target || target.path !== normalized) {
@@ -261,6 +280,10 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     },
     async statFile(path: string): Promise<{ size: number; mtimeMs: number }> {
       const normalized = normalizePath(path);
+      if (isContainerPath(normalized)) {
+        const data = await readFromContainer(normalized, 0, 64 * 1024 * 1024);
+        return { size: data.byteLength, mtimeMs: 0 };
+      }
       const stat = await bridge.fsa.stat(normalized);
       const current = currentFileRef.current;
       if (current && current.path === normalized && current.size !== stat.size) {

@@ -239,9 +239,11 @@ export const FileList = memo(function FileList({
         return;
       }
       
-      // Fallback: select the child folder we came from
+      // Fallback: select the child folder we came from.
+      // Strip the container-path separator (null byte) that may appear when prevPath
+      // was a container root, e.g. "archive.zip\0" → "archive.zip".
       const remainder = prevPath.slice(currentPath.length).replace(/^\//, '');
-      const childName = remainder.split('/')[0];
+      const childName = remainder.split('/')[0].replace(/\0.*$/, '');
       if (childName) {
         const idx = displayEntries.findIndex((d) => d.entry.name === childName);
         if (idx >= 0) {

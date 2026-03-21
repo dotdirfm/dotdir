@@ -1,18 +1,13 @@
-import { FsNode } from 'fss-lang';
-import type { LayeredResolver, ThemeKind } from 'fss-lang';
-import { createFsNode } from 'fss-lang/helpers';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import type { FsChangeType } from './types';
 import { bridge } from './bridge';
-import type { CopyOptions, CopyProgressEvent, ConflictResolution, MoveOptions, MoveProgressEvent, DeleteProgressEvent } from './bridge';
 import type { PanelTab } from './FileList/PanelTabs';
 import { isMediaFile } from './mediaFiles';
 import { ViewerContainer, EditorContainer } from './ExtensionContainer';
 import { viewerRegistry, editorRegistry, fsProviderRegistry, populateRegistries } from './viewerEditorRegistry';
-import { isContainerPath, parseContainerPath, buildContainerPath, CONTAINER_SEP } from './containerPath';
-import { loadFsProvider, clearFsProviderCache } from './browserFsProvider';
+import { isContainerPath, parseContainerPath, CONTAINER_SEP } from './containerPath';
+import { clearFsProviderCache } from './browserFsProvider';
 import type { LanguageOption } from './OpenCreateFileDialog';
 import { useDialog, DialogHolder } from './dialogContext';
 import { ModalDialog } from './ModalDialog';
@@ -22,316 +17,21 @@ import { ExtensionsPanel } from './ExtensionsPanel';
 import { PanelGroup } from './PanelGroup';
 import { CommandPalette, useCommandPalette } from './CommandPalette';
 import { commandRegistry } from './commands';
-import { DirectoryHandle, FileHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
-import { createPanelResolver, invalidateFssCache, setExtensionLayers, syncLayers } from './fss';
+import { FileHandle } from './fsa';
+import { setExtensionLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, findColorTheme, type LoadedExtension, type PanelPersistedState, type PersistedTab } from './extensions';
 import { loadAndApplyColorTheme, clearColorTheme, uiThemeToKind } from './vscodeColorTheme';
 import { initUserSettings, onSettingsChange, updateSettings } from './userSettings';
-import { languageRegistry } from './languageRegistry';
 import { setIconTheme, setIconThemeKind } from './iconResolver';
-import { basename, dirname, isFileExecutable, isRootPath, join } from './path';
+import { basename, dirname, join } from './path';
 import { normalizeTerminalPath } from './terminal/path';
 import { initUserKeybindings } from './userKeybindings';
 import { BrowserExtensionHost } from './browserExtensionHost';
-
-function buildParentChain(dirPath: string): FsNode | undefined {
-  if (dirname(dirPath) === dirPath) return undefined;
-
-  const ancestors: string[] = [];
-  let cur = dirPath;
-  while (true) {
-    ancestors.push(cur);
-    const parent = dirname(cur);
-    if (parent === cur) break;
-    cur = parent;
-  }
-  ancestors.reverse();
-
-  let node: FsNode | undefined;
-  for (const p of ancestors) {
-    node = createFsNode({
-      name: basename(p) || p,
-      type: 'folder',
-      path: p,
-      parent: node,
-    });
-  }
-  return node;
-}
-
-function handleToFsNode(handle: FileSystemHandle & { meta?: HandleMeta }, dirPath: string, parent?: FsNode): FsNode {
-  const isDir = handle.kind === 'directory';
-  return createFsNode({
-    name: handle.name,
-    type: isDir ? 'folder' : 'file',
-    lang: isDir ? '' : languageRegistry.detectLanguage(handle.name),
-    meta: {
-      size: handle.meta?.size ?? 0,
-      mtimeMs: handle.meta?.mtimeMs ?? 0,
-      executable: !isDir && handle.meta != null && isFileExecutable(handle.meta.mode ?? 0, handle.name),
-      hidden: handle.meta?.hidden ?? handle.name.startsWith('.'),
-      nlink: handle.meta?.nlink ?? 1,
-      entryKind: handle.meta?.kind ?? (isDir ? 'directory' : 'file'),
-      linkTarget: handle.meta?.linkTarget,
-    },
-    path: join(dirPath, handle.name),
-    parent,
-  });
-}
-
-interface PanelState {
-  currentPath: string;
-  parentNode?: FsNode;
-  entries: FsNode[];
-}
-
-const emptyPanel: PanelState = { currentPath: '', parentNode: undefined, entries: [] };
-
-async function findExistingParent(startPath: string): Promise<string> {
-  let cur = startPath;
-  while (true) {
-    if (await bridge.fsa.exists(cur)) return cur;
-    const parent = dirname(cur);
-    if (parent === cur || isRootPath(cur)) return cur;
-    cur = parent;
-  }
-}
-
-function getAncestors(dirPath: string): string[] {
-  const ancestors: string[] = [];
-  let cur = dirPath;
-  while (true) {
-    ancestors.push(cur);
-    const parent = dirname(cur);
-    if (parent === cur) break;
-    cur = parent;
-  }
-  return ancestors;
-}
-
-function usePanel(theme: ThemeKind, showError: (message: string) => void) {
-  const [state, setState] = useState<PanelState>(emptyPanel);
-  const [navigating, setNavigating] = useState(false);
-  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const navAbortRef = useRef<AbortController | null>(null);
-  const resolverRef = useRef<LayeredResolver | null>(null);
-  if (!resolverRef.current) {
-    resolverRef.current = createPanelResolver(theme);
-  }
-
-  const observerRef = useRef<FileSystemObserver | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const currentPathRef = useRef<string>('');
-
-  useEffect(() => {
-    resolverRef.current!.setTheme(theme);
-  }, [theme]);
-
-  const showErrorRef = useRef(showError);
-  showErrorRef.current = showError;
-
-  const setupWatches = useCallback((dirPath: string) => {
-    const observer = observerRef.current!;
-    const ancestors = getAncestors(dirPath);
-    const paths: string[] = [];
-    for (const ancestor of ancestors) {
-      paths.push(ancestor);
-      paths.push(join(ancestor, '.faraday'));
-    }
-    observer.sync(paths);
-  }, []);
-
-  const navigateTo = useCallback(
-    async (path: string, force = false) => {
-      // Skip if already navigating to this path
-      if (!force && currentPathRef.current === path && navAbortRef.current) {
-        return;
-      }
-      navAbortRef.current?.abort();
-      const abort = new AbortController();
-      navAbortRef.current = abort;
-
-      navTimerRef.current = setTimeout(() => setNavigating(true), 300);
-      try {
-        const work = (async () => {
-          currentPathRef.current = path;
-
-          if (isContainerPath(path)) {
-            // ── Container path: delegate listing to the fsProvider extension ──
-            const { containerFile: hostFile, innerPath } = parseContainerPath(path);
-            const providerMatch = fsProviderRegistry.resolve(basename(hostFile));
-            if (!providerMatch) {
-              throw new Error(`No fsProvider registered for "${basename(hostFile)}"`);
-            }
-            let entries: import('./extensionApi').FsProviderEntry[];
-            if (providerMatch.contribution.runtime === 'backend' && bridge.fsProvider) {
-              const wasmPath = join(providerMatch.extensionDirPath, providerMatch.contribution.entry);
-              const raw = await bridge.fsProvider.listEntries(wasmPath, hostFile, innerPath);
-              if (abort.signal.aborted) return;
-              entries = raw.map((e) => ({ name: e.name, type: e.kind, size: e.size, mtimeMs: e.mtimeMs }));
-            } else {
-              const provider = await loadFsProvider(
-                providerMatch.extensionDirPath,
-                providerMatch.contribution.entry,
-              );
-              if (abort.signal.aborted) return;
-              entries = await provider.listEntries(hostFile, innerPath);
-              if (abort.signal.aborted) return;
-            }
-
-            const parent = buildParentChain(path);
-            const nodes: FsNode[] = entries.map((entry) => {
-              const entryInner = (innerPath === '/' ? '' : innerPath) + '/' + entry.name;
-              return createFsNode({
-                name: entry.name,
-                type: entry.type === 'directory' ? 'folder' : 'file',
-                lang: entry.type === 'file' ? languageRegistry.detectLanguage(entry.name) : '',
-                meta: {
-                  size: entry.size ?? 0,
-                  mtimeMs: entry.mtimeMs ?? 0,
-                  executable: false,
-                  hidden: entry.name.startsWith('.'),
-                  nlink: 1,
-                  entryKind: entry.type === 'directory' ? 'directory' : 'file',
-                },
-                path: buildContainerPath(hostFile, entryInner),
-                parent,
-              });
-            });
-            setState({ currentPath: path, parentNode: parent, entries: nodes });
-            // No filesystem watches inside containers.
-          } else {
-            // ── Normal filesystem path ─────────────────────────────────────────
-            await syncLayers(resolverRef.current!, path);
-            if (abort.signal.aborted) return;
-            const dirHandle = new DirectoryHandle(path);
-            const parent = buildParentChain(path);
-            const nodes: FsNode[] = [];
-            for await (const [, handle] of dirHandle.entries()) {
-              if (abort.signal.aborted) return;
-              nodes.push(handleToFsNode(handle, path, parent));
-            }
-            if (abort.signal.aborted) return;
-            setState({ currentPath: path, parentNode: parent, entries: nodes });
-            setupWatches(path);
-          }
-        })();
-        work.catch(() => {});
-        await Promise.race([
-          work,
-          new Promise<void>((resolve) => {
-            abort.signal.addEventListener('abort', () => resolve(), { once: true });
-          }),
-        ]);
-      } catch (err) {
-        if (!abort.signal.aborted) {
-          const msg = err && typeof err === 'object' && 'message' in err
-            ? (err as { message: string }).message
-            : String(err);
-          showErrorRef.current(`Failed to read directory: ${msg}`);
-        }
-      } finally {
-        if (navAbortRef.current === abort) {
-          navAbortRef.current = null;
-        }
-        clearTimeout(navTimerRef.current!);
-        navTimerRef.current = null;
-        setNavigating(false);
-      }
-    },
-    [setupWatches],
-  );
-
-  const cancelNavigation = useCallback(() => {
-    navAbortRef.current?.abort();
-    navAbortRef.current = null;
-    if (navTimerRef.current) {
-      clearTimeout(navTimerRef.current);
-      navTimerRef.current = null;
-    }
-    setNavigating(false);
-  }, []);
-
-  useEffect(() => {
-    const handleRecords = (records: FileSystemChangeRecord[]) => {
-      const curPath = currentPathRef.current;
-      if (!curPath) return;
-
-      let needsRefresh = false;
-      let needsFssRefresh = false;
-      let navigateUp = false;
-
-      for (const record of records) {
-        const rootPath = record.root.path;
-        const changedName = record.relativePathComponents[0] ?? null;
-        const type: FsChangeType = record.type;
-
-        if (rootPath === curPath) {
-          if (type === 'errored') {
-            navigateUp = true;
-          } else {
-            needsRefresh = true;
-          }
-        } else if (rootPath.endsWith('/.faraday')) {
-          if (changedName === 'fs.css') {
-            const parentDir = dirname(rootPath);
-            invalidateFssCache(parentDir);
-            needsFssRefresh = true;
-          }
-        } else if (curPath.startsWith(rootPath + '/') || curPath === rootPath) {
-          if (changedName === '.faraday') {
-            invalidateFssCache(rootPath);
-            needsFssRefresh = true;
-          } else if (changedName) {
-            const relative = curPath.slice(rootPath.length + 1);
-            const nextSegment = relative.split('/')[0];
-            if (changedName === nextSegment && type === 'disappeared') {
-              navigateUp = true;
-            }
-          }
-        }
-      }
-
-      if (navigateUp) {
-        if (debounceRef.current) {
-          clearTimeout(debounceRef.current);
-          debounceRef.current = null;
-        }
-        findExistingParent(curPath).then((parent) => {
-          navigateToRef.current(parent);
-        });
-        return;
-      }
-
-      if (needsRefresh || needsFssRefresh) {
-        if (debounceRef.current) clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => {
-          debounceRef.current = null;
-          navigateToRef.current(currentPathRef.current);
-        }, 100);
-      }
-    };
-
-    observerRef.current = new FileSystemObserver(handleRecords);
-
-    return () => {
-      observerRef.current?.disconnect();
-      observerRef.current = null;
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
-    };
-  }, []);
-
-  const navigateToRef = useRef(navigateTo);
-  navigateToRef.current = navigateTo;
-
-  return { ...state, navigateTo, navigating, cancelNavigation, resolver: resolverRef.current! };
-}
-
-type PanelSide = 'left' | 'right';
+import type { ThemeKind } from 'fss-lang';
+import { usePanel, findExistingParent } from './usePanel';
+import { useFileOperations, type PanelSide } from './useFileOperations';
+import { languageRegistry } from './languageRegistry';
 
 let nextTabId = 0;
 function genTabId(): string {
@@ -365,12 +65,6 @@ export function App() {
   const [editorExt, setEditorExt] = useState<{ dirPath: string; entry: string } | null>(null);
   const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
-  const activeDeleteIdRef = useRef<number | null>(null);
-  const deleteProgressSpecRef = useRef<{ type: 'deleteProgress'; filesDone: number; currentFile: string; onCancel: () => void } | null>(null);
-  const activeCopyIdRef = useRef<number | null>(null);
-  const copyProgressSpecRef = useRef<{ type: 'copyProgress'; bytesCopied: number; bytesTotal: number; filesDone: number; filesTotal: number; currentFile: string; onCancel: () => void } | null>(null);
-  const activeMoveIdRef = useRef<number | null>(null);
-  const moveProgressSpecRef = useRef<{ type: 'moveProgress'; bytesCopied: number; bytesTotal: number; filesDone: number; filesTotal: number; currentFile: string; onCancel: () => void } | null>(null);
   const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
   const [activeColorTheme, setActiveColorTheme] = useState<string | undefined>(undefined);
   const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
@@ -461,6 +155,14 @@ export function App() {
   const activePanelNavigateRef = useRef(left.navigateTo);
   activePanelNavigateRef.current = activePanel === 'left' ? left.navigateTo : right.navigateTo;
 
+  const leftRef = useRef(left);
+  leftRef.current = left;
+  const rightRef = useRef(right);
+  rightRef.current = right;
+
+  const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } =
+    useFileOperations(activePanelRef, leftRef, rightRef, setSelectionKey);
+
   // Set context for which panel is active
   useEffect(() => {
     commandRegistry.setContext('leftPanelActive', activePanel === 'left');
@@ -495,426 +197,6 @@ export function App() {
       setEditorFile({ path: filePath, name: fileName, size, langId });
     },
     []
-  );
-
-  const handleMoveToTrash = useCallback(
-    (sourcePaths: string[], refresh: () => void) => {
-      if (sourcePaths.length === 0) return;
-      const label = sourcePaths.length === 1
-        ? `Move "${basename(sourcePaths[0])}" to Trash?`
-        : `Move ${sourcePaths.length} items to Trash?`;
-      showDialog({
-        type: 'message',
-        title: 'Move to Trash',
-        message: label,
-        variant: 'default',
-        buttons: [
-          { label: 'Cancel' },
-          { label: 'Move to Trash', default: true, onClick: async () => {
-            try {
-              await bridge.fsa.moveToTrash(sourcePaths);
-              refresh();
-            } catch (e) {
-              showDialog({ type: 'message', title: 'Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
-            }
-          }},
-        ],
-      });
-    },
-    [showDialog]
-  );
-
-  const handlePermanentDelete = useCallback(
-    (sourcePaths: string[], _refresh: () => void) => {
-      if (sourcePaths.length === 0) return;
-      const label = sourcePaths.length === 1
-        ? `Permanently delete "${basename(sourcePaths[0])}"? This cannot be undone.`
-        : `Permanently delete ${sourcePaths.length} items? This cannot be undone.`;
-      showDialog({
-        type: 'message',
-        title: 'Permanently Delete',
-        message: label,
-        variant: 'default',
-        buttons: [
-          { label: 'Cancel' },
-          { label: 'Delete', default: true, onClick: async () => {
-            try {
-              const onCancel = () => {
-                showDialog({
-                  type: 'cancelDeleteConfirm',
-                  onResume: () => {
-                    if (deleteProgressSpecRef.current) showDialog(deleteProgressSpecRef.current);
-                  },
-                  onCancelDeletion: () => {
-                    if (activeDeleteIdRef.current !== null) {
-                      void bridge.delete.cancel(activeDeleteIdRef.current);
-                    }
-                    activeDeleteIdRef.current = null;
-                    deleteProgressSpecRef.current = null;
-                    closeDialog();
-                  },
-                });
-              };
-
-              const progressSpec = {
-                type: 'deleteProgress' as const,
-                filesDone: 0,
-                currentFile: 'Preparing...',
-                onCancel,
-              };
-              deleteProgressSpecRef.current = progressSpec;
-              showDialog(progressSpec);
-
-              const deleteId = await bridge.delete.start(sourcePaths);
-              if (deleteProgressSpecRef.current !== null) {
-                activeDeleteIdRef.current = deleteId;
-              }
-            } catch (e) {
-              activeDeleteIdRef.current = null;
-              deleteProgressSpecRef.current = null;
-              closeDialog();
-              showDialog({ type: 'message', title: 'Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
-            }
-          }},
-        ],
-      });
-    },
-    [showDialog, closeDialog]
-  );
-
-  // ── Copy handler ────────────────────────────────────────────────────
-
-  const handleCopy = useCallback(
-    (sourcePaths: string[], refresh: () => void) => {
-      const destPanel = activePanelRef.current === 'left' ? right : left;
-      const destDir = destPanel.currentPath;
-      if (!destDir || sourcePaths.length === 0) return;
-
-      showDialog({
-        type: 'copyConfig',
-        itemCount: sourcePaths.length,
-        destPath: destDir,
-        onConfirm: async (options: CopyOptions, newDestDir: string) => {
-          try {
-            // Set up progress dialog and refs BEFORE starting copy to avoid
-            // race condition where Done event arrives before copyId is set.
-            const onCancel = () => {
-              showDialog({
-                type: 'cancelCopyConfirm',
-                onResume: () => {
-                  if (copyProgressSpecRef.current) showDialog(copyProgressSpecRef.current);
-                },
-                onCancelCopy: () => {
-                  if (activeCopyIdRef.current !== null) {
-                    bridge.copy.cancel(activeCopyIdRef.current);
-                  }
-                  activeCopyIdRef.current = null;
-                  copyProgressSpecRef.current = null;
-                  closeDialog();
-                  refresh();
-                },
-              });
-            };
-
-            const progressSpec = {
-              type: 'copyProgress' as const,
-              bytesCopied: 0,
-              bytesTotal: 0,
-              filesDone: 0,
-              filesTotal: 0,
-              currentFile: 'Preparing...',
-              onCancel,
-            };
-            copyProgressSpecRef.current = progressSpec;
-            showDialog(progressSpec);
-
-            // Now start the copy — events may arrive before this resolves.
-            // Only write back the ID if the done/error event hasn't already
-            // cleared copyProgressSpecRef (race condition for fast copies).
-            const copyId = await bridge.copy.start(sourcePaths, newDestDir, options);
-            if (copyProgressSpecRef.current !== null) {
-              activeCopyIdRef.current = copyId;
-            }
-          } catch (e) {
-            activeCopyIdRef.current = null;
-            copyProgressSpecRef.current = null;
-            closeDialog();
-            showDialog({ type: 'message', title: 'Copy Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
-          }
-        },
-        onCancel: () => {},
-      });
-    },
-    [left, right, showDialog, closeDialog]
-  );
-
-  // ── Copy progress listener ──────────────────────────────────────────
-
-  useEffect(() => {
-    const unsub = bridge.copy.onProgress((payload: CopyProgressEvent) => {
-      if (activeCopyIdRef.current === null) {
-        // Copy started but the start() Promise hasn't resolved yet — late-bind the ID
-        if (copyProgressSpecRef.current !== null) {
-          activeCopyIdRef.current = payload.copyId;
-        } else {
-          return;
-        }
-      } else if (payload.copyId !== activeCopyIdRef.current) {
-        return;
-      }
-      const event = payload.event;
-
-      switch (event.kind) {
-        case 'progress': {
-          const update = {
-            bytesCopied: event.bytesCopied,
-            bytesTotal: event.bytesTotal,
-            filesDone: event.filesDone,
-            filesTotal: event.filesTotal,
-            currentFile: event.currentFile,
-          };
-          if (copyProgressSpecRef.current) {
-            copyProgressSpecRef.current = { ...copyProgressSpecRef.current, ...update };
-          }
-          updateDialog(update);
-          break;
-        }
-        case 'conflict': {
-          showDialog({
-            type: 'copyConflict',
-            src: event.src,
-            dest: event.dest,
-            srcSize: event.srcSize,
-            srcMtimeMs: event.srcMtimeMs,
-            destSize: event.destSize,
-            destMtimeMs: event.destMtimeMs,
-            onResolve: (resolution: ConflictResolution) => {
-              bridge.copy.resolveConflict(activeCopyIdRef.current!, resolution);
-              // Re-show progress dialog
-              if (copyProgressSpecRef.current) showDialog(copyProgressSpecRef.current);
-            },
-          });
-          break;
-        }
-        case 'done': {
-          activeCopyIdRef.current = null;
-          copyProgressSpecRef.current = null;
-          closeDialog();
-          setSelectionKey((k) => k + 1);
-          leftRef.current.navigateTo(leftRef.current.currentPath);
-          rightRef.current.navigateTo(rightRef.current.currentPath);
-          break;
-        }
-        case 'error': {
-          activeCopyIdRef.current = null;
-          copyProgressSpecRef.current = null;
-          closeDialog();
-          showDialog({ type: 'message', title: 'Copy Error', message: event.message, variant: 'error' });
-          leftRef.current.navigateTo(leftRef.current.currentPath);
-          rightRef.current.navigateTo(rightRef.current.currentPath);
-          break;
-        }
-      }
-    });
-    return unsub;
-  }, [showDialog, closeDialog, updateDialog]);
-
-  // ── Move handler ─────────────────────────────────────────────────────
-
-  const handleMove = useCallback(
-    (sourcePaths: string[], refresh: () => void) => {
-      const destPanel = activePanelRef.current === 'left' ? right : left;
-      const destDir = destPanel.currentPath;
-      if (!destDir || sourcePaths.length === 0) return;
-
-      showDialog({
-        type: 'moveConfig',
-        itemCount: sourcePaths.length,
-        destPath: destDir,
-        onConfirm: async (options: MoveOptions, newDestDir: string) => {
-          try {
-            const onCancel = () => {
-              showDialog({
-                type: 'cancelMoveConfirm',
-                onResume: () => {
-                  if (moveProgressSpecRef.current) showDialog(moveProgressSpecRef.current);
-                },
-                onCancelMove: () => {
-                  if (activeMoveIdRef.current !== null) {
-                    bridge.move.cancel(activeMoveIdRef.current);
-                  }
-                  activeMoveIdRef.current = null;
-                  moveProgressSpecRef.current = null;
-                  closeDialog();
-                  refresh();
-                },
-              });
-            };
-
-            const progressSpec = {
-              type: 'moveProgress' as const,
-              bytesCopied: 0,
-              bytesTotal: 0,
-              filesDone: 0,
-              filesTotal: 0,
-              currentFile: 'Preparing...',
-              onCancel,
-            };
-            moveProgressSpecRef.current = progressSpec;
-            showDialog(progressSpec);
-
-            const moveId = await bridge.move.start(sourcePaths, newDestDir, options);
-            if (moveProgressSpecRef.current !== null) {
-              activeMoveIdRef.current = moveId;
-            }
-          } catch (e) {
-            activeMoveIdRef.current = null;
-            moveProgressSpecRef.current = null;
-            closeDialog();
-            showDialog({ type: 'message', title: 'Move Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
-          }
-        },
-        onCancel: () => {},
-      });
-    },
-    [left, right, showDialog, closeDialog]
-  );
-
-  // ── Move progress listener ───────────────────────────────────────────
-
-  useEffect(() => {
-    const unsub = bridge.move.onProgress((payload: MoveProgressEvent) => {
-      if (activeMoveIdRef.current === null) {
-        if (moveProgressSpecRef.current !== null) {
-          activeMoveIdRef.current = payload.moveId;
-        } else {
-          return;
-        }
-      } else if (payload.moveId !== activeMoveIdRef.current) {
-        return;
-      }
-      const event = payload.event;
-
-      switch (event.kind) {
-        case 'progress': {
-          const update = {
-            bytesCopied: event.bytesCopied,
-            bytesTotal: event.bytesTotal,
-            filesDone: event.filesDone,
-            filesTotal: event.filesTotal,
-            currentFile: event.currentFile,
-          };
-          if (moveProgressSpecRef.current) {
-            moveProgressSpecRef.current = { ...moveProgressSpecRef.current, ...update };
-          }
-          updateDialog(update);
-          break;
-        }
-        case 'conflict': {
-          showDialog({
-            type: 'moveConflict',
-            src: event.src,
-            dest: event.dest,
-            srcSize: event.srcSize,
-            srcMtimeMs: event.srcMtimeMs,
-            destSize: event.destSize,
-            destMtimeMs: event.destMtimeMs,
-            onResolve: (resolution: ConflictResolution) => {
-              bridge.move.resolveConflict(activeMoveIdRef.current!, resolution);
-              if (moveProgressSpecRef.current) showDialog(moveProgressSpecRef.current);
-            },
-          });
-          break;
-        }
-        case 'done': {
-          activeMoveIdRef.current = null;
-          moveProgressSpecRef.current = null;
-          closeDialog();
-          setSelectionKey((k) => k + 1);
-          leftRef.current.navigateTo(leftRef.current.currentPath);
-          rightRef.current.navigateTo(rightRef.current.currentPath);
-          break;
-        }
-        case 'error': {
-          activeMoveIdRef.current = null;
-          moveProgressSpecRef.current = null;
-          closeDialog();
-          showDialog({ type: 'message', title: 'Move Error', message: event.message, variant: 'error' });
-          leftRef.current.navigateTo(leftRef.current.currentPath);
-          rightRef.current.navigateTo(rightRef.current.currentPath);
-          break;
-        }
-      }
-    });
-    return unsub;
-  }, [showDialog, closeDialog, updateDialog]);
-
-  // ── Delete progress listener ─────────────────────────────────────────
-
-  useEffect(() => {
-    const unsub = bridge.delete.onProgress((payload: DeleteProgressEvent) => {
-      if (activeDeleteIdRef.current === null) {
-        if (deleteProgressSpecRef.current !== null) {
-          activeDeleteIdRef.current = payload.deleteId;
-        } else {
-          return;
-        }
-      } else if (payload.deleteId !== activeDeleteIdRef.current) {
-        return;
-      }
-      const event = payload.event;
-
-      switch (event.kind) {
-        case 'progress': {
-          const update = { filesDone: event.filesDone, currentFile: event.currentFile };
-          if (deleteProgressSpecRef.current) {
-            deleteProgressSpecRef.current = { ...deleteProgressSpecRef.current, ...update };
-          }
-          updateDialog(update);
-          break;
-        }
-        case 'done': {
-          activeDeleteIdRef.current = null;
-          deleteProgressSpecRef.current = null;
-          closeDialog();
-          setSelectionKey((k) => k + 1);
-          leftRef.current.navigateTo(leftRef.current.currentPath);
-          rightRef.current.navigateTo(rightRef.current.currentPath);
-          break;
-        }
-        case 'error': {
-          activeDeleteIdRef.current = null;
-          deleteProgressSpecRef.current = null;
-          closeDialog();
-          showDialog({ type: 'message', title: 'Delete Error', message: event.message, variant: 'error' });
-          leftRef.current.navigateTo(leftRef.current.currentPath);
-          rightRef.current.navigateTo(rightRef.current.currentPath);
-          break;
-        }
-      }
-    });
-    return unsub;
-  }, [showDialog, closeDialog, updateDialog]);
-
-  // ── Rename handler ───────────────────────────────────────────────────
-
-  const handleRename = useCallback(
-    (sourcePath: string, currentName: string, refresh: () => void) => {
-      showDialog({
-        type: 'rename',
-        currentName,
-        onConfirm: async (newName: string) => {
-          try {
-            await bridge.rename.rename(sourcePath, newName);
-            refresh();
-          } catch (e) {
-            showDialog({ type: 'message', title: 'Rename Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
-          }
-        },
-        onCancel: () => {},
-      });
-    },
-    [showDialog]
   );
 
   const rememberExpectedTerminalCwd = useCallback((path: string) => {
@@ -993,8 +275,8 @@ export function App() {
   }, [editorResolved?.extensionDirPath, editorResolved?.contribution.entry]);
 
   const viewerActiveName = viewerFile && isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
-  const leftRequestedCursor = viewerFile?.panel === 'left' ? viewerActiveName : undefined;
-  const rightRequestedCursor = viewerFile?.panel === 'right' ? viewerActiveName : undefined;
+  const leftRequestedCursor = left.requestedCursor ?? (viewerFile?.panel === 'left' ? viewerActiveName : undefined);
+  const rightRequestedCursor = right.requestedCursor ?? (viewerFile?.panel === 'right' ? viewerActiveName : undefined);
 
   // Panel state persistence with long debounce (10s) to avoid excessive writes
   const panelStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1461,8 +743,17 @@ export function App() {
       'Go to Parent Directory',
       () => {
         const panel = activePanelRef.current === 'left' ? left : right;
-        const parent = dirname(panel.currentPath);
-        if (parent !== panel.currentPath) {
+        const currentPath = panel.currentPath;
+        if (isContainerPath(currentPath)) {
+          const { containerFile, innerPath } = parseContainerPath(currentPath);
+          if (innerPath === '/' || innerPath === '') {
+            // Exiting the container root — go to the parent dir, cursor on the archive file.
+            panel.navigateTo(dirname(containerFile), false, basename(containerFile));
+            return;
+          }
+        }
+        const parent = dirname(currentPath);
+        if (parent !== currentPath) {
           panel.navigateTo(parent);
         }
       },
@@ -1706,10 +997,6 @@ export function App() {
   leftPathRef.current = left.currentPath;
   const rightPathRef = useRef(right.currentPath);
   rightPathRef.current = right.currentPath;
-  const leftRef = useRef(left);
-  leftRef.current = left;
-  const rightRef = useRef(right);
-  rightRef.current = right;
 
   // Re-navigate when theme changes to refresh FSS styles
   const prevThemeRef = useRef(theme);
