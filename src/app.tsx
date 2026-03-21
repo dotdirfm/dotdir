@@ -6,6 +6,7 @@ import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { FsChangeType } from './types';
 import { bridge } from './bridge';
+import type { CopyOptions, CopyProgressEvent, ConflictResolution, MoveOptions, MoveProgressEvent } from './bridge';
 import type { PanelTab } from './FileList/PanelTabs';
 import { isMediaFile } from './mediaFiles';
 import { ViewerContainer, EditorContainer } from './ExtensionContainer';
@@ -317,6 +318,10 @@ export function App() {
   const [showExtensions, setShowExtensions] = useState(false);
   const cancelDeleteRef = useRef(false);
   const deleteProgressSpecRef = useRef<{ type: 'deleteProgress'; total: number; current: number; currentPath: string; onCancel: () => void } | null>(null);
+  const activeCopyIdRef = useRef<number | null>(null);
+  const copyProgressSpecRef = useRef<{ type: 'copyProgress'; bytesCopied: number; bytesTotal: number; filesDone: number; filesTotal: number; currentFile: string; onCancel: () => void } | null>(null);
+  const activeMoveIdRef = useRef<number | null>(null);
+  const moveProgressSpecRef = useRef<{ type: 'moveProgress'; bytesCopied: number; bytesTotal: number; filesDone: number; filesTotal: number; currentFile: string; onCancel: () => void } | null>(null);
   const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
   const [activeColorTheme, setActiveColorTheme] = useState<string | undefined>(undefined);
   const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
@@ -435,21 +440,21 @@ export function App() {
   );
 
   const handleMoveToTrash = useCallback(
-    (path: string, name: string, _isDir: boolean, refresh: () => void) => {
-      if (!bridge.fsa.moveToTrash) {
-        showDialog({ type: 'message', title: 'Not available', message: 'Move to Trash is only available in the desktop app.', variant: 'error' });
-        return;
-      }
+    (sourcePaths: string[], refresh: () => void) => {
+      if (sourcePaths.length === 0) return;
+      const label = sourcePaths.length === 1
+        ? `Move "${basename(sourcePaths[0])}" to Trash?`
+        : `Move ${sourcePaths.length} items to Trash?`;
       showDialog({
         type: 'message',
         title: 'Move to Trash',
-        message: `Move "${name}" to Trash?`,
+        message: label,
         variant: 'default',
         buttons: [
           { label: 'Cancel' },
           { label: 'Move to Trash', default: true, onClick: async () => {
             try {
-              await bridge.fsa.moveToTrash!(path);
+              await bridge.fsa.moveToTrash(sourcePaths);
               refresh();
             } catch (e) {
               showDialog({ type: 'message', title: 'Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
@@ -462,65 +467,80 @@ export function App() {
   );
 
   const handlePermanentDelete = useCallback(
-    (path: string, name: string, isDir: boolean, refresh: () => void) => {
-      if (!bridge.fsa.deletePath) {
-        showDialog({ type: 'message', title: 'Not available', message: 'Permanent delete is only available in the desktop app.', variant: 'error' });
-        return;
-      }
+    (sourcePaths: string[], refresh: () => void) => {
+      if (sourcePaths.length === 0) return;
+      const label = sourcePaths.length === 1
+        ? `Permanently delete "${basename(sourcePaths[0])}"? This cannot be undone.`
+        : `Permanently delete ${sourcePaths.length} items? This cannot be undone.`;
       showDialog({
         type: 'message',
         title: 'Permanently Delete',
-        message: `Permanently delete "${name}"? This cannot be undone.`,
+        message: label,
         variant: 'default',
         buttons: [
           { label: 'Cancel' },
           { label: 'Delete', default: true, onClick: async () => {
             try {
-              if (isDir) {
-                const { files, dirs } = await collectPathsForDelete(path);
-                const paths = [...files, ...dirs];
-                if (paths.length === 0) {
-                  await bridge.fsa.deletePath!(path);
+              // Collect all paths (expanding directories recursively)
+              const allPaths: string[] = [];
+              for (const p of sourcePaths) {
+                const stat = await bridge.fsa.stat(p).catch(() => null);
+                if (stat === null) continue;
+                // Check if directory by trying to list entries
+                try {
+                  const { files, dirs } = await collectPathsForDelete(p);
+                  allPaths.push(...files, ...dirs);
+                } catch {
+                  // Not a directory or empty dir — just delete the path itself
+                  allPaths.push(p);
+                }
+              }
+
+              if (allPaths.length === 0) {
+                refresh();
+                return;
+              }
+
+              if (allPaths.length === 1) {
+                await bridge.fsa.deletePath(allPaths[0]);
+                refresh();
+                return;
+              }
+
+              cancelDeleteRef.current = false;
+              const initialSpec = {
+                type: 'deleteProgress' as const,
+                total: allPaths.length,
+                current: 0,
+                currentPath: allPaths[0] ?? '',
+                onCancel: () => {
+                  showDialog({
+                    type: 'cancelDeleteConfirm',
+                    onResume: () => {
+                      if (deleteProgressSpecRef.current) showDialog(deleteProgressSpecRef.current);
+                    },
+                    onCancelDeletion: () => {
+                      cancelDeleteRef.current = true;
+                      closeDialog();
+                    },
+                  });
+                },
+              };
+              deleteProgressSpecRef.current = { ...initialSpec };
+              showDialog(initialSpec);
+              for (let i = 0; i < allPaths.length; i++) {
+                if (cancelDeleteRef.current) {
+                  closeDialog();
                   refresh();
                   return;
                 }
-                cancelDeleteRef.current = false;
-                const initialSpec = {
-                  type: 'deleteProgress' as const,
-                  total: paths.length,
-                  current: 0,
-                  currentPath: paths[0] ?? '',
-                  onCancel: () => {
-                    showDialog({
-                      type: 'cancelDeleteConfirm',
-                      onResume: () => {
-                        if (deleteProgressSpecRef.current) showDialog(deleteProgressSpecRef.current);
-                      },
-                      onCancelDeletion: () => {
-                        cancelDeleteRef.current = true;
-                        closeDialog();
-                      },
-                    });
-                  },
-                };
-                deleteProgressSpecRef.current = { ...initialSpec };
-                showDialog(initialSpec);
-                for (let i = 0; i < paths.length; i++) {
-                  if (cancelDeleteRef.current) {
-                    closeDialog();
-                    refresh();
-                    return;
-                  }
-                  updateDialog({ current: i, currentPath: paths[i] });
-                  if (deleteProgressSpecRef.current) {
-                    deleteProgressSpecRef.current = { ...deleteProgressSpecRef.current, current: i, currentPath: paths[i] };
-                  }
-                  await bridge.fsa.deletePath!(paths[i]);
+                updateDialog({ current: i, currentPath: allPaths[i] });
+                if (deleteProgressSpecRef.current) {
+                  deleteProgressSpecRef.current = { ...deleteProgressSpecRef.current, current: i, currentPath: allPaths[i] };
                 }
-                closeDialog();
-              } else {
-                await bridge.fsa.deletePath!(path);
+                await bridge.fsa.deletePath(allPaths[i]);
               }
+              closeDialog();
               refresh();
             } catch (e) {
               closeDialog();
@@ -531,6 +551,288 @@ export function App() {
       });
     },
     [showDialog, closeDialog, updateDialog]
+  );
+
+  // ── Copy handler ────────────────────────────────────────────────────
+
+  const handleCopy = useCallback(
+    (sourcePaths: string[], refresh: () => void) => {
+      const destPanel = activePanelRef.current === 'left' ? right : left;
+      const destDir = destPanel.currentPath;
+      if (!destDir || sourcePaths.length === 0) return;
+
+      showDialog({
+        type: 'copyConfig',
+        itemCount: sourcePaths.length,
+        destPath: destDir,
+        onConfirm: async (options: CopyOptions) => {
+          try {
+            // Set up progress dialog and refs BEFORE starting copy to avoid
+            // race condition where Done event arrives before copyId is set.
+            const onCancel = () => {
+              showDialog({
+                type: 'cancelCopyConfirm',
+                onResume: () => {
+                  if (copyProgressSpecRef.current) showDialog(copyProgressSpecRef.current);
+                },
+                onCancelCopy: () => {
+                  if (activeCopyIdRef.current !== null) {
+                    bridge.copy.cancel(activeCopyIdRef.current);
+                  }
+                  activeCopyIdRef.current = null;
+                  copyProgressSpecRef.current = null;
+                  closeDialog();
+                  refresh();
+                },
+              });
+            };
+
+            const progressSpec = {
+              type: 'copyProgress' as const,
+              bytesCopied: 0,
+              bytesTotal: 0,
+              filesDone: 0,
+              filesTotal: 0,
+              currentFile: 'Preparing...',
+              onCancel,
+            };
+            copyProgressSpecRef.current = progressSpec;
+            showDialog(progressSpec);
+
+            // Now start the copy — events may arrive before this resolves
+            const copyId = await bridge.copy.start(sourcePaths, destDir, options);
+            activeCopyIdRef.current = copyId;
+          } catch (e) {
+            activeCopyIdRef.current = null;
+            copyProgressSpecRef.current = null;
+            closeDialog();
+            showDialog({ type: 'message', title: 'Copy Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
+          }
+        },
+        onCancel: () => {},
+      });
+    },
+    [left, right, showDialog, closeDialog]
+  );
+
+  // ── Copy progress listener ──────────────────────────────────────────
+
+  useEffect(() => {
+    const unsub = bridge.copy.onProgress((payload: CopyProgressEvent) => {
+      if (activeCopyIdRef.current === null) {
+        // Copy started but the start() Promise hasn't resolved yet — late-bind the ID
+        if (copyProgressSpecRef.current !== null) {
+          activeCopyIdRef.current = payload.copyId;
+        } else {
+          return;
+        }
+      } else if (payload.copyId !== activeCopyIdRef.current) {
+        return;
+      }
+      const event = payload.event;
+
+      switch (event.kind) {
+        case 'progress': {
+          const update = {
+            bytesCopied: event.bytesCopied,
+            bytesTotal: event.bytesTotal,
+            filesDone: event.filesDone,
+            filesTotal: event.filesTotal,
+            currentFile: event.currentFile,
+          };
+          if (copyProgressSpecRef.current) {
+            copyProgressSpecRef.current = { ...copyProgressSpecRef.current, ...update };
+          }
+          updateDialog(update);
+          break;
+        }
+        case 'conflict': {
+          showDialog({
+            type: 'copyConflict',
+            src: event.src,
+            dest: event.dest,
+            srcSize: event.srcSize,
+            srcMtimeMs: event.srcMtimeMs,
+            destSize: event.destSize,
+            destMtimeMs: event.destMtimeMs,
+            onResolve: (resolution: ConflictResolution) => {
+              bridge.copy.resolveConflict(activeCopyIdRef.current!, resolution);
+              // Re-show progress dialog
+              if (copyProgressSpecRef.current) showDialog(copyProgressSpecRef.current);
+            },
+          });
+          break;
+        }
+        case 'done': {
+          activeCopyIdRef.current = null;
+          copyProgressSpecRef.current = null;
+          closeDialog();
+          // Refresh both panels
+          left.navigateTo(left.currentPath);
+          right.navigateTo(right.currentPath);
+          break;
+        }
+        case 'error': {
+          activeCopyIdRef.current = null;
+          copyProgressSpecRef.current = null;
+          closeDialog();
+          showDialog({ type: 'message', title: 'Copy Error', message: event.message, variant: 'error' });
+          // Refresh both panels even on error
+          left.navigateTo(left.currentPath);
+          right.navigateTo(right.currentPath);
+          break;
+        }
+      }
+    });
+    return unsub;
+  }, [showDialog, closeDialog, updateDialog, left, right]);
+
+  // ── Move handler ─────────────────────────────────────────────────────
+
+  const handleMove = useCallback(
+    (sourcePaths: string[], refresh: () => void) => {
+      const destPanel = activePanelRef.current === 'left' ? right : left;
+      const destDir = destPanel.currentPath;
+      if (!destDir || sourcePaths.length === 0) return;
+
+      showDialog({
+        type: 'moveConfig',
+        itemCount: sourcePaths.length,
+        destPath: destDir,
+        onConfirm: async (options: MoveOptions) => {
+          try {
+            const onCancel = () => {
+              showDialog({
+                type: 'cancelMoveConfirm',
+                onResume: () => {
+                  if (moveProgressSpecRef.current) showDialog(moveProgressSpecRef.current);
+                },
+                onCancelMove: () => {
+                  if (activeMoveIdRef.current !== null) {
+                    bridge.move.cancel(activeMoveIdRef.current);
+                  }
+                  activeMoveIdRef.current = null;
+                  moveProgressSpecRef.current = null;
+                  closeDialog();
+                  refresh();
+                },
+              });
+            };
+
+            const progressSpec = {
+              type: 'moveProgress' as const,
+              bytesCopied: 0,
+              bytesTotal: 0,
+              filesDone: 0,
+              filesTotal: 0,
+              currentFile: 'Preparing...',
+              onCancel,
+            };
+            moveProgressSpecRef.current = progressSpec;
+            showDialog(progressSpec);
+
+            const moveId = await bridge.move.start(sourcePaths, destDir, options);
+            activeMoveIdRef.current = moveId;
+          } catch (e) {
+            activeMoveIdRef.current = null;
+            moveProgressSpecRef.current = null;
+            closeDialog();
+            showDialog({ type: 'message', title: 'Move Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
+          }
+        },
+        onCancel: () => {},
+      });
+    },
+    [left, right, showDialog, closeDialog]
+  );
+
+  // ── Move progress listener ───────────────────────────────────────────
+
+  useEffect(() => {
+    const unsub = bridge.move.onProgress((payload: MoveProgressEvent) => {
+      if (activeMoveIdRef.current === null) {
+        if (moveProgressSpecRef.current !== null) {
+          activeMoveIdRef.current = payload.moveId;
+        } else {
+          return;
+        }
+      } else if (payload.moveId !== activeMoveIdRef.current) {
+        return;
+      }
+      const event = payload.event;
+
+      switch (event.kind) {
+        case 'progress': {
+          const update = {
+            bytesCopied: event.bytesCopied,
+            bytesTotal: event.bytesTotal,
+            filesDone: event.filesDone,
+            filesTotal: event.filesTotal,
+            currentFile: event.currentFile,
+          };
+          if (moveProgressSpecRef.current) {
+            moveProgressSpecRef.current = { ...moveProgressSpecRef.current, ...update };
+          }
+          updateDialog(update);
+          break;
+        }
+        case 'conflict': {
+          showDialog({
+            type: 'moveConflict',
+            src: event.src,
+            dest: event.dest,
+            srcSize: event.srcSize,
+            srcMtimeMs: event.srcMtimeMs,
+            destSize: event.destSize,
+            destMtimeMs: event.destMtimeMs,
+            onResolve: (resolution: ConflictResolution) => {
+              bridge.move.resolveConflict(activeMoveIdRef.current!, resolution);
+              if (moveProgressSpecRef.current) showDialog(moveProgressSpecRef.current);
+            },
+          });
+          break;
+        }
+        case 'done': {
+          activeMoveIdRef.current = null;
+          moveProgressSpecRef.current = null;
+          closeDialog();
+          left.navigateTo(left.currentPath);
+          right.navigateTo(right.currentPath);
+          break;
+        }
+        case 'error': {
+          activeMoveIdRef.current = null;
+          moveProgressSpecRef.current = null;
+          closeDialog();
+          showDialog({ type: 'message', title: 'Move Error', message: event.message, variant: 'error' });
+          left.navigateTo(left.currentPath);
+          right.navigateTo(right.currentPath);
+          break;
+        }
+      }
+    });
+    return unsub;
+  }, [showDialog, closeDialog, updateDialog, left, right]);
+
+  // ── Rename handler ───────────────────────────────────────────────────
+
+  const handleRename = useCallback(
+    (sourcePath: string, currentName: string, refresh: () => void) => {
+      showDialog({
+        type: 'rename',
+        currentName,
+        onConfirm: async (newName: string) => {
+          try {
+            await bridge.rename.rename(sourcePath, newName);
+            refresh();
+          } catch (e) {
+            showDialog({ type: 'message', title: 'Rename Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
+          }
+        },
+        onCancel: () => {},
+      });
+    },
+    [showDialog]
   );
 
   const rememberExpectedTerminalCwd = useCallback((path: string) => {
@@ -1677,8 +1979,11 @@ export function App() {
                   onRememberExpectedTerminalCwd={rememberExpectedTerminalCwd}
                   onViewFile={handleViewFile}
                   onEditFile={handleEditFile}
-                  onMoveToTrash={(path, name, isDir) => handleMoveToTrash(path, name, isDir, () => left.navigateTo(left.currentPath))}
-                  onPermanentDelete={(path, name, isDir) => handlePermanentDelete(path, name, isDir, () => left.navigateTo(left.currentPath))}
+                  onMoveToTrash={(sourcePaths, refresh) => handleMoveToTrash(sourcePaths, refresh)}
+                  onPermanentDelete={(sourcePaths, refresh) => handlePermanentDelete(sourcePaths, refresh)}
+                  onCopy={(sourcePaths, refresh) => handleCopy(sourcePaths, refresh)}
+                  onMove={(sourcePaths, refresh) => handleMove(sourcePaths, refresh)}
+                  onRename={(sourcePath, currentName, refresh) => handleRename(sourcePath, currentName, refresh)}
                   onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
                   requestedActiveName={leftRequestedCursor}
                   requestedTopmostName={undefined}
@@ -1702,8 +2007,11 @@ export function App() {
                   onRememberExpectedTerminalCwd={rememberExpectedTerminalCwd}
                   onViewFile={handleViewFile}
                   onEditFile={handleEditFile}
-                  onMoveToTrash={(path, name, isDir) => handleMoveToTrash(path, name, isDir, () => right.navigateTo(right.currentPath))}
-                  onPermanentDelete={(path, name, isDir) => handlePermanentDelete(path, name, isDir, () => right.navigateTo(right.currentPath))}
+                  onMoveToTrash={(sourcePaths, refresh) => handleMoveToTrash(sourcePaths, refresh)}
+                  onPermanentDelete={(sourcePaths, refresh) => handlePermanentDelete(sourcePaths, refresh)}
+                  onCopy={(sourcePaths, refresh) => handleCopy(sourcePaths, refresh)}
+                  onMove={(sourcePaths, refresh) => handleMove(sourcePaths, refresh)}
+                  onRename={(sourcePath, currentName, refresh) => handleRename(sourcePath, currentName, refresh)}
                   onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
                   requestedActiveName={rightRequestedCursor}
                   requestedTopmostName={undefined}

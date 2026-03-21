@@ -8,13 +8,15 @@ byteorder = "1"
 log = "0.4"
 notify = { version = "7", features = ["macos_fsevent"] }
 parking_lot = "0.12"
+serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+xattr = "1"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
+windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
 
 [dev-dependencies]
 tempfile = "3"

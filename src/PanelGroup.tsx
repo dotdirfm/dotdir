@@ -34,8 +34,11 @@ interface PanelGroupProps {
   onRememberExpectedTerminalCwd: (path: string) => void;
   onViewFile: (filePath: string, fileName: string, fileSize: number) => void;
   onEditFile: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
-  onMoveToTrash: (path: string, name: string, isDir: boolean) => void;
-  onPermanentDelete: (path: string, name: string, isDir: boolean) => void;
+  onMoveToTrash: (sourcePaths: string[], refresh: () => void) => void;
+  onPermanentDelete: (sourcePaths: string[], refresh: () => void) => void;
+  onCopy?: (sourcePaths: string[], refresh: () => void) => void;
+  onMove?: (sourcePaths: string[], refresh: () => void) => void;
+  onRename?: (sourcePath: string, currentName: string, refresh: () => void) => void;
   onExecuteInTerminal: (cmd: string) => Promise<void>;
   requestedActiveName?: string;
   requestedTopmostName?: string;
@@ -61,6 +64,9 @@ export function PanelGroup({
   onEditFile,
   onMoveToTrash,
   onPermanentDelete,
+  onCopy,
+  onMove,
+  onRename,
   onExecuteInTerminal,
   requestedActiveName,
   requestedTopmostName,
@@ -95,8 +101,11 @@ export function PanelGroup({
             }}
             onViewFile={onViewFile}
             onEditFile={onEditFile}
-            onMoveToTrash={(path, name, isDir) => onMoveToTrash(path, name, isDir)}
-            onPermanentDelete={(path, name, isDir) => onPermanentDelete(path, name, isDir)}
+            onMoveToTrash={onMoveToTrash}
+            onPermanentDelete={onPermanentDelete}
+            onCopy={onCopy}
+            onMove={onMove}
+            onRename={onRename}
             onExecuteInTerminal={onExecuteInTerminal}
             editorFileSizeLimit={editorFileSizeLimit}
             active={active}

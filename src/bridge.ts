@@ -7,6 +7,61 @@ import type { FsaRawEntry, FsChangeEvent } from './types';
 import { tauriBridge } from './tauriBridge';
 import { createWsBridge } from './wsBridge';
 
+// ── Copy types ──────────────────────────────────────────────────────
+
+export type ConflictPolicy = 'ask' | 'overwrite' | 'skip' | 'rename' | 'append' | 'onlyNewer';
+export type SymlinkMode = 'smart' | 'alwaysLink' | 'alwaysTarget';
+
+export interface CopyOptions {
+  conflictPolicy: ConflictPolicy;
+  copyPermissions: boolean;
+  copyXattrs: boolean;
+  sparseFiles: boolean;
+  useCow: boolean;
+  symlinkMode: SymlinkMode;
+  disableWriteCache: boolean;
+}
+
+export type ConflictResolution =
+  | { type: 'overwrite' }
+  | { type: 'skip' }
+  | { type: 'rename'; newName: string }
+  | { type: 'overwriteAll' }
+  | { type: 'skipAll' }
+  | { type: 'cancel' };
+
+export interface CopyProgress {
+  bytesCopied: number;
+  bytesTotal: number;
+  filesDone: number;
+  filesTotal: number;
+  currentFile: string;
+}
+
+export type CopyProgressEvent = {
+  copyId: number;
+  event:
+    | { kind: 'progress'; bytesCopied: number; bytesTotal: number; filesDone: number; filesTotal: number; currentFile: string }
+    | { kind: 'conflict'; src: string; dest: string; srcSize: number; srcMtimeMs: number; destSize: number; destMtimeMs: number }
+    | { kind: 'done'; filesDone: number; bytesCopied: number }
+    | { kind: 'error'; message: string };
+};
+
+// ── Move types ──────────────────────────────────────────────────────
+
+export interface MoveOptions {
+  conflictPolicy: ConflictPolicy;
+}
+
+export type MoveProgressEvent = {
+  moveId: number;
+  event:
+    | { kind: 'progress'; bytesCopied: number; bytesTotal: number; filesDone: number; filesTotal: number; currentFile: string }
+    | { kind: 'conflict'; src: string; dest: string; srcSize: number; srcMtimeMs: number; destSize: number; destMtimeMs: number }
+    | { kind: 'done'; filesDone: number; bytesCopied: number }
+    | { kind: 'error'; message: string };
+};
+
 export interface PtyLaunchInfo {
   ptyId: number;
   cwd: string;
@@ -36,10 +91,10 @@ export interface Bridge {
     writeBinaryFile(filePath: string, data: Uint8Array): Promise<void>;
     /** Create directory (and parents). */
     createDir?(dirPath: string): Promise<void>;
-    /** Move file or folder to OS trash (Tauri only). */
-    moveToTrash?(path: string): Promise<void>;
-    /** Remove a single file or empty directory (Tauri only). For recursive delete, call in order: files first, then dirs deepest-first. */
-    deletePath?(path: string): Promise<void>;
+    /** Move files/folders to OS trash (batched for single trash sound). */
+    moveToTrash(paths: string[]): Promise<void>;
+    /** Remove a single file or empty directory. For recursive delete, call in order: files first, then dirs deepest-first. */
+    deletePath(path: string): Promise<void>;
   };
   pty: {
     spawn(cwd: string, profileId?: string): Promise<PtyLaunchInfo>;
@@ -52,6 +107,21 @@ export interface Bridge {
   utils: {
     getHomePath(): Promise<string>;
     getTerminalProfiles(): Promise<TerminalProfile[]>;
+  };
+  copy: {
+    start(sources: string[], destDir: string, options: CopyOptions): Promise<number>;
+    cancel(copyId: number): Promise<void>;
+    resolveConflict(copyId: number, resolution: ConflictResolution): Promise<void>;
+    onProgress(callback: (event: CopyProgressEvent) => void): () => void;
+  };
+  move: {
+    start(sources: string[], destDir: string, options: MoveOptions): Promise<number>;
+    cancel(moveId: number): Promise<void>;
+    resolveConflict(moveId: number, resolution: ConflictResolution): Promise<void>;
+    onProgress(callback: (event: MoveProgressEvent) => void): () => void;
+  };
+  rename: {
+    rename(source: string, newName: string): Promise<void>;
   };
   theme: {
     get(): Promise<string>;

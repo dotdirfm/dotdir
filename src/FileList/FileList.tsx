@@ -21,10 +21,16 @@ interface FileListProps {
   onNavigate: (path: string) => Promise<void>;
   onViewFile?: (filePath: string, fileName: string, fileSize: number) => void;
   onEditFile?: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
-  /** Move selected item to trash. Receives (path, name, isDir, refresh). */
-  onMoveToTrash?: (path: string, name: string, isDir: boolean, refresh: () => void) => void;
-  /** Permanently delete selected item. Receives (path, name, isDir, refresh). */
-  onPermanentDelete?: (path: string, name: string, isDir: boolean, refresh: () => void) => void;
+  /** Move selected items to trash. Receives (sourcePaths, refresh). */
+  onMoveToTrash?: (sourcePaths: string[], refresh: () => void) => void;
+  /** Permanently delete selected items. Receives (sourcePaths, refresh). */
+  onPermanentDelete?: (sourcePaths: string[], refresh: () => void) => void;
+  /** Copy selected items. Receives (sourcePaths, refresh). */
+  onCopy?: (sourcePaths: string[], refresh: () => void) => void;
+  /** Move selected items. Receives (sourcePaths, refresh). */
+  onMove?: (sourcePaths: string[], refresh: () => void) => void;
+  /** Rename item under cursor. Receives (sourcePath, currentName, refresh). */
+  onRename?: (sourcePath: string, currentName: string, refresh: () => void) => void;
   /** Run executable in terminal: receives (command) and should write command + newline to terminal. */
   onExecuteInTerminal?: (command: string) => Promise<void>;
   editorFileSizeLimit?: number;
@@ -86,6 +92,9 @@ export const FileList = memo(function FileList({
   onEditFile,
   onMoveToTrash,
   onPermanentDelete,
+  onCopy,
+  onMove,
+  onRename,
   onExecuteInTerminal,
   editorFileSizeLimit = 0,
   active,
@@ -129,6 +138,12 @@ export const FileList = memo(function FileList({
   onMoveToTrashRef.current = onMoveToTrash;
   const onPermanentDeleteRef = useRef(onPermanentDelete);
   onPermanentDeleteRef.current = onPermanentDelete;
+  const onCopyRef = useRef(onCopy);
+  onCopyRef.current = onCopy;
+  const onMoveRef = useRef(onMove);
+  onMoveRef.current = onMove;
+  const onRenameRef = useRef(onRename);
+  onRenameRef.current = onRename;
   const editorFileSizeLimitRef = useRef(editorFileSizeLimit);
   editorFileSizeLimitRef.current = editorFileSizeLimit;
   
@@ -652,14 +667,24 @@ export const FileList = memo(function FileList({
       'list.moveToTrash',
       'Move to Trash',
       () => actionQueue.enqueue(() => {
-        const item = displayEntriesRef.current[activeIndexRef.current];
-        const onMove = onMoveToTrashRef.current;
-        if (!item || !onMove) return;
-        const path = item.entry.path as string;
-        const name = item.entry.name;
-        const isDir = item.entry.type === 'folder';
+        const onTrash = onMoveToTrashRef.current;
+        if (!onTrash) return;
+        const selected = selectedNamesRef.current;
+        const all = displayEntriesRef.current;
         const refresh = () => onNavigateRef.current(currentPathRef.current);
-        onMove(path, name, isDir, refresh);
+
+        let sourcePaths: string[];
+        if (selected.size > 0) {
+          sourcePaths = all
+            .filter((d) => selected.has(d.entry.name))
+            .map((d) => d.entry.path as string);
+        } else {
+          const item = all[activeIndexRef.current];
+          if (!item) return;
+          sourcePaths = [item.entry.path as string];
+        }
+        if (sourcePaths.length === 0) return;
+        onTrash(sourcePaths, refresh);
       }),
       { when: 'focusPanel' }
     ));
@@ -673,20 +698,113 @@ export const FileList = memo(function FileList({
       'list.permanentDelete',
       'Permanently Delete',
       () => actionQueue.enqueue(() => {
-        const item = displayEntriesRef.current[activeIndexRef.current];
         const onDelete = onPermanentDeleteRef.current;
-        if (!item || !onDelete) return;
-        const path = item.entry.path as string;
-        const name = item.entry.name;
-        const isDir = item.entry.type === 'folder';
+        if (!onDelete) return;
+        const selected = selectedNamesRef.current;
+        const all = displayEntriesRef.current;
         const refresh = () => onNavigateRef.current(currentPathRef.current);
-        onDelete(path, name, isDir, refresh);
+
+        let sourcePaths: string[];
+        if (selected.size > 0) {
+          sourcePaths = all
+            .filter((d) => selected.has(d.entry.name))
+            .map((d) => d.entry.path as string);
+        } else {
+          const item = all[activeIndexRef.current];
+          if (!item) return;
+          sourcePaths = [item.entry.path as string];
+        }
+        if (sourcePaths.length === 0) return;
+        onDelete(sourcePaths, refresh);
       }),
       { when: 'focusPanel' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.permanentDelete',
       key: 'shift+delete',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.copy',
+      'Copy',
+      () => actionQueue.enqueue(() => {
+        const onCopyCb = onCopyRef.current;
+        if (!onCopyCb) return;
+        const selected = selectedNamesRef.current;
+        const all = displayEntriesRef.current;
+        const refresh = () => onNavigateRef.current(currentPathRef.current);
+
+        let sourcePaths: string[];
+        if (selected.size > 0) {
+          // Copy selected items
+          sourcePaths = all
+            .filter((d) => selected.has(d.entry.name))
+            .map((d) => d.entry.path as string);
+        } else {
+          // Copy cursor item
+          const item = all[activeIndexRef.current];
+          if (!item) return;
+          sourcePaths = [item.entry.path as string];
+        }
+        if (sourcePaths.length === 0) return;
+        onCopyCb(sourcePaths, refresh);
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.copy',
+      key: 'f5',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.move',
+      'Move',
+      () => actionQueue.enqueue(() => {
+        const onMoveCb = onMoveRef.current;
+        if (!onMoveCb) return;
+        const selected = selectedNamesRef.current;
+        const all = displayEntriesRef.current;
+        const refresh = () => onNavigateRef.current(currentPathRef.current);
+
+        let sourcePaths: string[];
+        if (selected.size > 0) {
+          sourcePaths = all
+            .filter((d) => selected.has(d.entry.name))
+            .map((d) => d.entry.path as string);
+        } else {
+          const item = all[activeIndexRef.current];
+          if (!item) return;
+          sourcePaths = [item.entry.path as string];
+        }
+        if (sourcePaths.length === 0) return;
+        onMoveCb(sourcePaths, refresh);
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.move',
+      key: 'f6',
+      when: 'focusPanel',
+    }));
+
+    disposables.push(commandRegistry.registerCommand(
+      'list.rename',
+      'Rename',
+      () => actionQueue.enqueue(() => {
+        const onRenameCb = onRenameRef.current;
+        if (!onRenameCb) return;
+        const item = displayEntriesRef.current[activeIndexRef.current];
+        if (!item) return;
+        const refresh = () => onNavigateRef.current(currentPathRef.current);
+        onRenameCb(item.entry.path as string, item.entry.name, refresh);
+      }),
+      { when: 'focusPanel' }
+    ));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.rename',
+      key: 'shift+f6',
       when: 'focusPanel',
     }));
 
@@ -731,7 +849,7 @@ export const FileList = memo(function FileList({
     return () => {
       for (const dispose of disposables) dispose();
     };
-  }, [active, navigateToEntry, applySelection, onExecuteInTerminal, onMoveToTrash, onPermanentDelete]);
+  }, [active, navigateToEntry, applySelection, onExecuteInTerminal, onMoveToTrash, onPermanentDelete, onCopy]);
 
   const columnCountRef = useRef(columnCount);
   columnCountRef.current = columnCount;

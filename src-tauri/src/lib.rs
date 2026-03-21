@@ -1,12 +1,16 @@
+use faraday_core::copy::{self, CancelToken, ConflictResolution, CopyEvent, CopyOptions};
+use faraday_core::move_op::{self, MoveOptions};
 use faraday_core::error::FsError;
 use faraday_core::ops::{self, EntryInfo, FdTable, StatResult};
 use faraday_core::watch::{EventCallback, FsWatcher};
 use log::debug;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{mpsc as std_mpsc, Arc};
 use tauri::{Emitter, Manager, State};
 use tauri::http::header as http_header;
 use tauri::http::StatusCode as HttpStatusCode;
@@ -128,6 +132,18 @@ fn is_eacces(e: &FsError) -> bool {
     matches!(e, FsError::PermissionDenied)
 }
 
+// ── Copy/Move job state ──────────────────────────────────────────────
+
+struct CopyJobHandle {
+    cancel_token: CancelToken,
+    conflict_tx: std_mpsc::SyncSender<ConflictResolution>,
+}
+
+struct MoveJobHandle {
+    cancel_token: CancelToken,
+    conflict_tx: std_mpsc::SyncSender<ConflictResolution>,
+}
+
 // ── Managed state ────────────────────────────────────────────────────
 
 pub struct AppState {
@@ -135,8 +151,12 @@ pub struct AppState {
     pub watcher: FsWatcher,
     pub proxy: std::sync::Mutex<Option<Arc<elevate::FsProxy>>>,
     pub emit_handle: std::sync::Mutex<Option<tauri::AppHandle>>,
-    pub ptys: std::sync::Mutex<std::collections::HashMap<u32, pty::PtyHandle>>,
-    pub next_pty_id: std::sync::atomic::AtomicU32,
+    pub ptys: std::sync::Mutex<HashMap<u32, pty::PtyHandle>>,
+    pub next_pty_id: AtomicU32,
+    pub(crate) copy_jobs: std::sync::Mutex<HashMap<u32, CopyJobHandle>>,
+    pub(crate) next_copy_id: AtomicU32,
+    pub(crate) move_jobs: std::sync::Mutex<HashMap<u32, MoveJobHandle>>,
+    pub(crate) next_move_id: AtomicU32,
 }
 
 impl AppState {
@@ -433,6 +453,229 @@ fn debug_log(message: String) {
     write_debug_log(&message);
 }
 
+// ── Copy commands ────────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CopyProgressEvent {
+    copy_id: u32,
+    event: CopyEvent,
+}
+
+#[tauri::command]
+fn copy_start(
+    sources: Vec<String>,
+    dest_dir: String,
+    options: CopyOptions,
+    state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> CmdResult<u32> {
+    let copy_id = state.next_copy_id.fetch_add(1, Ordering::Relaxed);
+    let cancel_token = CancelToken::new();
+    let (conflict_tx, conflict_rx) = std_mpsc::sync_channel::<ConflictResolution>(0);
+
+    state.copy_jobs.lock().unwrap().insert(
+        copy_id,
+        CopyJobHandle {
+            cancel_token: cancel_token.clone(),
+            conflict_tx,
+        },
+    );
+
+    let source_paths: Vec<PathBuf> = sources.iter().map(PathBuf::from).collect();
+    let dest_path = PathBuf::from(&dest_dir);
+
+    std::thread::spawn(move || {
+        let handle = app_handle.clone();
+        let emit_progress = move |event: CopyEvent| {
+            let _ = handle.emit(
+                "copy:progress",
+                CopyProgressEvent {
+                    copy_id,
+                    event,
+                },
+            );
+        };
+
+        let on_conflict = |src: &Path, dest: &Path| -> ConflictResolution {
+            // Emit conflict event so frontend can show dialog
+            let src_meta = fs::metadata(src).ok();
+            let dest_meta = fs::metadata(dest).ok();
+            let _ = app_handle.emit(
+                "copy:progress",
+                CopyProgressEvent {
+                    copy_id,
+                    event: CopyEvent::Conflict {
+                        src: src.to_string_lossy().into_owned(),
+                        dest: dest.to_string_lossy().into_owned(),
+                        src_size: src_meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                        src_mtime_ms: src_meta.as_ref().map(|m| crate::copy_mtime_ms(m)).unwrap_or(0.0),
+                        dest_size: dest_meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                        dest_mtime_ms: dest_meta.as_ref().map(|m| crate::copy_mtime_ms(m)).unwrap_or(0.0),
+                    },
+                },
+            );
+            // Block until frontend responds
+            conflict_rx.recv().unwrap_or(ConflictResolution::Cancel)
+        };
+
+        let result = copy::copy_tree(
+            &source_paths,
+            &dest_path,
+            &options,
+            &cancel_token,
+            &emit_progress,
+            &on_conflict,
+        );
+
+        if let Err(e) = result {
+            emit_progress(CopyEvent::Error {
+                message: e.to_string(),
+            });
+        }
+
+        // Clean up job
+        if let Some(app) = tauri::Manager::try_state::<AppState>(&app_handle) {
+            app.copy_jobs.lock().unwrap().remove(&copy_id);
+        }
+    });
+
+    Ok(copy_id)
+}
+
+fn copy_mtime_ms(meta: &fs::Metadata) -> f64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs_f64() * 1000.0)
+        .unwrap_or(0.0)
+}
+
+#[tauri::command]
+fn copy_cancel(copy_id: u32, state: State<'_, AppState>) {
+    if let Some(job) = state.copy_jobs.lock().unwrap().get(&copy_id) {
+        job.cancel_token.cancel();
+        // Also unblock any waiting conflict resolution
+        let _ = job.conflict_tx.try_send(ConflictResolution::Cancel);
+    }
+}
+
+#[tauri::command]
+fn copy_resolve_conflict(copy_id: u32, resolution: ConflictResolution, state: State<'_, AppState>) {
+    if let Some(job) = state.copy_jobs.lock().unwrap().get(&copy_id) {
+        let _ = job.conflict_tx.send(resolution);
+    }
+}
+
+// ── Move commands ────────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct MoveProgressEvent {
+    move_id: u32,
+    event: CopyEvent,
+}
+
+#[tauri::command]
+fn move_start(
+    sources: Vec<String>,
+    dest_dir: String,
+    options: MoveOptions,
+    state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> CmdResult<u32> {
+    let move_id = state.next_move_id.fetch_add(1, Ordering::Relaxed);
+    let cancel_token = CancelToken::new();
+    let (conflict_tx, conflict_rx) = std_mpsc::sync_channel::<ConflictResolution>(0);
+
+    state.move_jobs.lock().unwrap().insert(
+        move_id,
+        MoveJobHandle {
+            cancel_token: cancel_token.clone(),
+            conflict_tx,
+        },
+    );
+
+    let source_paths: Vec<PathBuf> = sources.iter().map(PathBuf::from).collect();
+    let dest_path = PathBuf::from(&dest_dir);
+
+    std::thread::spawn(move || {
+        let handle = app_handle.clone();
+        let emit_progress = move |event: CopyEvent| {
+            let _ = handle.emit(
+                "move:progress",
+                MoveProgressEvent {
+                    move_id,
+                    event,
+                },
+            );
+        };
+
+        let on_conflict = |src: &Path, dest: &Path| -> ConflictResolution {
+            let src_meta = fs::metadata(src).ok();
+            let dest_meta = fs::metadata(dest).ok();
+            let _ = app_handle.emit(
+                "move:progress",
+                MoveProgressEvent {
+                    move_id,
+                    event: CopyEvent::Conflict {
+                        src: src.to_string_lossy().into_owned(),
+                        dest: dest.to_string_lossy().into_owned(),
+                        src_size: src_meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                        src_mtime_ms: src_meta.as_ref().map(|m| copy_mtime_ms(m)).unwrap_or(0.0),
+                        dest_size: dest_meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                        dest_mtime_ms: dest_meta.as_ref().map(|m| copy_mtime_ms(m)).unwrap_or(0.0),
+                    },
+                },
+            );
+            conflict_rx.recv().unwrap_or(ConflictResolution::Cancel)
+        };
+
+        let result = move_op::move_tree(
+            &source_paths,
+            &dest_path,
+            &options,
+            &cancel_token,
+            &emit_progress,
+            &on_conflict,
+        );
+
+        if let Err(e) = result {
+            emit_progress(CopyEvent::Error {
+                message: e.to_string(),
+            });
+        }
+
+        if let Some(app) = tauri::Manager::try_state::<AppState>(&app_handle) {
+            app.move_jobs.lock().unwrap().remove(&move_id);
+        }
+    });
+
+    Ok(move_id)
+}
+
+#[tauri::command]
+fn move_cancel(move_id: u32, state: State<'_, AppState>) {
+    if let Some(job) = state.move_jobs.lock().unwrap().get(&move_id) {
+        job.cancel_token.cancel();
+        let _ = job.conflict_tx.try_send(ConflictResolution::Cancel);
+    }
+}
+
+#[tauri::command]
+fn move_resolve_conflict(move_id: u32, resolution: ConflictResolution, state: State<'_, AppState>) {
+    if let Some(job) = state.move_jobs.lock().unwrap().get(&move_id) {
+        let _ = job.conflict_tx.send(resolution);
+    }
+}
+
+#[tauri::command]
+fn rename_item(source: String, new_name: String) -> CmdResult<()> {
+    let source_path = PathBuf::from(&source);
+    move_op::rename_item(&source_path, &new_name)?;
+    Ok(())
+}
+
 // ── VFS protocol handler ─────────────────────────────────────────────
 
 #[cfg(unix)]
@@ -502,9 +745,12 @@ fn vfs_response_for_path(os_path: &Path) -> tauri::http::Response<Vec<u8>> {
 // ── Move to Trash & Permanent Delete ─────────────────────────────────
 
 #[tauri::command]
-fn move_to_trash(path: String) -> CmdResult<()> {
-    let p = Path::new(&path).canonicalize().map_err(|e| CmdError(FsError::from_io(e)))?;
-    trash::delete(&p).map_err(|e| {
+fn move_to_trash(paths: Vec<String>) -> CmdResult<()> {
+    let canonical: Vec<std::path::PathBuf> = paths
+        .iter()
+        .map(|p| Path::new(p).canonicalize().map_err(|e| CmdError(FsError::from_io(e))))
+        .collect::<Result<Vec<_>, _>>()?;
+    trash::delete_all(&canonical).map_err(|e| {
         CmdError(FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))
     })?;
     Ok(())
@@ -691,8 +937,12 @@ pub fn run() {
                 watcher,
                 proxy: std::sync::Mutex::new(None),
                 emit_handle: std::sync::Mutex::new(Some(app.handle().clone())),
-                ptys: std::sync::Mutex::new(std::collections::HashMap::new()),
-                next_pty_id: std::sync::atomic::AtomicU32::new(0),
+                ptys: std::sync::Mutex::new(HashMap::new()),
+                next_pty_id: AtomicU32::new(0),
+                copy_jobs: std::sync::Mutex::new(HashMap::new()),
+                next_copy_id: AtomicU32::new(0),
+                move_jobs: std::sync::Mutex::new(HashMap::new()),
+                next_move_id: AtomicU32::new(0),
             };
             app.manage(state);
             write_debug_log("tauri setup completed");
@@ -720,6 +970,13 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_close,
+            copy_start,
+            copy_cancel,
+            copy_resolve_conflict,
+            move_start,
+            move_cancel,
+            move_resolve_conflict,
+            rename_item,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

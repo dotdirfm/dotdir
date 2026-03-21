@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { focusContext } from './focusContext';
+import { useDialogButtonNav } from './useDialogButtonNav';
 
 interface ModalButton {
   label: string;
@@ -17,7 +18,12 @@ export interface ModalDialogProps {
 
 export function ModalDialog({ title, message, variant = 'default', buttons, onClose }: ModalDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const buttonsRef = useRef<HTMLDivElement>(null);
   const resolvedButtons = buttons ?? [{ label: 'OK', default: true }];
+  const defaultIdx = resolvedButtons.findIndex((b) => b.default);
+  const { onKeyDown } = useDialogButtonNav(buttonsRef, {
+    defaultIndex: defaultIdx >= 0 ? defaultIdx : resolvedButtons.length - 1,
+  });
 
   useEffect(() => {
     const dialog = dialogRef.current!;
@@ -32,14 +38,13 @@ export function ModalDialog({ title, message, variant = 'default', buttons, onCl
   }, [onClose]);
 
   return (
-    <dialog ref={dialogRef} className={`modal-dialog ${variant}`}>
+    <dialog ref={dialogRef} className={`modal-dialog ${variant}`} onKeyDown={onKeyDown}>
       {title && <div className="modal-dialog-header">{title}</div>}
       <div className="modal-dialog-body">{message}</div>
-      <div className="modal-dialog-buttons">
+      <div className="modal-dialog-buttons" ref={buttonsRef}>
         {resolvedButtons.map((btn) => (
           <button
             key={btn.label}
-            autoFocus={btn.default}
             onClick={() => {
               btn.onClick?.();
               dialogRef.current?.close();

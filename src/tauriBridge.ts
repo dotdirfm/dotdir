@@ -4,7 +4,7 @@
 /// Uses Tauri's invoke() for commands and listen() for events.
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { PtyLaunchInfo, TerminalProfile } from './bridge';
+import type { PtyLaunchInfo, TerminalProfile, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent } from './bridge';
 import type { FsaRawEntry, FsChangeEvent } from './types';
 import { normalizePath } from './path';
 
@@ -74,8 +74,8 @@ export const tauriBridge = {
     async createDir(dirPath: string): Promise<void> {
       return invoke<void>('fsa_create_dir', { dirPath });
     },
-    async moveToTrash(path: string): Promise<void> {
-      return invoke<void>('move_to_trash', { path });
+    async moveToTrash(paths: string[]): Promise<void> {
+      return invoke<void>('move_to_trash', { paths });
     },
     async deletePath(path: string): Promise<void> {
       return invoke<void>('fsa_delete_path', { path });
@@ -167,6 +167,66 @@ export const tauriBridge = {
     },
     async getTerminalProfiles(): Promise<TerminalProfile[]> {
       return invoke<RustTerminalProfile[]>('get_terminal_profiles');
+    },
+  },
+  copy: {
+    async start(sources: string[], destDir: string, options: CopyOptions): Promise<number> {
+      return invoke<number>('copy_start', { sources, destDir, options });
+    },
+    async cancel(copyId: number): Promise<void> {
+      return invoke<void>('copy_cancel', { copyId });
+    },
+    async resolveConflict(copyId: number, resolution: ConflictResolution): Promise<void> {
+      // Map TS discriminated union to Rust serde format
+      let rustRes: unknown;
+      switch (resolution.type) {
+        case 'overwrite': rustRes = 'overwrite'; break;
+        case 'skip': rustRes = 'skip'; break;
+        case 'rename': rustRes = { rename: resolution.newName }; break;
+        case 'overwriteAll': rustRes = 'overwriteAll'; break;
+        case 'skipAll': rustRes = 'skipAll'; break;
+        case 'cancel': rustRes = 'cancel'; break;
+      }
+      return invoke<void>('copy_resolve_conflict', { copyId, resolution: rustRes });
+    },
+    onProgress(callback: (event: CopyProgressEvent) => void): () => void {
+      let unlisten: (() => void) | null = null;
+      listen<CopyProgressEvent>('copy:progress', (event) => {
+        callback(event.payload);
+      }).then((fn) => { unlisten = fn; });
+      return () => { unlisten?.(); };
+    },
+  },
+  move: {
+    async start(sources: string[], destDir: string, options: MoveOptions): Promise<number> {
+      return invoke<number>('move_start', { sources, destDir, options });
+    },
+    async cancel(moveId: number): Promise<void> {
+      return invoke<void>('move_cancel', { moveId });
+    },
+    async resolveConflict(moveId: number, resolution: ConflictResolution): Promise<void> {
+      let rustRes: unknown;
+      switch (resolution.type) {
+        case 'overwrite': rustRes = 'overwrite'; break;
+        case 'skip': rustRes = 'skip'; break;
+        case 'rename': rustRes = { rename: resolution.newName }; break;
+        case 'overwriteAll': rustRes = 'overwriteAll'; break;
+        case 'skipAll': rustRes = 'skipAll'; break;
+        case 'cancel': rustRes = 'cancel'; break;
+      }
+      return invoke<void>('move_resolve_conflict', { moveId, resolution: rustRes });
+    },
+    onProgress(callback: (event: MoveProgressEvent) => void): () => void {
+      let unlisten: (() => void) | null = null;
+      listen<MoveProgressEvent>('move:progress', (event) => {
+        callback(event.payload);
+      }).then((fn) => { unlisten = fn; });
+      return () => { unlisten?.(); };
+    },
+  },
+  rename: {
+    async rename(source: string, newName: string): Promise<void> {
+      return invoke<void>('rename_item', { source, newName });
     },
   },
   theme: {

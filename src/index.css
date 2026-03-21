@@ -682,6 +682,193 @@ body.terminal-resizing {
   color: var(--fg-muted);
 }
 
+/* ── Copy config dialog ───────────────────────────────────────────── */
+
+.copy-config-dialog {
+  width: 480px;
+}
+
+.copy-config-dest {
+  font-size: 12px;
+  color: var(--fg-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 12px;
+}
+
+.copy-config-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.copy-config-section {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px 12px;
+  margin: 0;
+}
+
+.copy-config-section legend {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-secondary);
+  padding: 0 4px;
+}
+
+.copy-config-section label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.copy-config-section input[type="radio"],
+.copy-config-section input[type="checkbox"] {
+  margin: 0;
+}
+
+/* ── Copy progress dialog ─────────────────────────────────────────── */
+
+.copy-progress-dialog {
+  width: 440px;
+}
+
+.copy-progress-bar-container {
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.copy-progress-bar {
+  height: 100%;
+  background: var(--border-active);
+  border-radius: 3px;
+  transition: width 0.15s ease;
+}
+
+.copy-progress-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--fg-secondary);
+  margin-bottom: 4px;
+}
+
+.copy-progress-current {
+  font-size: 12px;
+  color: var(--fg-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Conflict dialog ──────────────────────────────────────────────── */
+
+.conflict-dialog {
+  width: 500px;
+}
+
+.conflict-file-info {
+  margin-bottom: 12px;
+}
+
+.conflict-file-info:last-child {
+  margin-bottom: 0;
+}
+
+.conflict-file-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-secondary);
+  margin-bottom: 2px;
+}
+
+.conflict-file-path {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conflict-file-meta {
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin-top: 2px;
+}
+
+.conflict-buttons {
+  flex-wrap: wrap;
+}
+
+.conflict-rename-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.conflict-rename-field label {
+  font-size: 12px;
+  color: var(--fg-secondary);
+}
+
+.conflict-rename-field input {
+  padding: 6px 8px;
+  font-size: 13px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+}
+
+.conflict-rename-field input:focus {
+  outline: 2px solid var(--border-active);
+  outline-offset: 0;
+}
+
+/* ── Move config dialog ──────────────────────────────────────────── */
+
+.move-config-dialog {
+  width: 400px;
+}
+
+/* ── Rename dialog ───────────────────────────────────────────────── */
+
+.rename-dialog {
+  width: 400px;
+}
+
+.rename-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rename-field label {
+  font-size: 12px;
+  color: var(--fg-secondary);
+}
+
+.rename-field input {
+  padding: 6px 8px;
+  font-size: 13px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--fg);
+  width: 100%;
+}
+
+.rename-field input:focus {
+  outline: 2px solid var(--border-active);
+  outline-offset: 0;
+}
+
 .file-list {
   display: flex;
   flex-direction: column;

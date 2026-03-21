@@ -3,7 +3,7 @@
 /// Implements the same Bridge interface as tauriBridge.ts, using JSON-RPC 2.0
 /// over WebSocket. Binary frames are used for fs.read responses.
 /// Automatically reconnects on disconnection with exponential backoff.
-import type { Bridge, PtyLaunchInfo, TerminalProfile } from './bridge';
+import type { Bridge, PtyLaunchInfo, TerminalProfile, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent } from './bridge';
 import type { FsaRawEntry, FsChangeEvent, FsChangeType } from './types';
 
 type Pending = {
@@ -23,6 +23,8 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
   const changeListeners = new Set<(event: FsChangeEvent) => void>();
   const ptyDataListeners = new Set<PtyDataCallback>();
   const ptyExitListeners = new Set<PtyExitCallback>();
+  const copyProgressListeners = new Set<(event: CopyProgressEvent) => void>();
+  const moveProgressListeners = new Set<(event: MoveProgressEvent) => void>();
   const reconnectCallbacks = new Set<() => void>();
 
   let wsReady: Promise<void>;
@@ -56,6 +58,12 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
         for (const cb of changeListeners) cb(event);
       } else if (msg.method === 'pty.exit') {
         for (const cb of ptyExitListeners) cb(msg.params.ptyId);
+      } else if (msg.method === 'copy.progress') {
+        const event: CopyProgressEvent = { copyId: msg.params.copyId, event: msg.params.event };
+        for (const cb of copyProgressListeners) cb(event);
+      } else if (msg.method === 'move.progress') {
+        const event: MoveProgressEvent = { moveId: msg.params.moveId, event: msg.params.event };
+        for (const cb of moveProgressListeners) cb(event);
       }
       return;
     }
@@ -195,6 +203,8 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       writeFile: (filePath: string, data: string) => rpc('fs.writeFile', { path: filePath, data }) as Promise<void>,
       writeBinaryFile: (filePath: string, data: Uint8Array) => rpc('fs.writeBinary', { path: filePath, data: Array.from(data) }) as Promise<void>,
       createDir: (dirPath: string) => rpc('fs.createDir', { path: dirPath }) as Promise<void>,
+      moveToTrash: (paths: string[]) => rpc('fs.moveToTrash', { paths }) as Promise<void>,
+      deletePath: (path: string) => rpc('fs.deletePath', { path }) as Promise<void>,
       onFsChange(callback: (event: FsChangeEvent) => void): () => void {
         changeListeners.add(callback);
         return () => {
@@ -224,6 +234,51 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
     utils: {
       getHomePath: () => rpc('utils.getHomePath', {}) as Promise<string>,
       getTerminalProfiles: () => rpc('utils.getTerminalProfiles', {}) as Promise<TerminalProfile[]>,
+    },
+    copy: {
+      start: (sources: string[], destDir: string, options: CopyOptions) =>
+        rpc('copy.start', { sources, destDir, options }) as Promise<number>,
+      cancel: (copyId: number) => rpc('copy.cancel', { copyId }) as Promise<void>,
+      resolveConflict: (copyId: number, resolution: ConflictResolution) => {
+        let rustRes: unknown;
+        switch (resolution.type) {
+          case 'overwrite': rustRes = 'overwrite'; break;
+          case 'skip': rustRes = 'skip'; break;
+          case 'rename': rustRes = { rename: resolution.newName }; break;
+          case 'overwriteAll': rustRes = 'overwriteAll'; break;
+          case 'skipAll': rustRes = 'skipAll'; break;
+          case 'cancel': rustRes = 'cancel'; break;
+        }
+        return rpc('copy.resolveConflict', { copyId, resolution: rustRes }) as Promise<void>;
+      },
+      onProgress(callback: (event: CopyProgressEvent) => void): () => void {
+        copyProgressListeners.add(callback);
+        return () => { copyProgressListeners.delete(callback); };
+      },
+    },
+    move: {
+      start: (sources: string[], destDir: string, options: MoveOptions) =>
+        rpc('move.start', { sources, destDir, options }) as Promise<number>,
+      cancel: (moveId: number) => rpc('move.cancel', { moveId }) as Promise<void>,
+      resolveConflict: (moveId: number, resolution: ConflictResolution) => {
+        let rustRes: unknown;
+        switch (resolution.type) {
+          case 'overwrite': rustRes = 'overwrite'; break;
+          case 'skip': rustRes = 'skip'; break;
+          case 'rename': rustRes = { rename: resolution.newName }; break;
+          case 'overwriteAll': rustRes = 'overwriteAll'; break;
+          case 'skipAll': rustRes = 'skipAll'; break;
+          case 'cancel': rustRes = 'cancel'; break;
+        }
+        return rpc('move.resolveConflict', { moveId, resolution: rustRes }) as Promise<void>;
+      },
+      onProgress(callback: (event: MoveProgressEvent) => void): () => void {
+        moveProgressListeners.add(callback);
+        return () => { moveProgressListeners.delete(callback); };
+      },
+    },
+    rename: {
+      rename: (source: string, newName: string) => rpc('fs.rename', { source, newName }) as Promise<void>,
     },
     theme: {
       get: () => Promise.resolve(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),

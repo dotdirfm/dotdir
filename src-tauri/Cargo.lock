@@ -1187,9 +1187,11 @@ dependencies = [
  "log",
  "notify",
  "parking_lot",
+ "serde",
  "tempfile",
  "thiserror 2.0.18",
  "windows-sys 0.59.0",
+ "xattr",
 ]
 
 [[package]]
@@ -6432,6 +6434,16 @@ dependencies = [
  "libc",
  "once_cell",
  "pkg-config",
+]
+
+[[package]]
+name = "xattr"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
+dependencies = [
+ "libc",
+ "rustix",
 ]
 
 [[package]]

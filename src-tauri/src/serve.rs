@@ -16,6 +16,8 @@ use axum::{
 };
 use crate::pty;
 use faraday_core::{
+    copy::{self, CancelToken, ConflictResolution, CopyEvent, CopyOptions},
+    move_op::{self, MoveOptions},
     error::FsError,
     ops::{self, FdTable},
     watch::{EventCallback, FsWatcher},
@@ -25,7 +27,14 @@ use log::debug;
 use rust_embed::RustEmbed;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
+};
 
 use tokio::sync::mpsc;
 
@@ -66,11 +75,25 @@ impl From<ops::EntryInfo> for JsEntry {
 
 // ── Per-connection session ──────────────────────────────────────────
 
+struct CopyJobHandle {
+    cancel_token: CancelToken,
+    conflict_tx: std::sync::mpsc::SyncSender<ConflictResolution>,
+}
+
+struct MoveJobHandle {
+    cancel_token: CancelToken,
+    conflict_tx: std::sync::mpsc::SyncSender<ConflictResolution>,
+}
+
 struct Session {
     fdt: FdTable,
     watcher: FsWatcher,
     ptys: std::sync::Mutex<HashMap<u32, pty::PtyHandle>>,
-    next_pty_id: std::sync::atomic::AtomicU32,
+    next_pty_id: AtomicU32,
+    copy_jobs: std::sync::Mutex<HashMap<u32, CopyJobHandle>>,
+    next_copy_id: AtomicU32,
+    move_jobs: std::sync::Mutex<HashMap<u32, MoveJobHandle>>,
+    next_move_id: AtomicU32,
 }
 
 // ── WebSocket handler ───────────────────────────────────────────────
@@ -104,7 +127,11 @@ async fn handle_socket(socket: WebSocket) {
         fdt: FdTable::new(),
         watcher,
         ptys: std::sync::Mutex::new(HashMap::new()),
-        next_pty_id: std::sync::atomic::AtomicU32::new(0),
+        next_pty_id: AtomicU32::new(0),
+        copy_jobs: std::sync::Mutex::new(HashMap::new()),
+        next_copy_id: AtomicU32::new(0),
+        move_jobs: std::sync::Mutex::new(HashMap::new()),
+        next_move_id: AtomicU32::new(0),
     });
 
     let write_task = tokio::spawn(async move {
@@ -174,6 +201,16 @@ async fn process_message(
     // PTY spawn needs tx for the reader thread
     if method == "pty.spawn" {
         return Some(handle_pty_spawn(session, &id, &params, tx));
+    }
+
+    // copy.start needs tx for progress streaming
+    if method == "copy.start" {
+        return Some(handle_copy_start(session, &id, &params, tx));
+    }
+
+    // move.start needs tx for progress streaming
+    if method == "move.start" {
+        return Some(handle_move_start(session, &id, &params, tx));
     }
 
     let session = session.clone();
@@ -271,6 +308,192 @@ fn handle_pty_spawn(
     Message::Text(json!({ "jsonrpc": "2.0", "id": id, "result": result }).to_string())
 }
 
+fn handle_copy_start(
+    session: &Arc<Session>,
+    id: &Value,
+    params: &Value,
+    tx: &mpsc::UnboundedSender<Message>,
+) -> Message {
+    let sources: Vec<String> = match serde_json::from_value(params["sources"].clone()) {
+        Ok(v) => v,
+        Err(_) => return rpc_error(id, &FsError::InvalidInput),
+    };
+    let dest_dir = match params["destDir"].as_str() {
+        Some(s) => s.to_string(),
+        None => return rpc_error(id, &FsError::InvalidInput),
+    };
+    let options: CopyOptions = serde_json::from_value(params["options"].clone()).unwrap_or_default();
+
+    let copy_id = session.next_copy_id.fetch_add(1, Ordering::Relaxed);
+    let cancel_token = CancelToken::new();
+    let (conflict_tx, conflict_rx) = std::sync::mpsc::sync_channel::<ConflictResolution>(0);
+
+    session.copy_jobs.lock().unwrap().insert(
+        copy_id,
+        CopyJobHandle {
+            cancel_token: cancel_token.clone(),
+            conflict_tx,
+        },
+    );
+
+    let source_paths: Vec<PathBuf> = sources.iter().map(PathBuf::from).collect();
+    let dest_path = PathBuf::from(&dest_dir);
+    let tx_copy = tx.clone();
+    let session_ref = session.clone();
+
+    std::thread::spawn(move || {
+        let tx_progress = tx_copy.clone();
+        let emit_progress = move |event: CopyEvent| {
+            let payload = json!({
+                "jsonrpc": "2.0",
+                "method": "copy.progress",
+                "params": { "copyId": copy_id, "event": event }
+            });
+            let _ = tx_progress.send(Message::Text(payload.to_string()));
+        };
+
+        let tx_conflict = tx_copy.clone();
+        let on_conflict = |src: &std::path::Path, dest: &std::path::Path| -> ConflictResolution {
+            let src_meta = std::fs::metadata(src).ok();
+            let dest_meta = std::fs::metadata(dest).ok();
+            let payload = json!({
+                "jsonrpc": "2.0",
+                "method": "copy.progress",
+                "params": {
+                    "copyId": copy_id,
+                    "event": {
+                        "kind": "conflict",
+                        "src": src.to_string_lossy(),
+                        "dest": dest.to_string_lossy(),
+                        "srcSize": src_meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                        "srcMtimeMs": src_meta.as_ref().map(|m| serve_mtime_ms(m)).unwrap_or(0.0),
+                        "destSize": dest_meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                        "destMtimeMs": dest_meta.as_ref().map(|m| serve_mtime_ms(m)).unwrap_or(0.0),
+                    }
+                }
+            });
+            let _ = tx_conflict.send(Message::Text(payload.to_string()));
+            conflict_rx.recv().unwrap_or(ConflictResolution::Cancel)
+        };
+
+        let result = copy::copy_tree(
+            &source_paths,
+            &dest_path,
+            &options,
+            &cancel_token,
+            &emit_progress,
+            &on_conflict,
+        );
+
+        if let Err(e) = result {
+            emit_progress(CopyEvent::Error {
+                message: e.to_string(),
+            });
+        }
+
+        session_ref.copy_jobs.lock().unwrap().remove(&copy_id);
+    });
+
+    Message::Text(json!({ "jsonrpc": "2.0", "id": id, "result": copy_id }).to_string())
+}
+
+fn handle_move_start(
+    session: &Arc<Session>,
+    id: &Value,
+    params: &Value,
+    tx: &mpsc::UnboundedSender<Message>,
+) -> Message {
+    let sources: Vec<String> = match serde_json::from_value(params["sources"].clone()) {
+        Ok(v) => v,
+        Err(_) => return rpc_error(id, &FsError::InvalidInput),
+    };
+    let dest_dir = match params["destDir"].as_str() {
+        Some(s) => s.to_string(),
+        None => return rpc_error(id, &FsError::InvalidInput),
+    };
+    let options: MoveOptions = serde_json::from_value(params["options"].clone()).unwrap_or_default();
+
+    let move_id = session.next_move_id.fetch_add(1, Ordering::Relaxed);
+    let cancel_token = CancelToken::new();
+    let (conflict_tx, conflict_rx) = std::sync::mpsc::sync_channel::<ConflictResolution>(0);
+
+    session.move_jobs.lock().unwrap().insert(
+        move_id,
+        MoveJobHandle {
+            cancel_token: cancel_token.clone(),
+            conflict_tx,
+        },
+    );
+
+    let source_paths: Vec<PathBuf> = sources.iter().map(PathBuf::from).collect();
+    let dest_path = PathBuf::from(&dest_dir);
+    let tx_move = tx.clone();
+    let session_ref = session.clone();
+
+    std::thread::spawn(move || {
+        let tx_progress = tx_move.clone();
+        let emit_progress = move |event: CopyEvent| {
+            let payload = json!({
+                "jsonrpc": "2.0",
+                "method": "move.progress",
+                "params": { "moveId": move_id, "event": event }
+            });
+            let _ = tx_progress.send(Message::Text(payload.to_string()));
+        };
+
+        let tx_conflict = tx_move.clone();
+        let on_conflict = |src: &std::path::Path, dest: &std::path::Path| -> ConflictResolution {
+            let src_meta = std::fs::metadata(src).ok();
+            let dest_meta = std::fs::metadata(dest).ok();
+            let payload = json!({
+                "jsonrpc": "2.0",
+                "method": "move.progress",
+                "params": {
+                    "moveId": move_id,
+                    "event": {
+                        "kind": "conflict",
+                        "src": src.to_string_lossy(),
+                        "dest": dest.to_string_lossy(),
+                        "srcSize": src_meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                        "srcMtimeMs": src_meta.as_ref().map(|m| serve_mtime_ms(m)).unwrap_or(0.0),
+                        "destSize": dest_meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                        "destMtimeMs": dest_meta.as_ref().map(|m| serve_mtime_ms(m)).unwrap_or(0.0),
+                    }
+                }
+            });
+            let _ = tx_conflict.send(Message::Text(payload.to_string()));
+            conflict_rx.recv().unwrap_or(ConflictResolution::Cancel)
+        };
+
+        let result = move_op::move_tree(
+            &source_paths,
+            &dest_path,
+            &options,
+            &cancel_token,
+            &emit_progress,
+            &on_conflict,
+        );
+
+        if let Err(e) = result {
+            emit_progress(CopyEvent::Error {
+                message: e.to_string(),
+            });
+        }
+
+        session_ref.move_jobs.lock().unwrap().remove(&move_id);
+    });
+
+    Message::Text(json!({ "jsonrpc": "2.0", "id": id, "result": move_id }).to_string())
+}
+
+fn serve_mtime_ms(meta: &std::fs::Metadata) -> f64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs_f64() * 1000.0)
+        .unwrap_or(0.0)
+}
+
 fn rpc_error(id: &Value, e: &FsError) -> Message {
     Message::Text(
         json!({
@@ -362,6 +585,75 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
             let pty_id = params["ptyId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
             if let Some(mut handle) = session.ptys.lock().unwrap().remove(&pty_id) {
                 pty::close(&mut handle);
+            }
+            Ok(Value::Null)
+        }
+        "copy.cancel" => {
+            let copy_id = params["copyId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
+            if let Some(job) = session.copy_jobs.lock().unwrap().get(&copy_id) {
+                job.cancel_token.cancel();
+                let _ = job.conflict_tx.try_send(ConflictResolution::Cancel);
+            }
+            Ok(Value::Null)
+        }
+        "copy.resolveConflict" => {
+            let copy_id = params["copyId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
+            let resolution: ConflictResolution =
+                serde_json::from_value(params["resolution"].clone())
+                    .map_err(|_| FsError::InvalidInput)?;
+            if let Some(job) = session.copy_jobs.lock().unwrap().get(&copy_id) {
+                let _ = job.conflict_tx.send(resolution);
+            }
+            Ok(Value::Null)
+        }
+        "move.cancel" => {
+            let move_id = params["moveId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
+            if let Some(job) = session.move_jobs.lock().unwrap().get(&move_id) {
+                job.cancel_token.cancel();
+                let _ = job.conflict_tx.try_send(ConflictResolution::Cancel);
+            }
+            Ok(Value::Null)
+        }
+        "move.resolveConflict" => {
+            let move_id = params["moveId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
+            let resolution: ConflictResolution =
+                serde_json::from_value(params["resolution"].clone())
+                    .map_err(|_| FsError::InvalidInput)?;
+            if let Some(job) = session.move_jobs.lock().unwrap().get(&move_id) {
+                let _ = job.conflict_tx.send(resolution);
+            }
+            Ok(Value::Null)
+        }
+        "fs.rename" => {
+            let source = params["source"].as_str().ok_or(FsError::InvalidInput)?;
+            let new_name = params["newName"].as_str().ok_or(FsError::InvalidInput)?;
+            move_op::rename_item(std::path::Path::new(source), new_name)?;
+            Ok(Value::Null)
+        }
+        "fs.moveToTrash" => {
+            let paths = params["paths"].as_array().ok_or(FsError::InvalidInput)?;
+            let canonical: Vec<std::path::PathBuf> = paths
+                .iter()
+                .map(|v| {
+                    let s = v.as_str().ok_or(FsError::InvalidInput)?;
+                    std::path::Path::new(s)
+                        .canonicalize()
+                        .map_err(FsError::from_io)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            trash::delete_all(&canonical).map_err(|e| {
+                FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+            })?;
+            Ok(Value::Null)
+        }
+        "fs.deletePath" => {
+            let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
+            let p = std::path::Path::new(path);
+            let meta = std::fs::metadata(p).map_err(FsError::from_io)?;
+            if meta.is_dir() {
+                std::fs::remove_dir(p).map_err(FsError::from_io)?;
+            } else {
+                std::fs::remove_file(p).map_err(FsError::from_io)?;
             }
             Ok(Value::Null)
         }
