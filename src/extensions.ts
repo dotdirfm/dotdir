@@ -395,9 +395,9 @@ async function inflateRaw(compressed: Uint8Array): Promise<Uint8Array> {
   return result;
 }
 
-async function extractZipFiles(buffer: ArrayBuffer): Promise<Map<string, string>> {
+async function extractZipFiles(buffer: ArrayBuffer): Promise<Map<string, Uint8Array>> {
   const bytes = new Uint8Array(buffer);
-  const files = new Map<string, string>();
+  const files = new Map<string, Uint8Array>();
 
   const read2 = (o: number) => bytes[o] | (bytes[o + 1] << 8);
   const read4 = (o: number) => (bytes[o] | (bytes[o + 1] << 8) | (bytes[o + 2] << 16) | (bytes[o + 3] << 24)) >>> 0;
@@ -432,12 +432,11 @@ async function extractZipFiles(buffer: ArrayBuffer): Promise<Map<string, string>
     const dataStart = localHeaderOffset + 30 + localNameLen + localExtraLen;
     const raw = bytes.slice(dataStart, dataStart + compSize);
 
-    let content: string;
+    let content: Uint8Array;
     if (method === 0) {
-      content = new TextDecoder().decode(raw);
+      content = raw;
     } else if (method === 8) {
-      const decompressed = await inflateRaw(raw);
-      content = new TextDecoder().decode(decompressed);
+      content = await inflateRaw(raw);
     } else {
       continue;
     }
@@ -480,7 +479,7 @@ export async function installExtension(publisherUsername: string, extName: strin
   for (const [fileName, content] of files) {
     const normalizedName = stripPrefix ? fileName.slice(stripPrefix.length) : fileName;
     if (!normalizedName) continue;
-    await bridge.fsa.writeFile(join(extDir, normalizedName), content);
+    await bridge.fsa.writeBinaryFile(join(extDir, normalizedName), content);
   }
 
   const refs = await readRefs();
