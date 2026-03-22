@@ -5,16 +5,24 @@ use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex, OnceLock};
 
-/// Shell integration scripts registered by extensions (shell basename → init script).
-/// When set, these are injected into the PTY on spawn.
-static SHELL_INTEGRATIONS: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+/// Shell integration init info registered by extensions.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ShellIntegrationInit {
+    pub script: String,
+    /// When true, the script is passed as the final CLI argument rather than written to stdin.
+    #[serde(default, rename = "scriptArg")]
+    pub script_as_arg: bool,
+}
 
-fn shell_integrations_map() -> &'static Mutex<HashMap<String, String>> {
+/// Shell integration scripts registered by extensions (shell path → init info).
+static SHELL_INTEGRATIONS: OnceLock<Mutex<HashMap<String, ShellIntegrationInit>>> = OnceLock::new();
+
+fn shell_integrations_map() -> &'static Mutex<HashMap<String, ShellIntegrationInit>> {
     SHELL_INTEGRATIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 /// Called by the frontend to register shell integration scripts from extensions.
-pub fn set_shell_integrations(integrations: HashMap<String, String>) {
+pub fn set_shell_integrations(integrations: HashMap<String, ShellIntegrationInit>) {
     let mut lock = shell_integrations_map().lock().unwrap_or_else(|e| e.into_inner());
     *lock = integrations;
 }
@@ -32,11 +40,11 @@ fn portable_pty_error(err: impl std::fmt::Display) -> io::Error {
     io::Error::other(err.to_string())
 }
 
-/// Returns the init script for the given shell, if one has been registered by an extension.
+/// Returns the init info for the given shell, if one has been registered by an extension.
 ///
-/// The frontend may register scripts keyed by **full executable path** (e.g. `/bin/zsh`) or by
-/// basename (`zsh`). Lookup tries basename first (matches `spawn`'s shell path), then the full path.
-fn shell_init(shell: &str) -> Option<String> {
+/// The frontend registers scripts keyed by **full executable path** (e.g. `/bin/zsh`).
+/// Lookup tries the full path first, then falls back to basename (without .exe).
+fn shell_init(shell: &str) -> Option<ShellIntegrationInit> {
     let shell_name = std::path::Path::new(shell)
         .file_name()
         .and_then(|name| name.to_str())
@@ -45,8 +53,8 @@ fn shell_init(shell: &str) -> Option<String> {
     let shell_name = shell_name.strip_suffix(".exe").unwrap_or(shell_name);
     let lock = shell_integrations_map().lock().unwrap_or_else(|e| e.into_inner());
     lock
-        .get(shell_name)
-        .or_else(|| lock.get(shell))
+        .get(shell)
+        .or_else(|| lock.get(shell_name))
         .cloned()
 }
 
@@ -74,18 +82,21 @@ pub fn spawn(
         extra_args.len()
     ));
 
+    // Look up init info before building the command so we can append script as an arg.
+    let init_info = shell_init(shell);
+
     let mut cmd = CommandBuilder::new(shell);
     cmd.cwd(cwd);
 
     #[cfg(windows)]
     {
-        let shell_name = std::path::Path::new(shell)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default()
-            .to_lowercase();
         for a in extra_args {
             cmd.arg(a);
+        }
+        if let Some(ref info) = init_info {
+            if info.script_as_arg {
+                cmd.arg(&info.script);
+            }
         }
     }
 
@@ -98,6 +109,11 @@ pub fn spawn(
         cmd.env("LC_CTYPE", "UTF-8");
         for a in extra_args {
             cmd.arg(a);
+        }
+        if let Some(ref info) = init_info {
+            if info.script_as_arg {
+                cmd.arg(&info.script);
+            }
         }
     }
 
@@ -118,21 +134,11 @@ pub fn spawn(
         cwd: cwd.to_string(),
     };
 
-    if let Some(init) = shell_init(shell) {
-        let _ = write_all(&handle.writer, init.as_bytes());
-        // Multiline init must not be sent to an interactive shell: each line is a separate
-        // command (zsh shows function>, pwsh breaks mid-statement). Newlines → spaces only;
-        // do not re-tokenize (would break quoted strings in contributions).
-        // let t: String = init
-        //     .chars()
-        //     .map(|c| if c == '\r' || c == '\n' { ' ' } else { c })
-        //     .collect();
-        // let line = if cfg!(windows) {
-        //     format!("{}\r\n", t.trim())
-        // } else {
-        //     format!("{}\n", t.trim())
-        // };
-        // let _ = write_all(&handle.writer, line.as_bytes());
+    // For shells that don't use scriptArg, write the init script to stdin.
+    if let Some(info) = init_info {
+        if !info.script_as_arg {
+            let _ = write_all(&handle.writer, info.script.as_bytes());
+        }
     }
 
     Ok(handle)

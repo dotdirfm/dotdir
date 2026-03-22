@@ -231,7 +231,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
           rows: Math.max(1, Math.floor(rows)),
         }) as Promise<void>,
       close: (ptyId: number) => rpc('pty.close', { ptyId }) as Promise<void>,
-      setShellIntegrations: (_integrations: Record<string, string>) => Promise.resolve(),
+      setShellIntegrations: (_integrations: Record<string, { script: string; scriptArg: boolean }>) => Promise.resolve(),
       onData(callback: PtyDataCallback): () => void {
         ptyDataListeners.add(callback);
         return () => { ptyDataListeners.delete(callback); };

@@ -134,8 +134,8 @@ export interface Bridge {
     close(ptyId: number): Promise<void>;
     onData(callback: (ptyId: number, data: string | Uint8Array) => void): () => void;
     onExit(callback: (ptyId: number) => void): () => void;
-    /** Register shell init scripts from extensions (shell basename → script). */
-    setShellIntegrations?(integrations: Record<string, string>): Promise<void>;
+    /** Register shell init scripts from extensions (shell path → init info). */
+    setShellIntegrations?(integrations: Record<string, { script: string; scriptArg: boolean }>): Promise<void>;
   };
   utils: {
     getHomePath(): Promise<string>;

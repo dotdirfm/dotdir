@@ -127,6 +127,11 @@ export interface ExtensionShellIntegration {
   lineEnding?: '\n' | '\r\n';
   /** Extra argv after the shell executable (e.g. `--noprofile` for bash). */
   spawnArgs?: string[];
+  /**
+   * When true, the init script is passed as the last CLI argument (after spawnArgs)
+   * rather than written to PTY stdin. Use for shells like pwsh that accept `-Command <script>`.
+   */
+  scriptArg?: boolean;
 }
 
 export interface ExtensionContributions {
@@ -232,6 +237,7 @@ export interface LoadedExtension {
     cwdEscape?: CwdEscapeMode;
     lineEnding?: '\n' | '\r\n';
     spawnArgs?: string[];
+    scriptArg?: boolean;
   }>;
 }
 
@@ -397,6 +403,7 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
               cwdEscape: si.cwdEscape,
               lineEnding: si.lineEnding,
               spawnArgs: si.spawnArgs,
+              scriptArg: si.scriptArg,
             });
           } catch {
             // Skip scripts that fail to load

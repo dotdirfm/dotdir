@@ -81,12 +81,25 @@ export class TerminalSession {
   }
 
   /**
-   * Faraday OSC 779 — shell integration emits this when the prompt is ready (command finished).
-   * Payload is typically `F` (finished).
+   * Faraday OSC 779 — shell integration emits this on preexec (S) and command finish (F).
+   * Payload `S` = command starting (preexec); `F` = command finished (postexec / precmd).
    */
   notifyFaradayPromptOsc(payload: string): void {
     if (this.oscHooksSuppressed) return;
     const body = payload.replace(/^;/, '').trimStart();
+    if (body.startsWith('S')) {
+      // preexec: a user command is about to run (not fired for hidden cd — suppress flag is set)
+      if (!this.suppressNextCommandFinish) {
+        if (!this.capabilities.hasFaradayOsc) {
+          this.capabilities = { ...this.capabilities, hasFaradayOsc: true };
+        }
+        if (!this.capabilities.commandRunning) {
+          this.capabilities = { ...this.capabilities, commandRunning: true, promptReady: false };
+        }
+        this.emitCapabilities();
+      }
+      return;
+    }
     if (!body.startsWith('F')) return;
     if (!this.capabilities.hasFaradayOsc) {
       this.capabilities = { ...this.capabilities, hasFaradayOsc: true };

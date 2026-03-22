@@ -3,7 +3,7 @@ import type { LoadedExtension } from '../extensions';
 
 export interface ShellProfilesResult {
   profiles: TerminalProfile[];
-  shellScripts: Record<string, string>;
+  shellScripts: Record<string, { script: string; scriptArg: boolean }>;
 }
 
 function matchesPlatform(
@@ -93,7 +93,7 @@ export async function resolveShellProfiles(
   const shellEnv = env['SHELL'] ?? '';
 
   const profiles: TerminalProfile[] = [];
-  const shellScripts: Record<string, string> = {};
+  const shellScripts: Record<string, { script: string; scriptArg: boolean }> = {};
   const seenPaths = new Set<string>();
 
   const contributions: Array<{
@@ -106,6 +106,7 @@ export async function resolveShellProfiles(
     cwdEscape?: CwdEscapeMode;
     lineEnding?: '\n' | '\r\n';
     spawnArgs?: string[];
+    scriptArg?: boolean;
   }> = [];
 
   for (const ext of extensions) {
@@ -124,7 +125,7 @@ export async function resolveShellProfiles(
         if (exists) {
           seenPaths.add(shellEnv);
           profiles.push(profileFromContribution(shellEnv, matched.label, matched));
-          shellScripts[shellEnv] = matched.script;
+          shellScripts[shellEnv] = { script: matched.script, scriptArg: matched.scriptArg ?? false };
         }
       } catch {
         // Ignore
@@ -141,7 +142,7 @@ export async function resolveShellProfiles(
         if (exists) {
           seenPaths.add(resolved);
           profiles.push(profileFromContribution(resolved, si.label, si));
-          shellScripts[resolved] = si.script;
+          shellScripts[resolved] = { script: si.script, scriptArg: si.scriptArg ?? false };
           break;
         }
       } catch {

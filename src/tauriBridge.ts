@@ -146,7 +146,7 @@ export const tauriBridge = {
     async close(ptyId: number): Promise<void> {
       return invoke<void>('pty_close', { ptyId });
     },
-    async setShellIntegrations(integrations: Record<string, string>): Promise<void> {
+    async setShellIntegrations(integrations: Record<string, { script: string; scriptArg: boolean }>): Promise<void> {
       return invoke<void>('pty_set_shell_integrations', { integrations });
     },
     onData(callback: (ptyId: number, data: Uint8Array) => void): () => void {

@@ -396,7 +396,7 @@ fn get_env() -> HashMap<String, String> {
 }
 
 #[tauri::command]
-fn pty_set_shell_integrations(integrations: HashMap<String, String>) {
+fn pty_set_shell_integrations(integrations: HashMap<String, pty::ShellIntegrationInit>) {
     pty::set_shell_integrations(integrations);
 }
 

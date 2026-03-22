@@ -109,6 +109,7 @@ interface ExtensionShellIntegration {
   cwdEscape?: 'posix' | 'powershell' | 'cmd';
   lineEnding?: '\n' | '\r\n';
   spawnArgs?: string[];
+  scriptArg?: boolean;
 }
 
 interface ExtensionContributions {
@@ -187,6 +188,7 @@ export interface WorkerLoadedExtension {
     cwdEscape?: 'posix' | 'powershell' | 'cmd';
     lineEnding?: '\n' | '\r\n';
     spawnArgs?: string[];
+    scriptArg?: boolean;
   }>;
 }
 
@@ -279,6 +281,7 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
             cwdEscape: si.cwdEscape,
             lineEnding: si.lineEnding,
             spawnArgs: si.spawnArgs,
+            scriptArg: si.scriptArg,
           });
         }
       }
