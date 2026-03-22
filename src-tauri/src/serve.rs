@@ -254,9 +254,21 @@ fn handle_pty_spawn(
     };
     let cols = params["cols"].as_u64().unwrap_or(80) as u16;
     let rows = params["rows"].as_u64().unwrap_or(24) as u16;
-    let profile_id = params["profileId"].as_str();
+    let shell_path = match params["shellPath"].as_str() {
+        Some(s) => s,
+        None => return rpc_error(id, &FsError::InvalidInput),
+    };
 
-    let handle = match pty::spawn(cwd, profile_id, cols, rows) {
+    let spawn_args: Vec<String> = params["spawnArgs"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let handle = match pty::spawn(cwd, shell_path, cols, rows, &spawn_args) {
         Ok(h) => h,
         Err(e) => return rpc_error(id, &FsError::Io(e)),
     };
@@ -269,8 +281,6 @@ fn handle_pty_spawn(
         "ptyId": pty_id,
         "cwd": handle.cwd,
         "shell": handle.shell,
-        "profileId": handle.profile_id,
-        "profileLabel": handle.profile_label,
     });
 
     session.ptys.lock().unwrap().insert(pty_id, handle);
@@ -761,7 +771,11 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_default()
         )),
-        "utils.getTerminalProfiles" => Ok(serde_json::to_value(pty::list_profiles()).unwrap()),
+        "utils.getEnv" => {
+            let mut env: std::collections::HashMap<String, String> = std::env::vars().collect();
+            env.insert("__platform__".to_string(), std::env::consts::OS.to_string());
+            Ok(serde_json::to_value(env).unwrap())
+        }
         _ => Err(FsError::InvalidInput),
     }
 }

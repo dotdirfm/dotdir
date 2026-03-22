@@ -1,13 +1,5 @@
 import { normalizePath } from '../path';
-import type { TerminalShellType } from './types';
-
-function isWindowsPath(path: string): boolean {
-  return /^[A-Za-z]:[\\/]/.test(path);
-}
-
-function shellQuote(path: string): string {
-  return "'" + path.replace(/'/g, "'\\''") + "'";
-}
+import type { CwdEscapeMode, TerminalProfile } from '../bridge';
 
 export function normalizeTerminalPath(raw: string): string {
   const normalized = raw.replace(/\\/g, '/');
@@ -15,16 +7,25 @@ export function normalizeTerminalPath(raw: string): string {
   return normalizePath(match ? match[1] : normalized);
 }
 
-export function buildCdCommand(path: string, shellType: TerminalShellType): string {
-  if (shellType === 'powershell') {
-    const psPath = path.replace(/\//g, '\\').replace(/`/g, '``').replace(/"/g, '`"');
-    return `cd "${psPath}"\r`;
+function escapeCwdForMode(cwd: string, mode: CwdEscapeMode): string {
+  switch (mode) {
+    case 'posix':
+      return "'" + cwd.replace(/'/g, "'\\''") + "'";
+    case 'powershell':
+      return "'" + cwd.replace(/'/g, "''") + "'";
+    case 'cmd':
+      return '"' + cwd.replace(/"/g, '""') + '"';
   }
-
-  if (isWindowsPath(path) || shellType === 'cmd') {
-    const cmdPath = path.replace(/\//g, '\\').replace(/"/g, '""');
-    return `@cd /d "${cmdPath}"\r`;
-  }
-  return ` cd ${shellQuote(path)}\n`;
 }
 
+/**
+ * Hidden `cd` sent before running a command from the command line or panel sync.
+ * Template comes from shell-integration contributions (`{{cwd}}` = escaped path).
+ */
+export function formatHiddenCd(absoluteCwd: string, profile: TerminalProfile): string {
+  const normalized = normalizeTerminalPath(absoluteCwd);
+  const escaped = escapeCwdForMode(normalized, profile.cwdEscape);
+  const body = profile.hiddenCdTemplate.replace(/\{\{cwd\}\}/g, escaped);
+  const eol = profile.lineEnding ?? '\n';
+  return body + eol;
+}

@@ -307,7 +307,7 @@ fn fsa_unwatch(watch_id: String, state: State<'_, AppState>) {
 #[derive(Serialize, Clone)]
 struct PtyDataEvent {
     pty_id: u32,
-    data: String,
+    data: Vec<u8>,
 }
 
 #[derive(Serialize, Clone)]
@@ -320,35 +320,37 @@ struct PtySpawnResult {
     pty_id: u32,
     cwd: String,
     shell: String,
-    profile_id: String,
-    profile_label: String,
 }
 
 #[tauri::command]
 fn pty_spawn(
     cwd: String,
-    profile_id: Option<String>,
+    shell_path: String,
+    spawn_args: Option<Vec<String>>,
     cols: Option<u16>,
     rows: Option<u16>,
     state: State<'_, AppState>,
     app_handle: tauri::AppHandle,
 ) -> CmdResult<PtySpawnResult> {
     let id = state.next_pty_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let args = spawn_args.as_deref().unwrap_or(&[]);
     write_debug_log(&format!(
-        "pty_spawn requested id={} cwd={} profile={}",
+        "pty_spawn requested id={} cwd={} shell={} argc={}",
         id,
         cwd,
-        profile_id.as_deref().unwrap_or("<default>")
+        shell_path,
+        args.len()
     ));
     let handle = match pty::spawn(
         &cwd,
-        profile_id.as_deref(),
+        &shell_path,
         cols.unwrap_or(80),
         rows.unwrap_or(24),
+        args,
     ) {
         Ok(handle) => handle,
         Err(e) => {
-            write_debug_log(&format!("pty_spawn failed id={} cwd={} error={}", id, cwd, e));
+            write_debug_log(&format!("pty_spawn failed id={} error={}", id, e));
             return Err(CmdError(FsError::Io(e)));
         }
     };
@@ -357,20 +359,14 @@ fn pty_spawn(
         pty_id: id,
         cwd: handle.cwd.clone(),
         shell: handle.shell.clone(),
-        profile_id: handle.profile_id.clone(),
-        profile_label: handle.profile_label.clone(),
     };
     state.ptys.lock().unwrap().insert(id, handle);
     write_debug_log(&format!("pty_spawn started id={}", id));
 
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
-        let mut leftover = Vec::new(); // incomplete UTF-8 bytes from previous read
         loop {
-            let offset = leftover.len();
-            buf[..offset].copy_from_slice(&leftover);
-            leftover.clear();
-            match pty::read_blocking(&reader, &mut buf[offset..]) {
+            match pty::read_blocking(&reader, &mut buf) {
                 Ok(0) => {
                     write_debug_log(&format!("pty read eof id={}", id));
                     let _ = app_handle.emit("pty:exit", PtyExitEvent { pty_id: id });
@@ -382,18 +378,7 @@ fn pty_spawn(
                     break;
                 }
                 Ok(n) => {
-                    let total = offset + n;
-                    let valid_up_to = match std::str::from_utf8(&buf[..total]) {
-                        Ok(_) => total,
-                        Err(e) => e.valid_up_to(),
-                    };
-                    if valid_up_to < total {
-                        leftover.extend_from_slice(&buf[valid_up_to..total]);
-                    }
-                    if valid_up_to == 0 {
-                        continue;
-                    }
-                    let data = unsafe { std::str::from_utf8_unchecked(&buf[..valid_up_to]) }.to_owned();
+                    let data = buf[..n].to_vec();
                     let _ = app_handle.emit("pty:data", PtyDataEvent { pty_id: id, data });
                 }
             }
@@ -403,15 +388,33 @@ fn pty_spawn(
 }
 
 #[tauri::command]
-fn get_terminal_profiles() -> Vec<pty::TerminalProfile> {
-    pty::list_profiles()
+fn get_env() -> HashMap<String, String> {
+    let mut env: HashMap<String, String> = std::env::vars().collect();
+    // Inject platform key so frontend can branch on OS without a separate call.
+    env.insert("__platform__".to_string(), std::env::consts::OS.to_string());
+    env
 }
 
 #[tauri::command]
-fn pty_write(pty_id: u32, data: String, state: State<'_, AppState>) -> CmdResult<()> {
+fn pty_set_shell_integrations(integrations: HashMap<String, String>) {
+    pty::set_shell_integrations(integrations);
+}
+
+#[tauri::command]
+fn pty_write(
+    pty_id: u32,
+    data: Option<String>,
+    data_bytes: Option<Vec<u8>>,
+    state: State<'_, AppState>,
+) -> CmdResult<()> {
     let ptys = state.ptys.lock().unwrap();
     let handle = ptys.get(&pty_id).ok_or(CmdError(FsError::BadFd))?;
-    pty::write_all(&handle.writer, data.as_bytes()).map_err(|e| CmdError(FsError::Io(e)))?;
+    let payload = match (data_bytes, data) {
+        (Some(bytes), _) => bytes,
+        (None, Some(text)) => text.into_bytes(),
+        (None, None) => return Err(CmdError(FsError::InvalidInput)),
+    };
+    pty::write_all(&handle.writer, &payload).map_err(|e| CmdError(FsError::Io(e)))?;
     Ok(())
 }
 
@@ -429,6 +432,46 @@ fn pty_close(pty_id: u32, state: State<'_, AppState>) {
     if let Some(mut handle) = state.ptys.lock().unwrap().remove(&pty_id) {
         pty::close(&mut handle);
     }
+}
+
+/// Subdirectories of `extensions_root` that contain a `package.json` (one extension per folder).
+fn collect_extension_dirs_with_package_json(extensions_root: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    if !extensions_root.is_dir() {
+        return out;
+    }
+    let Ok(entries) = fs::read_dir(extensions_root) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() && path.join("package.json").is_file() {
+            out.push(path.to_string_lossy().into_owned());
+        }
+    }
+    out
+}
+
+/// Directories to scan for built-in extensions (dev: repo `extensions/`; release: bundled resources).
+#[tauri::command]
+fn get_builtin_extension_dirs(app: tauri::AppHandle) -> Vec<String> {
+    let mut dirs = Vec::new();
+
+    #[cfg(debug_assertions)]
+    {
+        if let Some(parent) = Path::new(env!("CARGO_MANIFEST_DIR")).parent() {
+            let dev = parent.join("extensions");
+            dirs.extend(collect_extension_dirs_with_package_json(&dev));
+        }
+    }
+
+    if let Ok(res_dir) = app.path().resource_dir() {
+        dirs.extend(collect_extension_dirs_with_package_json(&res_dir.join("extensions")));
+    }
+
+    dirs.sort();
+    dirs.dedup();
+    dirs
 }
 
 #[tauri::command]
@@ -1054,7 +1097,8 @@ pub fn run() {
             fsa_watch,
             fsa_unwatch,
             get_home_path,
-            get_terminal_profiles,
+            get_builtin_extension_dirs,
+            get_env,
             get_theme,
             debug_log,
             move_to_trash,
@@ -1063,6 +1107,7 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_close,
+            pty_set_shell_integrations,
             copy_start,
             copy_cancel,
             copy_resolve_conflict,

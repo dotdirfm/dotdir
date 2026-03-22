@@ -8,6 +8,8 @@ import { TerminalService, type TerminalServiceSnapshot } from './terminal/Termin
 interface TerminalPanelProps {
   cwd: string;
   expanded?: boolean;
+  profiles?: TerminalProfile[];
+  profilesLoaded?: boolean;
   onCwdChange?: (path: string) => void;
   onPromptActive?: (active: boolean) => void;
   /** Called when the active session starts or finishes a command. */
@@ -114,6 +116,8 @@ export function TerminalPanelBody({ activeSessionId, session, expanded = false }
 export function TerminalController({
   cwd,
   expanded = false,
+  profiles: profilesProp = [],
+  profilesLoaded: profilesLoadedProp = false,
   onCwdChange,
   onPromptActive,
   onCommandRunningChange,
@@ -123,8 +127,6 @@ export function TerminalController({
 }: TerminalPanelProps & { children: (slots: { body: ReactNode; toolbar: ReactNode }) => ReactNode }) {
   const lastReportedCwdRef = useRef<string | null>(null);
   const service = useMemo(() => new TerminalService(), []);
-  const [profiles, setProfiles] = useState<TerminalProfile[]>([]);
-  const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [snapshot, setSnapshot] = useState<TerminalServiceSnapshot>(emptySnapshot);
 
   const onPromptActiveRef = useRef(onPromptActive);
@@ -163,32 +165,21 @@ export function TerminalController({
       } else if (event.type === 'command-finish') {
         onPromptActiveRef.current?.(true);
         onCommandRunningChangeRef.current?.(false);
+      } else if (event.type === 'capabilities') {
+        const running = event.capabilities.commandRunning;
+        onPromptActiveRef.current?.(!running);
+        onCommandRunningChangeRef.current?.(running);
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.activeSessionId]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    bridge.utils.getTerminalProfiles()
-      .then((loadedProfiles) => {
-        if (cancelled) return;
-        setProfiles(loadedProfiles);
-        service.setProfiles(loadedProfiles, cwd);
-        setProfilesLoaded(true);
-      })
-      .catch((error) => {
-        console.error('Failed to load terminal profiles', error);
-        if (!cancelled) {
-          setProfilesLoaded(true);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [service]);
+    if (profilesLoadedProp && profilesProp.length > 0) {
+      service.setProfiles(profilesProp, cwd);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service, profilesLoadedProp, profilesProp]);
 
   useEffect(() => {
     return () => {
@@ -227,7 +218,7 @@ export function TerminalController({
 
   const activeSession = snapshot.sessions.find((session) => session.id === snapshot.activeSessionId) ?? null;
   const activeProfileShell = activeSession
-    ? profiles.find((profile) => profile.id === activeSession.profileId)?.shell ?? null
+    ? profilesProp.find((profile) => profile.id === activeSession.profileId)?.shell ?? null
     : null;
 
   const body = (
@@ -246,8 +237,8 @@ export function TerminalController({
       activeProfileId={activeSession?.profileId ?? null}
       activeProfileShell={activeProfileShell}
       activeError={activeSession?.error ?? null}
-      profiles={profiles}
-      profilesLoaded={profilesLoaded}
+      profiles={profilesProp}
+      profilesLoaded={profilesLoadedProp}
     />
   );
 

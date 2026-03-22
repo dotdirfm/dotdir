@@ -84,10 +84,21 @@ export class ExtensionHostClient {
     };
 
     this.worker = worker;
-    worker.postMessage({
-      type: 'start',
-      homePath: this.homePath,
-    });
+    void (async () => {
+      let builtInDirs: string[] = [];
+      try {
+        if (bridge.utils.getBuiltinExtensionDirs) {
+          builtInDirs = await bridge.utils.getBuiltinExtensionDirs();
+        }
+      } catch {
+        /* ignore */
+      }
+      worker.postMessage({
+        type: 'start',
+        homePath: this.homePath,
+        builtInDirs,
+      });
+    })();
   }
 
   private async handleFileRead(worker: Worker, id: number, path: string): Promise<void> {

@@ -3,7 +3,7 @@
 /// Implements the same Bridge interface as tauriBridge.ts, using JSON-RPC 2.0
 /// over WebSocket. Binary frames are used for fs.read responses.
 /// Automatically reconnects on disconnection with exponential backoff.
-import type { Bridge, PtyLaunchInfo, TerminalProfile, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent, FspEntry } from './bridge';
+import type { Bridge, PtyLaunchInfo, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent, FspEntry } from './bridge';
 import type { FsaRawEntry, FsChangeEvent, FsChangeType } from './types';
 
 type Pending = {
@@ -217,7 +217,12 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       },
     },
     pty: {
-      spawn: (cwd: string, profileId?: string) => rpc('pty.spawn', { cwd, profileId }) as Promise<PtyLaunchInfo>,
+      spawn: (cwd: string, shellPath: string, options?: { spawnArgs?: string[] }) =>
+        rpc('pty.spawn', {
+          cwd,
+          shellPath,
+          spawnArgs: options?.spawnArgs && options.spawnArgs.length > 0 ? options.spawnArgs : undefined,
+        }) as Promise<PtyLaunchInfo>,
       write: (ptyId: number, data: string) => rpc('pty.write', { ptyId, data }) as Promise<void>,
       resize: (ptyId: number, cols: number, rows: number) =>
         rpc('pty.resize', {
@@ -226,6 +231,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
           rows: Math.max(1, Math.floor(rows)),
         }) as Promise<void>,
       close: (ptyId: number) => rpc('pty.close', { ptyId }) as Promise<void>,
+      setShellIntegrations: (_integrations: Record<string, string>) => Promise.resolve(),
       onData(callback: PtyDataCallback): () => void {
         ptyDataListeners.add(callback);
         return () => { ptyDataListeners.delete(callback); };
@@ -237,7 +243,8 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
     },
     utils: {
       getHomePath: () => rpc('utils.getHomePath', {}) as Promise<string>,
-      getTerminalProfiles: () => rpc('utils.getTerminalProfiles', {}) as Promise<TerminalProfile[]>,
+      getEnv: () => rpc('utils.getEnv', {}) as Promise<Record<string, string>>,
+      getBuiltinExtensionDirs: () => Promise.resolve([]),
     },
     copy: {
       start: (sources: string[], destDir: string, options: CopyOptions) =>

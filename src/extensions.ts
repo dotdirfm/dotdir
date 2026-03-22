@@ -1,4 +1,4 @@
-import { bridge } from './bridge';
+import { bridge, type CwdEscapeMode } from './bridge';
 import { FileHandle } from './fsa';
 import { dirname, join, normalizePath } from './path';
 
@@ -100,6 +100,35 @@ export interface ExtensionColorTheme {
   path: string; // relative path to JSON file
 }
 
+/**
+ * A shellIntegration contribution declares a shell that Faraday can spawn:
+ * how to find its executable and what init script to inject.
+ *
+ * The `shell` value matches the executable basename (without .exe on Windows),
+ * e.g. "bash", "zsh", "fish", "pwsh", "cmd".
+ */
+export interface ExtensionShellIntegration {
+  shell: string;
+  /** Display label shown in the shell picker dropdown. */
+  label: string;
+  /** Relative path to the init script file within the extension directory. */
+  scriptPath: string;
+  /**
+   * Ordered list of filesystem paths to check for the shell executable.
+   * Supports $VAR substitution from environment variables.
+   * The first existing path wins for each platform.
+   */
+  executableCandidates: string[];
+  /** Optional platform filter. If omitted, applies to all platforms. */
+  platforms?: ('darwin' | 'linux' | 'unix' | 'windows')[];
+  /** Hidden `cd` line before running a command from the UI; must contain `{{cwd}}`. */
+  hiddenCdTemplate?: string;
+  cwdEscape?: CwdEscapeMode;
+  lineEnding?: '\n' | '\r\n';
+  /** Extra argv after the shell executable (e.g. `--noprofile` for bash). */
+  spawnArgs?: string[];
+}
+
 export interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme; // FSS format (single)
   iconThemes?: ExtensionIconThemeVSCode[]; // VS Code format (array)
@@ -115,6 +144,7 @@ export interface ExtensionContributions {
   viewers?: ExtensionViewerContribution[];
   editors?: ExtensionEditorContribution[];
   fsProviders?: ExtensionFsProviderContribution[];
+  shellIntegrations?: ExtensionShellIntegration[];
 }
 
 export interface ExtensionManifest {
@@ -191,6 +221,18 @@ export interface LoadedExtension {
   editors?: ExtensionEditorContribution[];
   /** FsProvider contributions from this extension */
   fsProviders?: ExtensionFsProviderContribution[];
+  /** Shell integration contributions from this extension (fully resolved). */
+  shellIntegrations?: Array<{
+    shell: string;
+    label: string;
+    script: string;
+    executableCandidates: string[];
+    platforms?: ('darwin' | 'linux' | 'unix' | 'windows')[];
+    hiddenCdTemplate?: string;
+    cwdEscape?: CwdEscapeMode;
+    lineEnding?: '\n' | '\r\n';
+    spawnArgs?: string[];
+  }>;
 }
 
 export interface MarketplaceExtension {
@@ -338,6 +380,30 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
       const editors = manifest.contributes?.editors;
       const fsProviders = manifest.contributes?.fsProviders;
 
+      // Load shell integration contributions
+      let shellIntegrations: LoadedExtension['shellIntegrations'];
+      if (manifest.contributes?.shellIntegrations?.length) {
+        shellIntegrations = [];
+        for (const si of manifest.contributes.shellIntegrations) {
+          try {
+            const script = await readTextFile(join(extDir, si.scriptPath));
+            shellIntegrations.push({
+              shell: si.shell,
+              label: si.label,
+              script,
+              executableCandidates: si.executableCandidates ?? [],
+              platforms: si.platforms,
+              hiddenCdTemplate: si.hiddenCdTemplate,
+              cwdEscape: si.cwdEscape,
+              lineEnding: si.lineEnding,
+              spawnArgs: si.spawnArgs,
+            });
+          } catch {
+            // Skip scripts that fail to load
+          }
+        }
+      }
+
       loaded.push({
         ref,
         manifest,
@@ -356,6 +422,7 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         viewers,
         editors,
         fsProviders,
+        shellIntegrations,
       });
     } catch {
       continue;

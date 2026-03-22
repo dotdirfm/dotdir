@@ -1,14 +1,7 @@
 import { bridge } from '../bridge';
-import type { PtyLaunchInfo } from '../bridge';
+import type { PtyLaunchInfo, TerminalProfile } from '../bridge';
 import { focusContext } from '../focusContext';
-import { buildCdCommand, normalizeTerminalPath } from './path';
-import {
-  detectPrompt,
-  detectShellType,
-  extractOsc7Cwds,
-  extractPromptInfo,
-  splitOnFirstOsc7,
-} from './parser';
+import { formatHiddenCd, normalizeTerminalPath } from './path';
 import type {
   TerminalCapabilities,
   TerminalSessionEvent,
@@ -19,7 +12,6 @@ type SessionListener = (event: TerminalSessionEvent) => void;
 
 export class TerminalSession {
   private static readonly replayLimit = 64 * 1024;
-  private static readonly syncSuppressionTimeoutMs = 5000;
   private readonly listeners = new Set<SessionListener>();
   private readonly decoder = new TextDecoder();
   private readonly initialCwd: string;
@@ -34,28 +26,21 @@ export class TerminalSession {
   private suppressNextCommandFinish = false;
   private cleanupData: (() => void) | null = null;
   private cleanupExit: (() => void) | null = null;
-  private suppressSyncOutput = false;
-  private suppressedOutput = '';
-  private suppressTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingCwdSync: string | null = null;
-  private pendingVisibleSyncEcho = false;
-  private visibleSyncEchoBuffer = '';
-  private expectedVisibleSyncCwd: string | null = null;
-  private recentAutoSyncCommand: string | null = null;
-  private recentAutoSyncPrompt: string | null = null;
-  private recentAutoSyncExpiresAt = 0;
-  private readonly profileId?: string;
+  private readonly profile: TerminalProfile;
+  /** While true, xterm OSC hooks must not mutate session state (replay buffer re-written to the terminal). */
+  private oscHooksSuppressed = false;
 
-  constructor(initialCwd: string, profileId?: string) {
+  constructor(initialCwd: string, profile: TerminalProfile) {
     const normalizedInitialCwd = normalizeTerminalPath(initialCwd);
     this.initialCwd = normalizedInitialCwd;
-    this.profileId = profileId;
+    this.profile = profile;
     this.currentCwd = normalizedInitialCwd;
     this.capabilities = {
-      shellType: 'unknown',
       cwd: normalizedInitialCwd,
-      profileId: profileId ?? null,
+      profileId: profile.id,
       hasOsc7Cwd: false,
+      hasFaradayOsc: false,
       promptReady: false,
       commandRunning: false,
       lastCommand: null,
@@ -85,12 +70,39 @@ export class TerminalSession {
     return this.replayData;
   }
 
+  setOscHooksSuppressed(suppressed: boolean): void {
+    this.oscHooksSuppressed = suppressed;
+  }
+
+  /** xterm OSC 7 — cwd from shell integration. */
+  notifyOsc7FromXterm(cwd: string): void {
+    if (this.oscHooksSuppressed) return;
+    this.applyCwdUpdate(normalizeTerminalPath(cwd), this.capabilities.commandRunning);
+  }
+
+  /**
+   * Faraday OSC 779 — shell integration emits this when the prompt is ready (command finished).
+   * Payload is typically `F` (finished).
+   */
+  notifyFaradayPromptOsc(payload: string): void {
+    if (this.oscHooksSuppressed) return;
+    const body = payload.replace(/^;/, '').trimStart();
+    if (!body.startsWith('F')) return;
+    if (!this.capabilities.hasFaradayOsc) {
+      this.capabilities = { ...this.capabilities, hasFaradayOsc: true };
+      this.emitCapabilities();
+    }
+    this.finishCommand();
+  }
+
   async start(): Promise<void> {
     if (this.ptyId !== null || this.status === 'starting') return;
 
     this.setStatus('starting');
     try {
-      const launch = await bridge.pty.spawn(this.initialCwd, this.profileId);
+      const launch = await bridge.pty.spawn(this.initialCwd, this.profile.shell, {
+        spawnArgs: this.profile.spawnArgs.length > 0 ? this.profile.spawnArgs : undefined,
+      });
       this.acceptLaunch(launch);
 
       this.cleanupData = bridge.pty.onData((ptyId, data) => {
@@ -126,11 +138,13 @@ export class TerminalSession {
     await bridge.pty.write(this.ptyId, data);
   }
 
-  /** Write data to the PTY without emitting command-finish when the shell returns to a prompt. */
+  /**
+   * Write to the PTY without tracking as user input (used for hidden `cd`).
+   * The next OSC 779 (prompt after this line) is ignored for command-finish.
+   */
   async writeHidden(data: string): Promise<void> {
     if (this.ptyId === null) return;
     this.suppressNextCommandFinish = true;
-    this.consumeUserInput(data);
     await bridge.pty.write(this.ptyId, data);
   }
 
@@ -146,7 +160,8 @@ export class TerminalSession {
       this.pendingCwdSync = normalizedNextCwd;
       return;
     }
-    await this.performCwdSync(normalizedNextCwd);
+    this.pendingCwdSync = null;
+    await this.writeHidden(formatHiddenCd(normalizedNextCwd, this.profile));
   }
 
   async refreshPrompt(): Promise<void> {
@@ -160,17 +175,7 @@ export class TerminalSession {
     this.cleanupData = null;
     this.cleanupExit?.();
     this.cleanupExit = null;
-    if (this.suppressTimer) {
-      clearTimeout(this.suppressTimer);
-      this.suppressTimer = null;
-    }
     this.pendingCwdSync = null;
-    this.pendingVisibleSyncEcho = false;
-    this.visibleSyncEchoBuffer = '';
-    this.expectedVisibleSyncCwd = null;
-    this.recentAutoSyncCommand = null;
-    this.recentAutoSyncPrompt = null;
-    this.recentAutoSyncExpiresAt = 0;
 
     if (this.ptyId !== null) {
       const id = this.ptyId;
@@ -187,8 +192,7 @@ export class TerminalSession {
     this.capabilities = {
       ...this.capabilities,
       cwd: normalizedCwd,
-      profileId: launch.profileId,
-      shellType: detectShellType(launch.shell),
+      profileId: this.profile.id,
     };
 
     this.emit({ type: 'launch', launch });
@@ -197,61 +201,23 @@ export class TerminalSession {
   }
 
   private handleData(data: string): void {
-    if (this.suppressSyncOutput) {
-      this.suppressedOutput += data;
-      const syncOscResult = splitOnFirstOsc7(this.suppressedOutput);
-      if (syncOscResult) {
-        this.endSyncSuppression();
-        const cwd = this.expectedVisibleSyncCwd ?? syncOscResult.cwd;
-        this.applyCwdUpdate(cwd, false);
-        this.processVisibleData(this.renderSuppressedPrompt(this.buildPromptForCwd(cwd)));
-        this.emit({ type: 'sync-complete', cwd: this.currentCwd });
-        return;
-      }
-
-      const promptInfo = extractPromptInfo(this.suppressedOutput, this.capabilities.shellType);
-      const fallbackPrompt = this.extractSuppressedPrompt(this.suppressedOutput);
-      if (!promptInfo && !fallbackPrompt) return;
-
-      this.endSyncSuppression();
-      const resolvedPrompt = promptInfo ?? fallbackPrompt;
-      const cwd = this.expectedVisibleSyncCwd ?? resolvedPrompt?.cwd ?? this.currentCwd;
-      this.applyCwdUpdate(cwd, false);
-      this.processVisibleData(this.renderSuppressedPrompt(this.buildPromptForCwd(cwd)));
-      this.emit({ type: 'sync-complete', cwd: this.currentCwd });
-      return;
-    }
-
-    this.processVisibleData(data);
+    this.appendVisibleData(data);
   }
 
-  private processVisibleData(data: string): void {
-    const visibleData = this.sanitizeRecentAutoSyncEcho(this.consumePendingVisibleSyncEcho(data));
-    if (!visibleData) return;
-
-    this.replayData = this.sanitizeReplayData((this.replayData + visibleData).slice(-TerminalSession.replayLimit));
-    this.emit({ type: 'data', data: visibleData });
-
-    const cwdUpdates = extractOsc7Cwds(visibleData);
-    const latestCwd = cwdUpdates[cwdUpdates.length - 1];
-    if (latestCwd) {
-      this.applyCwdUpdate(latestCwd, this.capabilities.commandRunning);
-    } else {
-      const promptInfo = extractPromptInfo(visibleData, this.capabilities.shellType);
-      if (promptInfo?.cwd) {
-        this.applyCwdUpdate(promptInfo.cwd, this.capabilities.commandRunning);
-      }
-    }
-
-    if (detectPrompt(visibleData, this.capabilities.shellType)) {
-      this.finishCommand();
-    }
+  private appendVisibleData(data: string): void {
+    if (!data) return;
+    this.replayData = (this.replayData + data).slice(-TerminalSession.replayLimit);
+    this.emit({ type: 'data', data });
   }
 
   private finishCommand(): void {
-    const suppress = this.suppressNextCommandFinish;
-    this.suppressNextCommandFinish = false;
-    if (!suppress && this.activeCommand) {
+    // After a hidden `cd`, the first OSC 779 is prompt-ready for that line only — ignore it
+    // and keep tracking the user's command until the next OSC 779.
+    if (this.suppressNextCommandFinish) {
+      this.suppressNextCommandFinish = false;
+      return;
+    }
+    if (this.activeCommand) {
       this.emit({ type: 'command-finish', command: this.activeCommand });
     }
     this.activeCommand = null;
@@ -315,236 +281,13 @@ export class TerminalSession {
     this.emit({ type: 'status', status, error });
   }
 
-  private beginSyncSuppression(): void {
-    this.suppressSyncOutput = true;
-    this.suppressedOutput = '';
-    if (this.suppressTimer) {
-      clearTimeout(this.suppressTimer);
-    }
-    this.suppressTimer = setTimeout(() => {
-      const buffered = this.suppressedOutput;
-      this.endSyncSuppression();
-      if (buffered) {
-        const promptInfo = extractPromptInfo(buffered, this.capabilities.shellType);
-        const fallbackPrompt = this.extractSuppressedPrompt(buffered);
-        if (promptInfo?.cwd) {
-          const cwd = this.expectedVisibleSyncCwd ?? promptInfo.cwd;
-          this.applyCwdUpdate(cwd, false);
-          this.processVisibleData(this.renderSuppressedPrompt(this.buildPromptForCwd(cwd)));
-        } else if (fallbackPrompt) {
-          const cwd = this.expectedVisibleSyncCwd ?? fallbackPrompt.cwd ?? this.currentCwd;
-          this.applyCwdUpdate(cwd, false);
-          this.processVisibleData(this.renderSuppressedPrompt(this.buildPromptForCwd(cwd)));
-        } else if (!this.looksLikeSuppressedSyncEcho(buffered)) {
-          this.processVisibleData(buffered);
-        }
-        this.emit({ type: 'sync-complete', cwd: this.currentCwd });
-      }
-    }, TerminalSession.syncSuppressionTimeoutMs);
-  }
-
-  private async performCwdSync(nextCwd: string): Promise<void> {
-    if (this.ptyId === null || nextCwd === this.currentCwd) return;
-    this.pendingCwdSync = null;
-    this.currentCwd = nextCwd;
-    this.capabilities = {
-      ...this.capabilities,
-      cwd: nextCwd,
-    };
-    this.emit({ type: 'cwd', cwd: nextCwd, userInitiated: false });
-    this.emit({ type: 'sync-start', cwd: nextCwd });
-    this.emitCapabilities();
-    this.pendingVisibleSyncEcho = true;
-    this.visibleSyncEchoBuffer = '';
-    this.expectedVisibleSyncCwd = nextCwd;
-    this.beginSyncSuppression();
-    const syncCommand = buildCdCommand(nextCwd, this.capabilities.shellType);
-    this.recentAutoSyncCommand = syncCommand.replace(/\r?\n$/, '');
-    this.recentAutoSyncPrompt = this.buildPromptForCwd(nextCwd);
-    this.recentAutoSyncExpiresAt = Date.now() + 2000;
-    await bridge.pty.write(this.ptyId, syncCommand);
-  }
-
   private flushPendingCwdSync(): void {
     const nextCwd = this.pendingCwdSync;
     if (!nextCwd) return;
     if (this.ptyId === null || this.capabilities.commandRunning || (this.inputBuffer.length > 0 && focusContext.is('terminal'))) {
       return;
     }
-    void this.performCwdSync(nextCwd);
-  }
-
-  private endSyncSuppression(): void {
-    this.suppressSyncOutput = false;
-    this.suppressedOutput = '';
-    if (this.suppressTimer) {
-      clearTimeout(this.suppressTimer);
-      this.suppressTimer = null;
-    }
-  }
-
-  private looksLikeSuppressedSyncEcho(data: string): boolean {
-    const normalized = data.replace(/\r/g, '').trim();
-    if (!normalized) return true;
-
-    if (this.capabilities.shellType === 'powershell') {
-      return normalized.includes('Set-Location -LiteralPath') || normalized.startsWith('cd "') || normalized.includes('\ncd "');
-    }
-
-    if (this.capabilities.shellType === 'cmd') {
-      return normalized.includes('cd /d "') || normalized.includes('@cd /d "');
-    }
-
-    return normalized.startsWith('cd ') || normalized.includes('Set-Location -LiteralPath');
-  }
-
-  private extractSuppressedPrompt(data: string): { prompt: string; cwd: string | null } | null {
-    if (this.capabilities.shellType === 'powershell') {
-      const matches = [...data.matchAll(/PS [^\r\n>]+>\s*/g)];
-      const lastMatch = matches.length > 0 ? matches[matches.length - 1] : undefined;
-      const last = lastMatch?.[0]?.trimEnd();
-      if (!last) return null;
-      const cwdMatch = last.match(/^PS (.+)>\s*$/);
-      return {
-        prompt: last,
-        cwd: cwdMatch?.[1] ?? null,
-      };
-    }
-
-    if (this.capabilities.shellType === 'cmd') {
-      const matches = [...data.matchAll(/[A-Za-z]:\\[^\r\n>]*>\s*/g)];
-      const lastMatch = matches.length > 0 ? matches[matches.length - 1] : undefined;
-      const last = lastMatch?.[0]?.trimEnd();
-      if (!last) return null;
-      const cwdMatch = last.match(/^([A-Za-z]:\\.*)>\s*$/);
-      return {
-        prompt: last,
-        cwd: cwdMatch?.[1] ?? null,
-      };
-    }
-
-    return null;
-  }
-
-  private renderSuppressedPrompt(prompt: string): string {
-    const cleanedPrompt = prompt.trimEnd();
-    if (!cleanedPrompt) {
-      return '\r\x1b[2K';
-    }
-
-    if (this.capabilities.shellType === 'cmd' || this.capabilities.shellType === 'powershell') {
-      return `\r\x1b[2K\x1b[1A\r\x1b[2K\x1b[1A\r\x1b[2K${cleanedPrompt}`;
-    }
-
-    return `\r\x1b[2K${cleanedPrompt}`;
-  }
-
-  private buildPromptForCwd(cwd: string): string {
-    const shellPath = cwd.replace(/\//g, '\\');
-    if (this.capabilities.shellType === 'powershell') {
-      return `PS ${shellPath}>`;
-    }
-    if (this.capabilities.shellType === 'cmd') {
-      return `${shellPath}>`;
-    }
-    return cwd;
-  }
-
-  private consumePendingVisibleSyncEcho(data: string): string {
-    if (!this.pendingVisibleSyncEcho) return data;
-
-    this.visibleSyncEchoBuffer += data;
-    const buffered = this.visibleSyncEchoBuffer;
-    const promptInfo = extractPromptInfo(buffered, this.capabilities.shellType);
-    const fallbackPrompt = this.extractSuppressedPrompt(buffered);
-    const looksLikeSync = this.looksLikeSuppressedSyncEcho(buffered);
-    const resolvedPrompt = promptInfo ?? fallbackPrompt;
-    const normalizedPromptCwd = resolvedPrompt?.cwd ? normalizeTerminalPath(resolvedPrompt.cwd) : null;
-    const reachedExpectedPrompt =
-      !!resolvedPrompt
-      && !!normalizedPromptCwd
-      && !!this.expectedVisibleSyncCwd
-      && normalizedPromptCwd === this.expectedVisibleSyncCwd;
-
-    if (reachedExpectedPrompt && looksLikeSync) {
-      this.pendingVisibleSyncEcho = false;
-      this.visibleSyncEchoBuffer = '';
-      this.expectedVisibleSyncCwd = null;
-      return this.renderSuppressedPrompt(resolvedPrompt?.prompt ?? '');
-    }
-
-    if (looksLikeSync) {
-      if (buffered.length > 8192) {
-        this.pendingVisibleSyncEcho = false;
-        this.visibleSyncEchoBuffer = '';
-        this.expectedVisibleSyncCwd = null;
-        return '';
-      }
-      return '';
-    }
-
-    this.pendingVisibleSyncEcho = false;
-    this.visibleSyncEchoBuffer = '';
-    this.expectedVisibleSyncCwd = null;
-    return buffered;
-  }
-
-  private sanitizeReplayData(data: string): string {
-    if (!data) return data;
-
-    let sanitized = data;
-    sanitized = sanitized.replace(
-      /(?:[A-Za-z]:\\[^\r\n>]*>\s*)@?cd \/d "[^"]+"(?:\r?\n)+([A-Za-z]:\\[^\r\n>]*>\s*)/g,
-      '$1',
-    );
-    sanitized = sanitized.replace(
-      /(?:[A-Za-z]:\\[^\r\n>]*>\s*)cd \/d "[^"]+"(?:\r?\n)+([A-Za-z]:\\[^\r\n>]*>\s*)/g,
-      '$1',
-    );
-    sanitized = sanitized.replace(
-      /(?:PS [^\r\n>]+>\s*)cd "(?:[^"`]|`.)+"(?:\r?\n)+(PS [^\r\n>]+>\s*)/g,
-      '$1',
-    );
-    return sanitized.replace(/(\r?\n){3,}/g, '\r\n\r\n');
-  }
-
-  private sanitizeRecentAutoSyncEcho(data: string): string {
-    if (!data || !this.recentAutoSyncCommand || Date.now() > this.recentAutoSyncExpiresAt) {
-      if (Date.now() > this.recentAutoSyncExpiresAt) {
-        this.recentAutoSyncCommand = null;
-        this.recentAutoSyncPrompt = null;
-      }
-      return data;
-    }
-
-    if (
-      data.includes(this.recentAutoSyncCommand)
-      || data.includes(this.recentAutoSyncCommand.replace(/^@/, ''))
-    ) {
-      const prompt = this.recentAutoSyncPrompt ?? '';
-      this.recentAutoSyncCommand = null;
-      this.recentAutoSyncPrompt = null;
-      this.recentAutoSyncExpiresAt = 0;
-      return this.renderSuppressedPrompt(prompt);
-    }
-
-    const escapedCommand = this.recentAutoSyncCommand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const escapedPrompt = (this.recentAutoSyncPrompt ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const stripped = data
-      .replace(new RegExp(`(?:[A-Za-z]:\\\\[^\\r\\n>]*>\\s*)?${escapedCommand}(?:\\r?\\n)+${escapedPrompt}`, 'g'), this.recentAutoSyncPrompt ?? '')
-      .replace(new RegExp(`(?:[A-Za-z]:\\\\[^\\r\\n>]*>\\s*)?${escapedCommand}(?:\\r?\\n)?`, 'g'), '')
-      .replace(/(?:[A-Za-z]:\\[^\r\n>]*>\s*)cd \/d "[^"]+"(?:\r?\n)+([A-Za-z]:\\[^\r\n>]*>\s*)/g, '$1')
-      .replace(/(?:[A-Za-z]:\\[^\r\n>]*>\s*)@cd \/d "[^"]+"(?:\r?\n)+([A-Za-z]:\\[^\r\n>]*>\s*)/g, '$1')
-      .replace(/(?:[A-Za-z]:\\[^\r\n>]*>\s*)cd \/d "[^"]+"(?:\r?\n)?/g, '')
-      .replace(/(?:[A-Za-z]:\\[^\r\n>]*>\s*)@cd \/d "[^"]+"(?:\r?\n)?/g, '')
-      .replace(new RegExp(`${escapedPrompt}(?:\\r?\\n)+${escapedPrompt}`, 'g'), this.recentAutoSyncPrompt ?? '');
-
-    if (stripped !== data && detectPrompt(stripped, this.capabilities.shellType)) {
-      this.recentAutoSyncCommand = null;
-      this.recentAutoSyncPrompt = null;
-      this.recentAutoSyncExpiresAt = 0;
-    }
-
-    return stripped;
+    this.pendingCwdSync = null;
+    void this.writeHidden(formatHiddenCd(nextCwd, this.profile));
   }
 }

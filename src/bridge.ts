@@ -76,14 +76,25 @@ export interface PtyLaunchInfo {
   ptyId: number;
   cwd: string;
   shell: string;
-  profileId: string;
-  profileLabel: string;
 }
+
+/** How to embed `{{cwd}}` in `hiddenCdTemplate` — set per shell-integration contribution. */
+export type CwdEscapeMode = 'posix' | 'powershell' | 'cmd';
 
 export interface TerminalProfile {
   id: string;
   label: string;
   shell: string;
+  /**
+   * Hidden cd before running a command from the UI; must contain `{{cwd}}`.
+   * From shell-integration contributions (e.g. `cd {{cwd}}`).
+   */
+  hiddenCdTemplate: string;
+  cwdEscape: CwdEscapeMode;
+  /** Line ending appended after the hidden cd line. */
+  lineEnding: '\n' | '\r\n';
+  /** Extra argv after the shell executable (e.g. `--noprofile` for bash). From contributions. */
+  spawnArgs: string[];
 }
 
 // ── FsProvider (WASM backend) types ─────────────────────────────────
@@ -117,16 +128,21 @@ export interface Bridge {
     deletePath(path: string): Promise<void>;
   };
   pty: {
-    spawn(cwd: string, profileId?: string): Promise<PtyLaunchInfo>;
+    spawn(cwd: string, shellPath: string, options?: { spawnArgs?: string[] }): Promise<PtyLaunchInfo>;
     write(ptyId: number, data: string): Promise<void>;
     resize(ptyId: number, cols: number, rows: number): Promise<void>;
     close(ptyId: number): Promise<void>;
     onData(callback: (ptyId: number, data: string | Uint8Array) => void): () => void;
     onExit(callback: (ptyId: number) => void): () => void;
+    /** Register shell init scripts from extensions (shell basename → script). */
+    setShellIntegrations?(integrations: Record<string, string>): Promise<void>;
   };
   utils: {
     getHomePath(): Promise<string>;
-    getTerminalProfiles(): Promise<TerminalProfile[]>;
+    /** Returns all process environment variables plus `__platform__` (e.g. "macos", "linux", "windows"). */
+    getEnv(): Promise<Record<string, string>>;
+    /** Absolute paths to built-in extension roots (each contains `package.json`). Tauri only. */
+    getBuiltinExtensionDirs?(): Promise<string[]>;
   };
   copy: {
     start(sources: string[], destDir: string, options: CopyOptions): Promise<number>;

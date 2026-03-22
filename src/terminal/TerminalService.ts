@@ -1,6 +1,6 @@
 import type { TerminalProfile } from '../bridge';
 import { TerminalSession } from './TerminalSession';
-import { buildCdCommand, normalizeTerminalPath } from './path';
+import { formatHiddenCd, normalizeTerminalPath } from './path';
 import type { TerminalSessionStatus } from './types';
 
 const TERMINAL_STATE_STORAGE_KEY = 'faraday.terminalSessions';
@@ -17,6 +17,7 @@ interface StoredTerminalState {
 export interface ManagedTerminalSession {
   id: string;
   session: TerminalSession;
+  profile: TerminalProfile;
   profileId: string;
   profileLabel: string;
   cwd: string;
@@ -90,16 +91,16 @@ export class TerminalService {
     }
 
     const stored = readStoredState();
-    const profileIds = stored?.sessions
-      .map((session) => session.profileId)
-      .filter((profileId) => profiles.some((profile) => profile.id === profileId)) ?? [];
+    // Try to restore stored profile IDs; fall back to first profile if none match
+    const storedProfileIds = stored?.sessions.map((s) => s.profileId) ?? [];
+    const resolvedProfiles = storedProfileIds
+      .map((id) => profiles.find((p) => p.id === id))
+      .filter((p): p is TerminalProfile => p != null);
 
-    if (profileIds.length === 0 && profiles[0]) {
-      profileIds.push(profiles[0].id);
-    }
+    const startProfiles = resolvedProfiles.length > 0 ? resolvedProfiles : (profiles[0] ? [profiles[0]] : []);
 
-    for (const profileId of profileIds) {
-      this.sessions.push(this.createManagedSession(profileId, cwd));
+    for (const profile of startProfiles) {
+      this.sessions.push(this.createManagedSession(profile, cwd));
     }
 
     this.activeSessionId = stored?.activeSessionId && this.sessions.some((session) => session.id === stored.activeSessionId)
@@ -118,7 +119,7 @@ export class TerminalService {
     const resolvedProfile = this.resolveProfile(profileId);
     if (!resolvedProfile) return;
 
-    const managed = this.createManagedSession(resolvedProfile.id, this.currentCwd);
+    const managed = this.createManagedSession(resolvedProfile, this.currentCwd);
     this.sessions = [...this.sessions, managed];
     this.activeSessionId = managed.id;
     this.persistAndEmit();
@@ -135,7 +136,9 @@ export class TerminalService {
     const profile = this.resolveProfile(profileId);
     if (!active || !profile || active.profileId === profile.id) return;
 
-    const replacement = this.createManagedSession(profile.id, active.cwd || this.currentCwd, active.id);
+    // Generate a new session ID so that Terminal.tsx's activeSessionId-dependent
+    // subscribe effect re-runs and subscribes to the new session's events.
+    const replacement = this.createManagedSession(profile, active.cwd || this.currentCwd);
     void active.session.dispose();
     this.sessions = this.sessions.map((session) => (session.id === active.id ? replacement : session));
     this.activeSessionId = replacement.id;
@@ -158,9 +161,10 @@ export class TerminalService {
 
   restartAll(): void {
     const previous = this.sessions;
-    this.sessions = previous.map((session) =>
-      this.createManagedSession(session.profileId, session.cwd || this.currentCwd, session.id),
-    );
+    this.sessions = previous.map((session) => {
+      const profile = this.resolveProfile(session.profileId) ?? session.profile;
+      return this.createManagedSession(profile, session.cwd || this.currentCwd, session.id);
+    });
     for (const session of previous) {
       void session.session.dispose();
     }
@@ -180,21 +184,13 @@ export class TerminalService {
     await active.session.write(data);
   }
 
-  /** cd to cwd and execute command in the active terminal session. */
+  /** Hidden cd to panel cwd, then run the user's command (command line). */
   async executeCommandInCwd(command: string, cwd: string): Promise<void> {
     const active = this.getActiveSession();
     if (!active) return;
-    const { shellType } = active.session.getCapabilities();
     const normalizedCwd = normalizeTerminalPath(cwd);
-
-    // Only cd if the terminal isn't already at the target directory.
-    // writeHidden suppresses the command-finish for the cd so panels don't flicker.
-    if (normalizeTerminalPath(active.cwd) !== normalizedCwd) {
-      await active.session.writeHidden(buildCdCommand(normalizedCwd, shellType));
-    }
-
-    // Write just the user's command — this is what gets echoed and tracked.
-    const eol = shellType === 'powershell' || shellType === 'cmd' ? '\r' : '\n';
+    await active.session.writeHidden(formatHiddenCd(normalizedCwd, active.profile));
+    const eol = active.profile.lineEnding === '\r\n' ? '\r\n' : '\n';
     await active.session.write(command + eol);
   }
 
@@ -218,14 +214,14 @@ export class TerminalService {
     return this.profiles[0];
   }
 
-  private createManagedSession(profileId: string, cwd: string, sessionId = makeSessionId()): ManagedTerminalSession {
-    const profile = this.resolveProfile(profileId);
-    const session = new TerminalSession(cwd, profile?.id);
+  private createManagedSession(profile: TerminalProfile, cwd: string, sessionId = makeSessionId()): ManagedTerminalSession {
+    const session = new TerminalSession(cwd, profile);
     const managed: ManagedTerminalSession = {
       id: sessionId,
       session,
-      profileId: profile?.id ?? profileId,
-      profileLabel: profile?.label ?? profileId,
+      profile,
+      profileId: profile.id,
+      profileLabel: profile.label,
       cwd: normalizeTerminalPath(cwd),
       cwdUserInitiated: false,
       status: 'idle',
@@ -239,8 +235,6 @@ export class TerminalService {
         managed.status = event.status;
         managed.error = event.error;
       } else if (event.type === 'launch') {
-        managed.profileId = event.launch.profileId;
-        managed.profileLabel = event.launch.profileLabel;
         managed.cwd = normalizeTerminalPath(event.launch.cwd);
       }
       this.emit();
@@ -258,6 +252,7 @@ export class TerminalService {
     if (!profile) return session;
     return {
       ...session,
+      profile,
       profileId: profile.id,
       profileLabel: profile.label,
     };

@@ -217,8 +217,6 @@ Default viewers and editor live **inside this repo** as regular extensions, so t
 
 Recommendation: **Option A** — resolve built-in extension dirs from app resources; when building the list of extensions to load, merge “built-in dirs” with `~/.faraday/extensions`. Same manifest/contribution format; only the source path differs.
 
-**Implementation**: Built-in dirs are returned by the Tauri command `get_builtin_extension_dirs` (dev: repo `extensions/`; production: `$RESOURCE/extensions/` via `bundle.resources: ["../extensions/"]`). The extension host worker receives `builtInDirs` and loads them with `loadExtensionFromDir()` before user extensions. The iframe bootstrap injects the `frdy.*` API, so no `comlink.js` is needed. The core app keeps `FileViewer`, `ImageViewer`, and `FileEditor` as **fallbacks** when no extension matches (e.g. headless with no built-in dirs).
-
 ## 7. Resolution and Precedence
 
 - **Pattern matching**: For `fileName`, check each contribution’s `patterns` (e.g. minimatch or a simple `*.ext` check). If `mimeTypes` are provided and we have MIME (e.g. from backend or from extension), require MIME match too.

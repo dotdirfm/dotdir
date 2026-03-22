@@ -1,16 +1,15 @@
 import { useEffect, useRef } from 'react';
-import { Terminal } from '@xterm/xterm';
+import { Terminal, type IDisposable } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { focusContext } from '../focusContext';
+import { normalizeTerminalPath } from './path';
 import type { TerminalSession } from './TerminalSession';
 
 interface TerminalViewProps {
   session: TerminalSession;
   expanded?: boolean;
 }
-
-type DebugWindow = Window & typeof globalThis & { __terminalDebugLogs?: string[] };
 
 function resolveTerminalTheme() {
   return {
@@ -27,10 +26,9 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const hasTerminalFocusRef = useRef(false);
+  const suppressPtyInputRef = useRef(false);
   const expandedRef = useRef(expanded);
   expandedRef.current = expanded;
-  const replayFrameRef = useRef<number | null>(null);
-  const syncInFlightRef = useRef(false);
   /** Last viewport size we fitted to; avoids ResizeObserver loop from fit.fit() changing layout. */
   const lastFitSizeRef = useRef({ w: 0, h: 0 });
 
@@ -44,6 +42,7 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
 
     const fit = new FitAddon();
     const term = new Terminal({
+      allowProposedApi: true,
       cursorBlink: false,
       fontSize: 13,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
@@ -67,46 +66,43 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
         lastFitSizeRef.current = { w, h };
         fit.fit();
         void session.resize(Math.max(2, term.cols), Math.max(1, term.rows));
-        const screen = container.querySelector('.xterm-screen');
-        if (screen instanceof HTMLElement) {
-          screen.style.transform = '';
-          const rows = Array.from(container.querySelectorAll('.xterm-rows > div'))
-            .filter((row): row is HTMLElement => row instanceof HTMLElement && row.getBoundingClientRect().height > 0);
-          const lastVisibleRow = [...rows].reverse().find((row) => row.textContent?.trim().length) ?? rows[rows.length - 1];
-          if (lastVisibleRow) {
-            const containerRect = container.getBoundingClientRect();
-            const rowRect = lastVisibleRow.getBoundingClientRect();
-            const offset = Math.max(0, containerRect.bottom - rowRect.bottom + 1);
-            screen.style.transform = offset > 0 ? `translateY(${offset}px)` : '';
-          }
-        }
+      });
+    };
+
+    const writeReplay = (replay: string) => {
+      if (!replay) return;
+      session.setOscHooksSuppressed(true);
+      suppressPtyInputRef.current = true;
+      term.write(replay, () => {
+        suppressPtyInputRef.current = false;
+        session.setOscHooksSuppressed(false);
       });
     };
 
     const renderReplay = () => {
       const replay = session.getReplayData();
       term.reset();
-      if (!replay) return;
-      term.write(replay);
-    };
-
-    const scheduleReplayRender = () => {
-      if (replayFrameRef.current !== null) cancelAnimationFrame(replayFrameRef.current);
-      replayFrameRef.current = requestAnimationFrame(() => {
-        replayFrameRef.current = null;
-        const replay = session.getReplayData();
-        const debugWindow = window as DebugWindow;
-        debugWindow.__terminalDebugLogs ??= [];
-        debugWindow.__terminalDebugLogs.push(replay);
-        renderReplay();
-        term.scrollToBottom();
-        scheduleLayout();
-      });
+      writeReplay(replay);
     };
 
     term.loadAddon(fit);
     term.open(container);
     termRef.current = term;
+
+    const oscDisposables: IDisposable[] = [
+      term.parser.registerOscHandler(7, (data) => {
+        const pathMatch = data.match(/^file:\/\/[^/]*(\/.*)/);
+        if (!pathMatch) return false;
+        const cwd = normalizeTerminalPath(decodeURIComponent(pathMatch[1]));
+        session.notifyOsc7FromXterm(cwd);
+        return true;
+      }),
+      // Faraday private OSC: prompt ready / command finished (shell integration scripts).
+      term.parser.registerOscHandler(779, (data) => {
+        session.notifyFaradayPromptOsc(data);
+        return true;
+      }),
+    ];
     fitRef.current = fit;
     const setTerminalFocus = () => {
       if (hasTerminalFocusRef.current || !expandedRef.current) return;
@@ -129,15 +125,7 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
     renderReplay();
 
     const cleanupSession = session.subscribe((event) => {
-      if (event.type === 'sync-start') {
-        syncInFlightRef.current = true;
-      } else if (event.type === 'sync-complete') {
-        syncInFlightRef.current = false;
-        scheduleReplayRender();
-      } else if (event.type === 'data') {
-        if (syncInFlightRef.current) {
-          return;
-        }
+      if (event.type === 'data') {
         term.write(event.data);
         term.scrollToBottom();
         scheduleLayout();
@@ -155,6 +143,7 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
     });
 
     const dataDisposable = term.onData((data) => {
+      if (suppressPtyInputRef.current) return;
       term.scrollToBottom();
       void session.write(data);
     });
@@ -199,11 +188,10 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
       resizeDisposable.dispose();
       dataDisposable.dispose();
       cleanupSession();
+      for (const d of oscDisposables) d.dispose();
       if (fitFrameRef.current !== null) cancelAnimationFrame(fitFrameRef.current);
-      if (replayFrameRef.current !== null) cancelAnimationFrame(replayFrameRef.current);
       termRef.current = null;
       fitRef.current = null;
-      syncInFlightRef.current = false;
       term.dispose();
     };
   }, [session]);
@@ -219,7 +207,12 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
       const replay = session.getReplayData();
       if (replay) {
         term.clear();
-        term.write(replay);
+        session.setOscHooksSuppressed(true);
+        suppressPtyInputRef.current = true;
+        term.write(replay, () => {
+          suppressPtyInputRef.current = false;
+          session.setOscHooksSuppressed(false);
+        });
       }
       fit.fit();
       void session.resize(Math.max(2, term.cols), Math.max(1, term.rows));

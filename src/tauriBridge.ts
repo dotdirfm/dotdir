@@ -4,9 +4,11 @@
 /// Uses Tauri's invoke() for commands and listen() for events.
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { PtyLaunchInfo, TerminalProfile, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent, FspEntry } from './bridge';
+import type { PtyLaunchInfo, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent, FspEntry } from './bridge';
 import type { FsaRawEntry, FsChangeEvent } from './types';
 import { normalizePath } from './path';
+
+const ptyWriteEncoder = new TextEncoder();
 
 interface RustFsEntry {
   name: string;
@@ -25,17 +27,9 @@ interface RustFsChangeEvent {
   name: string | null;
 }
 
-interface RustPtyLaunchInfo {
+interface RustPtySpawnResult {
   pty_id: number;
   cwd: string;
-  shell: string;
-  profile_id: string;
-  profile_label: string;
-}
-
-interface RustTerminalProfile {
-  id: string;
-  label: string;
   shell: string;
 }
 
@@ -123,18 +117,24 @@ export const tauriBridge = {
     },
   },
   pty: {
-    async spawn(cwd: string, profileId?: string): Promise<PtyLaunchInfo> {
-      const raw = await invoke<RustPtyLaunchInfo>('pty_spawn', { cwd, profileId });
+    async spawn(cwd: string, shellPath: string, options?: { spawnArgs?: string[] }): Promise<PtyLaunchInfo> {
+      const raw = await invoke<RustPtySpawnResult>('pty_spawn', {
+        cwd,
+        shellPath,
+        spawnArgs:
+          options?.spawnArgs && options.spawnArgs.length > 0 ? options.spawnArgs : null,
+      });
       return {
         ptyId: raw.pty_id,
         cwd: normalizePath(raw.cwd),
         shell: raw.shell,
-        profileId: raw.profile_id,
-        profileLabel: raw.profile_label,
       };
     },
     async write(ptyId: number, data: string): Promise<void> {
-      return invoke<void>('pty_write', { ptyId, data });
+      return invoke<void>('pty_write', {
+        ptyId,
+        dataBytes: Array.from(ptyWriteEncoder.encode(data)),
+      });
     },
     async resize(ptyId: number, cols: number, rows: number): Promise<void> {
       return invoke<void>('pty_resize', {
@@ -146,10 +146,13 @@ export const tauriBridge = {
     async close(ptyId: number): Promise<void> {
       return invoke<void>('pty_close', { ptyId });
     },
-    onData(callback: (ptyId: number, data: string) => void): () => void {
+    async setShellIntegrations(integrations: Record<string, string>): Promise<void> {
+      return invoke<void>('pty_set_shell_integrations', { integrations });
+    },
+    onData(callback: (ptyId: number, data: Uint8Array) => void): () => void {
       let unlisten: UnlistenFn | null = null;
-      listen<{ pty_id: number; data: string }>('pty:data', (event) => {
-        callback(event.payload.pty_id, event.payload.data);
+      listen<{ pty_id: number; data: number[] }>('pty:data', (event) => {
+        callback(event.payload.pty_id, new Uint8Array(event.payload.data));
       }).then((fn) => { unlisten = fn; });
       return () => { unlisten?.(); };
     },
@@ -165,8 +168,11 @@ export const tauriBridge = {
     async getHomePath(): Promise<string> {
       return normalizePath(await invoke<string>('get_home_path'));
     },
-    async getTerminalProfiles(): Promise<TerminalProfile[]> {
-      return invoke<RustTerminalProfile[]>('get_terminal_profiles');
+    async getEnv(): Promise<Record<string, string>> {
+      return invoke<Record<string, string>>('get_env');
+    },
+    async getBuiltinExtensionDirs(): Promise<string[]> {
+      return invoke<string[]>('get_builtin_extension_dirs');
     },
   },
   copy: {

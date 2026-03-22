@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTauri as isTauriApp } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { bridge } from './bridge';
+import { bridge, type TerminalProfile } from './bridge';
 import type { PanelTab } from './FileList/PanelTabs';
 import { isMediaFile } from './mediaFiles';
 import { ViewerContainer, EditorContainer } from './ExtensionContainer';
@@ -27,6 +27,7 @@ import { initUserSettings, onSettingsChange, updateSettings } from './userSettin
 import { setIconTheme, setIconThemeKind } from './iconResolver';
 import { basename, dirname, join } from './path';
 import { normalizeTerminalPath } from './terminal/path';
+import { resolveShellProfiles } from './terminal/shellProfiles';
 import { initUserKeybindings } from './userKeybindings';
 import { BrowserExtensionHost } from './browserExtensionHost';
 import type { ThemeKind } from 'fss-lang';
@@ -80,6 +81,8 @@ export function App() {
   const rightSelectedNameRef = useRef<string | undefined>(undefined);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [themesReady, setThemesReady] = useState(false);
+  const [resolvedProfiles, setResolvedProfiles] = useState<TerminalProfile[]>([]);
+  const [terminalProfilesLoaded, setTerminalProfilesLoaded] = useState(false);
   const leftTabsRef = useRef(leftTabs);
   leftTabsRef.current = leftTabs;
   const rightTabsRef = useRef(rightTabs);
@@ -1269,6 +1272,19 @@ export function App() {
           }
         }
 
+        // Resolve shell profiles from extension contributions (client-side).
+        bridge.utils.getEnv().then((env) =>
+          resolveShellProfiles(exts, env).then(({ profiles, shellScripts }) => {
+            setResolvedProfiles(profiles);
+            setTerminalProfilesLoaded(true);
+            if (bridge.pty.setShellIntegrations && Object.keys(shellScripts).length > 0) {
+              bridge.pty.setShellIntegrations(shellScripts).catch(() => {});
+            }
+          })
+        ).catch(() => {
+          setTerminalProfilesLoaded(true);
+        });
+
         // Load only the active FSS icon theme contents (lazy).
         await ensureActiveIconThemeFssLoaded(exts, activeIconThemeRef.current);
         setExtensionLayers(exts, activeIconThemeRef.current);
@@ -1340,6 +1356,8 @@ export function App() {
       <TerminalController
         cwd={activeCwd}
         expanded={!panelsVisible}
+        profiles={resolvedProfiles}
+        profilesLoaded={terminalProfilesLoaded}
         onCwdChange={handleTerminalCwd}
         onPromptActive={handlePromptActive}
         onCommandRunningChange={(running) => {

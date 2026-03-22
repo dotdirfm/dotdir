@@ -99,6 +99,18 @@ interface ExtensionFsProviderContribution {
   runtime?: 'frontend' | 'backend';
 }
 
+interface ExtensionShellIntegration {
+  shell: string;
+  label: string;
+  scriptPath: string;
+  executableCandidates: string[];
+  platforms?: ('darwin' | 'linux' | 'unix' | 'windows')[];
+  hiddenCdTemplate?: string;
+  cwdEscape?: 'posix' | 'powershell' | 'cmd';
+  lineEnding?: '\n' | '\r\n';
+  spawnArgs?: string[];
+}
+
 interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme;
   themes?: ExtensionColorTheme[];
@@ -109,6 +121,7 @@ interface ExtensionContributions {
   commands?: ExtensionCommand[];
   keybindings?: ExtensionKeybinding[];
   fsProviders?: ExtensionFsProviderContribution[];
+  shellIntegrations?: ExtensionShellIntegration[];
 }
 
 interface ExtensionManifest {
@@ -163,6 +176,18 @@ export interface WorkerLoadedExtension {
   keybindings?: ExtensionKeybinding[];
   /** FsProvider contributions from this extension */
   fsProviders?: ExtensionFsProviderContribution[];
+  /** Shell integration contributions (scripts fully loaded). */
+  shellIntegrations?: Array<{
+    shell: string;
+    label: string;
+    script: string;
+    executableCandidates: string[];
+    platforms?: ('darwin' | 'linux' | 'unix' | 'windows')[];
+    hiddenCdTemplate?: string;
+    cwdEscape?: 'posix' | 'powershell' | 'cmd';
+    lineEnding?: '\n' | '\r\n';
+    spawnArgs?: string[];
+  }>;
 }
 
 // ── File reading via RPC to main thread ─────────────────────────────
@@ -238,6 +263,27 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
     const keybindings = manifest.contributes?.keybindings;
     const fsProviders = manifest.contributes?.fsProviders;
 
+    let shellIntegrations: WorkerLoadedExtension['shellIntegrations'];
+    if (manifest.contributes?.shellIntegrations?.length) {
+      shellIntegrations = [];
+      for (const si of manifest.contributes.shellIntegrations) {
+        const script = await readTextFile(join(extDir, si.scriptPath));
+        if (script !== null) {
+          shellIntegrations.push({
+            shell: si.shell,
+            label: si.label,
+            script,
+            executableCandidates: si.executableCandidates ?? [],
+            platforms: si.platforms,
+            hiddenCdTemplate: si.hiddenCdTemplate,
+            cwdEscape: si.cwdEscape,
+            lineEnding: si.lineEnding,
+            spawnArgs: si.spawnArgs,
+          });
+        }
+      }
+    }
+
     return {
       ref,
       manifest,
@@ -253,6 +299,7 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
       commands,
       keybindings,
       fsProviders,
+      shellIntegrations,
     };
   } catch {
     return null;
