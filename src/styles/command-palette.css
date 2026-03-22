@@ -1,0 +1,102 @@
+/* Command Palette */
+.command-palette-dialog {
+  position: fixed;
+  top: 15vh;
+  left: 50%;
+  transform: translateX(-50%);
+  border: none;
+  padding: 0;
+  background: transparent;
+  width: 800px;
+  max-width: 90vw;
+  max-height: none;
+  overflow: visible;
+}
+
+.command-palette-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.command-palette {
+  width: 100%;
+  max-width: 800px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 16px 70px rgba(0, 0, 0, 0.5);
+}
+
+.command-palette [cmdk-input] {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 15px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  outline: none;
+  font-family: inherit;
+}
+
+.command-palette [cmdk-input]::placeholder {
+  color: var(--fg-muted);
+}
+
+.command-palette [cmdk-list] {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.command-palette [cmdk-empty] {
+  padding: 24px;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+
+.command-palette [cmdk-group-heading] {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.command-palette [cmdk-item] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--fg);
+  user-select: none;
+}
+
+.command-palette [cmdk-item][data-selected="true"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.command-palette [cmdk-item][data-selected="true"] .command-item-keybinding {
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--accent-fg);
+}
+
+.command-item-title {
+  flex: 1;
+}
+
+.command-item-keybinding {
+  font-size: 11px;
+  color: var(--fg-muted);
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 12px;
+}

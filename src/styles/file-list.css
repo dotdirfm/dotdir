@@ -1,0 +1,261 @@
+.file-list {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.path-bar {
+  position: relative;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  color: var(--fg-secondary);
+  font-size: 12px;
+  font-family: monospace;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+/* Breadcrumbs: single line, left-aligned, proportional shrink, hover expand, gradient when truncated */
+.breadcrumbs {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.breadcrumbs .breadcrumb-copied-tooltip {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+.breadcrumb-segment {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: 4px;
+  transition: min-width 0.15s ease-out, background-color 0.1s ease;
+}
+
+.breadcrumb-segment:hover {
+  background: var(--entry-hover, rgba(255, 255, 255, 0.06));
+}
+
+.breadcrumb-segment-measure {
+  position: absolute;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+  height: 0;
+  overflow: hidden;
+}
+
+.breadcrumb-segment-text {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Fade out truncated text at the right edge using mask; animate mask on hover via @property */
+@property --breadcrumb-fade {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 24px;
+}
+
+.breadcrumb-segment.is-truncated .breadcrumb-segment-text {
+  padding-right: 4px; /* avoid last letter being clipped */
+  --breadcrumb-fade: 24px;
+  transition: --breadcrumb-fade 0.15s ease;
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - var(--breadcrumb-fade)), transparent 100%);
+  mask-image: linear-gradient(to right, black calc(100% - var(--breadcrumb-fade)), transparent 100%);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+.breadcrumb-segment.is-truncated:hover .breadcrumb-segment-text {
+  --breadcrumb-fade: 0px;
+}
+
+.breadcrumb-separator {
+  flex-shrink: 0;
+  opacity: 0.6;
+  pointer-events: none;
+  user-select: none;
+}
+
+.file-list-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.columns-scroller-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.columns-scroller-content {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+
+.columns-scroller-content > div {
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.columns-borders {
+  display: grid;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.columns-border {
+  border-inline-end: 1px solid var(--border);
+}
+
+.columns-border:last-child {
+  border-inline-end: none;
+}
+
+.entry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  cursor: default;
+  user-select: none;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.file-list:not(.no-hover) .entry:hover {
+  background: var(--entry-hover);
+}
+
+.entry.selected {
+  background: var(--entry-selected);
+  color: var(--entry-selected-fg);
+}
+
+.entry.marked::before {
+  content: '';
+  position: absolute;
+  inset: 0 4px;
+  background: var(--entry-marked-bg, rgba(229, 192, 123, 0.15));
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+/* Remove bottom radius when next sibling also has a marked entry */
+.columns-scroller-content > div:has(> .entry.marked) + div:has(> .entry.marked) > .entry.marked::before {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* Remove bottom radius on the first of consecutive marked entries */
+.columns-scroller-content > div:has(> .entry.marked):has(+ div > .entry.marked) > .entry.marked::before {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.entry-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.entry-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-size {
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-family: monospace;
+  flex-shrink: 0;
+  text-align: right;
+  min-width: 70px;
+}
+
+.file-info-footer {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  height: 26px;
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--fg-secondary);
+  user-select: none;
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.file-info-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-info-link {
+  flex: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+  color: var(--fg-muted);
+}
+
+.file-info-size {
+  font-family: monospace;
+  min-width: 60px;
+  text-align: right;
+}
+
+.file-info-date {
+  font-family: monospace;
+  min-width: 120px;
+  text-align: right;
+}
+
+.panel-summary {
+  padding: 2px 12px;
+  font-size: 11px;
+  color: var(--fg-muted);
+  border-top: 1px solid var(--border);
+  user-select: none;
+  flex-shrink: 0;
+}
