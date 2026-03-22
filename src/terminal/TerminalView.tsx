@@ -27,6 +27,8 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const hasTerminalFocusRef = useRef(false);
+  const expandedRef = useRef(expanded);
+  expandedRef.current = expanded;
   const replayFrameRef = useRef<number | null>(null);
   const syncInFlightRef = useRef(false);
   /** Last viewport size we fitted to; avoids ResizeObserver loop from fit.fit() changing layout. */
@@ -107,7 +109,7 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
     termRef.current = term;
     fitRef.current = fit;
     const setTerminalFocus = () => {
-      if (hasTerminalFocusRef.current) return;
+      if (hasTerminalFocusRef.current || !expandedRef.current) return;
       hasTerminalFocusRef.current = true;
       focusContext.push('terminal');
     };
@@ -224,11 +226,16 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
       if (expanded) {
         term.scrollToBottom();
       }
-      if (!hasTerminalFocusRef.current) {
-        hasTerminalFocusRef.current = true;
-        focusContext.push('terminal');
+      if (expanded) {
+        if (!hasTerminalFocusRef.current) {
+          hasTerminalFocusRef.current = true;
+          focusContext.push('terminal');
+        }
+        term.focus();
+      } else if (hasTerminalFocusRef.current) {
+        hasTerminalFocusRef.current = false;
+        focusContext.pop('terminal');
       }
-      term.focus();
     });
   }, [expanded]);
 

@@ -27,3 +27,4 @@ export function buildCdCommand(path: string, shellType: TerminalShellType): stri
   }
   return ` cd ${shellQuote(path)}\n`;
 }
+

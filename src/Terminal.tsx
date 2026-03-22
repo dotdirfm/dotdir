@@ -10,8 +10,12 @@ interface TerminalPanelProps {
   expanded?: boolean;
   onCwdChange?: (path: string) => void;
   onPromptActive?: (active: boolean) => void;
+  /** Called when the active session starts or finishes a command. */
+  onCommandRunningChange?: (running: boolean) => void;
   /** Called with a function that writes to the active terminal (for list.execute). */
   onWriteToTerminal?: (write: (data: string) => Promise<void>) => void;
+  /** Called with a function that cd's to cwd and runs a command in the active terminal. */
+  onExecuteCommand?: (execute: (command: string, cwd: string) => Promise<void>) => void;
 }
 
 interface TerminalToolbarProps {
@@ -112,7 +116,9 @@ export function TerminalController({
   expanded = false,
   onCwdChange,
   onPromptActive,
+  onCommandRunningChange,
   onWriteToTerminal,
+  onExecuteCommand,
   children,
 }: TerminalPanelProps & { children: (slots: { body: ReactNode; toolbar: ReactNode }) => ReactNode }) {
   const lastReportedCwdRef = useRef<string | null>(null);
@@ -121,9 +127,12 @@ export function TerminalController({
   const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [snapshot, setSnapshot] = useState<TerminalServiceSnapshot>(emptySnapshot);
 
-  useEffect(() => {
-    onPromptActive?.(true);
-  }, [onPromptActive]);
+  const onPromptActiveRef = useRef(onPromptActive);
+  onPromptActiveRef.current = onPromptActive;
+  const onCommandRunningChangeRef = useRef(onCommandRunningChange);
+  onCommandRunningChangeRef.current = onCommandRunningChange;
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
 
   useEffect(() => {
     const cleanup = service.subscribe(() => {
@@ -132,6 +141,32 @@ export function TerminalController({
     setSnapshot(service.getSnapshot());
     return cleanup;
   }, [service]);
+
+  // Subscribe to command-start / command-finish events on the active session.
+  // Resubscribes whenever the active session ID changes.
+  useEffect(() => {
+    const active = snapshotRef.current.sessions.find((s) => s.id === snapshotRef.current.activeSessionId);
+    if (!active) {
+      onPromptActiveRef.current?.(true);
+      onCommandRunningChangeRef.current?.(false);
+      return;
+    }
+    // Sync initial state for this session
+    const running = active.session.getCapabilities().commandRunning;
+    onPromptActiveRef.current?.(!running);
+    onCommandRunningChangeRef.current?.(running);
+
+    return active.session.subscribe((event) => {
+      if (event.type === 'command-start') {
+        onPromptActiveRef.current?.(false);
+        onCommandRunningChangeRef.current?.(true);
+      } else if (event.type === 'command-finish') {
+        onPromptActiveRef.current?.(true);
+        onCommandRunningChangeRef.current?.(false);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.activeSessionId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,12 +197,16 @@ export function TerminalController({
   }, [service]);
 
   useEffect(() => {
-    service.syncActiveCwd(cwd);
+    service.setCurrentCwd(cwd);
   }, [cwd, service]);
 
   useEffect(() => {
-    onWriteToTerminal?.( (data: string) => service.writeToActiveSession(data) );
+    onWriteToTerminal?.((data: string) => service.writeToActiveSession(data));
   }, [service, onWriteToTerminal]);
+
+  useEffect(() => {
+    onExecuteCommand?.((command: string, cwd: string) => service.executeCommandInCwd(command, cwd));
+  }, [service, onExecuteCommand]);
 
   useEffect(() => {
     const active = snapshot.sessions.find((session) => session.id === snapshot.activeSessionId);

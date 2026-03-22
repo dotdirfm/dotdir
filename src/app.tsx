@@ -12,6 +12,7 @@ import type { LanguageOption } from './OpenCreateFileDialog';
 import { useDialog, DialogHolder } from './dialogContext';
 import { ModalDialog } from './ModalDialog';
 import { TerminalController } from './Terminal';
+import { CommandLine } from './CommandLine';
 import { ActionBar } from './ActionBar';
 import { ExtensionsPanel } from './ExtensionsPanel';
 import { PanelGroup } from './PanelGroup';
@@ -94,6 +95,8 @@ export function App() {
   activeColorThemeRef.current = activeColorTheme;
   const commandPalette = useCommandPalette();
   const writeToTerminalRef = useRef<(data: string) => Promise<void>>(async () => {});
+  const executeCommandRef = useRef<(command: string, cwd: string) => Promise<void>>(async () => {});
+  const hiddenForCommandRef = useRef(false);
 
   useEffect(() => {
     // Initialize settings with watch
@@ -630,6 +633,10 @@ export function App() {
     if (active) {
       // Show panels immediately when command finishes
       setPromptActive(true);
+      if (hiddenForCommandRef.current) {
+        hiddenForCommandRef.current = false;
+        setPanelsVisible(true);
+      }
     } else {
       // Delay hiding panels by 60ms to avoid flashing on fast commands
       promptHideTimerRef.current = setTimeout(() => {
@@ -683,6 +690,7 @@ export function App() {
       command: 'faraday.togglePanels',
       key: 'ctrl+o',
       mac: 'cmd+o',
+      when: '!terminalCommandRunning',
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -1334,7 +1342,11 @@ export function App() {
         expanded={!panelsVisible}
         onCwdChange={handleTerminalCwd}
         onPromptActive={handlePromptActive}
+        onCommandRunningChange={(running) => {
+          commandRegistry.setContext('terminalCommandRunning', running);
+        }}
         onWriteToTerminal={(write) => { writeToTerminalRef.current = write; }}
+        onExecuteCommand={(execute) => { executeCommandRef.current = execute; }}
       >
         {({ body, toolbar }) => (
           <>
@@ -1404,6 +1416,15 @@ export function App() {
                 />
               </div>
             </div>
+            <CommandLine
+              cwd={activeCwd}
+              visible={panelsVisible && promptActive}
+              onExecute={(cmd) => {
+                hiddenForCommandRef.current = true;
+                setPanelsVisible(false);
+                void executeCommandRef.current(cmd, activeCwd);
+              }}
+            />
             {toolbar}
           </>
         )}

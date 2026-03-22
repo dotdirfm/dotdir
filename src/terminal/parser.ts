@@ -64,7 +64,7 @@ function isPowerShellPrompt(line: string): boolean {
 }
 
 function isPosixPrompt(line: string): boolean {
-  return /[$#]\s*$/.test(line.trim());
+  return /[$#%]\s*$/.test(line.trim());
 }
 
 export function detectPrompt(data: string, shellType: TerminalShellType): boolean {

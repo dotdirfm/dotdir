@@ -31,6 +31,7 @@ export class TerminalSession {
   private replayData = '';
   private inputBuffer = '';
   private activeCommand: string | null = null;
+  private suppressNextCommandFinish = false;
   private cleanupData: (() => void) | null = null;
   private cleanupExit: (() => void) | null = null;
   private suppressSyncOutput = false;
@@ -121,6 +122,14 @@ export class TerminalSession {
 
   async write(data: string): Promise<void> {
     if (this.ptyId === null) return;
+    this.consumeUserInput(data);
+    await bridge.pty.write(this.ptyId, data);
+  }
+
+  /** Write data to the PTY without emitting command-finish when the shell returns to a prompt. */
+  async writeHidden(data: string): Promise<void> {
+    if (this.ptyId === null) return;
+    this.suppressNextCommandFinish = true;
     this.consumeUserInput(data);
     await bridge.pty.write(this.ptyId, data);
   }
@@ -235,18 +244,24 @@ export class TerminalSession {
     }
 
     if (detectPrompt(visibleData, this.capabilities.shellType)) {
-      if (this.activeCommand) {
-        this.emit({ type: 'command-finish', command: this.activeCommand });
-      }
-      this.activeCommand = null;
-      this.capabilities = {
-        ...this.capabilities,
-        commandRunning: false,
-        promptReady: true,
-      };
-      this.emitCapabilities();
-      this.flushPendingCwdSync();
+      this.finishCommand();
     }
+  }
+
+  private finishCommand(): void {
+    const suppress = this.suppressNextCommandFinish;
+    this.suppressNextCommandFinish = false;
+    if (!suppress && this.activeCommand) {
+      this.emit({ type: 'command-finish', command: this.activeCommand });
+    }
+    this.activeCommand = null;
+    this.capabilities = {
+      ...this.capabilities,
+      commandRunning: false,
+      promptReady: true,
+    };
+    this.emitCapabilities();
+    this.flushPendingCwdSync();
   }
 
   private applyCwdUpdate(cwd: string, userInitiated: boolean): void {

@@ -1,6 +1,6 @@
 import type { TerminalProfile } from '../bridge';
 import { TerminalSession } from './TerminalSession';
-import { normalizeTerminalPath } from './path';
+import { buildCdCommand, normalizeTerminalPath } from './path';
 import type { TerminalSessionStatus } from './types';
 
 const TERMINAL_STATE_STORAGE_KEY = 'faraday.terminalSessions';
@@ -109,12 +109,9 @@ export class TerminalService {
     this.persistAndEmit();
   }
 
-  syncActiveCwd(cwd: string): void {
+  /** Update the tracked panel cwd (used as starting directory for new sessions). Does NOT cd the active shell. */
+  setCurrentCwd(cwd: string): void {
     this.currentCwd = normalizeTerminalPath(cwd);
-    const active = this.getActiveSession();
-    if (!active) return;
-    if (normalizeTerminalPath(active.cwd) === this.currentCwd) return;
-    void active.session.syncToCwd(this.currentCwd);
   }
 
   createSession(profileId?: string): void {
@@ -131,10 +128,6 @@ export class TerminalService {
     if (!this.sessions.some((session) => session.id === sessionId)) return;
     this.activeSessionId = sessionId;
     this.persistAndEmit();
-    const active = this.getActiveSession();
-    if (active) {
-      void active.session.syncToCwd(this.currentCwd);
-    }
   }
 
   switchActiveProfile(profileId: string): void {
@@ -185,6 +178,24 @@ export class TerminalService {
     const active = this.getActiveSession();
     if (!active) return;
     await active.session.write(data);
+  }
+
+  /** cd to cwd and execute command in the active terminal session. */
+  async executeCommandInCwd(command: string, cwd: string): Promise<void> {
+    const active = this.getActiveSession();
+    if (!active) return;
+    const { shellType } = active.session.getCapabilities();
+    const normalizedCwd = normalizeTerminalPath(cwd);
+
+    // Only cd if the terminal isn't already at the target directory.
+    // writeHidden suppresses the command-finish for the cd so panels don't flicker.
+    if (normalizeTerminalPath(active.cwd) !== normalizedCwd) {
+      await active.session.writeHidden(buildCdCommand(normalizedCwd, shellType));
+    }
+
+    // Write just the user's command — this is what gets echoed and tracked.
+    const eol = shellType === 'powershell' || shellType === 'cmd' ? '\r' : '\n';
+    await active.session.write(command + eol);
   }
 
   dispose(): void {
