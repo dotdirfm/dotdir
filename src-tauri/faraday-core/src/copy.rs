@@ -397,7 +397,7 @@ fn copy_single_file_platform(
         _callback_reason: u32,
         _src_handle: *mut std::ffi::c_void,
         _dest_handle: *mut std::ffi::c_void,
-        data: *mut std::ffi::c_void,
+        data: *const std::ffi::c_void,
     ) -> u32 {
         let data = &mut *(data as *mut CallbackData);
         if data.token.is_cancelled() {
