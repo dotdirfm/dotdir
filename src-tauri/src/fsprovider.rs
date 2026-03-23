@@ -19,15 +19,57 @@
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
 use wasmtime::{Engine, Linker, Module, Store};
 
+/// The source of bytes that the WASM plugin reads via host_read_range.
+/// For top-level containers this is a real file; for nested containers (e.g. a
+/// zip inside a zip) the inner archive has already been extracted into memory.
+enum ContainerSource {
+    File(String),
+    Memory(Vec<u8>),
+}
+
 /// Data available to host-imported functions during a WASM call.
 struct HostData {
-    container_path: String,
+    container_source: ContainerSource,
     /// Accumulates bytes sent by the plugin via host_receive_bytes.
     output_data: Vec<u8>,
+}
+
+/// Resolve a container_path that may contain '\0'-separated nesting into a
+/// ContainerSource.  For a plain file path (no '\0') this is a no-op.  For a
+/// nested path like "outer.zip\0/inner.zip" we read the outer archive and
+/// extract the inner file, recursing as needed for deeper nesting.
+fn resolve_container_source(container_path: &str) -> Result<ContainerSource, String> {
+    match container_path.find('\0') {
+        None => Ok(ContainerSource::File(container_path.to_string())),
+        Some(null_pos) => {
+            let outer_path = &container_path[..null_pos];
+            let inner_file = container_path[null_pos + 1..].trim_start_matches('/');
+
+            // Recursively resolve the outer container.
+            let outer_bytes = match resolve_container_source(outer_path)? {
+                ContainerSource::File(path) => {
+                    std::fs::read(&path).map_err(|e| format!("Failed to read '{}': {}", path, e))?
+                }
+                ContainerSource::Memory(bytes) => bytes,
+            };
+
+            // Extract the named entry from the outer zip.
+            let cursor = Cursor::new(outer_bytes);
+            let mut archive = zip::ZipArchive::new(cursor)
+                .map_err(|e| format!("Failed to open zip: {}", e))?;
+            let mut entry = archive
+                .by_name(inner_file)
+                .map_err(|e| format!("Entry '{}' not found in zip: {}", inner_file, e))?;
+            let mut inner_bytes = Vec::new();
+            entry.read_to_end(&mut inner_bytes).map_err(|e| format!("Failed to read zip entry: {}", e))?;
+
+            Ok(ContainerSource::Memory(inner_bytes))
+        }
+    }
 }
 
 /// A compiled WASM plugin. `Engine` and `Module` are thread-safe.
@@ -109,7 +151,7 @@ fn make_linker(engine: &Engine) -> Result<Linker<HostData>, String> {
     let mut linker = Linker::new(engine);
 
     // host_read_range(offset: i64, len: i64, out_ptr: i32) -> i32
-    // Reads from the container file; writes `len` bytes at `out_ptr` in WASM memory.
+    // Reads from the container source; writes `len` bytes at `out_ptr` in WASM memory.
     linker
         .func_wrap(
             "env",
@@ -118,27 +160,38 @@ fn make_linker(engine: &Engine) -> Result<Linker<HostData>, String> {
                 if offset < 0 || len <= 0 || len > 4 * 1024 * 1024 {
                     return -1;
                 }
-                let container_path = caller.data().container_path.clone();
-                let mut file = match File::open(&container_path) {
-                    Ok(f) => f,
-                    Err(_) => return -1,
-                };
-                if file.seek(SeekFrom::Start(offset as u64)).is_err() {
-                    return -1;
-                }
-                let mut buf = vec![0u8; len as usize];
-                let n = match file.read(&mut buf) {
-                    Ok(n) => n,
-                    Err(_) => return -1,
+                let buf = match &caller.data().container_source {
+                    ContainerSource::File(path) => {
+                        let mut file = match File::open(path) {
+                            Ok(f) => f,
+                            Err(_) => return -1,
+                        };
+                        if file.seek(SeekFrom::Start(offset as u64)).is_err() {
+                            return -1;
+                        }
+                        let mut b = vec![0u8; len as usize];
+                        match file.read(&mut b) {
+                            Ok(n) => { b.truncate(n); b }
+                            Err(_) => return -1,
+                        }
+                    }
+                    ContainerSource::Memory(bytes) => {
+                        let start = offset as usize;
+                        if start >= bytes.len() {
+                            return 0;
+                        }
+                        let end = (start + len as usize).min(bytes.len());
+                        bytes[start..end].to_vec()
+                    }
                 };
                 let mem = match caller.get_export("memory") {
                     Some(wasmtime::Extern::Memory(m)) => m,
                     _ => return -1,
                 };
-                if mem.write(&mut caller, out_ptr as usize, &buf[..n]).is_err() {
+                if mem.write(&mut caller, out_ptr as usize, &buf).is_err() {
                     return -1;
                 }
-                n as i32
+                buf.len() as i32
             },
         )
         .map_err(|e| format!("Failed to link host_read_range: {}", e))?;
@@ -213,7 +266,8 @@ fn call_plugin_list(
     container_path: &str,
     inner_path: &str,
 ) -> Result<Vec<FspEntry>, String> {
-    let mut store = Store::new(&plugin.engine, HostData { container_path: container_path.to_string(), output_data: Vec::new() });
+    let source = resolve_container_source(container_path)?;
+    let mut store = Store::new(&plugin.engine, HostData { container_source: source, output_data: Vec::new() });
     let linker = make_linker(&plugin.engine)?;
     let instance = linker
         .instantiate(&mut store, &plugin.module)
@@ -265,7 +319,8 @@ fn call_plugin_read(
     offset: u64,
     length: usize,
 ) -> Result<Vec<u8>, String> {
-    let mut store = Store::new(&plugin.engine, HostData { container_path: container_path.to_string(), output_data: Vec::new() });
+    let source = resolve_container_source(container_path)?;
+    let mut store = Store::new(&plugin.engine, HostData { container_source: source, output_data: Vec::new() });
     let linker = make_linker(&plugin.engine)?;
     let instance = linker
         .instantiate(&mut store, &plugin.module)

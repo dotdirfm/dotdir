@@ -23,15 +23,15 @@ export async function getExtensionScriptUrl(
 ): Promise<{ scriptUrl: string }> {
   const entryRel = normalizeEntryPath(entry);
   const fullPath = join(extensionDirPath, entryRel);
-  const fd = await bridge.fsa.open(fullPath);
+  const fd = await bridge.fs.open(fullPath);
   try {
-    const stat = await bridge.fsa.stat(fullPath);
-    const buf = await bridge.fsa.read(fd, 0, Math.max(0, Math.floor(stat.size)));
+    const stat = await bridge.fs.stat(fullPath);
+    const buf = await bridge.fs.read(fd, 0, Math.max(0, Math.floor(stat.size)));
     const content = new TextDecoder().decode(buf);
     const blob = new Blob([content], { type: 'application/javascript' });
     const scriptUrl = URL.createObjectURL(blob);
     return { scriptUrl };
   } finally {
-    await bridge.fsa.close(fd);
+    await bridge.fs.close(fd);
   }
 }

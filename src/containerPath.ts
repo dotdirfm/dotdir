@@ -29,7 +29,7 @@ export function isContainerPath(path: string): boolean {
  * @returns containerFile — real FS path; innerPath — always starts with '/'.
  */
 export function parseContainerPath(path: string): { containerFile: string; innerPath: string } {
-  const sep = path.indexOf(CONTAINER_SEP);
+  const sep = path.lastIndexOf(CONTAINER_SEP);
   if (sep < 0) throw new Error('Not a container path: ' + JSON.stringify(path));
   const containerFile = path.slice(0, sep);
   const after = path.slice(sep + 1);

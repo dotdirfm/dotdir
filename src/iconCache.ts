@@ -1,4 +1,4 @@
-import { FileHandle } from './fsa';
+import { FileHandle } from './fs';
 import { normalizePath } from './path';
 
 const MAX_SIZE = 200;

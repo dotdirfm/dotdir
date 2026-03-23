@@ -11,7 +11,7 @@ export type EntryKind =
   | 'event_port'
   | 'unknown';
 
-export interface FsaRawEntry {
+export interface FsRawEntry {
   name: string;
   kind: EntryKind;
   size: number;

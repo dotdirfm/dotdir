@@ -121,7 +121,7 @@ export async function resolveShellProfiles(
     const matched = contributions.find((c) => c.shell === shellBasename);
     if (matched && !seenPaths.has(shellEnv)) {
       try {
-        const exists = await bridge.fsa.exists(shellEnv);
+        const exists = await bridge.fs.exists(shellEnv);
         if (exists) {
           seenPaths.add(shellEnv);
           profiles.push(profileFromContribution(shellEnv, matched.label, matched));
@@ -138,7 +138,7 @@ export async function resolveShellProfiles(
       const resolved = substituteVars(candidate, env);
       if (!resolved || seenPaths.has(resolved)) continue;
       try {
-        const exists = await bridge.fsa.exists(resolved);
+        const exists = await bridge.fs.exists(resolved);
         if (exists) {
           seenPaths.add(resolved);
           profiles.push(profileFromContribution(resolved, si.label, si));

@@ -6,7 +6,7 @@
  */
 
 import { parse as parseJsonc } from 'jsonc-parser';
-import { FileHandle } from './fsa';
+import { FileHandle } from './fs';
 import { dirname, join } from './path';
 
 export interface VSCodeColorThemeJson {

@@ -4,8 +4,8 @@
 /// Uses Tauri's invoke() for commands and listen() for events.
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { PtyLaunchInfo, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent, FspEntry } from './bridge';
-import type { FsaRawEntry, FsChangeEvent } from './types';
+import type { PtyLaunchInfo, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent, FspEntry, Bridge } from './bridge';
+import type { FsRawEntry, FsChangeEvent } from './types';
 import { normalizePath } from './path';
 
 const ptyWriteEncoder = new TextEncoder();
@@ -33,10 +33,10 @@ interface RustPtySpawnResult {
   shell: string;
 }
 
-function mapEntry(e: RustFsEntry): FsaRawEntry {
+function mapEntry(e: RustFsEntry): FsRawEntry {
   return {
     name: e.name,
-    kind: e.kind as FsaRawEntry['kind'],
+    kind: e.kind as FsRawEntry['kind'],
     size: e.size,
     mtimeMs: e.mtime_ms,
     mode: e.mode,
@@ -46,51 +46,48 @@ function mapEntry(e: RustFsEntry): FsaRawEntry {
   };
 }
 
-export const tauriBridge = {
-  fsa: {
-    async entries(dirPath: string): Promise<FsaRawEntry[]> {
-      const raw = await invoke<RustFsEntry[]>('fsa_entries', { dirPath });
+export const tauriBridge: Bridge = {
+  fs: {
+    async entries(dirPath: string): Promise<FsRawEntry[]> {
+      const raw = await invoke<RustFsEntry[]>('fs_entries', { dirPath });
       return raw.map(mapEntry);
     },
     async stat(filePath: string): Promise<{ size: number; mtimeMs: number }> {
-      const raw = await invoke<{ size: number; mtime_ms: number }>('fsa_stat', { filePath });
+      const raw = await invoke<{ size: number; mtime_ms: number }>('fs_stat', { filePath });
       return { size: raw.size, mtimeMs: raw.mtime_ms };
     },
     async exists(filePath: string): Promise<boolean> {
-      return invoke<boolean>('fsa_exists', { filePath });
+      return invoke<boolean>('fs_exists', { filePath });
     },
     async writeFile(filePath: string, data: string): Promise<void> {
-      return invoke<void>('fsa_write_text', { filePath, data });
+      return invoke<void>('fs_write_text', { filePath, data });
     },
     async writeBinaryFile(filePath: string, data: Uint8Array): Promise<void> {
-      return invoke<void>('fsa_write_binary', { filePath, data: Array.from(data) });
+      return invoke<void>('fs_write_binary', { filePath, data: Array.from(data) });
     },
     async createDir(dirPath: string): Promise<void> {
-      return invoke<void>('fsa_create_dir', { dirPath });
+      return invoke<void>('fs_create_dir', { dirPath });
     },
     async moveToTrash(paths: string[]): Promise<void> {
       return invoke<void>('move_to_trash', { paths });
     },
-    async deletePath(path: string): Promise<void> {
-      return invoke<void>('fsa_delete_path', { path });
-    },
     async open(filePath: string): Promise<number> {
-      return invoke<number>('fsa_open', { filePath });
+      return invoke<number>('fs_open', { filePath });
     },
     async read(fd: number, offset: number, length: number): Promise<ArrayBuffer> {
       const offsetInt = Math.max(0, Math.floor(offset));
       const lengthInt = Math.max(0, Math.floor(length));
-      const bytes = await invoke<number[]>('fsa_read', { fd, offset: offsetInt, length: lengthInt });
+      const bytes = await invoke<number[]>('fs_read', { fd, offset: offsetInt, length: lengthInt });
       return new Uint8Array(bytes).buffer;
     },
     async close(fd: number): Promise<void> {
-      return invoke<void>('fsa_close', { fd });
+      return invoke<void>('fs_close', { fd });
     },
     async watch(watchId: string, dirPath: string): Promise<boolean> {
-      return invoke<boolean>('fsa_watch', { watchId, dirPath });
+      return invoke<boolean>('fs_watch', { watchId, dirPath });
     },
     async unwatch(watchId: string): Promise<void> {
-      return invoke<void>('fsa_unwatch', { watchId });
+      return invoke<void>('fs_unwatch', { watchId });
     },
     onFsChange(callback: (event: FsChangeEvent) => void): () => void {
       let unlisten: UnlistenFn | null = null;

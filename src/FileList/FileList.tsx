@@ -33,6 +33,8 @@ interface FileListProps {
   onRename?: (sourcePath: string, currentName: string, refresh: () => void) => void;
   /** Run executable in terminal: receives (command) and should write command + newline to terminal. */
   onExecuteInTerminal?: (command: string) => Promise<void>;
+  /** Paste filename or path into the command line. */
+  onPasteToCommandLine?: (text: string) => void;
   editorFileSizeLimit?: number;
   selectionKey?: number;
   active: boolean;
@@ -97,6 +99,7 @@ export const FileList = memo(function FileList({
   onMove,
   onRename,
   onExecuteInTerminal,
+  onPasteToCommandLine,
   editorFileSizeLimit = 0,
   selectionKey,
   active,
@@ -136,6 +139,8 @@ export const FileList = memo(function FileList({
   onEditFileRef.current = onEditFile;
   const onExecuteInTerminalRef = useRef(onExecuteInTerminal);
   onExecuteInTerminalRef.current = onExecuteInTerminal;
+  const onPasteToCommandLineRef = useRef(onPasteToCommandLine);
+  onPasteToCommandLineRef.current = onPasteToCommandLine;
   const onMoveToTrashRef = useRef(onMoveToTrash);
   onMoveToTrashRef.current = onMoveToTrash;
   const onPermanentDeleteRef = useRef(onPermanentDelete);
@@ -814,14 +819,14 @@ export const FileList = memo(function FileList({
 
     disposables.push(commandRegistry.registerCommand(
       'list.pasteFilename',
-      'Paste Filename to Terminal',
-      () => actionQueue.enqueue(async () => {
+      'Paste Filename to Command Line',
+      () => actionQueue.enqueue(() => {
         const item = displayEntriesRef.current[activeIndexRef.current];
-        const write = onExecuteInTerminalRef.current;
-        if (!item || !write) return;
+        const paste = onPasteToCommandLineRef.current;
+        if (!item || !paste) return;
         const name = item.entry.name;
         const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? name : JSON.stringify(name);
-        await write(arg);
+        paste(arg);
       }),
       { when: 'focusPanel' }
     ));
@@ -833,14 +838,14 @@ export const FileList = memo(function FileList({
 
     disposables.push(commandRegistry.registerCommand(
       'list.pastePath',
-      'Paste Path to Terminal',
-      () => actionQueue.enqueue(async () => {
+      'Paste Path to Command Line',
+      () => actionQueue.enqueue(() => {
         const item = displayEntriesRef.current[activeIndexRef.current];
-        const write = onExecuteInTerminalRef.current;
-        if (!item || !write) return;
-        const path = (item.entry.path as string) ?? '';
+        const paste = onPasteToCommandLineRef.current;
+        if (!item || !paste) return;
+        const path = ((item.entry.path as string) ?? '').split('\0')[0];
         const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
-        await write(arg);
+        paste(arg);
       }),
       { when: 'focusPanel' }
     ));
@@ -853,7 +858,7 @@ export const FileList = memo(function FileList({
     return () => {
       for (const dispose of disposables) dispose();
     };
-  }, [active, navigateToEntry, applySelection, onExecuteInTerminal, onMoveToTrash, onPermanentDelete, onCopy]);
+  }, [active, navigateToEntry, applySelection, onExecuteInTerminal, onPasteToCommandLine, onMoveToTrash, onPermanentDelete, onCopy]);
 
   const columnCountRef = useRef(columnCount);
   columnCountRef.current = columnCount;

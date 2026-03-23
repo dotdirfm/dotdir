@@ -198,15 +198,15 @@ impl AppState {
 // ── Commands ─────────────────────────────────────────────────────────
 
 #[tauri::command]
-fn fsa_entries(dir_path: String, state: State<'_, AppState>) -> CmdResult<Vec<FsEntry>> {
-    debug!("[cmd] fsa_entries {:?}", dir_path);
+fn fs_entries(dir_path: String, state: State<'_, AppState>) -> CmdResult<Vec<FsEntry>> {
+    debug!("[cmd] fs_entries {:?}", dir_path);
     match ops::entries(&dir_path) {
         Ok(v) => {
-            debug!("[cmd] fsa_entries {:?} → {} entries", dir_path, v.len());
+            debug!("[cmd] fs_entries {:?} → {} entries", dir_path, v.len());
             Ok(v.into_iter().map(FsEntry::from).collect())
         }
         Err(e) if is_eacces(&e) => {
-            debug!("[cmd] fsa_entries {:?} EACCES, trying proxy", dir_path);
+            debug!("[cmd] fs_entries {:?} EACCES, trying proxy", dir_path);
             let proxy = state.get_or_launch_proxy()?;
             proxy
                 .entries(&dir_path)
@@ -214,14 +214,14 @@ fn fsa_entries(dir_path: String, state: State<'_, AppState>) -> CmdResult<Vec<Fs
                 .map_err(Into::into)
         }
         Err(e) => {
-            debug!("[cmd] fsa_entries {:?} error: {}", dir_path, e);
+            debug!("[cmd] fs_entries {:?} error: {}", dir_path, e);
             Err(e.into())
         }
     }
 }
 
 #[tauri::command]
-fn fsa_stat(file_path: String, state: State<'_, AppState>) -> CmdResult<FsStat> {
+fn fs_stat(file_path: String, state: State<'_, AppState>) -> CmdResult<FsStat> {
     match ops::stat(&file_path) {
         Ok(s) => Ok(FsStat::from(s)),
         Err(e) if is_eacces(&e) => {
@@ -233,28 +233,28 @@ fn fsa_stat(file_path: String, state: State<'_, AppState>) -> CmdResult<FsStat> 
 }
 
 #[tauri::command]
-fn fsa_exists(file_path: String) -> bool {
+fn fs_exists(file_path: String) -> bool {
     ops::exists(&file_path)
 }
 
 #[tauri::command]
-fn fsa_write_text(file_path: String, data: String) -> CmdResult<()> {
+fn fs_write_text(file_path: String, data: String) -> CmdResult<()> {
   ops::write_text(&file_path, &data).map_err(Into::into)
 }
 
 #[tauri::command]
-fn fsa_write_binary(file_path: String, data: Vec<u8>) -> CmdResult<()> {
+fn fs_write_binary(file_path: String, data: Vec<u8>) -> CmdResult<()> {
   ops::write_bytes(&file_path, &data).map_err(Into::into)
 }
 
 #[tauri::command]
-fn fsa_create_dir(dir_path: String) -> CmdResult<()> {
+fn fs_create_dir(dir_path: String) -> CmdResult<()> {
     fs::create_dir_all(&dir_path).map_err(|e| CmdError(FsError::from_io(e)))?;
     Ok(())
 }
 
 #[tauri::command]
-fn fsa_open(file_path: String, state: State<'_, AppState>) -> CmdResult<i32> {
+fn fs_open(file_path: String, state: State<'_, AppState>) -> CmdResult<i32> {
     match ops::open(&file_path, &state.fdt) {
         Ok(fd) => Ok(fd),
         Err(e) if is_eacces(&e) => {
@@ -266,7 +266,7 @@ fn fsa_open(file_path: String, state: State<'_, AppState>) -> CmdResult<i32> {
 }
 
 #[tauri::command]
-fn fsa_read(fd: i32, offset: u64, length: usize, state: State<'_, AppState>) -> CmdResult<Vec<u8>> {
+fn fs_read(fd: i32, offset: u64, length: usize, state: State<'_, AppState>) -> CmdResult<Vec<u8>> {
     if fd < 0 {
         // Negative fd = proxy fd
         let proxy = state.get_or_launch_proxy()?;
@@ -277,7 +277,7 @@ fn fsa_read(fd: i32, offset: u64, length: usize, state: State<'_, AppState>) -> 
 }
 
 #[tauri::command]
-fn fsa_close(fd: i32, state: State<'_, AppState>) {
+fn fs_close(fd: i32, state: State<'_, AppState>) {
     if fd < 0 {
         if let Ok(proxy) = state.get_or_launch_proxy() {
             proxy.close(fd);
@@ -288,14 +288,14 @@ fn fsa_close(fd: i32, state: State<'_, AppState>) {
 }
 
 #[tauri::command]
-fn fsa_watch(watch_id: String, dir_path: String, state: State<'_, AppState>) -> bool {
-    debug!("[cmd] fsa_watch id={} path={:?}", watch_id, dir_path);
+fn fs_watch(watch_id: String, dir_path: String, state: State<'_, AppState>) -> bool {
+    debug!("[cmd] fs_watch id={} path={:?}", watch_id, dir_path);
     state.watcher.add(&watch_id, &dir_path)
 }
 
 #[tauri::command]
-fn fsa_unwatch(watch_id: String, state: State<'_, AppState>) {
-    debug!("[cmd] fsa_unwatch id={}", watch_id);
+fn fs_unwatch(watch_id: String, state: State<'_, AppState>) {
+    debug!("[cmd] fs_unwatch id={}", watch_id);
     state.watcher.remove(&watch_id);
     if let Some(ref proxy) = *state.proxy.lock().unwrap() {
         proxy.unwatch(&watch_id);
@@ -926,20 +926,6 @@ fn vfs_virtual_response(path: &str) -> Option<tauri::http::Response<Vec<u8>>> {
     Some(vfs_response_for_path(&os_path))
 }
 
-/// Remove a single file or empty directory. For recursive delete the frontend
-/// must delete in order (files first, then dirs from deepest to shallowest).
-#[tauri::command]
-fn fsa_delete_path(path: String) -> CmdResult<()> {
-    let p = Path::new(&path);
-    let meta = fs::metadata(p).map_err(|e| CmdError(FsError::from_io(e)))?;
-    if meta.is_dir() {
-        fs::remove_dir(p).map_err(|e| CmdError(FsError::from_io(e)))?;
-    } else {
-        fs::remove_file(p).map_err(|e| CmdError(FsError::from_io(e)))?;
-    }
-    Ok(())
-}
-
 // ── FsProvider (WASM) commands ───────────────────────────────────────
 
 #[tauri::command]
@@ -1085,24 +1071,23 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            fsa_entries,
-            fsa_stat,
-            fsa_exists,
-            fsa_write_text,
-            fsa_write_binary,
-            fsa_create_dir,
-            fsa_open,
-            fsa_read,
-            fsa_close,
-            fsa_watch,
-            fsa_unwatch,
+            fs_entries,
+            fs_stat,
+            fs_exists,
+            fs_write_text,
+            fs_write_binary,
+            fs_create_dir,
+            fs_open,
+            fs_read,
+            fs_close,
+            fs_watch,
+            fs_unwatch,
             get_home_path,
             get_builtin_extension_dirs,
             get_env,
             get_theme,
             debug_log,
             move_to_trash,
-            fsa_delete_path,
             pty_spawn,
             pty_write,
             pty_resize,

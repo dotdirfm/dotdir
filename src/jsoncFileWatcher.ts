@@ -8,7 +8,7 @@
 
 import { parse as parseJsonc, ParseError, printParseErrorCode } from 'jsonc-parser';
 import { bridge } from './bridge';
-import { FileHandle } from './fsa';
+import { FileHandle } from './fs';
 import { basename, dirname } from './path';
 
 export interface JsoncFileWatcher<T> {
@@ -101,9 +101,9 @@ export async function createJsoncFileWatcher<T>(
       const fileName = basename(path);
       watchId = `${name}-${Date.now()}`;
       
-      await bridge.fsa.watch(watchId, dirPath);
+      await bridge.fs.watch(watchId, dirPath);
       
-      unsubscribeFsChange = bridge.fsa.onFsChange((event) => {
+      unsubscribeFsChange = bridge.fs.onFsChange((event) => {
         if (event.watchId === watchId && event.name === fileName) {
           console.log(`[${name}] Detected change, reloading...`);
           load();
@@ -138,7 +138,7 @@ export async function createJsoncFileWatcher<T>(
       }
       if (watchId) {
         try {
-          await bridge.fsa.unwatch(watchId);
+          await bridge.fs.unwatch(watchId);
         } catch {
           // Ignore unwatch errors
         }

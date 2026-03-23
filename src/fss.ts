@@ -1,7 +1,7 @@
 import { createLayer, FsNode, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from 'fss-lang';
 import type { ResolvedEntryStyle } from './types';
 import type { LoadedExtension } from './extensions';
-import { DirectoryHandle } from './fsa';
+import { DirectoryHandle } from './fs';
 import { basename, dirname, join, normalizePath } from './path';
 
 const defaultFss = `

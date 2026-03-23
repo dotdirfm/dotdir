@@ -45,7 +45,7 @@ async function saveSettingsToDisk(settings: FaradaySettings): Promise<void> {
       const homePath = await bridge.utils.getHomePath();
       settingsPath = join(homePath, '.faraday', 'settings.json');
     }
-    await bridge.fsa.writeFile(settingsPath, JSON.stringify(settings, null, 2));
+    await bridge.fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
   } catch (err) {
     console.error('[userSettings] Failed to save settings:', err);
   }

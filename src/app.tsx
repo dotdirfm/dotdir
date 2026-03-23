@@ -18,7 +18,7 @@ import { ExtensionsPanel } from './ExtensionsPanel';
 import { PanelGroup } from './PanelGroup';
 import { CommandPalette, useCommandPalette } from './CommandPalette';
 import { commandRegistry } from './commands';
-import { FileHandle } from './fsa';
+import { FileHandle } from './fs';
 import { setExtensionLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, findColorTheme, type LoadedExtension, type PanelPersistedState, type PersistedTab } from './extensions';
@@ -99,6 +99,7 @@ export function App() {
   const commandPalette = useCommandPalette();
   const writeToTerminalRef = useRef<(data: string) => Promise<void>>(async () => {});
   const executeCommandRef = useRef<(command: string, cwd: string) => Promise<void>>(async () => {});
+  const commandLinePasteRef = useRef<(text: string) => void>(() => {});
   const hiddenForCommandRef = useRef(false);
 
   useEffect(() => {
@@ -107,6 +108,7 @@ export function App() {
       if (s.iconTheme) setActiveIconTheme(s.iconTheme);
       if (s.colorTheme) setActiveColorTheme(s.colorTheme);
       if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
+      if (s.showHidden !== undefined) setShowHidden(s.showHidden);
 
       // Restore tabs from persisted state
       const restoreTabs = (panel: PanelPersistedState | undefined) => {
@@ -148,6 +150,7 @@ export function App() {
       if (s.iconTheme) setActiveIconTheme(s.iconTheme);
       if (s.colorTheme !== undefined) setActiveColorTheme(s.colorTheme || undefined);
       if (s.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(s.editorFileSizeLimit);
+      if (s.showHidden !== undefined) setShowHidden(s.showHidden);
     });
 
     initUserKeybindings();
@@ -195,11 +198,11 @@ export function App() {
 
   const handleOpenCreateFileConfirm = useCallback(
     async (filePath: string, fileName: string, langId: string) => {
-      const exists = await bridge.fsa.exists(filePath);
+      const exists = await bridge.fs.exists(filePath);
       if (!exists) {
-        await bridge.fsa.writeFile(filePath, '');
+        await bridge.fs.writeFile(filePath, '');
       }
-      const size = exists ? (await bridge.fsa.stat(filePath)).size : 0;
+      const size = exists ? (await bridge.fs.stat(filePath)).size : 0;
       setEditorFile({ path: filePath, name: fileName, size, langId });
     },
     []
@@ -613,7 +616,7 @@ export function App() {
 
   const handleTerminalCwd = useCallback((path: string) => {
     const normalizedPath = normalizeTerminalPath(path);
-    const panel = activePanel === 'left' ? left : right;
+    const panel = activePanelRef.current === 'left' ? leftRef.current : rightRef.current;
     if (normalizedPath === normalizeTerminalPath(panel.currentPath)) return;
     panel.navigateTo(normalizedPath);
     setRequestedTerminalCwd(null);
@@ -674,7 +677,7 @@ export function App() {
     disposables.push(commandRegistry.registerCommand(
       'faraday.toggleHiddenFiles',
       'Toggle Hidden Files',
-      () => setShowHidden(h => !h),
+      () => setShowHidden(h => { const next = !h; updateSettings({ showHidden: next }); return next; }),
       { category: 'View' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -917,7 +920,7 @@ export function App() {
           currentPath,
           onConfirm: async (folderName: string) => {
             const fullPath = currentPath ? `${currentPath.replace(/\/?$/, '')}/${folderName}` : folderName;
-            if (bridge.fsa.createDir) await bridge.fsa.createDir(fullPath);
+            if (bridge.fs.createDir) await bridge.fs.createDir(fullPath);
             panel.navigateTo(currentPath);
           },
           onCancel: () => {},
@@ -1093,7 +1096,7 @@ export function App() {
       let targetPath = persistedState?.currentPath ?? fallbackPath;
 
       if (targetPath) {
-        const exists = await bridge.fsa.exists(targetPath);
+        const exists = await bridge.fs.exists(targetPath);
         if (!exists) {
           targetPath = await findExistingParent(targetPath);
         }
@@ -1107,7 +1110,7 @@ export function App() {
     };
 
     if (hasUrlPath) {
-      bridge.fsa.exists(browserPath).then(async (exists) => {
+      bridge.fs.exists(browserPath).then(async (exists) => {
         if (exists) {
           left.navigateTo(browserPath);
         } else {
@@ -1397,6 +1400,7 @@ export function App() {
                   onMove={(sourcePaths, refresh) => handleMove(sourcePaths, refresh)}
                   onRename={(sourcePath, currentName, refresh) => handleRename(sourcePath, currentName, refresh)}
                   onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
+                  onPasteToCommandLine={(text) => commandLinePasteRef.current(text)}
                   selectionKey={selectionKey}
                   requestedActiveName={leftRequestedCursor}
                   requestedTopmostName={undefined}
@@ -1426,6 +1430,7 @@ export function App() {
                   onMove={(sourcePaths, refresh) => handleMove(sourcePaths, refresh)}
                   onRename={(sourcePath, currentName, refresh) => handleRename(sourcePath, currentName, refresh)}
                   onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
+                  onPasteToCommandLine={(text) => commandLinePasteRef.current(text)}
                   selectionKey={selectionKey}
                   requestedActiveName={rightRequestedCursor}
                   requestedTopmostName={undefined}
@@ -1437,6 +1442,7 @@ export function App() {
             <CommandLine
               cwd={activeCwd}
               visible={panelsVisible && promptActive}
+              pasteRef={commandLinePasteRef}
               onExecute={(cmd) => {
                 hiddenForCommandRef.current = true;
                 setPanelsVisible(false);

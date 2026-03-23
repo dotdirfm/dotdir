@@ -193,7 +193,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     }
     const current = currentFileRef.current;
     if (current) {
-      bridge.fsa.close(current.fd).catch(() => {});
+      bridge.fs.close(current.fd).catch(() => {});
       currentFileRef.current = null;
     }
   }, [active, kind]);
@@ -237,17 +237,17 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       if (!target || target.path !== normalized) {
         if (current) {
           try {
-            await bridge.fsa.close(current.fd);
+            await bridge.fs.close(current.fd);
           } catch {
             // ignore close errors
           }
         }
-        const fd = await bridge.fsa.open(normalized);
-        const stat = await bridge.fsa.stat(normalized);
+        const fd = await bridge.fs.open(normalized);
+        const stat = await bridge.fs.stat(normalized);
         target = { fd, size: stat.size, path: normalized };
         currentFileRef.current = target;
       }
-      return bridge.fsa.read(target.fd, 0, target.size);
+      return bridge.fs.read(target.fd, 0, target.size);
     },
     async readFileRange(path: string, offset: number, length: number): Promise<ArrayBuffer> {
       const normalized = normalizePath(path);
@@ -257,13 +257,13 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       if (!target || target.path !== normalized) {
         if (current) {
           try {
-            await bridge.fsa.close(current.fd);
+            await bridge.fs.close(current.fd);
           } catch {
             // ignore close errors
           }
         }
-        const fd = await bridge.fsa.open(normalized);
-        const stat = await bridge.fsa.stat(normalized);
+        const fd = await bridge.fs.open(normalized);
+        const stat = await bridge.fs.stat(normalized);
         target = { fd, size: stat.size, path: normalized };
         currentFileRef.current = target;
       }
@@ -272,7 +272,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       const remaining = Math.max(0, target.size - safeOffset);
       const safeLen = Math.min(maxLen, remaining);
       if (safeLen === 0) return new ArrayBuffer(0);
-      return bridge.fsa.read(target.fd, safeOffset, safeLen);
+      return bridge.fs.read(target.fd, safeOffset, safeLen);
     },
     async readFileText(path: string): Promise<string> {
       const buf = await this.readFile(path);
@@ -284,7 +284,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         const data = await readFromContainer(normalized, 0, 64 * 1024 * 1024);
         return { size: data.byteLength, mtimeMs: 0 };
       }
-      const stat = await bridge.fsa.stat(normalized);
+      const stat = await bridge.fs.stat(normalized);
       const current = currentFileRef.current;
       if (current && current.path === normalized && current.size !== stat.size) {
         current.size = stat.size;
@@ -300,13 +300,13 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       const watchId = `viewer-${Math.random().toString(36).slice(2)}`;
       let disposed = false;
 
-      const stopFsChange = bridge.fsa.onFsChange((event) => {
+      const stopFsChange = bridge.fs.onFsChange((event) => {
         if (disposed) return;
         if (event.watchId !== watchId || !event.name) return;
         if (event.name === name && (event.type === 'modified' || event.type === 'appeared')) {
           const current = currentFileRef.current;
           if (current && current.path === normalized) {
-            void bridge.fsa.close(current.fd).catch(() => {});
+            void bridge.fs.close(current.fd).catch(() => {});
             currentFileRef.current = null;
           }
           callback();
@@ -314,7 +314,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       });
 
       void (async () => {
-        const ok = await bridge.fsa.watch(watchId, dir);
+        const ok = await bridge.fs.watch(watchId, dir);
         if (!ok) {
           disposed = true;
           stopFsChange();
@@ -324,12 +324,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       return () => {
         if (disposed) return;
         disposed = true;
-        bridge.fsa.unwatch(watchId);
+        bridge.fs.unwatch(watchId);
         stopFsChange();
       };
     },
     async writeFile(path: string, content: string): Promise<void> {
-      await bridge.fsa.writeFile(path, content);
+      await bridge.fs.writeFile(path, content);
     },
     async getTheme(): Promise<string> {
       return bridge.theme.get();
@@ -667,13 +667,13 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       let entryScript: string | undefined;
       if (isEsm) {
         try {
-          const fd = await bridge.fsa.open(entryPath);
+          const fd = await bridge.fs.open(entryPath);
           try {
-            const stat = await bridge.fsa.stat(entryPath);
-            const buf = await bridge.fsa.read(fd, 0, Math.max(0, Math.floor(stat.size)));
+            const stat = await bridge.fs.stat(entryPath);
+            const buf = await bridge.fs.read(fd, 0, Math.max(0, Math.floor(stat.size)));
             entryScript = new TextDecoder().decode(buf);
           } finally {
-            await bridge.fsa.close(fd);
+            await bridge.fs.close(fd);
           }
         } catch (err) {
           if (!cancelled) {
@@ -757,7 +757,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
 
       const currentFile = currentFileRef.current;
       if (currentFile) {
-        bridge.fsa.close(currentFile.fd).catch(() => {});
+        bridge.fs.close(currentFile.fd).catch(() => {});
         currentFileRef.current = null;
       }
     };

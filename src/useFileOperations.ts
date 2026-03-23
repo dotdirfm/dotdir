@@ -107,7 +107,7 @@ export function useFileOperations(
           {
             label: 'Move to Trash', default: true, onClick: async () => {
               try {
-                await bridge.fsa.moveToTrash(sourcePaths);
+                await bridge.fs.moveToTrash(sourcePaths);
                 refresh();
               } catch (e) {
                 showDialog({ type: 'message', title: 'Error', message: e instanceof Error ? e.message : String(e), variant: 'error' });
@@ -246,7 +246,7 @@ export function useFileOperations(
               for (const { innerPath, destRelPath, hostFile, wasmPath, provider } of jobs) {
                 const destPath = join(newDestDir, destRelPath);
                 updateDialog({ currentFile: basename(destRelPath), filesDone });
-                if (bridge.fsa.createDir) await bridge.fsa.createDir(dirname(destPath)).catch(() => {});
+                if (bridge.fs.createDir) await bridge.fs.createDir(dirname(destPath)).catch(() => {});
                 let data: ArrayBuffer;
                 if (wasmPath) {
                   data = await bridge.fsProvider!.readFileRange(wasmPath, hostFile, innerPath, 0, 64 * 1024 * 1024);
@@ -254,7 +254,7 @@ export function useFileOperations(
                   if (!provider?.readFileRange) throw new Error('Provider does not support readFileRange');
                   data = await provider.readFileRange(hostFile, innerPath, 0, 64 * 1024 * 1024);
                 }
-                await bridge.fsa.writeBinaryFile(destPath, new Uint8Array(data));
+                await bridge.fs.writeBinaryFile(destPath, new Uint8Array(data));
                 filesDone++;
               }
 

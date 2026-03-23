@@ -3,7 +3,7 @@
 /// Uses ES module live bindings: importers of `bridge` always see the current value.
 /// Must call `initBridge()` before rendering (from main.tsx).
 import { isTauri as isTauriApp } from '@tauri-apps/api/core';
-import type { FsaRawEntry, FsChangeEvent } from './types';
+import type { FsRawEntry, FsChangeEvent } from './types';
 import { tauriBridge } from './tauriBridge';
 import { createWsBridge } from './wsBridge';
 
@@ -108,8 +108,8 @@ export interface FspEntry {
 }
 
 export interface Bridge {
-  fsa: {
-    entries(dirPath: string): Promise<FsaRawEntry[]>;
+  fs: {
+    entries(dirPath: string): Promise<FsRawEntry[]>;
     stat(filePath: string): Promise<{ size: number; mtimeMs: number }>;
     exists(filePath: string): Promise<boolean>;
     open(filePath: string): Promise<number>;
@@ -124,8 +124,6 @@ export interface Bridge {
     createDir?(dirPath: string): Promise<void>;
     /** Move files/folders to OS trash (batched for single trash sound). */
     moveToTrash(paths: string[]): Promise<void>;
-    /** Remove a single file or empty directory. For recursive delete, call in order: files first, then dirs deepest-first. */
-    deletePath(path: string): Promise<void>;
   };
   pty: {
     spawn(cwd: string, shellPath: string, options?: { spawnArgs?: string[] }): Promise<PtyLaunchInfo>;
@@ -180,7 +178,7 @@ export interface Bridge {
   };
 }
 
-// Live-binding: fsa.ts and iconCache.ts import `bridge` and always get the current value.
+// Live-binding: fs.ts and iconCache.ts import `bridge` and always get the current value.
 // eslint-disable-next-line import/no-mutable-exports
 export let bridge: Bridge;
 

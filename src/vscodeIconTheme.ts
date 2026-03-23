@@ -4,7 +4,7 @@
  * Parses VS Code icon theme JSON format and provides icon resolution.
  */
 
-import { FileHandle } from './fsa';
+import { FileHandle } from './fs';
 import { join, dirname } from './path';
 
 export interface VSCodeIconDefinition {

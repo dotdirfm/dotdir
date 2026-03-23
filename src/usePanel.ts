@@ -16,7 +16,7 @@ import { fsProviderRegistry } from './viewerEditorRegistry';
 import { isContainerPath, parseContainerPath, buildContainerPath } from './containerPath';
 import { loadFsProvider } from './browserFsProvider';
 import { createPanelResolver, invalidateFssCache, syncLayers } from './fss';
-import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fsa';
+import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fs';
 import { basename, dirname, isFileExecutable, isRootPath, join } from './path';
 import { languageRegistry } from './languageRegistry';
 
@@ -70,7 +70,7 @@ function handleToFsNode(handle: FileSystemHandle & { meta?: HandleMeta }, dirPat
 export async function findExistingParent(startPath: string): Promise<string> {
   let cur = startPath;
   while (true) {
-    if (await bridge.fsa.exists(cur)) return cur;
+    if (await bridge.fs.exists(cur)) return cur;
     const parent = dirname(cur);
     if (parent === cur || isRootPath(cur)) return cur;
     cur = parent;

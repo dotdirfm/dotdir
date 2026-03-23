@@ -4,7 +4,7 @@
 /// over WebSocket. Binary frames are used for fs.read responses.
 /// Automatically reconnects on disconnection with exponential backoff.
 import type { Bridge, PtyLaunchInfo, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent, FspEntry } from './bridge';
-import type { FsaRawEntry, FsChangeEvent, FsChangeType } from './types';
+import type { FsRawEntry, FsChangeEvent, FsChangeType } from './types';
 
 type Pending = {
   resolve: (value: unknown) => void;
@@ -194,8 +194,8 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
   startHeartbeat();
 
   return {
-    fsa: {
-      entries: (dirPath: string) => rpc('fs.entries', { path: dirPath }) as Promise<FsaRawEntry[]>,
+    fs: {
+      entries: (dirPath: string) => rpc('fs.entries', { path: dirPath }) as Promise<FsRawEntry[]>,
       stat: (filePath: string) => rpc('fs.stat', { path: filePath }) as Promise<{ size: number; mtimeMs: number }>,
       exists: (filePath: string) => rpc('fs.exists', { path: filePath }) as Promise<boolean>,
       open: (filePath: string) => rpc('fs.open', { path: filePath }) as Promise<number>,
@@ -208,7 +208,6 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       writeBinaryFile: (filePath: string, data: Uint8Array) => rpc('fs.writeBinary', { path: filePath, data: Array.from(data) }) as Promise<void>,
       createDir: (dirPath: string) => rpc('fs.createDir', { path: dirPath }) as Promise<void>,
       moveToTrash: (paths: string[]) => rpc('fs.moveToTrash', { paths }) as Promise<void>,
-      deletePath: (path: string) => rpc('fs.deletePath', { path }) as Promise<void>,
       onFsChange(callback: (event: FsChangeEvent) => void): () => void {
         changeListeners.add(callback);
         return () => {

@@ -33,6 +33,7 @@ mime_guess = "2"
 portable-pty = "0.8"
 trash = "5"
 wasmtime = { version = "25", default-features = false, features = ["cranelift", "runtime"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [profile.release.package.wry]
 debug = true

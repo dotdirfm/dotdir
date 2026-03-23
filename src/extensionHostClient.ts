@@ -7,7 +7,7 @@
  */
 
 import { bridge } from './bridge';
-import { FileHandle } from './fsa';
+import { FileHandle } from './fs';
 import type { LoadedExtension } from './extensions';
 import { normalizePath } from './path';
 

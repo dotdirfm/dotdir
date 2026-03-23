@@ -1,4 +1,4 @@
-import type { FsaRawEntry, EntryKind, FsChangeEvent, FsChangeType } from './types';
+import type { FsRawEntry, EntryKind, FsChangeEvent, FsChangeType } from './types';
 import { bridge } from './bridge';
 import { join, normalizePath } from './path';
 
@@ -35,7 +35,7 @@ export class DirectoryHandle implements FileSystemDirectoryHandle {
   }
 
   async *entries(): AsyncIterableIterator<[string, FileSystemHandle]> {
-    const raw: FsaRawEntry[] = await bridge.fsa.entries(this.path);
+    const raw: FsRawEntry[] = await bridge.fs.entries(this.path);
     for (const entry of raw) {
       const childPath = join(this.path, entry.name);
       const meta: HandleMeta = {
@@ -116,16 +116,16 @@ export class FileHandle implements FileSystemFileHandle {
     let size = this.meta?.size;
     let mtimeMs = this.meta?.mtimeMs;
     if (size === undefined) {
-      const stat = await bridge.fsa.stat(this.path);
+      const stat = await bridge.fs.stat(this.path);
       size = stat.size;
       mtimeMs = stat.mtimeMs;
     }
-    const fd = await bridge.fsa.open(this.path);
+    const fd = await bridge.fs.open(this.path);
     try {
-      const buf = await bridge.fsa.read(fd, 0, size);
+      const buf = await bridge.fs.read(fd, 0, size);
       return new File([buf], this.name, { lastModified: mtimeMs ?? 0 });
     } finally {
-      await bridge.fsa.close(fd);
+      await bridge.fs.close(fd);
     }
   }
 
@@ -135,7 +135,7 @@ export class FileHandle implements FileSystemFileHandle {
     return {
       async write(data: string): Promise<void> {
         if (closed) throw new Error('Writer is closed');
-        await bridge.fsa.writeFile(self.path, data);
+        await bridge.fs.writeFile(self.path, data);
       },
       async close(): Promise<void> {
         closed = true;
@@ -170,7 +170,7 @@ export class FileSystemObserver {
 
   #ensureListener(): void {
     if (!this.#cleanup) {
-      this.#cleanup = bridge.fsa.onFsChange((event: FsChangeEvent) => {
+      this.#cleanup = bridge.fs.onFsChange((event: FsChangeEvent) => {
         this.#handleEvent(event);
       });
     }
@@ -189,11 +189,11 @@ export class FileSystemObserver {
     this.#watches.set(watchId, handle);
     this.#pathToId.set(handle.path, watchId);
 
-    const ok = await bridge.fsa.watch(watchId, handle.path);
+    const ok = await bridge.fs.watch(watchId, handle.path);
 
     // Discard if observer was disconnected/updated while awaiting IPC
     if (gen !== this.#generation) {
-      if (ok) bridge.fsa.unwatch(watchId);
+      if (ok) bridge.fs.unwatch(watchId);
       return;
     }
 
@@ -207,7 +207,7 @@ export class FileSystemObserver {
   unobserve(handle: DirectoryHandle): void {
     const watchId = this.#pathToId.get(handle.path);
     if (watchId != null) {
-      bridge.fsa.unwatch(watchId);
+      bridge.fs.unwatch(watchId);
       this.#watches.delete(watchId);
       this.#pathToId.delete(handle.path);
     }
@@ -222,7 +222,7 @@ export class FileSystemObserver {
     // Remove watches no longer needed
     for (const [path, watchId] of this.#pathToId) {
       if (!desired.has(path)) {
-        bridge.fsa.unwatch(watchId);
+        bridge.fs.unwatch(watchId);
         this.#watches.delete(watchId);
         this.#pathToId.delete(path);
       }
@@ -239,7 +239,7 @@ export class FileSystemObserver {
   disconnect(): void {
     this.#generation++;
     for (const watchId of this.#watches.keys()) {
-      bridge.fsa.unwatch(watchId);
+      bridge.fs.unwatch(watchId);
     }
     this.#watches.clear();
     this.#pathToId.clear();

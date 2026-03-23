@@ -15,7 +15,7 @@ Faraday is a dual-pane file manager built with a React/Vite frontend and a Rust/
 - `src/bridge.ts` exposes one runtime-agnostic API for filesystem, PTY, utils, and theme operations.
 - `src/tauriBridge.ts` implements that API with Tauri IPC.
 - `src/wsBridge.ts` implements that API with JSON-RPC 2.0 over WebSocket.
-- `src/fsa.ts` wraps bridge operations in File System Access-style handles and observers.
+- `src/fs.ts` wraps bridge operations in File System Access-style handles and observers.
 - `src/fss.ts` loads layered `.faraday/fs.css` stylesheets for filesystem-aware coloring and icons.
 - `src/FileList/FileList.tsx` renders the dual-pane file list with virtualized multi-column scrolling.
 - `src/Terminal.tsx` embeds xterm.js and syncs cwd with the active panel using OSC 7.

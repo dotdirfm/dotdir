@@ -5,13 +5,21 @@ interface CommandLineProps {
   cwd: string;
   visible: boolean;
   onExecute: (command: string) => void;
+  pasteRef?: React.MutableRefObject<(text: string) => void>;
 }
 
-export function CommandLine({ cwd, visible, onExecute }: CommandLineProps) {
+export function CommandLine({ cwd, visible, onExecute, pasteRef }: CommandLineProps) {
   const [value, setValue] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [, setHistoryPos] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  if (pasteRef) {
+    pasteRef.current = (text: string) => {
+      setValue((v) => v + text);
+      inputRef.current?.focus();
+    };
+  }
 
   useEffect(() => {
     if (visible) inputRef.current?.focus();

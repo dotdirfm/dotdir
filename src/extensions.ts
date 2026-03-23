@@ -1,5 +1,5 @@
 import { bridge, type CwdEscapeMode } from './bridge';
-import { FileHandle } from './fsa';
+import { FileHandle } from './fs';
 import { dirname, join, normalizePath } from './path';
 
 export const MARKETPLACE_URL = 'https://faraday-marketplace.troubleshooters.dev';
@@ -283,7 +283,7 @@ async function readRefs(): Promise<ExtensionRef[]> {
 
 async function writeRefs(refs: ExtensionRef[]): Promise<void> {
   const extensionsDir = await getExtensionsDir();
-  await bridge.fsa.writeFile(
+  await bridge.fs.writeFile(
     join(extensionsDir, 'extensions.json'),
     JSON.stringify(refs, null, 2),
   );
@@ -553,7 +553,7 @@ export async function installExtension(publisherUsername: string, extName: strin
   for (const [fileName, content] of files) {
     const normalizedName = stripPrefix ? fileName.slice(stripPrefix.length) : fileName;
     if (!normalizedName) continue;
-    await bridge.fsa.writeBinaryFile(join(extDir, normalizedName), content);
+    await bridge.fs.writeBinaryFile(join(extDir, normalizedName), content);
   }
 
   const refs = await readRefs();
@@ -667,9 +667,9 @@ export async function installVSCodeExtension(publisherName: string, extName: str
       || fileName.endsWith('.language-configuration.json');
     
     if (isTextFile) {
-      await bridge.fsa.writeFile(filePath, new TextDecoder().decode(content));
+      await bridge.fs.writeFile(filePath, new TextDecoder().decode(content));
     } else {
-      await bridge.fsa.writeBinaryFile(filePath, content);
+      await bridge.fs.writeBinaryFile(filePath, content);
     }
   }
 
@@ -708,6 +708,7 @@ export interface FaradaySettings {
    * Use 0 (or any negative value) to disable the limit.
    */
   editorFileSizeLimit?: number;
+  showHidden?: boolean;
   leftPanel?: PanelPersistedState;
   rightPanel?: PanelPersistedState;
   activePanel?: 'left' | 'right';
@@ -731,7 +732,7 @@ export async function readSettings(): Promise<FaradaySettings> {
 }
 
 export async function writeSettings(settings: FaradaySettings): Promise<void> {
-  await bridge.fsa.writeFile(await getSettingsPath(), JSON.stringify(settings, null, 2));
+  await bridge.fs.writeFile(await getSettingsPath(), JSON.stringify(settings, null, 2));
 }
 
 export function extensionIconThemeId(ext: LoadedExtension): string | null {

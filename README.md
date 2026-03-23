@@ -30,9 +30,9 @@ src/
   bridge.ts            # Dynamic bridge provider (Tauri IPC or WebSocket)
   tauriBridge.ts       # Tauri IPC bridge (invoke/listen)
   wsBridge.ts          # WebSocket bridge (headless/browser mode)
-  fsa.ts               # File System Access API shim
+  fs.ts                # File System Access API shim
   fss.ts               # FSS resolver (layered .faraday/fs.css)
-  types.ts             # Shared types (FsaRawEntry, FsChangeEvent)
+  types.ts             # Shared types (FsRawEntry, FsChangeEvent)
   iconCache.ts         # SVG icon loading and LRU cache
   langDetect.ts        # File language detection for syntax highlighting
   path.ts              # Cross-platform path utilities

@@ -16,7 +16,7 @@
 
 import { bridge } from './bridge';
 import { join, basename } from './path';
-import { FileHandle } from './fsa';
+import { FileHandle } from './fs';
 import type { FsProviderExtensionApi, FsProviderHostApi } from './extensionApi';
 
 /** Cache: key → settled Promise<FsProviderExtensionApi> */
@@ -30,11 +30,11 @@ function makeHostApi(): FsProviderHostApi {
       return file.arrayBuffer();
     },
     async readFileRange(realPath: string, offset: number, length: number): Promise<ArrayBuffer> {
-      const fd = await bridge.fsa.open(realPath);
+      const fd = await bridge.fs.open(realPath);
       try {
-        return await bridge.fsa.read(fd, offset, length);
+        return await bridge.fs.read(fd, offset, length);
       } finally {
-        await bridge.fsa.close(fd);
+        await bridge.fs.close(fd);
       }
     },
   };

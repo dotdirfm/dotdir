@@ -715,17 +715,6 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
             })?;
             Ok(Value::Null)
         }
-        "fs.deletePath" => {
-            let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
-            let p = std::path::Path::new(path);
-            let meta = std::fs::metadata(p).map_err(FsError::from_io)?;
-            if meta.is_dir() {
-                std::fs::remove_dir(p).map_err(FsError::from_io)?;
-            } else {
-                std::fs::remove_file(p).map_err(FsError::from_io)?;
-            }
-            Ok(Value::Null)
-        }
         "delete.cancel" => {
             let delete_id = params["deleteId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
             if let Some(job) = session.delete_jobs.lock().unwrap().get(&delete_id) {
