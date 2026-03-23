@@ -174,7 +174,6 @@ class CommandRegistry {
       focusEditor: focusOverride === 'editor',
       focusTerminal: focusOverride === 'terminal',
       focusCommandPalette: focusOverride === 'commandPalette',
-      focusCommandLine: focusOverride === 'commandLine',
       focusModal: focusOverride === 'modal',
     };
     return CommandRegistry.evalWhen(when, context);
@@ -217,7 +216,6 @@ class CommandRegistry {
       focusEditor: currentFocus === 'editor',
       focusTerminal: currentFocus === 'terminal',
       focusCommandPalette: currentFocus === 'commandPalette',
-      focusCommandLine: currentFocus === 'commandLine',
       focusModal: currentFocus === 'modal',
     };
     return CommandRegistry.evalWhen(when, context);

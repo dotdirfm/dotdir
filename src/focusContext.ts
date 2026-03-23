@@ -8,7 +8,6 @@
 export type FocusLayer =
   | 'panel'           // File panels (default)
   | 'commandPalette'  // Command palette overlay
-  | 'commandLine'     // Command line input has focus
   | 'modal'           // Modal dialogs
   | 'terminal'        // Terminal has focus
   | 'editor'          // File editor has focus

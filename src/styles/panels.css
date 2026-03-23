@@ -4,6 +4,7 @@
   grid-column: 1;
   display: flex;
   gap: 4px;
+  background: var(--bg);
   min-height: 0;
   overflow: hidden;
 }

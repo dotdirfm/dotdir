@@ -78,7 +78,8 @@ export function CommandLine({
   // Register all editing/navigation commands once; always read state via refs
   useEffect(() => {
     const d: Array<() => void> = [];
-    const options = { category: "Command Line" };
+    const options = { category: "Command Line", when: "focusPanel" };
+    const optionsWhenHasText = { category: "Command Line", when: "focusPanel && commandLineHasText" };
 
     d.push(
       commandRegistry.registerCommand(
@@ -92,7 +93,7 @@ export function CommandLine({
           setCursor(0);
           setAnchor(0);
         },
-        options,
+        optionsWhenHasText,
       ),
     );
 
@@ -109,7 +110,7 @@ export function CommandLine({
             setAnchor(0);
           }
         },
-        options,
+        optionsWhenHasText,
       ),
     );
 
@@ -128,7 +129,7 @@ export function CommandLine({
             setAnchor(pos - 1);
           }
         },
-        options,
+        optionsWhenHasText,
       ),
     );
 
@@ -144,7 +145,7 @@ export function CommandLine({
             }
           }
         },
-        options,
+        optionsWhenHasText,
       ),
     );
 
@@ -159,7 +160,7 @@ export function CommandLine({
           while (p > 0 && v[p - 1] !== " ") p--;
           moveCursor(p, false);
         },
-        options,
+        optionsWhenHasText,
       ),
     );
 
@@ -174,7 +175,7 @@ export function CommandLine({
           while (p < v.length && v[p] === " ") p++;
           moveCursor(p, false);
         },
-        options,
+        optionsWhenHasText,
       ),
     );
 
@@ -185,6 +186,7 @@ export function CommandLine({
         () => {
           moveCursor(0, false);
         },
+        optionsWhenHasText
       ),
     );
 
@@ -195,7 +197,7 @@ export function CommandLine({
         () => {
           moveCursor(valueRef.current.length, false);
         },
-        options,
+        optionsWhenHasText,
       ),
     );
 
@@ -208,7 +210,7 @@ export function CommandLine({
           setAnchor(0);
           setCursor(valueRef.current.length);
         },
-        options,
+        optionsWhenHasText,
       ),
     );
 
@@ -220,7 +222,7 @@ export function CommandLine({
         () => {
           moveCursor(Math.max(0, cursorRef.current - 1), true);
         },
-        options,
+        optionsWhenHasText,
       ),
     );
 
@@ -234,6 +236,7 @@ export function CommandLine({
             true,
           );
         },
+        optionsWhenHasText,
       ),
     );
 
@@ -244,7 +247,7 @@ export function CommandLine({
         () => {
           moveCursor(0, true);
         },
-        options,
+        optionsWhenHasText,
       ),
     );
 
@@ -255,6 +258,7 @@ export function CommandLine({
         () => {
           moveCursor(valueRef.current.length, true);
         },
+        optionsWhenHasText,
       ),
     );
 
@@ -270,9 +274,9 @@ export function CommandLine({
           const e = Math.max(pos, anch);
           navigator.clipboard
             .writeText(valueRef.current.slice(s, e))
-            .catch(() => {});
+            .catch(() => { });
         },
-        options,
+        optionsWhenHasText,
       ),
     );
 
@@ -288,10 +292,10 @@ export function CommandLine({
           const e = Math.max(pos, anch);
           navigator.clipboard
             .writeText(valueRef.current.slice(s, e))
-            .catch(() => {});
+            .catch(() => { });
           deleteSelection();
         },
-        options,
+        optionsWhenHasText,
       ),
     );
 
@@ -313,7 +317,7 @@ export function CommandLine({
               setCursor(newPos);
               setAnchor(newPos);
             })
-            .catch(() => {});
+            .catch(() => { });
         },
         options,
       ),

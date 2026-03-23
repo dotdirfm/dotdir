@@ -8,6 +8,7 @@ import { TerminalService, type TerminalServiceSnapshot } from './terminal/Termin
 interface TerminalPanelProps {
   cwd: string;
   expanded?: boolean;
+  focusRequestKey?: number;
   profiles?: TerminalProfile[];
   profilesLoaded?: boolean;
   onCwdChange?: (path: string) => void;
@@ -99,12 +100,22 @@ export function TerminalToolbar({
   );
 }
 
-export function TerminalPanelBody({ activeSessionId, session, expanded = false }: { activeSessionId: string | null; session: unknown; expanded?: boolean }) {
+export function TerminalPanelBody({
+  activeSessionId,
+  session,
+  expanded = false,
+  focusRequestKey = 0,
+}: {
+  activeSessionId: string | null;
+  session: unknown;
+  expanded?: boolean;
+  focusRequestKey?: number;
+}) {
   return (
     <div className="terminal-panel">
       <div className="terminal-body">
         {activeSessionId && session && typeof session === 'object' ? (
-          <TerminalView key={activeSessionId} session={session as never} expanded={expanded} />
+          <TerminalView key={activeSessionId} session={session as never} expanded={expanded} focusRequestKey={focusRequestKey} />
         ) : (
           <div className="terminal-loading">Loading terminal...</div>
         )}
@@ -116,6 +127,7 @@ export function TerminalPanelBody({ activeSessionId, session, expanded = false }
 export function TerminalController({
   cwd,
   expanded = false,
+  focusRequestKey = 0,
   profiles: profilesProp = [],
   profilesLoaded: profilesLoadedProp = false,
   onCwdChange,
@@ -226,6 +238,7 @@ export function TerminalController({
       activeSessionId={activeSession?.id ?? null}
       session={activeSession?.session ?? null}
       expanded={expanded}
+      focusRequestKey={focusRequestKey}
     />
   );
 

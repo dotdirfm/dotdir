@@ -409,101 +409,104 @@ export const FileList = memo(function FileList({
     if (!active) return;
 
     const disposables: (() => void)[] = [];
+    const category = 'Navigation';
+    const whenFocusPanel = 'focusPanel';
+    const options = { category, when: whenFocusPanel };
 
     disposables.push(commandRegistry.registerCommand(
       'list.cursorUp',
       'Cursor Up',
       () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.max(0, i - 1)); }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.cursorUp',
       key: 'up',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.cursorDown',
       'Cursor Down',
       () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + 1)); }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.cursorDown',
       key: 'down',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.cursorLeft',
       'Cursor Left (Previous Column)',
       () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.max(0, i - maxItemsPerColumnRef.current)); }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.cursorLeft',
       key: 'left',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.cursorRight',
       'Cursor Right (Next Column)',
       () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + maxItemsPerColumnRef.current)); }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.cursorRight',
       key: 'right',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.cursorHome',
       'Cursor to First',
       () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex(0); }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.cursorHome',
       key: 'home',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.cursorEnd',
       'Cursor to Last',
       () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex(displayEntriesRef.current.length - 1); }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.cursorEnd',
       key: 'end',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.cursorPageUp',
       'Cursor Page Up',
       () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.max(0, i - displayedItemsRef.current + 1)); }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.cursorPageUp',
       key: 'pageup',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.cursorPageDown',
       'Cursor Page Down',
       () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + displayedItemsRef.current - 1)); }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.cursorPageDown',
       key: 'pagedown',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     // Selection commands (Shift+Arrow)
@@ -515,9 +518,9 @@ export const FileList = memo(function FileList({
         const target = Math.max(0, cur - 1);
         applySelection(cur, target, cur === 0 ? 'include-active' : 'exclude-active');
       }),
-      { when: 'focusPanel' }
+      options
     ));
-    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectUp', key: 'shift+up', when: 'focusPanel' }));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectUp', key: 'shift+up', when: whenFocusPanel }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.selectDown', 'Select Down',
@@ -528,9 +531,9 @@ export const FileList = memo(function FileList({
         const target = Math.min(last, cur + 1);
         applySelection(cur, target, cur === last ? 'include-active' : 'exclude-active');
       }),
-      { when: 'focusPanel' }
+      options
     ));
-    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectDown', key: 'shift+down', when: 'focusPanel' }));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectDown', key: 'shift+down', when: whenFocusPanel }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.selectLeft', 'Select Left',
@@ -539,9 +542,9 @@ export const FileList = memo(function FileList({
         const cur = activeIndexRef.current;
         applySelection(cur, Math.max(0, cur - maxItemsPerColumnRef.current), 'include-active');
       }),
-      { when: 'focusPanel' }
+      options
     ));
-    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectLeft', key: 'shift+left', when: 'focusPanel' }));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectLeft', key: 'shift+left', when: whenFocusPanel }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.selectRight', 'Select Right',
@@ -550,23 +553,23 @@ export const FileList = memo(function FileList({
         const cur = activeIndexRef.current;
         applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + maxItemsPerColumnRef.current), 'include-active');
       }),
-      { when: 'focusPanel' }
+      options
     ));
-    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectRight', key: 'shift+right', when: 'focusPanel' }));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectRight', key: 'shift+right', when: whenFocusPanel }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.selectHome', 'Select to First',
       () => actionQueue.enqueue(() => { markKeyboardNav(); applySelection(activeIndexRef.current, 0, 'include-active'); }),
-      { when: 'focusPanel' }
+      options
     ));
-    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectHome', key: 'shift+home', when: 'focusPanel' }));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectHome', key: 'shift+home', when: whenFocusPanel }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.selectEnd', 'Select to Last',
       () => actionQueue.enqueue(() => { markKeyboardNav(); applySelection(activeIndexRef.current, displayEntriesRef.current.length - 1, 'include-active'); }),
-      { when: 'focusPanel' }
+      options
     ));
-    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectEnd', key: 'shift+end', when: 'focusPanel' }));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectEnd', key: 'shift+end', when: whenFocusPanel }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.selectPageUp', 'Select Page Up',
@@ -575,9 +578,9 @@ export const FileList = memo(function FileList({
         const cur = activeIndexRef.current;
         applySelection(cur, Math.max(0, cur - displayedItemsRef.current + 1), 'include-active');
       }),
-      { when: 'focusPanel' }
+      options
     ));
-    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectPageUp', key: 'shift+pageup', when: 'focusPanel' }));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectPageUp', key: 'shift+pageup', when: whenFocusPanel }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.selectPageDown', 'Select Page Down',
@@ -586,9 +589,9 @@ export const FileList = memo(function FileList({
         const cur = activeIndexRef.current;
         applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + displayedItemsRef.current - 1), 'include-active');
       }),
-      { when: 'focusPanel' }
+      options
     ));
-    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectPageDown', key: 'shift+pagedown', when: 'focusPanel' }));
+    disposables.push(commandRegistry.registerKeybinding({ command: 'list.selectPageDown', key: 'shift+pagedown', when: whenFocusPanel }));
 
     disposables.push(commandRegistry.registerCommand(
       'list.execute',
@@ -603,7 +606,7 @@ export const FileList = memo(function FileList({
         const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? `./${name}` : `./${JSON.stringify(name)}`;
         await write(`${arg}\r`);
       }),
-      { when: 'focusPanel && listItemIsExecutable' }
+      { category, when: 'focusPanel && listItemIsExecutable' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.execute',
@@ -618,7 +621,7 @@ export const FileList = memo(function FileList({
         const item = displayEntriesRef.current[activeIndexRef.current];
         if (item) await navigateToEntry(item.entry);
       }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.open',
@@ -628,7 +631,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.open',
       key: 'alt+pagedown',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -640,7 +643,7 @@ export const FileList = memo(function FileList({
           onViewFileRef.current(item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
         }
       }),
-      { when: 'focusPanel && listItemHasViewer' }
+      { category, when: 'focusPanel && listItemHasViewer' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.viewFile',
@@ -669,7 +672,7 @@ export const FileList = memo(function FileList({
           }
         }
       }),
-      { when: 'focusPanel && listItemHasEditor' }
+      { category, when: 'focusPanel && listItemHasEditor' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.editFile',
@@ -700,12 +703,12 @@ export const FileList = memo(function FileList({
         if (sourcePaths.length === 0) return;
         onTrash(sourcePaths, refresh);
       }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.moveToTrash',
       key: 'f8',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -731,12 +734,12 @@ export const FileList = memo(function FileList({
         if (sourcePaths.length === 0) return;
         onDelete(sourcePaths, refresh);
       }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.permanentDelete',
       key: 'shift+delete',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -764,12 +767,12 @@ export const FileList = memo(function FileList({
         if (sourcePaths.length === 0) return;
         onCopyCb(sourcePaths, refresh);
       }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.copy',
       key: 'f5',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -795,12 +798,12 @@ export const FileList = memo(function FileList({
         if (sourcePaths.length === 0) return;
         onMoveCb(sourcePaths, refresh);
       }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.move',
       key: 'f6',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -814,12 +817,12 @@ export const FileList = memo(function FileList({
         const refresh = () => onNavigateRef.current(currentPathRef.current);
         onRenameCb(item.entry.path as string, item.entry.name, refresh);
       }),
-      { when: 'focusPanel' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.rename',
       key: 'shift+f6',
-      when: 'focusPanel',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -833,12 +836,12 @@ export const FileList = memo(function FileList({
         const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? name : JSON.stringify(name);
         paste(arg);
       }),
-      { when: 'focusPanel || focusCommandLine' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.pasteFilename',
       key: 'ctrl+enter',
-      when: 'focusPanel || focusCommandLine',
+      when: whenFocusPanel,
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -852,12 +855,12 @@ export const FileList = memo(function FileList({
         const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
         paste(arg);
       }),
-      { when: 'focusPanel || focusCommandLine' }
+      options
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.pastePath',
       key: 'ctrl+f',
-      when: 'focusPanel || focusCommandLine',
+      when: whenFocusPanel,
     }));
 
     return () => {

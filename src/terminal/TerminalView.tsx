@@ -9,6 +9,7 @@ import type { TerminalSession } from './TerminalSession';
 interface TerminalViewProps {
   session: TerminalSession;
   expanded?: boolean;
+  focusRequestKey?: number;
 }
 
 function resolveTerminalTheme() {
@@ -20,7 +21,7 @@ function resolveTerminalTheme() {
   };
 }
 
-export function TerminalView({ session, expanded = false }: TerminalViewProps) {
+export function TerminalView({ session, expanded = false, focusRequestKey = 0 }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fitFrameRef = useRef<number | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -195,6 +196,16 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
       term.dispose();
     };
   }, [session]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term || !expanded) return;
+    if (!hasTerminalFocusRef.current) {
+      hasTerminalFocusRef.current = true;
+      focusContext.push('terminal');
+    }
+    term.focus();
+  }, [expanded, focusRequestKey]);
 
   useEffect(() => {
     const term = termRef.current;

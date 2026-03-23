@@ -92,6 +92,7 @@ export function App() {
   const rightActiveIndexRef = useRef(rightActiveIndex);
   rightActiveIndexRef.current = rightActiveIndex;
   const [selectionKey, setSelectionKey] = useState(0);
+  const [terminalFocusRequestKey, setTerminalFocusRequestKey] = useState(0);
   const activeIconThemeRef = useRef(activeIconTheme);
   activeIconThemeRef.current = activeIconTheme;
   const activeColorThemeRef = useRef(activeColorTheme);
@@ -1369,6 +1370,7 @@ export function App() {
       <TerminalController
         cwd={activeCwd}
         expanded={!panelsVisible}
+        focusRequestKey={terminalFocusRequestKey}
         profiles={resolvedProfiles}
         profilesLoaded={terminalProfilesLoaded}
         onCwdChange={handleTerminalCwd}
@@ -1456,6 +1458,8 @@ export function App() {
               onExecute={(cmd) => {
                 hiddenForCommandRef.current = true;
                 setPanelsVisible(false);
+                focusContext.set('terminal');
+                setTerminalFocusRequestKey((k) => k + 1);
                 void executeCommandRef.current(cmd, activeCwd);
               }}
             />
