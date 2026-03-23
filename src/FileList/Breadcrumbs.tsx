@@ -8,9 +8,10 @@ interface BreadcrumbsProps {
 
 export const Breadcrumbs = memo(function Breadcrumbs({ currentPath, onNavigate }: BreadcrumbsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [fullWidths, setFullWidths] = useState<number[]>([]);
-  const [truncated, setTruncated] = useState<Set<number>>(new Set());
+  const stickToEndRef = useRef(true);
+  const adjustingScrollRef = useRef(false);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
   const [showCopiedTooltip, setShowCopiedTooltip] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -40,66 +41,87 @@ export const Breadcrumbs = memo(function Breadcrumbs({ currentPath, onNavigate }
     };
   }, []);
 
-  const measure = useCallback(() => {
+  const updateOverflowState = useCallback(() => {
     const root = containerRef.current;
     if (!root) return;
-    const measureEls = root.querySelectorAll('.breadcrumb-segment-measure');
-    const textEls = root.querySelectorAll('.breadcrumb-segment-text');
-    if (measureEls.length === 0) return;
-    const widths = Array.from(measureEls).map((el) => (el as HTMLElement).offsetWidth);
-    const truncatedSet = new Set<number>();
-    textEls.forEach((el, i) => {
-      const text = el as HTMLElement;
-      if (text.scrollWidth > text.clientWidth) truncatedSet.add(i);
-    });
-    setFullWidths((prev) => (prev.length === widths.length && prev.every((w, j) => w === widths[j]) ? prev : widths));
-    setTruncated((prev) => {
-      if (prev.size !== truncatedSet.size || [...prev].some((i) => !truncatedSet.has(i))) return truncatedSet;
-      return prev;
+    const maxScrollLeft = Math.max(0, root.scrollWidth - root.clientWidth);
+    const nextCanScrollLeft = root.scrollLeft > 0;
+    const nextCanScrollRight = root.scrollLeft < maxScrollLeft - 1;
+    setCanScrollLeft((prev) => (prev === nextCanScrollLeft ? prev : nextCanScrollLeft));
+    setCanScrollRight((prev) => (prev === nextCanScrollRight ? prev : nextCanScrollRight));
+  }, []);
+
+  const scrollToEnd = useCallback(() => {
+    const root = containerRef.current;
+    if (!root) return;
+    adjustingScrollRef.current = true;
+    root.scrollLeft = root.scrollWidth;
+    queueMicrotask(() => {
+      adjustingScrollRef.current = false;
     });
   }, []);
 
   useLayoutEffect(() => {
-    measure();
-  }, [currentPath, measure]);
+    // Keep the end of the path visible; leading segments crop first.
+    scrollToEnd();
+    stickToEndRef.current = true;
+    updateOverflowState();
+  }, [currentPath, scrollToEnd, updateOverflowState]);
 
   useEffect(() => {
     const root = containerRef.current;
     if (!root) return;
-    const ro = new ResizeObserver(measure);
+    const onScroll = () => {
+      updateOverflowState();
+    };
+    const ro = new ResizeObserver(() => {
+      if (stickToEndRef.current) {
+        scrollToEnd();
+      } else if (root.scrollLeft > root.scrollWidth - root.clientWidth) {
+        scrollToEnd();
+      }
+      updateOverflowState();
+    });
     ro.observe(root);
-    return () => ro.disconnect();
-  }, [measure]);
+    root.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      ro.disconnect();
+      root.removeEventListener('scroll', onScroll);
+    };
+  }, [scrollToEnd, updateOverflowState]);
 
   if (segments.length === 0) return null;
 
   const separator = /^[A-Za-z]:[\\/]/.test(currentPath) || currentPath.includes('\\') ? '\\' : '/';
 
   return (
-    <div className="breadcrumbs" ref={containerRef}>
+    <div
+      className={`breadcrumbs${canScrollLeft ? ' is-cropped-left' : ''}${canScrollRight ? ' is-cropped-right' : ''}`}
+      ref={containerRef}
+      onWheel={(e) => {
+        const root = containerRef.current;
+        if (!root) return;
+        const maxScrollLeft = Math.max(0, root.scrollWidth - root.clientWidth);
+        const nextScrollLeft = root.scrollLeft + (Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX);
+        // Only explicit wheel/trackpad scrolling changes stick-to-end intent.
+        stickToEndRef.current = nextScrollLeft >= maxScrollLeft - 1;
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && e.deltaY !== 0) {
+          root.scrollLeft += e.deltaY;
+          e.preventDefault();
+        }
+      }}
+    >
       {segments.map((seg, i) => {
         const isLast = i === segments.length - 1;
-        const fullWidth = fullWidths[i];
-        const isHovered = hoveredIndex === i;
-        const isTruncated = truncated.has(i);
         return (
           <Fragment key={`${i}-${seg.path}`}>
             <div
-              className={`breadcrumb-segment${isTruncated ? ' is-truncated' : ''}`}
-            style={{
-              flex: isLast ? '0 0.15 auto' : '0 1 auto',
-              minWidth: isHovered && fullWidth != null ? fullWidth + 12 : 0,
-            }}
-              onMouseEnter={() => setHoveredIndex(i)}
-              onMouseLeave={() => setHoveredIndex(null)}
+              className="breadcrumb-segment"
               onClick={(e) => {
                 e.stopPropagation();
                 handleSegmentClick(seg, i, isLast);
               }}
             >
-              <span className="breadcrumb-segment-measure" aria-hidden>
-                {seg.label}
-              </span>
               <span className="breadcrumb-segment-text">{seg.label}</span>
             </div>
             {!isLast && seg.label !== '/' && <span className="breadcrumb-separator" aria-hidden>{separator}</span>}

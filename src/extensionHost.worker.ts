@@ -131,6 +131,7 @@ interface ExtensionManifest {
   publisher: string;
   displayName?: string;
   description?: string;
+  activationEvents?: string[];
   /**
    * Optional browser activation script entry.
    * If present, the host will load it and call exported `activate()` / `deactivate()`.
@@ -196,6 +197,35 @@ export interface WorkerLoadedExtension {
 
 let nextRequestId = 0;
 const pendingReads = new Map<number, { resolve: (data: string | null) => void; reject: (err: Error) => void }>();
+const loadedExtensions = new Map<string, WorkerLoadedExtension>();
+const activeExtensions = new Map<string, { subscriptions: Array<{ dispose: () => void }>; deactivate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown> }>();
+const commandHandlers = new Map<string, (...args: unknown[]) => void | Promise<void>>();
+
+type BrowserDisposable = { dispose: () => void };
+
+interface BrowserExtensionContext {
+  subscriptions: BrowserDisposable[];
+  frdy: {
+    commands: {
+      registerCommand: (
+        commandId: string,
+        handler: (...args: unknown[]) => void | Promise<void>,
+      ) => BrowserDisposable;
+      registerKeybinding: (
+        binding: { command: string; key: string; mac?: string; when?: string },
+      ) => BrowserDisposable;
+    };
+  };
+}
+
+type BrowserExtensionModule = {
+  activate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
+  deactivate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
+  default?: {
+    activate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
+    deactivate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
+  };
+};
 
 function readTextFile(path: string): Promise<string | null> {
   return new Promise((resolve, reject) => {
@@ -203,6 +233,104 @@ function readTextFile(path: string): Promise<string | null> {
     pendingReads.set(id, { resolve, reject });
     self.postMessage({ type: 'readFile', id, path });
   });
+}
+
+function activationKey(ext: WorkerLoadedExtension): string {
+  return `${ext.ref.publisher}.${ext.ref.name}.${ext.ref.version}`;
+}
+
+function extensionWantsEvent(ext: WorkerLoadedExtension, event: string): boolean {
+  const events = ext.manifest.activationEvents ?? [];
+  if (events.length === 0) {
+    return event === '*';
+  }
+  return events.includes('*') || events.includes(event);
+}
+
+async function importBrowserModule(absScriptPath: string): Promise<BrowserExtensionModule> {
+  const script = await readTextFile(absScriptPath);
+  if (script == null) {
+    throw new Error(`Browser script not found: ${absScriptPath}`);
+  }
+  const blobUrl = URL.createObjectURL(new Blob([script], { type: 'text/javascript' }));
+  try {
+    const mod = await import(/* @vite-ignore */ blobUrl);
+    return mod as BrowserExtensionModule;
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+
+async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
+  const key = activationKey(ext);
+  if (activeExtensions.has(key)) return;
+  if (!ext.manifest.browser) return;
+
+  const relScript = normalizePath(ext.manifest.browser).replace(/^\/+/, '');
+  const absScriptPath = join(ext.dirPath, relScript);
+  const mod = await importBrowserModule(absScriptPath);
+  const activate = mod.activate ?? mod.default?.activate;
+  const deactivate = mod.deactivate ?? mod.default?.deactivate;
+  if (typeof activate !== 'function') {
+    console.warn(`[ExtHost] ${key} browser entry has no activate() export`);
+    return;
+  }
+
+  const localDisposables: BrowserDisposable[] = [];
+  const frdy = {
+    commands: {
+      registerCommand: (
+        commandId: string,
+        handler: (...args: unknown[]) => void | Promise<void>,
+      ): BrowserDisposable => {
+        commandHandlers.set(commandId, handler);
+        const disposable = {
+          dispose: () => {
+            const current = commandHandlers.get(commandId);
+            if (current === handler) {
+              commandHandlers.delete(commandId);
+            }
+          },
+        };
+        localDisposables.push(disposable);
+        return disposable;
+      },
+      registerKeybinding: (
+        _binding: { command: string; key: string; mac?: string; when?: string },
+      ): BrowserDisposable => {
+        // Keybindings are currently contributed from package.json on the main thread.
+        return { dispose() {} };
+      },
+    },
+  };
+
+  const ctx: BrowserExtensionContext = {
+    subscriptions: localDisposables,
+    frdy,
+  };
+
+  (self as unknown as { frdy?: unknown }).frdy = frdy;
+  await activate(ctx);
+  activeExtensions.set(key, { subscriptions: localDisposables, deactivate });
+}
+
+async function activateByEvent(event: string): Promise<void> {
+  for (const ext of loadedExtensions.values()) {
+    if (!ext.manifest.browser) continue;
+    if (!extensionWantsEvent(ext, event)) continue;
+    try {
+      await activateExtension(ext);
+    } catch (err) {
+      console.error('[ExtHost] activate failed:', activationKey(ext), err);
+    }
+  }
+}
+
+async function runCommand(command: string, args: unknown[]): Promise<void> {
+  await activateByEvent(`onCommand:${command}`);
+  const handler = commandHandlers.get(command);
+  if (!handler) return;
+  await handler(...args);
 }
 
 // ── Extension loading logic ─────────────────────────────────────────
@@ -309,16 +437,10 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
   }
 }
 
-async function loadExtensions(homePath: string, builtInDirs: string[]): Promise<WorkerLoadedExtension[]> {
+async function loadExtensions(homePath: string): Promise<WorkerLoadedExtension[]> {
   const loaded: WorkerLoadedExtension[] = [];
 
-  // 1. Load built-in extensions from provided dirs
-  for (const dir of builtInDirs) {
-    const ext = await loadExtensionFromDir(dir);
-    if (ext) loaded.push(ext);
-  }
-
-  // 2. Load user extensions from ~/.faraday/extensions/
+  // Load user extensions from ~/.faraday/extensions/
   const extensionsDir = join(homePath, '.faraday', 'extensions');
   let refs: ExtensionRef[];
   try {
@@ -338,6 +460,10 @@ async function loadExtensions(homePath: string, builtInDirs: string[]): Promise<
   }
 
   console.log('[ExtHost] loaded', loaded.length, 'extensions; FSS:', loaded.filter((e) => e.iconThemeFss).map((e) => `${e.ref.publisher}.${e.ref.name}`), 'vscode:', loaded.filter((e) => e.vscodeIconThemePath).map((e) => `${e.ref.publisher}.${e.ref.name}`));
+  loadedExtensions.clear();
+  for (const ext of loaded) {
+    loadedExtensions.set(activationKey(ext), ext);
+  }
   return loaded;
 }
 
@@ -347,13 +473,36 @@ self.onmessage = (e: MessageEvent) => {
   const msg = e.data;
 
   if (msg.type === 'start') {
-    loadExtensions(msg.homePath, msg.builtInDirs || [])
-      .then((extensions) => {
+    loadExtensions(msg.homePath)
+      .then(async (extensions) => {
+        await activateByEvent('*');
         self.postMessage({ type: 'loaded', extensions });
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message) : String(err);
         self.postMessage({ type: 'error', message: msg });
+      });
+  } else if (msg.type === 'activateByEvent') {
+    const requestId = Number(msg.requestId);
+    activateByEvent(String(msg.event ?? ''))
+      .then(() => {
+        self.postMessage({ type: 'requestResult', requestId, result: null });
+      })
+      .catch((err: unknown) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        self.postMessage({ type: 'requestResult', requestId, error: errMsg });
+      });
+  } else if (msg.type === 'executeCommand') {
+    const requestId = Number(msg.requestId);
+    const command = String(msg.command ?? '');
+    const args = Array.isArray(msg.args) ? msg.args : [];
+    runCommand(command, args)
+      .then(() => {
+        self.postMessage({ type: 'requestResult', requestId, result: null });
+      })
+      .catch((err: unknown) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        self.postMessage({ type: 'requestResult', requestId, error: errMsg });
       });
   } else if (msg.type === 'readFileResult') {
     const pending = pendingReads.get(msg.id);

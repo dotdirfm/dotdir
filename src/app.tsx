@@ -29,7 +29,6 @@ import { basename, dirname, join } from './path';
 import { normalizeTerminalPath } from './terminal/path';
 import { resolveShellProfiles } from './terminal/shellProfiles';
 import { initUserKeybindings } from './userKeybindings';
-import { BrowserExtensionHost } from './browserExtensionHost';
 import type { ThemeKind } from 'fss-lang';
 import { usePanel, findExistingParent } from './usePanel';
 import { useFileOperations, type PanelSide } from './useFileOperations';
@@ -1139,7 +1138,6 @@ export function App() {
   }, [settingsLoaded]);
 
   const latestExtensionsRef = useRef<LoadedExtension[]>([]);
-  const browserExtensionHostRef = useRef(new BrowserExtensionHost());
   const extensionContributionDisposersRef = useRef<(() => void)[]>([]);
 
   const readTextFileAbs = useCallback(async (absPath: string): Promise<string> => {
@@ -1231,8 +1229,8 @@ export function App() {
             const disposeCmd = commandRegistry.registerCommand(
               cmd.command,
               cmd.title,
-              () => {
-                console.log(`Extension command not implemented: ${cmd.command}`);
+              async (...args: unknown[]) => {
+                await extensionHost.executeCommand(cmd.command, args);
               },
               { category: cmd.category, icon: cmd.icon }
             );
@@ -1290,7 +1288,6 @@ export function App() {
 
         registerLanguages(exts);
         registerExtensionCommands(exts);
-        void browserExtensionHostRef.current.reconcile(exts);
 
         // Load themes first, then refresh panels once themes are ready
         Promise.all([
@@ -1306,7 +1303,6 @@ export function App() {
     extensionHost.start();
     return () => {
       unsub();
-      void browserExtensionHostRef.current.dispose();
       for (const d of extensionContributionDisposersRef.current) {
         try { d(); } catch { /* ignore */ }
       }
@@ -1505,7 +1501,6 @@ export function App() {
           onClose={() => setShowExtensions(false)}
           onExtensionsChanged={() => {
             void (async () => {
-              await browserExtensionHostRef.current.dispose();
               await extensionHost.restart();
             })();
           }}
