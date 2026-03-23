@@ -228,6 +228,10 @@ export function TerminalView({ session, expanded = false }: TerminalViewProps) {
       } else if (hasTerminalFocusRef.current) {
         hasTerminalFocusRef.current = false;
         focusContext.pop('terminal');
+        term.blur();
+      } else {
+        // Panels are visible; ensure hidden terminal cannot keep keyboard focus.
+        term.blur();
       }
     });
   }, [expanded]);

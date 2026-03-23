@@ -37,6 +37,12 @@ class FocusContextManager {
     }
   }
 
+  set(layer: FocusLayer): void {
+    if (this.stack.length === 1 && this.stack[0] === layer) return;
+    this.stack = [layer];
+    this.notify();
+  }
+
   is(layer: FocusLayer): boolean {
     return this.current === layer;
   }

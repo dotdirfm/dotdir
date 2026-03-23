@@ -174,19 +174,10 @@ class CommandRegistry {
       focusEditor: focusOverride === 'editor',
       focusTerminal: focusOverride === 'terminal',
       focusCommandPalette: focusOverride === 'commandPalette',
+      focusCommandLine: focusOverride === 'commandLine',
       focusModal: focusOverride === 'modal',
     };
-    try {
-      const parts = when.split(/\s*&&\s*/);
-      return parts.every(part => {
-        const negated = part.startsWith('!');
-        const key = negated ? part.slice(1).trim() : part.trim();
-        const value = !!context[key];
-        return negated ? !value : value;
-      });
-    } catch {
-      return true;
-    }
+    return CommandRegistry.evalWhen(when, context);
   }
 
   getKeybindings(): Keybinding[] {
@@ -226,16 +217,23 @@ class CommandRegistry {
       focusEditor: currentFocus === 'editor',
       focusTerminal: currentFocus === 'terminal',
       focusCommandPalette: currentFocus === 'commandPalette',
+      focusCommandLine: currentFocus === 'commandLine',
       focusModal: currentFocus === 'modal',
     };
+    return CommandRegistry.evalWhen(when, context);
+  }
+
+  /** Evaluate a `when` expression. Supports `&&` and `||`, and `!` negation. */
+  private static evalWhen(when: string, context: Record<string, unknown>): boolean {
     try {
-      const parts = when.split(/\s*&&\s*/);
-      return parts.every(part => {
-        const negated = part.startsWith('!');
-        const key = negated ? part.slice(1).trim() : part.trim();
-        const value = !!context[key];
-        return negated ? !value : value;
-      });
+      return when.split(/\s*&&\s*/).every(andPart =>
+        andPart.trim().split(/\s*\|\|\s*/).some(orPart => {
+          const trimmed = orPart.trim();
+          const negated = trimmed.startsWith('!');
+          const key = negated ? trimmed.slice(1) : trimmed;
+          return negated ? !context[key] : !!context[key];
+        })
+      );
     } catch {
       return true;
     }

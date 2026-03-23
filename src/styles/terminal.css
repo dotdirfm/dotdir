@@ -18,7 +18,8 @@
 }
 
 .command-line.hidden {
-  display: none;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .command-line-prompt {
@@ -33,13 +34,38 @@
 
 .command-line-input {
   flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #d7dae0;
-  font: inherit;
   min-width: 0;
-  caret-color: #f5f7ff;
+  white-space: pre;
+  overflow: hidden;
+}
+
+.command-line-text {
+  color: #d7dae0;
+}
+
+.command-line-cursor {
+  display: inline-block;
+  width: 0;
+  overflow: visible;
+  height: 1em;
+  position: relative;
+  vertical-align: text-bottom;
+  pointer-events: none;
+}
+
+.command-line-cursor::after {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background-color: #f5f7ff;
+}
+
+.command-line-selected {
+  background-color: rgba(100, 150, 255, 0.4);
+  color: #fff;
 }
 
 .terminal-background {

@@ -18,6 +18,7 @@ import { ExtensionsPanel } from './ExtensionsPanel';
 import { PanelGroup } from './PanelGroup';
 import { CommandPalette, useCommandPalette } from './CommandPalette';
 import { commandRegistry } from './commands';
+import { focusContext } from './focusContext';
 import { readFileText } from './fs';
 import { setExtensionLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
@@ -181,6 +182,16 @@ export function App() {
   useEffect(() => {
     commandRegistry.setContext('dialogOpen', dialog !== null);
   }, [dialog]);
+
+  useEffect(() => {
+    if (!panelsVisible || !promptActive) return;
+    // Terminal focus handlers may run during the same toggle frame.
+    // Re-assert panel focus after layout settles.
+    const frame = requestAnimationFrame(() => {
+      focusContext.set('panel');
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [panelsVisible, promptActive]);
 
   const handleViewFile = useCallback((filePath: string, fileName: string, fileSize: number) => {
     // If an fsProvider is registered for this file type, enter it like a directory.
@@ -688,7 +699,14 @@ export function App() {
     disposables.push(commandRegistry.registerCommand(
       'faraday.togglePanels',
       'Toggle Panels',
-      () => setPanelsVisible(v => !v),
+      () => setPanelsVisible((v) => {
+        const next = !v;
+        if (next) {
+          // Restoring panels should deterministically restore panel command context.
+          focusContext.set('panel');
+        }
+        return next;
+      }),
       { category: 'View' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
@@ -774,7 +792,7 @@ export function App() {
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'faraday.goToParent',
-      key: 'backspace',
+      key: 'alt+pageup',
       when: 'focusPanel',
     }));
 

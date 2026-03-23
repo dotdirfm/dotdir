@@ -608,7 +608,7 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.execute',
       key: 'enter',
-      when: 'focusPanel && listItemIsExecutable',
+      when: 'focusPanel && listItemIsExecutable && !commandLineHasText',
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -623,7 +623,12 @@ export const FileList = memo(function FileList({
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.open',
       key: 'enter',
-      when: 'focusPanel && !listItemIsExecutable',
+      when: 'focusPanel && !listItemIsExecutable && !commandLineHasText',
+    }));
+    disposables.push(commandRegistry.registerKeybinding({
+      command: 'list.open',
+      key: 'alt+pagedown',
+      when: 'focusPanel',
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -828,12 +833,12 @@ export const FileList = memo(function FileList({
         const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? name : JSON.stringify(name);
         paste(arg);
       }),
-      { when: 'focusPanel' }
+      { when: 'focusPanel || focusCommandLine' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.pasteFilename',
       key: 'ctrl+enter',
-      when: 'focusPanel',
+      when: 'focusPanel || focusCommandLine',
     }));
 
     disposables.push(commandRegistry.registerCommand(
@@ -847,12 +852,12 @@ export const FileList = memo(function FileList({
         const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
         paste(arg);
       }),
-      { when: 'focusPanel' }
+      { when: 'focusPanel || focusCommandLine' }
     ));
     disposables.push(commandRegistry.registerKeybinding({
       command: 'list.pastePath',
       key: 'ctrl+f',
-      when: 'focusPanel',
+      when: 'focusPanel || focusCommandLine',
     }));
 
     return () => {
