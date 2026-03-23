@@ -198,6 +198,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       entries: (dirPath: string) => rpc('fs.entries', { path: dirPath }) as Promise<FsRawEntry[]>,
       stat: (filePath: string) => rpc('fs.stat', { path: filePath }) as Promise<{ size: number; mtimeMs: number }>,
       exists: (filePath: string) => rpc('fs.exists', { path: filePath }) as Promise<boolean>,
+      readFile: (filePath: string) => rpc('fs.readFile', { path: filePath }) as Promise<ArrayBuffer>,
       open: (filePath: string) => rpc('fs.open', { path: filePath }) as Promise<number>,
       read: (fd: number, offset: number, length: number) =>
         rpc('fs.read', { handle: fd, offset, length }) as Promise<ArrayBuffer>,
@@ -243,7 +244,6 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
     utils: {
       getHomePath: () => rpc('utils.getHomePath', {}) as Promise<string>,
       getEnv: () => rpc('utils.getEnv', {}) as Promise<Record<string, string>>,
-      getBuiltinExtensionDirs: () => Promise.resolve([]),
     },
     copy: {
       start: (sources: string[], destDir: string, options: CopyOptions) =>

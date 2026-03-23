@@ -1,7 +1,7 @@
 import { createLayer, FsNode, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from 'fss-lang';
 import type { ResolvedEntryStyle } from './types';
 import type { LoadedExtension } from './extensions';
-import { DirectoryHandle } from './fs';
+import { readFileText } from './fs';
 import { basename, dirname, join, normalizePath } from './path';
 
 const defaultFss = `
@@ -80,9 +80,7 @@ export async function syncLayers(resolver: LayeredResolver, dirPath: string): Pr
     if (!fssSourceCache.has(p)) {
       const dir = join(p, '.faraday');
       try {
-        const fileHandle = await new DirectoryHandle(dir).getFileHandle('fs.css');
-        const file = await fileHandle.getFile();
-        fssSourceCache.set(p, await file.text());
+        fssSourceCache.set(p, await readFileText(join(dir, 'fs.css')));
       } catch {
         fssSourceCache.set(p, null);
       }

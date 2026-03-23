@@ -4,7 +4,7 @@
  * Parses VS Code icon theme JSON format and provides icon resolution.
  */
 
-import { FileHandle } from './fs';
+import { readFileBuffer, readFileText } from './fs';
 import { join, dirname } from './path';
 
 export interface VSCodeIconDefinition {
@@ -54,13 +54,6 @@ export interface IconMatch {
   iconUrl: string | null;
 }
 
-async function readBinaryFile(path: string): Promise<ArrayBuffer> {
-  const name = path.split('/').pop() ?? path;
-  const handle = new FileHandle(path, name);
-  const file = await handle.getFile();
-  return file.arrayBuffer();
-}
-
 function svgToDataUrl(svg: string): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
@@ -71,10 +64,7 @@ export class VSCodeIconThemeResolver {
   private themeKind: 'dark' | 'light' = 'dark';
 
   async load(jsonPath: string): Promise<void> {
-    const name = jsonPath.split('/').pop() ?? jsonPath;
-    const handle = new FileHandle(jsonPath, name);
-    const file = await handle.getFile();
-    const text = await file.text();
+    const text = await readFileText(jsonPath);
     const json: VSCodeIconThemeJson = JSON.parse(text);
     
     this.theme = {
@@ -195,7 +185,7 @@ export class VSCodeIconThemeResolver {
 
     const promise = (async () => {
       try {
-        const buf = await readBinaryFile(iconPath);
+        const buf = await readFileBuffer(iconPath);
         const ext = iconPath.split('.').pop()?.toLowerCase() ?? '';
         
         let dataUrl: string;

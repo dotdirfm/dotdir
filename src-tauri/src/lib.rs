@@ -238,6 +238,23 @@ fn fs_exists(file_path: String) -> bool {
 }
 
 #[tauri::command]
+fn fs_read_file(file_path: String, state: State<'_, AppState>) -> CmdResult<Vec<u8>> {
+    match ops::read_file(&file_path) {
+        Ok(bytes) => Ok(bytes),
+        Err(e) if is_eacces(&e) => {
+            let proxy = state.get_or_launch_proxy()?;
+            let stat = proxy.stat(&file_path)?;
+            let size = stat.size.max(0.0) as usize;
+            let fd = proxy.open(&file_path)?;
+            let result = proxy.pread(fd, 0, size).map_err(CmdError::from);
+            proxy.close(fd);
+            result
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
+#[tauri::command]
 fn fs_write_text(file_path: String, data: String) -> CmdResult<()> {
   ops::write_text(&file_path, &data).map_err(Into::into)
 }
@@ -432,46 +449,6 @@ fn pty_close(pty_id: u32, state: State<'_, AppState>) {
     if let Some(mut handle) = state.ptys.lock().unwrap().remove(&pty_id) {
         pty::close(&mut handle);
     }
-}
-
-/// Subdirectories of `extensions_root` that contain a `package.json` (one extension per folder).
-fn collect_extension_dirs_with_package_json(extensions_root: &Path) -> Vec<String> {
-    let mut out = Vec::new();
-    if !extensions_root.is_dir() {
-        return out;
-    }
-    let Ok(entries) = fs::read_dir(extensions_root) else {
-        return out;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() && path.join("package.json").is_file() {
-            out.push(path.to_string_lossy().into_owned());
-        }
-    }
-    out
-}
-
-/// Directories to scan for built-in extensions (dev: repo `extensions/`; release: bundled resources).
-#[tauri::command]
-fn get_builtin_extension_dirs(app: tauri::AppHandle) -> Vec<String> {
-    let mut dirs = Vec::new();
-
-    #[cfg(debug_assertions)]
-    {
-        if let Some(parent) = Path::new(env!("CARGO_MANIFEST_DIR")).parent() {
-            let dev = parent.join("extensions");
-            dirs.extend(collect_extension_dirs_with_package_json(&dev));
-        }
-    }
-
-    if let Ok(res_dir) = app.path().resource_dir() {
-        dirs.extend(collect_extension_dirs_with_package_json(&res_dir.join("extensions")));
-    }
-
-    dirs.sort();
-    dirs.dedup();
-    dirs
 }
 
 #[tauri::command]
@@ -1074,6 +1051,7 @@ pub fn run() {
             fs_entries,
             fs_stat,
             fs_exists,
+            fs_read_file,
             fs_write_text,
             fs_write_binary,
             fs_create_dir,
@@ -1083,7 +1061,6 @@ pub fn run() {
             fs_watch,
             fs_unwatch,
             get_home_path,
-            get_builtin_extension_dirs,
             get_env,
             get_theme,
             debug_log,

@@ -1,5 +1,5 @@
 import { bridge, type CwdEscapeMode } from './bridge';
-import { FileHandle } from './fs';
+import { readFileBuffer, readFileText } from './fs';
 import { dirname, join, normalizePath } from './path';
 
 export const MARKETPLACE_URL = 'https://faraday-marketplace.troubleshooters.dev';
@@ -258,13 +258,6 @@ function extensionDirName(ref: ExtensionRef): string {
   return `${ref.publisher}-${ref.name}-${ref.version}`;
 }
 
-async function readTextFile(path: string): Promise<string> {
-  const name = path.split('/').pop() ?? path;
-  const handle = new FileHandle(path, name);
-  const file = await handle.getFile();
-  return file.text();
-}
-
 async function getExtensionsDir(): Promise<string> {
   const homePath = await bridge.utils.getHomePath();
   return join(homePath, '.faraday', 'extensions');
@@ -273,7 +266,7 @@ async function getExtensionsDir(): Promise<string> {
 async function readRefs(): Promise<ExtensionRef[]> {
   const extensionsDir = await getExtensionsDir();
   try {
-    const text = await readTextFile(join(extensionsDir, 'extensions.json'));
+    const text = await readFileText(join(extensionsDir, 'extensions.json'));
     const refs = JSON.parse(text);
     return Array.isArray(refs) ? refs : [];
   } catch {
@@ -299,7 +292,7 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
     try {
       const extDir = ref.path ? normalizePath(ref.path) : join(extensionsDir, extensionDirName(ref));
       const manifest: ExtensionManifest = JSON.parse(
-        await readTextFile(join(extDir, 'package.json')),
+        await readFileText(join(extDir, 'package.json')),
       );
 
       let iconThemeFss: string | undefined;
@@ -351,9 +344,7 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
       if (manifest.icon) {
         try {
           const iconPath = join(extDir, manifest.icon);
-          const iconHandle = new FileHandle(iconPath, manifest.icon.split('/').pop() ?? manifest.icon);
-          const iconFile = await iconHandle.getFile();
-          const buf = await iconFile.arrayBuffer();
+          const buf = await readFileBuffer(iconPath);
           const ext = manifest.icon.split('.').pop()?.toLowerCase() ?? '';
           const mime = ext === 'svg' ? 'image/svg+xml'
             : ext === 'png' ? 'image/png'
@@ -392,7 +383,7 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         shellIntegrations = [];
         for (const si of manifest.contributes.shellIntegrations) {
           try {
-            const script = await readTextFile(join(extDir, si.scriptPath));
+            const script = await readFileText(join(extDir, si.scriptPath));
             shellIntegrations.push({
               shell: si.shell,
               label: si.label,
@@ -724,7 +715,7 @@ async function getSettingsPath(): Promise<string> {
 
 export async function readSettings(): Promise<FaradaySettings> {
   try {
-    const text = await readTextFile(await getSettingsPath());
+    const text = await readFileText(await getSettingsPath());
     return JSON.parse(text);
   } catch {
     return {};

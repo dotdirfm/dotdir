@@ -1,4 +1,4 @@
-import type { FsRawEntry, EntryKind, FsChangeEvent, FsChangeType } from './types';
+import type { EntryKind, FsChangeEvent, FsChangeType } from './types';
 import { bridge } from './bridge';
 import { join, normalizePath } from './path';
 
@@ -12,143 +12,24 @@ export interface HandleMeta {
   linkTarget?: string;
 }
 
-const readonlyError = () => {
-  throw new Error('Filesystem is read-only');
-};
-
-
-
-export class DirectoryHandle implements FileSystemDirectoryHandle {
-  readonly kind = 'directory' as const;
-  readonly name: string;
-  readonly path: string;
-  readonly meta?: HandleMeta;
-
-  constructor(path: string, name?: string, meta?: HandleMeta) {
-    this.path = normalizePath(path);
-    this.name = name ?? path.split('/').pop() ?? path;
-    this.meta = meta;
-  }
-
-  async isSameEntry(other: FileSystemHandle): Promise<boolean> {
-    return other instanceof DirectoryHandle && other.path === this.path;
-  }
-
-  async *entries(): AsyncIterableIterator<[string, FileSystemHandle]> {
-    const raw: FsRawEntry[] = await bridge.fs.entries(this.path);
-    for (const entry of raw) {
-      const childPath = join(this.path, entry.name);
-      const meta: HandleMeta = {
-        size: entry.size,
-        mtimeMs: entry.mtimeMs,
-        mode: entry.mode,
-        nlink: entry.nlink,
-        kind: entry.kind,
-        hidden: entry.hidden,
-        linkTarget: entry.linkTarget,
-      };
-      const isDir = entry.kind === 'directory' || (entry.kind === 'symlink' && (entry.mode & 0o170000) === 0o040000);
-      if (isDir) {
-        yield [entry.name, new DirectoryHandle(childPath, entry.name, meta)] as const;
-      } else {
-        yield [entry.name, new FileHandle(childPath, entry.name, meta)] as const;
-      }
-    }
-  }
-
-  async *keys(): AsyncIterableIterator<string> {
-    for await (const [name] of this.entries()) {
-      yield name;
-    }
-  }
-
-  async *values(): AsyncIterableIterator<FileSystemHandle> {
-    for await (const [, handle] of this.entries()) {
-      yield handle;
-    }
-  }
-
-  [Symbol.asyncIterator](): AsyncIterableIterator<[string, FileSystemHandle]> {
-    return this.entries();
-  }
-
-  async getDirectoryHandle(name: string): Promise<DirectoryHandle> {
-    return new DirectoryHandle(join(this.path, name), name);
-  }
-
-  async getFileHandle(name: string): Promise<FileHandle> {
-    return new FileHandle(join(this.path, name), name);
-  }
-
-  async removeEntry(): Promise<never> {
-    return readonlyError();
-  }
-
-  async resolve(possibleDescendant: FileSystemHandle): Promise<string[] | null> {
-    if (!(possibleDescendant instanceof DirectoryHandle || possibleDescendant instanceof FileHandle)) {
-      return null;
-    }
-    const descendantPath = possibleDescendant.path;
-    if (!descendantPath.startsWith(this.path)) return null;
-    const relative = descendantPath.slice(this.path.length).replace(/^\//, '');
-    if (!relative) return [];
-    return relative.split('/');
-  }
+export async function readFile(path: string): Promise<ArrayBuffer> {
+  return bridge.fs.readFile(normalizePath(path));
 }
 
-export class FileHandle implements FileSystemFileHandle {
-  readonly kind = 'file' as const;
-  readonly name: string;
-  readonly path: string;
-  readonly meta?: HandleMeta;
+export async function readFileBuffer(path: string): Promise<ArrayBuffer> {
+  return readFile(path);
+}
 
-  constructor(path: string, name: string, meta?: HandleMeta) {
-    this.path = normalizePath(path);
-    this.name = name;
-    this.meta = meta;
-  }
-
-  async isSameEntry(other: FileSystemHandle): Promise<boolean> {
-    return other instanceof FileHandle && other.path === this.path;
-  }
-
-  async getFile(): Promise<File> {
-    let size = this.meta?.size;
-    let mtimeMs = this.meta?.mtimeMs;
-    if (size === undefined) {
-      const stat = await bridge.fs.stat(this.path);
-      size = stat.size;
-      mtimeMs = stat.mtimeMs;
-    }
-    const fd = await bridge.fs.open(this.path);
-    try {
-      const buf = await bridge.fs.read(fd, 0, size);
-      return new File([buf], this.name, { lastModified: mtimeMs ?? 0 });
-    } finally {
-      await bridge.fs.close(fd);
-    }
-  }
-
-  async createWritable(): Promise<{ write(data: string): Promise<void>; close(): Promise<void> }> {
-    let closed = false;
-    const self = this;
-    return {
-      async write(data: string): Promise<void> {
-        if (closed) throw new Error('Writer is closed');
-        await bridge.fs.writeFile(self.path, data);
-      },
-      async close(): Promise<void> {
-        closed = true;
-      },
-    };
-  }
+export async function readFileText(path: string): Promise<string> {
+  const buf = await readFile(path);
+  return new TextDecoder().decode(buf);
 }
 
 // --- FileSystemObserver ---
 
 export interface FileSystemChangeRecord {
-  root: DirectoryHandle;
-  changedHandle: FileSystemHandle | null;
+  root: { path: string };
+  changedHandle: { path: string; name: string } | null;
   relativePathComponents: string[];
   type: FsChangeType;
 }
@@ -159,7 +40,7 @@ let nextWatchId = 0;
 
 export class FileSystemObserver {
   #callback: ObserverCallback;
-  #watches = new Map<string, DirectoryHandle>(); // watchId → handle
+  #watches = new Map<string, string>(); // watchId → normalized path
   #pathToId = new Map<string, string>(); // path → watchId (reverse lookup)
   #cleanup: (() => void) | null = null;
   #generation = 0; // incremented on disconnect to discard stale observe() results
@@ -176,20 +57,21 @@ export class FileSystemObserver {
     }
   }
 
-  async observe(handle: DirectoryHandle): Promise<void> {
+  async observe(path: string): Promise<void> {
     this.#ensureListener();
+    const normalizedPath = normalizePath(path);
 
     // Already watching this path — skip
-    if (this.#pathToId.has(handle.path)) return;
+    if (this.#pathToId.has(normalizedPath)) return;
 
     const gen = this.#generation;
     const watchId = `fso-${nextWatchId++}`;
 
     // Register synchronously so concurrent sync() calls see this path as watched
-    this.#watches.set(watchId, handle);
-    this.#pathToId.set(handle.path, watchId);
+    this.#watches.set(watchId, normalizedPath);
+    this.#pathToId.set(normalizedPath, watchId);
 
-    const ok = await bridge.fs.watch(watchId, handle.path);
+    const ok = await bridge.fs.watch(watchId, normalizedPath);
 
     // Discard if observer was disconnected/updated while awaiting IPC
     if (gen !== this.#generation) {
@@ -199,17 +81,18 @@ export class FileSystemObserver {
 
     if (!ok) {
       this.#watches.delete(watchId);
-      this.#pathToId.delete(handle.path);
-      this.#callback([{ root: handle, changedHandle: null, relativePathComponents: [], type: 'errored' }], this);
+      this.#pathToId.delete(normalizedPath);
+      this.#callback([{ root: { path: normalizedPath }, changedHandle: null, relativePathComponents: [], type: 'errored' }], this);
     }
   }
 
-  unobserve(handle: DirectoryHandle): void {
-    const watchId = this.#pathToId.get(handle.path);
+  unobserve(path: string): void {
+    const normalizedPath = normalizePath(path);
+    const watchId = this.#pathToId.get(normalizedPath);
     if (watchId != null) {
       bridge.fs.unwatch(watchId);
       this.#watches.delete(watchId);
-      this.#pathToId.delete(handle.path);
+      this.#pathToId.delete(normalizedPath);
     }
   }
 
@@ -231,7 +114,7 @@ export class FileSystemObserver {
     // Add watches for new paths
     for (const path of desired) {
       if (!this.#pathToId.has(path)) {
-        this.observe(new DirectoryHandle(path));
+        this.observe(path);
       }
     }
   }
@@ -253,9 +136,9 @@ export class FileSystemObserver {
     const root = this.#watches.get(event.watchId);
     if (!root) return;
 
-    const changedHandle: FileSystemHandle | null = event.name ? new FileHandle(join(root.path, event.name), event.name) : null;
+    const changedHandle = event.name ? { path: join(root, event.name), name: event.name } : null;
     const relativePathComponents = event.name ? [event.name] : [];
 
-    this.#callback([{ root, changedHandle, relativePathComponents, type: event.type }], this);
+    this.#callback([{ root: { path: root }, changedHandle, relativePathComponents, type: event.type }], this);
   }
 }

@@ -59,6 +59,10 @@ export const tauriBridge: Bridge = {
     async exists(filePath: string): Promise<boolean> {
       return invoke<boolean>('fs_exists', { filePath });
     },
+    async readFile(filePath: string): Promise<ArrayBuffer> {
+      const bytes = await invoke<number[]>('fs_read_file', { filePath });
+      return new Uint8Array(bytes).buffer;
+    },
     async writeFile(filePath: string, data: string): Promise<void> {
       return invoke<void>('fs_write_text', { filePath, data });
     },
@@ -167,9 +171,6 @@ export const tauriBridge: Bridge = {
     },
     async getEnv(): Promise<Record<string, string>> {
       return invoke<Record<string, string>>('get_env');
-    },
-    async getBuiltinExtensionDirs(): Promise<string[]> {
-      return invoke<string[]>('get_builtin_extension_dirs');
     },
   },
   copy: {

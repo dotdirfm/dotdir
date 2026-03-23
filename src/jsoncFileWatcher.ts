@@ -8,7 +8,7 @@
 
 import { parse as parseJsonc, ParseError, printParseErrorCode } from 'jsonc-parser';
 import { bridge } from './bridge';
-import { FileHandle } from './fs';
+import { readFileText } from './fs';
 import { basename, dirname } from './path';
 
 export interface JsoncFileWatcher<T> {
@@ -24,13 +24,6 @@ export interface JsoncFileWatcherOptions<T> {
   validate: (parsed: unknown) => T | null;
   defaultValue: T;
   onLoad?: (value: T) => void;
-}
-
-async function readTextFile(path: string): Promise<string> {
-  const name = basename(path);
-  const handle = new FileHandle(path, name);
-  const file = await handle.getFile();
-  return file.text();
 }
 
 export async function createJsoncFileWatcher<T>(
@@ -59,7 +52,7 @@ export async function createJsoncFileWatcher<T>(
       const path = filePath ?? await getPath();
       filePath = path;
       
-      const text = await readTextFile(path);
+      const text = await readFileText(path);
       const errors: ParseError[] = [];
       const parsed = parseJsonc(text, errors, { allowTrailingComma: true });
       

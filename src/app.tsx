@@ -18,7 +18,7 @@ import { ExtensionsPanel } from './ExtensionsPanel';
 import { PanelGroup } from './PanelGroup';
 import { CommandPalette, useCommandPalette } from './CommandPalette';
 import { commandRegistry } from './commands';
-import { FileHandle } from './fs';
+import { readFileText } from './fs';
 import { setExtensionLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, findColorTheme, type LoadedExtension, type PanelPersistedState, type PersistedTab } from './extensions';
@@ -1143,11 +1143,7 @@ export function App() {
   const extensionContributionDisposersRef = useRef<(() => void)[]>([]);
 
   const readTextFileAbs = useCallback(async (absPath: string): Promise<string> => {
-    const normalized = absPath;
-    const name = normalized.split('/').pop() ?? normalized;
-    const handle = new FileHandle(normalized, name);
-    const file = await handle.getFile();
-    return file.text();
+    return readFileText(absPath);
   }, []);
 
   const ensureActiveIconThemeFssLoaded = useCallback(

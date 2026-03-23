@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { bridge } from './bridge';
 import { commandRegistry } from './commands';
+import { readFileText as readFileTextFromFs } from './fs';
 import { basename, dirname, join, normalizePath } from './path';
 import { vfsUrl } from './vfs';
 import type {
@@ -207,23 +208,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     async readFile(path: string): Promise<ArrayBuffer> {
       const normalized = normalizePath(path);
       if (isContainerPath(normalized)) return readFromContainer(normalized, 0, 64 * 1024 * 1024);
-      const current = currentFileRef.current;
-      // Reuse existing fd when possible; otherwise open and remember a new one.
-      let target = current;
-      if (!target || target.path !== normalized) {
-        if (current) {
-          try {
-            await bridge.fs.close(current.fd);
-          } catch {
-            // ignore close errors
-          }
-        }
-        const fd = await bridge.fs.open(normalized);
-        const stat = await bridge.fs.stat(normalized);
-        target = { fd, size: stat.size, path: normalized };
-        currentFileRef.current = target;
-      }
-      return bridge.fs.read(target.fd, 0, target.size);
+      return bridge.fs.readFile(normalized);
     },
     async readFileRange(path: string, offset: number, length: number): Promise<ArrayBuffer> {
       const normalized = normalizePath(path);
@@ -251,8 +236,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       return bridge.fs.read(target.fd, safeOffset, safeLen);
     },
     async readFileText(path: string): Promise<string> {
-      const buf = await this.readFile(path);
-      return new TextDecoder().decode(buf);
+      const normalized = normalizePath(path);
+      if (isContainerPath(normalized)) {
+        const buf = await this.readFile(path);
+        return new TextDecoder().decode(buf);
+      }
+      return readFileTextFromFs(normalized);
     },
     async statFile(path: string): Promise<{ size: number; mtimeMs: number }> {
       const normalized = normalizePath(path);
@@ -643,14 +632,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       let entryScript: string | undefined;
       if (isEsm) {
         try {
-          const fd = await bridge.fs.open(entryPath);
-          try {
-            const stat = await bridge.fs.stat(entryPath);
-            const buf = await bridge.fs.read(fd, 0, Math.max(0, Math.floor(stat.size)));
-            entryScript = new TextDecoder().decode(buf);
-          } finally {
-            await bridge.fs.close(fd);
-          }
+          entryScript = await readFileTextFromFs(entryPath);
         } catch (err) {
           if (!cancelled) {
             const msg = err instanceof Error ? err.message : (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message) : String(err);

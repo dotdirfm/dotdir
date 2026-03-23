@@ -1,4 +1,4 @@
-import { FileHandle } from './fs';
+import { readFileText } from './fs';
 import { normalizePath } from './path';
 
 const MAX_SIZE = 200;
@@ -31,11 +31,8 @@ function evictIfNeeded(): void {
 
 async function loadIconAbsolute(path: string): Promise<void> {
   const normalized = normalizePath(path);
-  const fileName = normalized.split('/').pop() ?? normalized;
   try {
-    const handle = new FileHandle(normalized, fileName);
-    const file = await handle.getFile();
-    const content = await file.text();
+    const content = await readFileText(normalized);
     cache.set(path, svgToDataUrl(content));
     evictIfNeeded();
   } catch (err) {

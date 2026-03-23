@@ -209,6 +209,25 @@ async fn process_message(
         });
     }
 
+    if method == "fs.readFile" {
+        let path = params["path"].as_str()?.to_string();
+        let id_num = id.as_u64()? as u32;
+        let data = tokio::task::spawn_blocking(move || ops::read_file(&path))
+            .await
+            .unwrap();
+
+        return Some(match data {
+            Ok(bytes) => {
+                let mut frame = Vec::with_capacity(1 + 4 + bytes.len());
+                frame.push(0x00); // type: RPC response
+                frame.extend_from_slice(&id_num.to_le_bytes());
+                frame.extend_from_slice(&bytes);
+                Message::Binary(frame)
+            }
+            Err(e) => rpc_error(&id, &e),
+        });
+    }
+
     // PTY spawn needs tx for the reader thread
     if method == "pty.spawn" {
         return Some(handle_pty_spawn(session, &id, &params, tx));

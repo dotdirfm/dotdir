@@ -112,6 +112,7 @@ export interface Bridge {
     entries(dirPath: string): Promise<FsRawEntry[]>;
     stat(filePath: string): Promise<{ size: number; mtimeMs: number }>;
     exists(filePath: string): Promise<boolean>;
+    readFile(filePath: string): Promise<ArrayBuffer>;
     open(filePath: string): Promise<number>;
     read(fd: number, offset: number, length: number): Promise<ArrayBuffer>;
     close(fd: number): Promise<void>;
@@ -139,8 +140,6 @@ export interface Bridge {
     getHomePath(): Promise<string>;
     /** Returns all process environment variables plus `__platform__` (e.g. "macos", "linux", "windows"). */
     getEnv(): Promise<Record<string, string>>;
-    /** Absolute paths to built-in extension roots (each contains `package.json`). Tauri only. */
-    getBuiltinExtensionDirs?(): Promise<string[]>;
   };
   copy: {
     start(sources: string[], destDir: string, options: CopyOptions): Promise<number>;

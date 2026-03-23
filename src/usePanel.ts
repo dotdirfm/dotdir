@@ -16,9 +16,10 @@ import { fsProviderRegistry } from './viewerEditorRegistry';
 import { isContainerPath, parseContainerPath, buildContainerPath } from './containerPath';
 import { loadFsProvider } from './browserFsProvider';
 import { createPanelResolver, invalidateFssCache, syncLayers } from './fss';
-import { DirectoryHandle, FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fs';
+import { FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fs';
 import { basename, dirname, isFileExecutable, isRootPath, join } from './path';
 import { languageRegistry } from './languageRegistry';
+import type { FsRawEntry } from './types';
 
 // ── Helper functions ──────────────────────────────────────────────────────────
 
@@ -47,22 +48,35 @@ function buildParentChain(dirPath: string): FsNode | undefined {
   return node;
 }
 
-function handleToFsNode(handle: FileSystemHandle & { meta?: HandleMeta }, dirPath: string, parent?: FsNode): FsNode {
-  const isDir = handle.kind === 'directory';
+function isDirectoryEntry(entry: FsRawEntry): boolean {
+  return entry.kind === 'directory' || (entry.kind === 'symlink' && (entry.mode & 0o170000) === 0o040000);
+}
+
+function entryToFsNode(entry: FsRawEntry, dirPath: string, parent?: FsNode): FsNode {
+  const isDir = isDirectoryEntry(entry);
+  const meta: HandleMeta = {
+    size: entry.size,
+    mtimeMs: entry.mtimeMs,
+    mode: entry.mode,
+    nlink: entry.nlink,
+    kind: entry.kind,
+    hidden: entry.hidden,
+    linkTarget: entry.linkTarget,
+  };
   return createFsNode({
-    name: handle.name,
+    name: entry.name,
     type: isDir ? 'folder' : 'file',
-    lang: isDir ? '' : languageRegistry.detectLanguage(handle.name),
+    lang: isDir ? '' : languageRegistry.detectLanguage(entry.name),
     meta: {
-      size: handle.meta?.size ?? 0,
-      mtimeMs: handle.meta?.mtimeMs ?? 0,
-      executable: !isDir && handle.meta != null && isFileExecutable(handle.meta.mode ?? 0, handle.name),
-      hidden: handle.meta?.hidden ?? handle.name.startsWith('.'),
-      nlink: handle.meta?.nlink ?? 1,
-      entryKind: handle.meta?.kind ?? (isDir ? 'directory' : 'file'),
-      linkTarget: handle.meta?.linkTarget,
+      size: meta.size,
+      mtimeMs: meta.mtimeMs,
+      executable: !isDir && isFileExecutable(meta.mode ?? 0, entry.name),
+      hidden: meta.hidden ?? entry.name.startsWith('.'),
+      nlink: meta.nlink ?? 1,
+      entryKind: meta.kind ?? (isDir ? 'directory' : 'file'),
+      linkTarget: meta.linkTarget,
     },
-    path: join(dirPath, handle.name),
+    path: join(dirPath, entry.name),
     parent,
   });
 }
@@ -203,13 +217,10 @@ export function usePanel(theme: ThemeKind, showError: (message: string) => void)
             // ── Normal filesystem path ────────────────────────────────────────
             await syncLayers(resolverRef.current!, path);
             if (abort.signal.aborted) return;
-            const dirHandle = new DirectoryHandle(path);
             const parent = buildParentChain(path);
-            const nodes: FsNode[] = [];
-            for await (const [, handle] of dirHandle.entries()) {
-              if (abort.signal.aborted) return;
-              nodes.push(handleToFsNode(handle, path, parent));
-            }
+            const rawEntries = await bridge.fs.entries(path);
+            if (abort.signal.aborted) return;
+            const nodes: FsNode[] = rawEntries.map((entry) => entryToFsNode(entry, path, parent));
             if (abort.signal.aborted) return;
             setState({ currentPath: path, parentNode: parent, entries: nodes, requestedCursor: cursorName });
             setupWatches(path);

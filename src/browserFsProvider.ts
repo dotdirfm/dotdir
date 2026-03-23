@@ -15,8 +15,8 @@
  */
 
 import { bridge } from './bridge';
-import { join, basename } from './path';
-import { FileHandle } from './fs';
+import { join } from './path';
+import { readFileBuffer, readFileText } from './fs';
 import type { FsProviderExtensionApi, FsProviderHostApi } from './extensionApi';
 
 /** Cache: key → settled Promise<FsProviderExtensionApi> */
@@ -25,9 +25,7 @@ const cache = new Map<string, Promise<FsProviderExtensionApi>>();
 function makeHostApi(): FsProviderHostApi {
   return {
     async readFile(realPath: string): Promise<ArrayBuffer> {
-      const handle = new FileHandle(realPath, basename(realPath));
-      const file = await handle.getFile();
-      return file.arrayBuffer();
+      return readFileBuffer(realPath);
     },
     async readFileRange(realPath: string, offset: number, length: number): Promise<ArrayBuffer> {
       const fd = await bridge.fs.open(realPath);
@@ -50,9 +48,7 @@ export function loadFsProvider(
 
   const promise = (async (): Promise<FsProviderExtensionApi> => {
     const scriptPath = join(extensionDirPath, entry);
-    const handle = new FileHandle(scriptPath, basename(entry));
-    const file = await handle.getFile();
-    const code = await file.text();
+    const code = await readFileText(scriptPath);
 
     const hostApi = makeHostApi();
 

@@ -7,7 +7,7 @@
  */
 
 import { bridge } from './bridge';
-import { FileHandle } from './fs';
+import { readFileText } from './fs';
 import type { LoadedExtension } from './extensions';
 import { normalizePath } from './path';
 
@@ -85,29 +85,14 @@ export class ExtensionHostClient {
 
     this.worker = worker;
     void (async () => {
-      let builtInDirs: string[] = [];
-      try {
-        if (bridge.utils.getBuiltinExtensionDirs) {
-          builtInDirs = await bridge.utils.getBuiltinExtensionDirs();
-        }
-      } catch {
-        /* ignore */
-      }
-      worker.postMessage({
-        type: 'start',
-        homePath: this.homePath,
-        builtInDirs,
-      });
+      worker.postMessage({ type: 'start', homePath: this.homePath, });
     })();
   }
 
   private async handleFileRead(worker: Worker, id: number, path: string): Promise<void> {
     try {
       const normalizedPath = normalizePath(path);
-      const name = normalizedPath.split('/').pop() ?? normalizedPath;
-      const handle = new FileHandle(normalizedPath, name);
-      const file = await handle.getFile();
-      const text = await file.text();
+      const text = await readFileText(normalizedPath);
       console.log('[ExtHost] readFile ok', normalizedPath);
       worker.postMessage({ type: 'readFileResult', id, data: text });
     } catch (err) {

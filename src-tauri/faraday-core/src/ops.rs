@@ -363,6 +363,11 @@ pub fn exists(file_path: &str) -> bool {
     path_for_fs(file_path).try_exists().unwrap_or(false)
 }
 
+pub fn read_file(file_path: &str) -> Result<Vec<u8>, FsError> {
+    let path = path_for_fs(file_path);
+    fs::read(&path).map_err(FsError::from_io)
+}
+
 pub fn write_text(file_path: &str, data: &str) -> Result<(), FsError> {
   let path = path_for_fs(file_path);
   if let Some(parent) = path.parent() {

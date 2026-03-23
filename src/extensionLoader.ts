@@ -4,7 +4,7 @@
  * the extension renders into a provided mount root.
  */
 
-import { bridge } from './bridge';
+import { readFileText } from './fs';
 import { join, normalizePath } from './path';
 
 /** Normalize entry to a relative path (e.g. "./viewer.js" -> "viewer.js"). */
@@ -23,15 +23,8 @@ export async function getExtensionScriptUrl(
 ): Promise<{ scriptUrl: string }> {
   const entryRel = normalizeEntryPath(entry);
   const fullPath = join(extensionDirPath, entryRel);
-  const fd = await bridge.fs.open(fullPath);
-  try {
-    const stat = await bridge.fs.stat(fullPath);
-    const buf = await bridge.fs.read(fd, 0, Math.max(0, Math.floor(stat.size)));
-    const content = new TextDecoder().decode(buf);
-    const blob = new Blob([content], { type: 'application/javascript' });
-    const scriptUrl = URL.createObjectURL(blob);
-    return { scriptUrl };
-  } finally {
-    await bridge.fs.close(fd);
-  }
+  const content = await readFileText(fullPath);
+  const blob = new Blob([content], { type: 'application/javascript' });
+  const scriptUrl = URL.createObjectURL(blob);
+  return { scriptUrl };
 }

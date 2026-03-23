@@ -6,7 +6,7 @@
  */
 
 import { parse as parseJsonc } from 'jsonc-parser';
-import { FileHandle } from './fs';
+import { readFileText } from './fs';
 import { dirname, join } from './path';
 
 export interface VSCodeColorThemeJson {
@@ -45,15 +45,8 @@ const COLOR_MAPPING: Array<{ cssVar: string; keys: string[] }> = [
   { cssVar: '--action-bar-badge-fg', keys: ['activityBarBadge.foreground'] },
 ];
 
-async function readTextFile(path: string): Promise<string> {
-  const name = path.split('/').pop() ?? path;
-  const handle = new FileHandle(path, name);
-  const file = await handle.getFile();
-  return file.text();
-}
-
 async function loadThemeJson(jsonPath: string, maxDepth = 3): Promise<VSCodeColorThemeJson> {
-  const text = await readTextFile(jsonPath);
+  const text = await readFileText(jsonPath);
   const theme: VSCodeColorThemeJson = parseJsonc(text, undefined, { allowTrailingComma: true });
 
   // Handle `include` — merge base theme colors underneath
