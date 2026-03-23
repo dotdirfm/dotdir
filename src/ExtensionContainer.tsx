@@ -47,13 +47,6 @@ interface EditorContainerProps extends ExtensionContainerProps {
 
 export type ContainerProps = ViewerContainerProps | EditorContainerProps;
 
-function toHex(bytes: ArrayBuffer): string {
-  const u8 = new Uint8Array(bytes);
-  let out = '';
-  for (const b of u8) out += b.toString(16).padStart(2, '0');
-  return out;
-}
-
 /** Read a byte range from a file inside a container (e.g. ZIP) via the fsProvider. */
 async function readFromContainer(path: string, offset: number, length: number): Promise<ArrayBuffer> {
   const { containerFile: hostFile, innerPath } = parseContainerPath(path);
@@ -85,7 +78,6 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const [loading, setLoading] = useState(true);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
-  const [extHash, setExtHash] = useState<string | null>(null);
   const isInlineViewer = kind === 'viewer' && !!(props as ViewerProps).inline;
   const shouldAutoFocusIframe = kind === 'editor' || (kind === 'viewer' && !isInlineViewer);
   const panelFocusElRef = useRef<HTMLElement | null>(null);
@@ -102,7 +94,6 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   // For non-preview viewer/editor, focus iframe automatically when it appears.
   useEffect(() => {
     if (!shouldAutoFocusIframe) return;
-    if (!extHash) return;
     if (loading) return;
     if (autoFocusOnceRef.current) return;
     autoFocusOnceRef.current = true;
@@ -118,7 +109,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         // ignore
       }
     }, 0);
-  }, [shouldAutoFocusIframe, extHash, loading]);
+  }, [shouldAutoFocusIframe, loading]);
 
   // Inline/preview viewer: keep panel focused until user presses Tab.
   // First Tab: focus preview iframe + route keybindings via focusViewer.
@@ -211,21 +202,6 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   if (containerProps.kind === 'editor') {
     onDirtyChangeRef.current = containerProps.onDirtyChange;
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const key = `${normalizePath(extensionDirPath)}\0${entry}`;
-      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
-      const hex = toHex(buf);
-      if (!cancelled) setExtHash(hex);
-    })().catch((e) => {
-      if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [extensionDirPath, entry]);
 
   const buildHostApi = useCallback((): HostApi => ({
     async readFile(path: string): Promise<ArrayBuffer> {
@@ -409,7 +385,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   useEffect(() => {
     let cancelled = false;
     const iframe = iframeRef.current;
-    if (!iframe || !extHash) return;
+    if (!iframe) return;
 
     setLoading(true);
     setError(null);
@@ -761,7 +737,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         currentFileRef.current = null;
       }
     };
-  }, [extensionDirPath, entry, kind, buildHostApi, extHash, getThemeVars]); // intentionally exclude props
+  }, [extensionDirPath, entry, kind, buildHostApi, getThemeVars]); // intentionally exclude props
 
   // Re-mount when props change (e.g. file path). Skip when inactive.
   // Reset prevProps when hiding so the next activation always sends an update.
@@ -800,7 +776,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const entryRelForIframe = normalizePath(entry.replace(/^\.\//, '')) || 'index.js';
   const entryPathForIframe = join(extensionDirPath, entryRelForIframe);
   const entryDirForIframe = dirname(entryPathForIframe);
-  const iframeSrc = extHash ? vfsUrl(`/_ext${entryDirForIframe}/`) : null;
+  const iframeSrc = vfsUrl(`/_ext${entryDirForIframe}/`);
 
   return (
     <div className={className} style={{ ...style, position: 'relative' }}>
