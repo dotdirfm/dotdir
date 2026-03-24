@@ -1,4 +1,4 @@
-import { bridge, type CwdEscapeMode } from './bridge';
+import { bridge, type CwdEscapeMode, type DeleteProgressEvent } from './bridge';
 import { readFileBuffer, readFileText } from './fs';
 import { dirname, join, normalizePath } from './path';
 
@@ -670,9 +670,36 @@ export async function installVSCodeExtension(publisherName: string, extName: str
   await writeRefs(filtered);
 }
 
+/**
+ * Recursively delete a path using the same engine as permanent delete (no UI).
+ */
+async function deleteFilesystemPathRecursive(absPath: string): Promise<void> {
+  if (!(await bridge.fs.exists(absPath))) return;
+  const deleteId = await bridge.delete.start([absPath]);
+  await new Promise<void>((resolve, reject) => {
+    const unsub = bridge.delete.onProgress((payload: DeleteProgressEvent) => {
+      if (payload.deleteId !== deleteId) return;
+      const ev = payload.event;
+      if (ev.kind === 'done') {
+        unsub();
+        resolve();
+      } else if (ev.kind === 'error') {
+        unsub();
+        reject(new Error(ev.message));
+      }
+    });
+  });
+}
+
 export async function uninstallExtension(publisherUsername: string, extName: string): Promise<void> {
   const refs = await readRefs();
-  const filtered = refs.filter(r => !(r.publisher === publisherUsername && r.name === extName));
+  const target = refs.find((r) => r.publisher === publisherUsername && r.name === extName);
+  if (target && !target.path) {
+    const extensionsDir = await getExtensionsDir();
+    const extDir = join(extensionsDir, extensionDirName(target));
+    await deleteFilesystemPathRecursive(extDir);
+  }
+  const filtered = refs.filter((r) => !(r.publisher === publisherUsername && r.name === extName));
   await writeRefs(filtered);
 }
 
@@ -700,6 +727,8 @@ export interface FaradaySettings {
    */
   editorFileSizeLimit?: number;
   showHidden?: boolean;
+  /** Command-line folder aliases: `cd:name` navigates to the absolute path. Set with `cd::name`. */
+  pathAliases?: Record<string, string>;
   leftPanel?: PanelPersistedState;
   rightPanel?: PanelPersistedState;
   activePanel?: 'left' | 'right';

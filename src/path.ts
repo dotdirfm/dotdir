@@ -82,6 +82,63 @@ export function join(...parts: string[]): string {
   return result;
 }
 
+/**
+ * Resolves `.` and `..` segments (POSIX-style). Does not touch symlinks.
+ * Handles Unix absolute paths, Windows `C:/...`, and relative paths.
+ */
+export function resolveDotSegments(path: string): string {
+  const s = collapseSlashes(path.replace(/\\/g, '/'));
+  if (!s) return s;
+
+  // Windows: C:/... or C:...
+  const win = /^([A-Za-z]):(\/.*)?$/i.exec(s);
+  if (win) {
+    const drive = win[1]!.toUpperCase();
+    const rest = (win[2] ?? '/').replace(/^\//, '');
+    const parts = rest.split('/').filter((p) => p !== '');
+    const stack = resolveDotStack(parts, true);
+    if (stack.length === 0) return `${drive}:/`;
+    return `${drive}:/${stack.join('/')}`;
+  }
+
+  // UNC //host/share/...
+  if (isUncPath(s)) {
+    const body = s.slice(2);
+    const segments = body.split('/').filter(Boolean);
+    if (segments.length < 2) return s;
+    const prefix = `//${segments[0]}/${segments[1]}`;
+    const tail = segments.slice(2);
+    const stack = resolveDotStack(tail, true);
+    return stack.length ? `${prefix}/${stack.join('/')}` : prefix;
+  }
+
+  const isAbs = s.startsWith('/');
+  const body = isAbs ? s.slice(1) : s;
+  const parts = body.split('/').filter((p) => p !== '');
+  const stack = resolveDotStack(parts, isAbs);
+  if (isAbs) {
+    return stack.length ? `/${stack.join('/')}` : '/';
+  }
+  return stack.length ? stack.join('/') : '.';
+}
+
+function resolveDotStack(parts: string[], isAbsolute: boolean): string[] {
+  const stack: string[] = [];
+  for (const part of parts) {
+    if (part === '.' || part === '') continue;
+    if (part === '..') {
+      if (stack.length > 0) {
+        stack.pop();
+      } else if (!isAbsolute) {
+        stack.push('..');
+      }
+    } else {
+      stack.push(part);
+    }
+  }
+  return stack;
+}
+
 export function basename(path: string): string {
   const normalized = normalizePath(path);
   if (!normalized || isRootPath(normalized)) return '';

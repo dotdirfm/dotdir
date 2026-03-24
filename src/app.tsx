@@ -24,9 +24,10 @@ import { setExtensionLayers } from './fss';
 import { extensionHost } from './extensionHostClient';
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, findColorTheme, type LoadedExtension, type PanelPersistedState, type PersistedTab } from './extensions';
 import { loadAndApplyColorTheme, clearColorTheme, uiThemeToKind } from './vscodeColorTheme';
-import { initUserSettings, onSettingsChange, updateSettings } from './userSettings';
+import { getSettings, initUserSettings, onSettingsChange, updateSettings } from './userSettings';
+import { isExistingDirectory, parseCdCommand, resolveCdPath } from './commandLineCd';
 import { setIconTheme, setIconThemeKind } from './iconResolver';
-import { basename, dirname, join } from './path';
+import { basename, dirname, join, normalizePath, resolveDotSegments } from './path';
 import { normalizeTerminalPath } from './terminal/path';
 import { resolveShellProfiles } from './terminal/shellProfiles';
 import { initUserKeybindings } from './userKeybindings';
@@ -169,6 +170,76 @@ export function App() {
   leftRef.current = left;
   const rightRef = useRef(right);
   rightRef.current = right;
+
+  const activeCwdForExecuteRef = useRef('');
+  activeCwdForExecuteRef.current =
+    requestedTerminalCwd ?? (activePanel === 'left' ? left.currentPath : right.currentPath);
+
+  const handleCommandLineExecute = useCallback(
+    async (cmd: string) => {
+      const parsed = parseCdCommand(cmd);
+      if (!parsed) {
+        hiddenForCommandRef.current = true;
+        setPanelsVisible(false);
+        focusContext.set('terminal');
+        setTerminalFocusRequestKey((k) => k + 1);
+        void executeCommandRef.current(cmd, activeCwdForExecuteRef.current);
+        return;
+      }
+      if (parsed.kind === 'error') {
+        showDialog({ type: 'message', title: 'cd', message: parsed.message, variant: 'error' });
+        return;
+      }
+      const panel = activePanelRef.current === 'left' ? leftRef.current : rightRef.current;
+      const cwd = panel.currentPath;
+
+      if (parsed.kind === 'setAlias') {
+        const aliases = { ...(getSettings().pathAliases ?? {}), [parsed.alias]: normalizeTerminalPath(cwd) };
+        updateSettings({ pathAliases: aliases });
+        return;
+      }
+
+      if (parsed.kind === 'goAlias') {
+        const raw = getSettings().pathAliases?.[parsed.alias];
+        if (!raw) {
+          showDialog({
+            type: 'message',
+            title: 'cd',
+            message: `Unknown alias: ${parsed.alias}`,
+            variant: 'error',
+          });
+          return;
+        }
+        const path = normalizeTerminalPath(resolveDotSegments(normalizePath(raw)));
+        if (!(await isExistingDirectory(path))) {
+          showDialog({
+            type: 'message',
+            title: 'cd',
+            message: `Folder not found: ${path}`,
+            variant: 'error',
+          });
+          return;
+        }
+        await panel.navigateTo(path);
+        return;
+      }
+
+      if (parsed.kind === 'chdir') {
+        const target = await resolveCdPath(parsed.pathArg, cwd);
+        if (!(await isExistingDirectory(target))) {
+          showDialog({
+            type: 'message',
+            title: 'cd',
+            message: `Path not found: ${target}`,
+            variant: 'error',
+          });
+          return;
+        }
+        await panel.navigateTo(target);
+      }
+    },
+    [showDialog],
+  );
 
   const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } =
     useFileOperations(activePanelRef, leftRef, rightRef, setSelectionKey);
@@ -1465,13 +1536,7 @@ export function App() {
               cwd={activeCwd}
               visible={panelsVisible && promptActive}
               pasteRef={commandLinePasteRef}
-              onExecute={(cmd) => {
-                hiddenForCommandRef.current = true;
-                setPanelsVisible(false);
-                focusContext.set('terminal');
-                setTerminalFocusRequestKey((k) => k + 1);
-                void executeCommandRef.current(cmd, activeCwd);
-              }}
+              onExecute={handleCommandLineExecute}
             />
             {toolbar}
           </>
