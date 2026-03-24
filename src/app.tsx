@@ -1,40 +1,40 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { isTauri as isTauriApp } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { bridge, type TerminalProfile } from './bridge';
-import type { PanelTab } from './FileList/PanelTabs';
-import { isMediaFile } from './mediaFiles';
-import { ViewerContainer, EditorContainer } from './ExtensionContainer';
-import { viewerRegistry, editorRegistry, fsProviderRegistry, populateRegistries } from './viewerEditorRegistry';
-import { isContainerPath, parseContainerPath, CONTAINER_SEP } from './containerPath';
-import { clearFsProviderCache } from './browserFsProvider';
-import type { LanguageOption } from './OpenCreateFileDialog';
-import { useDialog, DialogHolder } from './dialogContext';
-import { ModalDialog } from './ModalDialog';
-import { TerminalController } from './Terminal';
-import { CommandLine } from './CommandLine';
-import { ActionBar } from './ActionBar';
-import { ExtensionsPanel } from './ExtensionsPanel';
-import { PanelGroup } from './PanelGroup';
-import { CommandPalette, useCommandPalette } from './CommandPalette';
-import { commandRegistry } from './commands';
-import { focusContext } from './focusContext';
-import { readFileText } from './fs';
-import { setExtensionLayers } from './fss';
-import { extensionHost } from './extensionHostClient';
-import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, findColorTheme, type LoadedExtension, type PanelPersistedState, type PersistedTab } from './extensions';
-import { loadAndApplyColorTheme, clearColorTheme, uiThemeToKind } from './vscodeColorTheme';
-import { getSettings, initUserSettings, onSettingsChange, updateSettings } from './userSettings';
-import { isExistingDirectory, parseCdCommand, resolveCdPath } from './commandLineCd';
-import { setIconTheme, setIconThemeKind } from './iconResolver';
-import { basename, dirname, join, normalizePath, resolveDotSegments } from './path';
-import { normalizeTerminalPath } from './terminal/path';
-import { resolveShellProfiles } from './terminal/shellProfiles';
-import { initUserKeybindings } from './userKeybindings';
-import type { ThemeKind } from 'fss-lang';
-import { usePanel, findExistingParent } from './usePanel';
-import { useFileOperations, type PanelSide } from './useFileOperations';
-import { languageRegistry } from './languageRegistry';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isTauri as isTauriApp } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { bridge, type TerminalProfile } from "./bridge";
+import type { PanelTab } from "./FileList/PanelTabs";
+import { isMediaFile } from "./mediaFiles";
+import { ViewerContainer, EditorContainer } from "./ExtensionContainer";
+import { viewerRegistry, editorRegistry, fsProviderRegistry, populateRegistries } from "./viewerEditorRegistry";
+import { isContainerPath, parseContainerPath, CONTAINER_SEP } from "./containerPath";
+import { clearFsProviderCache } from "./browserFsProvider";
+import type { LanguageOption } from "./OpenCreateFileDialog";
+import { useDialog, DialogHolder } from "./dialogContext";
+import { ModalDialog } from "./ModalDialog";
+import { TerminalController } from "./Terminal";
+import { CommandLine } from "./CommandLine";
+import { ActionBar } from "./ActionBar";
+import { ExtensionsPanel } from "./ExtensionsPanel";
+import { PanelGroup } from "./PanelGroup";
+import { CommandPalette, useCommandPalette } from "./CommandPalette";
+import { commandRegistry } from "./commands";
+import { focusContext } from "./focusContext";
+import { readFileText } from "./fs";
+import { setExtensionLayers } from "./fss";
+import { extensionHost } from "./extensionHostClient";
+import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, findColorTheme, type LoadedExtension, type PanelPersistedState, type PersistedTab } from "./extensions";
+import { loadAndApplyColorTheme, clearColorTheme, uiThemeToKind } from "./vscodeColorTheme";
+import { getSettings, initUserSettings, onSettingsChange, updateSettings } from "./userSettings";
+import { isExistingDirectory, parseCdCommand, resolveCdPath } from "./commandLineCd";
+import { setIconTheme, setIconThemeKind } from "./iconResolver";
+import { basename, dirname, join, normalizePath, resolveDotSegments } from "./path";
+import { normalizeTerminalPath } from "./terminal/path";
+import { resolveShellProfiles } from "./terminal/shellProfiles";
+import { initUserKeybindings } from "./userKeybindings";
+import type { ThemeKind } from "fss-lang";
+import { usePanel, findExistingParent } from "./usePanel";
+import { useFileOperations, type PanelSide } from "./useFileOperations";
+import { languageRegistry } from "./languageRegistry";
 
 let nextTabId = 0;
 function genTabId(): string {
@@ -42,30 +42,62 @@ function genTabId(): string {
 }
 
 function createFilelistTab(path: string): PanelTab {
-  return { id: genTabId(), type: 'filelist', path };
+  return { id: genTabId(), type: "filelist", path };
 }
 
 function createPreviewTab(path: string, name: string, size: number, sourcePanel: PanelSide): PanelTab {
-  return { id: genTabId(), type: 'preview', path, name, size, isTemp: true, sourcePanel };
+  return {
+    id: genTabId(),
+    type: "preview",
+    path,
+    name,
+    size,
+    isTemp: true,
+    sourcePanel,
+  };
 }
 
 export function App() {
-  const [theme, setTheme] = useState<ThemeKind>('dark');
+  const [theme, setTheme] = useState<ThemeKind>("dark");
   const { dialog, showDialog, closeDialog, updateDialog } = useDialog();
   const [showHidden, setShowHidden] = useState(false);
-  const showError = useCallback((message: string) => {
-    showDialog({ type: 'message', title: 'Error', message, variant: 'error' });
-  }, [showDialog]);
+  const showError = useCallback(
+    (message: string) => {
+      showDialog({
+        type: "message",
+        title: "Error",
+        message,
+        variant: "error",
+      });
+    },
+    [showDialog],
+  );
   const left = usePanel(theme, showError);
   const right = usePanel(theme, showError);
-  const [activePanel, setActivePanel] = useState<PanelSide>('left');
+  const [activePanel, setActivePanel] = useState<PanelSide>("left");
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [promptActive, setPromptActive] = useState(true);
   const promptHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
-  const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
-  const [viewerExt, setViewerExt] = useState<{ dirPath: string; entry: string } | null>(null);
-  const [editorExt, setEditorExt] = useState<{ dirPath: string; entry: string } | null>(null);
+  const [viewerFile, setViewerFile] = useState<{
+    path: string;
+    name: string;
+    size: number;
+    panel: PanelSide;
+  } | null>(null);
+  const [editorFile, setEditorFile] = useState<{
+    path: string;
+    name: string;
+    size: number;
+    langId: string;
+  } | null>(null);
+  const [viewerExt, setViewerExt] = useState<{
+    dirPath: string;
+    entry: string;
+  } | null>(null);
+  const [editorExt, setEditorExt] = useState<{
+    dirPath: string;
+    entry: string;
+  } | null>(null);
   const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
   const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
@@ -74,8 +106,8 @@ export function App() {
   const [initialLeftPanel, setInitialLeftPanel] = useState<PanelPersistedState | undefined>(undefined);
   const [initialRightPanel, setInitialRightPanel] = useState<PanelPersistedState | undefined>(undefined);
   const [initialActivePanel, setInitialActivePanel] = useState<PanelSide | undefined>(undefined);
-  const [leftTabs, setLeftTabs] = useState<PanelTab[]>(() => [createFilelistTab('')]);
-  const [rightTabs, setRightTabs] = useState<PanelTab[]>(() => [createFilelistTab('')]);
+  const [leftTabs, setLeftTabs] = useState<PanelTab[]>(() => [createFilelistTab("")]);
+  const [rightTabs, setRightTabs] = useState<PanelTab[]>(() => [createFilelistTab("")]);
   const [leftActiveIndex, setLeftActiveIndex] = useState(0);
   const [rightActiveIndex, setRightActiveIndex] = useState(0);
   const leftSelectedNameRef = useRef<string | undefined>(undefined);
@@ -115,7 +147,7 @@ export function App() {
       // Restore tabs from persisted state
       const restoreTabs = (panel: PanelPersistedState | undefined) => {
         if (panel?.tabs?.length) {
-          return panel.tabs.map(t => createFilelistTab(t.path));
+          return panel.tabs.map((t) => createFilelistTab(t.path));
         }
         if (panel?.currentPath) {
           return [createFilelistTab(panel.currentPath)];
@@ -125,12 +157,8 @@ export function App() {
 
       const restoredLeftTabs = restoreTabs(s.leftPanel);
       const restoredRightTabs = restoreTabs(s.rightPanel);
-      const restoredLeftIndex = restoredLeftTabs
-        ? Math.min(s.leftPanel?.activeTabIndex ?? 0, restoredLeftTabs.length - 1)
-        : 0;
-      const restoredRightIndex = restoredRightTabs
-        ? Math.min(s.rightPanel?.activeTabIndex ?? 0, restoredRightTabs.length - 1)
-        : 0;
+      const restoredLeftIndex = restoredLeftTabs ? Math.min(s.leftPanel?.activeTabIndex ?? 0, restoredLeftTabs.length - 1) : 0;
+      const restoredRightIndex = restoredRightTabs ? Math.min(s.rightPanel?.activeTabIndex ?? 0, restoredRightTabs.length - 1) : 0;
 
       // Update prev refs so tab sync effects don't fire redundantly
       prevLeftActiveIndexRef.current = restoredLeftIndex;
@@ -164,16 +192,15 @@ export function App() {
   activePanelRef.current = activePanel;
   // Points to the active panel's navigateTo so handleViewFile can enter containers.
   const activePanelNavigateRef = useRef(left.navigateTo);
-  activePanelNavigateRef.current = activePanel === 'left' ? left.navigateTo : right.navigateTo;
+  activePanelNavigateRef.current = activePanel === "left" ? left.navigateTo : right.navigateTo;
 
   const leftRef = useRef(left);
   leftRef.current = left;
   const rightRef = useRef(right);
   rightRef.current = right;
 
-  const activeCwdForExecuteRef = useRef('');
-  activeCwdForExecuteRef.current =
-    requestedTerminalCwd ?? (activePanel === 'left' ? left.currentPath : right.currentPath);
+  const activeCwdForExecuteRef = useRef("");
+  activeCwdForExecuteRef.current = requestedTerminalCwd ?? (activePanel === "left" ? left.currentPath : right.currentPath);
 
   const handleCommandLineExecute = useCallback(
     async (cmd: string) => {
@@ -181,42 +208,50 @@ export function App() {
       if (!parsed) {
         hiddenForCommandRef.current = true;
         setPanelsVisible(false);
-        focusContext.set('terminal');
+        focusContext.set("terminal");
         setTerminalFocusRequestKey((k) => k + 1);
         void executeCommandRef.current(cmd, activeCwdForExecuteRef.current);
         return;
       }
-      if (parsed.kind === 'error') {
-        showDialog({ type: 'message', title: 'cd', message: parsed.message, variant: 'error' });
+      if (parsed.kind === "error") {
+        showDialog({
+          type: "message",
+          title: "cd",
+          message: parsed.message,
+          variant: "error",
+        });
         return;
       }
-      const panel = activePanelRef.current === 'left' ? leftRef.current : rightRef.current;
+      const panel = activePanelRef.current === "left" ? leftRef.current : rightRef.current;
       const cwd = panel.currentPath;
 
-      if (parsed.kind === 'setAlias') {
-        const aliases = { ...(getSettings().pathAliases ?? {}), [parsed.alias]: normalizeTerminalPath(cwd) };
+      if (parsed.kind === "setAlias") {
+        const aliases = {
+          ...getSettings().pathAliases,
+          [parsed.alias]: normalizeTerminalPath(cwd),
+        };
         updateSettings({ pathAliases: aliases });
         return;
       }
 
-      if (parsed.kind === 'goAlias') {
+      if (parsed.kind === "goAlias") {
         const raw = getSettings().pathAliases?.[parsed.alias];
         if (!raw) {
           showDialog({
-            type: 'message',
-            title: 'cd',
+            type: "message",
+            title: "cd",
             message: `Unknown alias: ${parsed.alias}`,
-            variant: 'error',
+            variant: "error",
           });
           return;
         }
         const path = normalizeTerminalPath(resolveDotSegments(normalizePath(raw)));
         if (!(await isExistingDirectory(path))) {
           showDialog({
-            type: 'message',
-            title: 'cd',
+            type: "message",
+            title: "cd",
             message: `Folder not found: ${path}`,
-            variant: 'error',
+            variant: "error",
           });
           return;
         }
@@ -224,14 +259,14 @@ export function App() {
         return;
       }
 
-      if (parsed.kind === 'chdir') {
+      if (parsed.kind === "chdir") {
         const target = await resolveCdPath(parsed.pathArg, cwd);
         if (!(await isExistingDirectory(target))) {
           showDialog({
-            type: 'message',
-            title: 'cd',
+            type: "message",
+            title: "cd",
             message: `Path not found: ${target}`,
-            variant: 'error',
+            variant: "error",
           });
           return;
         }
@@ -241,18 +276,22 @@ export function App() {
     [showDialog],
   );
 
-  const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } =
-    useFileOperations(activePanelRef, leftRef, rightRef, setSelectionKey);
+  const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } = useFileOperations(
+    activePanelRef,
+    leftRef,
+    rightRef,
+    setSelectionKey,
+  );
 
   // Set context for which panel is active
   useEffect(() => {
-    commandRegistry.setContext('leftPanelActive', activePanel === 'left');
-    commandRegistry.setContext('rightPanelActive', activePanel === 'right');
+    commandRegistry.setContext("leftPanelActive", activePanel === "left");
+    commandRegistry.setContext("rightPanelActive", activePanel === "right");
   }, [activePanel]);
 
   // Set context when a dialog is open (e.g. so Tab doesn't switch panel)
   useEffect(() => {
-    commandRegistry.setContext('dialogOpen', dialog !== null);
+    commandRegistry.setContext("dialogOpen", dialog !== null);
   }, [dialog]);
 
   useEffect(() => {
@@ -260,7 +299,7 @@ export function App() {
     // Terminal focus handlers may run during the same toggle frame.
     // Re-assert panel focus after layout settles.
     const frame = requestAnimationFrame(() => {
-      focusContext.set('panel');
+      focusContext.set("panel");
     });
     return () => cancelAnimationFrame(frame);
   }, [panelsVisible, promptActive]);
@@ -271,35 +310,37 @@ export function App() {
       void activePanelNavigateRef.current(filePath + CONTAINER_SEP);
       return;
     }
-    setViewerFile({ path: filePath, name: fileName, size: fileSize, panel: activePanelRef.current });
+    setViewerFile({
+      path: filePath,
+      name: fileName,
+      size: fileSize,
+      panel: activePanelRef.current,
+    });
   }, []);
 
   const handleEditFile = useCallback((filePath: string, fileName: string, fileSize: number, langId: string) => {
     setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
   }, []);
 
-  const handleOpenCreateFileConfirm = useCallback(
-    async (filePath: string, fileName: string, langId: string) => {
-      const exists = await bridge.fs.exists(filePath);
-      if (!exists) {
-        await bridge.fs.writeFile(filePath, '');
-      }
-      const size = exists ? (await bridge.fs.stat(filePath)).size : 0;
-      setEditorFile({ path: filePath, name: fileName, size, langId });
-    },
-    []
-  );
+  const handleOpenCreateFileConfirm = useCallback(async (filePath: string, fileName: string, langId: string) => {
+    const exists = await bridge.fs.exists(filePath);
+    if (!exists) {
+      await bridge.fs.writeFile(filePath, "");
+    }
+    const size = exists ? (await bridge.fs.stat(filePath)).size : 0;
+    setEditorFile({ path: filePath, name: fileName, size, langId });
+  }, []);
 
   const rememberExpectedTerminalCwd = useCallback((path: string) => {
     setRequestedTerminalCwd(normalizeTerminalPath(path));
   }, []);
 
-  const viewerPanelEntries = viewerFile ? (viewerFile.panel === 'left' ? left.entries : right.entries) : [];
+  const viewerPanelEntries = viewerFile ? (viewerFile.panel === "left" ? left.entries : right.entries) : [];
 
   // Helper: match a filename against simple glob patterns like "*.png"
   const matchesPatterns = useCallback((name: string, patterns: string[]): boolean => {
     return patterns.some((p) => {
-      if (p.startsWith('*.')) {
+      if (p.startsWith("*.")) {
         const ext = p.slice(1).toLowerCase();
         return name.toLowerCase().endsWith(ext);
       }
@@ -308,41 +349,51 @@ export function App() {
   }, []);
 
   // Compute filtered & sorted file list matching given patterns from the viewer's panel
-  const getMatchingFiles = useCallback((patterns: string[]) => {
-    if (!viewerFile) return [];
-    const entries = showHidden ? viewerPanelEntries : viewerPanelEntries.filter(e => !e.meta.hidden);
-    return entries
-      .filter(e => e.type === 'file' && matchesPatterns(e.name, patterns))
-      .map(e => ({ path: e.path as string, name: e.name, size: Number(e.meta.size) }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [viewerFile, viewerPanelEntries, showHidden, matchesPatterns]);
+  const getMatchingFiles = useCallback(
+    (patterns: string[]) => {
+      if (!viewerFile) return [];
+      const entries = showHidden ? viewerPanelEntries : viewerPanelEntries.filter((e) => !e.meta.hidden);
+      return entries
+        .filter((e) => e.type === "file" && matchesPatterns(e.name, patterns))
+        .map((e) => ({
+          path: e.path as string,
+          name: e.name,
+          size: Number(e.meta.size),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
+    [viewerFile, viewerPanelEntries, showHidden, matchesPatterns],
+  );
 
   // Generic command handler for viewer extensions
-  const handleExecuteCommand = useCallback(async (command: string, args?: unknown): Promise<unknown> => {
-    const { patterns } = (args as { patterns?: string[] } | undefined) ?? {};
-    if (!patterns || !viewerFile) return undefined;
-    const files = getMatchingFiles(patterns);
-    const idx = files.findIndex((f) => f.path === viewerFile.path);
+  const handleExecuteCommand = useCallback(
+    async (command: string, args?: unknown): Promise<unknown> => {
+      const { patterns } = (args as { patterns?: string[] } | undefined) ?? {};
+      if (!patterns || !viewerFile) return undefined;
+      const files = getMatchingFiles(patterns);
+      const idx = files.findIndex((f) => f.path === viewerFile.path);
 
-    if (command === 'navigatePrev') {
-      if (idx > 0) {
-        const file = files[idx - 1]!;
-        setViewerFile(prev => prev ? { ...file, panel: prev.panel } : null);
+      if (command === "navigatePrev") {
+        if (idx > 0) {
+          const file = files[idx - 1]!;
+          setViewerFile((prev) => (prev ? { ...file, panel: prev.panel } : null));
+        }
+        return undefined;
+      }
+      if (command === "navigateNext") {
+        if (idx >= 0 && idx < files.length - 1) {
+          const file = files[idx + 1]!;
+          setViewerFile((prev) => (prev ? { ...file, panel: prev.panel } : null));
+        }
+        return undefined;
+      }
+      if (command === "getFileIndex") {
+        return { index: idx, total: files.length };
       }
       return undefined;
-    }
-    if (command === 'navigateNext') {
-      if (idx >= 0 && idx < files.length - 1) {
-        const file = files[idx + 1]!;
-        setViewerFile(prev => prev ? { ...file, panel: prev.panel } : null);
-      }
-      return undefined;
-    }
-    if (command === 'getFileIndex') {
-      return { index: idx, total: files.length };
-    }
-    return undefined;
-  }, [viewerFile, getMatchingFiles]);
+    },
+    [viewerFile, getMatchingFiles],
+  );
 
   // Resolve extension for current viewer/editor file. Cache the identity so the
   // overlay + iframe persist after the file is closed, enabling iframe reuse.
@@ -351,23 +402,29 @@ export function App() {
 
   useEffect(() => {
     if (!viewerResolved) return;
-    setViewerExt(prev => {
+    setViewerExt((prev) => {
       if (prev?.dirPath === viewerResolved.extensionDirPath && prev?.entry === viewerResolved.contribution.entry) return prev;
-      return { dirPath: viewerResolved.extensionDirPath, entry: viewerResolved.contribution.entry };
+      return {
+        dirPath: viewerResolved.extensionDirPath,
+        entry: viewerResolved.contribution.entry,
+      };
     });
   }, [viewerResolved?.extensionDirPath, viewerResolved?.contribution.entry]);
 
   useEffect(() => {
     if (!editorResolved) return;
-    setEditorExt(prev => {
+    setEditorExt((prev) => {
       if (prev?.dirPath === editorResolved.extensionDirPath && prev?.entry === editorResolved.contribution.entry) return prev;
-      return { dirPath: editorResolved.extensionDirPath, entry: editorResolved.contribution.entry };
+      return {
+        dirPath: editorResolved.extensionDirPath,
+        entry: editorResolved.contribution.entry,
+      };
     });
   }, [editorResolved?.extensionDirPath, editorResolved?.contribution.entry]);
 
   const viewerActiveName = viewerFile && isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
-  const leftRequestedCursor = left.requestedCursor ?? (viewerFile?.panel === 'left' ? viewerActiveName : undefined);
-  const rightRequestedCursor = right.requestedCursor ?? (viewerFile?.panel === 'right' ? viewerActiveName : undefined);
+  const leftRequestedCursor = left.requestedCursor ?? (viewerFile?.panel === "left" ? viewerActiveName : undefined);
+  const rightRequestedCursor = right.requestedCursor ?? (viewerFile?.panel === "right" ? viewerActiveName : undefined);
 
   // Panel state persistence with long debounce (10s) to avoid excessive writes
   const panelStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -380,9 +437,9 @@ export function App() {
     const persisted: PersistedTab[] = [];
     let mappedIdx = 0;
     for (let i = 0; i < tabs.length; i++) {
-      if (tabs[i].type === 'filelist') {
+      if (tabs[i].type === "filelist") {
         if (i === activeIdx) mappedIdx = persisted.length;
-        persisted.push({ type: 'filelist', path: tabs[i].path });
+        persisted.push({ type: "filelist", path: tabs[i].path });
       }
     }
     return { tabs: persisted, activeTabIndex: mappedIdx };
@@ -423,8 +480,8 @@ export function App() {
     const handleBeforeUnload = () => {
       flushPanelState();
     };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [flushPanelState]);
 
   const handleLeftStateChange = useCallback(
@@ -439,21 +496,29 @@ export function App() {
       savePanelStateDebounced();
       // Update opposite panel's temp preview tab and switch to it
       const tabs = rightTabsRef.current;
-      const tempIdx = tabs.findIndex((t) => t.type === 'preview' && t.isTemp && t.sourcePanel === 'left');
+      const tempIdx = tabs.findIndex((t) => t.type === "preview" && t.isTemp && t.sourcePanel === "left");
       if (tempIdx < 0 || !selectedName) return;
       const entry = left.entries.find((e) => e.name === selectedName);
-      if (!entry || entry.type !== 'file') return;
+      if (!entry || entry.type !== "file") return;
       const path = entry.path as string;
       const name = entry.name;
       const size = Number(entry.meta.size);
       const current = tabs[tempIdx];
-      if (current.type === 'preview' && current.path === path && current.name === name) return;
+      if (current.type === "preview" && current.path === path && current.name === name) return;
       const next = [...tabs];
-      next[tempIdx] = { id: current.id, type: 'preview' as const, path, name, size, isTemp: true, sourcePanel: 'left' as const };
+      next[tempIdx] = {
+        id: current.id,
+        type: "preview" as const,
+        path,
+        name,
+        size,
+        isTemp: true,
+        sourcePanel: "left" as const,
+      };
       setRightTabs(next);
       setRightActiveIndex(tempIdx);
     },
-    [left.currentPath, left.entries, savePanelStateDebounced]
+    [left.currentPath, left.entries, savePanelStateDebounced],
   );
 
   const handleRightStateChange = useCallback(
@@ -467,21 +532,29 @@ export function App() {
       };
       savePanelStateDebounced();
       const tabs = leftTabsRef.current;
-      const tempIdx = tabs.findIndex((t) => t.type === 'preview' && t.isTemp && t.sourcePanel === 'right');
+      const tempIdx = tabs.findIndex((t) => t.type === "preview" && t.isTemp && t.sourcePanel === "right");
       if (tempIdx < 0 || !selectedName) return;
       const entry = right.entries.find((e) => e.name === selectedName);
-      if (!entry || entry.type !== 'file') return;
+      if (!entry || entry.type !== "file") return;
       const path = entry.path as string;
       const name = entry.name;
       const size = Number(entry.meta.size);
       const current = tabs[tempIdx];
-      if (current.type === 'preview' && current.path === path && current.name === name) return;
+      if (current.type === "preview" && current.path === path && current.name === name) return;
       const next = [...tabs];
-      next[tempIdx] = { id: current.id, type: 'preview' as const, path, name, size, isTemp: true, sourcePanel: 'right' as const };
+      next[tempIdx] = {
+        id: current.id,
+        type: "preview" as const,
+        path,
+        name,
+        size,
+        isTemp: true,
+        sourcePanel: "right" as const,
+      };
       setLeftTabs(next);
       setLeftActiveIndex(tempIdx);
     },
-    [right.currentPath, right.entries, savePanelStateDebounced]
+    [right.currentPath, right.entries, savePanelStateDebounced],
   );
 
   // Save active panel when it changes (only after settings loaded to avoid overwriting on mount)
@@ -492,11 +565,11 @@ export function App() {
 
   const handleNewTab = useCallback(
     (side: PanelSide) => {
-      const path = side === 'left' ? left.currentPath : right.currentPath;
+      const path = side === "left" ? left.currentPath : right.currentPath;
       const newTab = createFilelistTab(path);
-      const setTabs = side === 'left' ? setLeftTabs : setRightTabs;
-      const setIdx = side === 'left' ? setLeftActiveIndex : setRightActiveIndex;
-      const panel = side === 'left' ? left : right;
+      const setTabs = side === "left" ? setLeftTabs : setRightTabs;
+      const setIdx = side === "left" ? setLeftActiveIndex : setRightActiveIndex;
+      const panel = side === "left" ? left : right;
       setTabs((prev) => {
         const next = [...prev, newTab];
         queueMicrotask(() => setIdx(next.length - 1));
@@ -504,65 +577,71 @@ export function App() {
       });
       panel.navigateTo(path);
     },
-    [left.currentPath, right.currentPath, left, right]
+    [left.currentPath, right.currentPath, left, right],
   );
 
-  const handleCloseTab = useCallback(async (side: PanelSide, index: number) => {
-    const tabs = side === 'left' ? leftTabs : rightTabs;
-    if (tabs.length > 1) {
-      const next = tabs.filter((_, i) => i !== index);
-      const activeIdx = side === 'left' ? leftActiveIndex : rightActiveIndex;
-      const newIdx = activeIdx === index ? Math.min(activeIdx, next.length - 1) : activeIdx > index ? activeIdx - 1 : activeIdx;
-      if (side === 'left') {
+  const handleCloseTab = useCallback(
+    async (side: PanelSide, index: number) => {
+      const tabs = side === "left" ? leftTabs : rightTabs;
+      if (tabs.length > 1) {
+        const next = tabs.filter((_, i) => i !== index);
+        const activeIdx = side === "left" ? leftActiveIndex : rightActiveIndex;
+        const newIdx = activeIdx === index ? Math.min(activeIdx, next.length - 1) : activeIdx > index ? activeIdx - 1 : activeIdx;
+        if (side === "left") {
+          setLeftTabs(next);
+          setLeftActiveIndex(newIdx);
+        } else {
+          setRightTabs(next);
+          setRightActiveIndex(newIdx);
+        }
+        return;
+      }
+      // Last tab: replace with new filelist tab at home
+      const home = await bridge.utils.getHomePath();
+      const newTab = createFilelistTab(home);
+      if (side === "left") {
+        setLeftTabs([newTab]);
+        setLeftActiveIndex(0);
+        left.navigateTo(home);
+      } else {
+        setRightTabs([newTab]);
+        setRightActiveIndex(0);
+        right.navigateTo(home);
+      }
+    },
+    [leftTabs, rightTabs, leftActiveIndex, rightActiveIndex, left, right],
+  );
+
+  const handleReorderTabs = useCallback(
+    (side: PanelSide, fromIndex: number, toIndex: number) => {
+      const tabs = side === "left" ? leftTabs : rightTabs;
+      const activeIdx = side === "left" ? leftActiveIndex : rightActiveIndex;
+      const next = [...tabs];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      let newActiveIdx = activeIdx;
+      if (activeIdx === fromIndex) {
+        newActiveIdx = toIndex;
+      } else {
+        if (fromIndex < activeIdx && toIndex >= activeIdx) newActiveIdx--;
+        else if (fromIndex > activeIdx && toIndex <= activeIdx) newActiveIdx++;
+      }
+      if (side === "left") {
         setLeftTabs(next);
-        setLeftActiveIndex(newIdx);
+        setLeftActiveIndex(newActiveIdx);
       } else {
         setRightTabs(next);
-        setRightActiveIndex(newIdx);
+        setRightActiveIndex(newActiveIdx);
       }
-      return;
-    }
-    // Last tab: replace with new filelist tab at home
-    const home = await bridge.utils.getHomePath();
-    const newTab = createFilelistTab(home);
-    if (side === 'left') {
-      setLeftTabs([newTab]);
-      setLeftActiveIndex(0);
-      left.navigateTo(home);
-    } else {
-      setRightTabs([newTab]);
-      setRightActiveIndex(0);
-      right.navigateTo(home);
-    }
-  }, [leftTabs, rightTabs, leftActiveIndex, rightActiveIndex, left, right]);
-
-  const handleReorderTabs = useCallback((side: PanelSide, fromIndex: number, toIndex: number) => {
-    const tabs = side === 'left' ? leftTabs : rightTabs;
-    const activeIdx = side === 'left' ? leftActiveIndex : rightActiveIndex;
-    const next = [...tabs];
-    const [moved] = next.splice(fromIndex, 1);
-    next.splice(toIndex, 0, moved);
-    let newActiveIdx = activeIdx;
-    if (activeIdx === fromIndex) {
-      newActiveIdx = toIndex;
-    } else {
-      if (fromIndex < activeIdx && toIndex >= activeIdx) newActiveIdx--;
-      else if (fromIndex > activeIdx && toIndex <= activeIdx) newActiveIdx++;
-    }
-    if (side === 'left') {
-      setLeftTabs(next);
-      setLeftActiveIndex(newActiveIdx);
-    } else {
-      setRightTabs(next);
-      setRightActiveIndex(newActiveIdx);
-    }
-  }, [leftTabs, rightTabs, leftActiveIndex, rightActiveIndex]);
+    },
+    [leftTabs, rightTabs, leftActiveIndex, rightActiveIndex],
+  );
 
   const handlePinTab = useCallback((side: PanelSide, index: number) => {
-    if (side === 'left') {
+    if (side === "left") {
       setLeftTabs((prev) => {
         const t = prev[index];
-        if (t?.type !== 'preview' || !t.isTemp) return prev;
+        if (t?.type !== "preview" || !t.isTemp) return prev;
         const next = [...prev];
         next[index] = { ...t, isTemp: false };
         return next;
@@ -570,7 +649,7 @@ export function App() {
     } else {
       setRightTabs((prev) => {
         const t = prev[index];
-        if (t?.type !== 'preview' || !t.isTemp) return prev;
+        if (t?.type !== "preview" || !t.isTemp) return prev;
         const next = [...prev];
         next[index] = { ...t, isTemp: false };
         return next;
@@ -580,18 +659,18 @@ export function App() {
 
   const handleOpenCurrentFolderInOppositeCurrentTab = useCallback(() => {
     const side = activePanelRef.current;
-    const opposite = side === 'left' ? 'right' : 'left';
-    const path = side === 'left' ? left.currentPath : right.currentPath;
-    const tabs = opposite === 'right' ? rightTabs : leftTabs;
-    const activeIdx = opposite === 'right' ? rightActiveIndex : leftActiveIndex;
+    const opposite = side === "left" ? "right" : "left";
+    const path = side === "left" ? left.currentPath : right.currentPath;
+    const tabs = opposite === "right" ? rightTabs : leftTabs;
+    const activeIdx = opposite === "right" ? rightActiveIndex : leftActiveIndex;
     const tab = tabs[activeIdx];
-    if (tab?.type !== 'filelist') return;
-    const setTabs = opposite === 'right' ? setRightTabs : setLeftTabs;
-    const panel = opposite === 'right' ? right : left;
+    if (tab?.type !== "filelist") return;
+    const setTabs = opposite === "right" ? setRightTabs : setLeftTabs;
+    const panel = opposite === "right" ? right : left;
     setTabs((prev) => {
       const next = [...prev];
       const t = next[activeIdx];
-      if (t?.type !== 'filelist') return prev;
+      if (t?.type !== "filelist") return prev;
       next[activeIdx] = { ...t, path };
       return next;
     });
@@ -601,12 +680,12 @@ export function App() {
 
   const handleOpenCurrentFolderInOppositeNewTab = useCallback(() => {
     const side = activePanelRef.current;
-    const opposite = side === 'left' ? 'right' : 'left';
-    const path = side === 'left' ? left.currentPath : right.currentPath;
+    const opposite = side === "left" ? "right" : "left";
+    const path = side === "left" ? left.currentPath : right.currentPath;
     const newTab = createFilelistTab(path);
-    const setTabs = opposite === 'right' ? setRightTabs : setLeftTabs;
-    const setIdx = opposite === 'right' ? setRightActiveIndex : setLeftActiveIndex;
-    const panel = opposite === 'right' ? right : left;
+    const setTabs = opposite === "right" ? setRightTabs : setLeftTabs;
+    const setIdx = opposite === "right" ? setRightActiveIndex : setLeftActiveIndex;
+    const panel = opposite === "right" ? right : left;
     setTabs((prev) => {
       const next = [...prev, newTab];
       queueMicrotask(() => setIdx(next.length - 1));
@@ -618,22 +697,22 @@ export function App() {
 
   const handleOpenSelectedFolderInOppositeCurrentTab = useCallback(() => {
     const side = activePanelRef.current;
-    const entries = side === 'left' ? left.entries : right.entries;
-    const selectedName = side === 'left' ? leftSelectedNameRef.current : rightSelectedNameRef.current;
+    const entries = side === "left" ? left.entries : right.entries;
+    const selectedName = side === "left" ? leftSelectedNameRef.current : rightSelectedNameRef.current;
     const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
-    if (!entry || entry.type !== 'folder') return;
+    if (!entry || entry.type !== "folder") return;
     const path = entry.path as string;
-    const opposite = side === 'left' ? 'right' : 'left';
-    const tabs = opposite === 'right' ? rightTabs : leftTabs;
-    const activeIdx = opposite === 'right' ? rightActiveIndex : leftActiveIndex;
+    const opposite = side === "left" ? "right" : "left";
+    const tabs = opposite === "right" ? rightTabs : leftTabs;
+    const activeIdx = opposite === "right" ? rightActiveIndex : leftActiveIndex;
     const tab = tabs[activeIdx];
-    if (tab?.type !== 'filelist') return;
-    const setTabs = opposite === 'right' ? setRightTabs : setLeftTabs;
-    const panel = opposite === 'right' ? right : left;
+    if (tab?.type !== "filelist") return;
+    const setTabs = opposite === "right" ? setRightTabs : setLeftTabs;
+    const panel = opposite === "right" ? right : left;
     setTabs((prev) => {
       const next = [...prev];
       const t = next[activeIdx];
-      if (t?.type !== 'filelist') return prev;
+      if (t?.type !== "filelist") return prev;
       next[activeIdx] = { ...t, path };
       return next;
     });
@@ -643,16 +722,16 @@ export function App() {
 
   const handleOpenSelectedFolderInOppositeNewTab = useCallback(() => {
     const side = activePanelRef.current;
-    const entries = side === 'left' ? left.entries : right.entries;
-    const selectedName = side === 'left' ? leftSelectedNameRef.current : rightSelectedNameRef.current;
+    const entries = side === "left" ? left.entries : right.entries;
+    const selectedName = side === "left" ? leftSelectedNameRef.current : rightSelectedNameRef.current;
     const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
-    if (!entry || entry.type !== 'folder') return;
+    if (!entry || entry.type !== "folder") return;
     const path = entry.path as string;
-    const opposite = side === 'left' ? 'right' : 'left';
+    const opposite = side === "left" ? "right" : "left";
     const newTab = createFilelistTab(path);
-    const setTabs = opposite === 'right' ? setRightTabs : setLeftTabs;
-    const setIdx = opposite === 'right' ? setRightActiveIndex : setLeftActiveIndex;
-    const panel = opposite === 'right' ? right : left;
+    const setTabs = opposite === "right" ? setRightTabs : setLeftTabs;
+    const setIdx = opposite === "right" ? setRightActiveIndex : setLeftActiveIndex;
+    const panel = opposite === "right" ? right : left;
     setTabs((prev) => {
       const next = [...prev, newTab];
       queueMicrotask(() => setIdx(next.length - 1));
@@ -664,23 +743,23 @@ export function App() {
 
   const handlePreviewInOppositePanel = useCallback(() => {
     const side = activePanelRef.current;
-    const entries = side === 'left' ? left.entries : right.entries;
-    const selectedName = side === 'left' ? leftSelectedNameRef.current : rightSelectedNameRef.current;
+    const entries = side === "left" ? left.entries : right.entries;
+    const selectedName = side === "left" ? leftSelectedNameRef.current : rightSelectedNameRef.current;
     const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
-    if (!entry || entry.type !== 'file') return;
+    if (!entry || entry.type !== "file") return;
     const path = entry.path as string;
     const name = entry.name;
     const size = Number(entry.meta.size);
     const sourcePanel = side;
-    const opposite = side === 'left' ? 'right' : 'left';
-    const tabs = opposite === 'right' ? rightTabs : leftTabs;
-    const setTabs = opposite === 'right' ? setRightTabs : setLeftTabs;
-    const setIdx = opposite === 'right' ? setRightActiveIndex : setLeftActiveIndex;
+    const opposite = side === "left" ? "right" : "left";
+    const tabs = opposite === "right" ? rightTabs : leftTabs;
+    const setTabs = opposite === "right" ? setRightTabs : setLeftTabs;
+    const setIdx = opposite === "right" ? setRightActiveIndex : setLeftActiveIndex;
 
-    const tempIdx = tabs.findIndex((t) => t.type === 'preview' && t.isTemp);
+    const tempIdx = tabs.findIndex((t) => t.type === "preview" && t.isTemp);
     if (tempIdx >= 0) {
       const current = tabs[tempIdx];
-      if (current.type === 'preview') {
+      if (current.type === "preview") {
         setTabs((prev) => {
           const next = [...prev];
           next[tempIdx] = { ...current, path, name, size, sourcePanel };
@@ -698,7 +777,7 @@ export function App() {
 
   const handleTerminalCwd = useCallback((path: string) => {
     const normalizedPath = normalizeTerminalPath(path);
-    const panel = activePanelRef.current === 'left' ? leftRef.current : rightRef.current;
+    const panel = activePanelRef.current === "left" ? leftRef.current : rightRef.current;
     if (normalizedPath === normalizeTerminalPath(panel.currentPath)) return;
     panel.navigateTo(normalizedPath);
     setRequestedTerminalCwd(null);
@@ -706,7 +785,7 @@ export function App() {
 
   useEffect(() => {
     if (!requestedTerminalCwd) return;
-    const activePath = normalizeTerminalPath(activePanel === 'left' ? left.currentPath : right.currentPath);
+    const activePath = normalizeTerminalPath(activePanel === "left" ? left.currentPath : right.currentPath);
     if (activePath === requestedTerminalCwd) {
       setRequestedTerminalCwd(null);
     }
@@ -741,12 +820,12 @@ export function App() {
   useEffect(() => {
     // If a color theme is active, determine light/dark from its uiTheme.
     // Otherwise fall back to OS/system theme.
-    const colorThemeMatch = activeColorTheme
-      ? findColorTheme(latestExtensionsRef.current, activeColorTheme)
-      : null;
+    const colorThemeMatch = activeColorTheme ? findColorTheme(latestExtensionsRef.current, activeColorTheme) : null;
     const effectiveKind = colorThemeMatch
       ? uiThemeToKind(colorThemeMatch.theme.uiTheme)
-      : (theme === 'light' || theme === 'high-contrast-light' ? 'light' : 'dark');
+      : theme === "light" || theme === "high-contrast-light"
+        ? "light"
+        : "dark";
     document.documentElement.dataset.theme = effectiveKind;
     setIconThemeKind(effectiveKind);
   }, [theme, activeColorTheme]);
@@ -756,348 +835,421 @@ export function App() {
     const disposables: (() => void)[] = [];
 
     // View commands
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.toggleHiddenFiles',
-      'Toggle Hidden Files',
-      () => setShowHidden(h => { const next = !h; updateSettings({ showHidden: next }); return next; }),
-      { category: 'View' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.toggleHiddenFiles',
-      key: 'ctrl+.',
-      mac: 'cmd+.',
-    }));
-
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.togglePanels',
-      'Toggle Panels',
-      () => setPanelsVisible((v) => {
-        const next = !v;
-        if (next) {
-          // Restoring panels should deterministically restore panel command context.
-          focusContext.set('panel');
-        }
-        return next;
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.toggleHiddenFiles",
+        "Toggle Hidden Files",
+        () =>
+          setShowHidden((h) => {
+            const next = !h;
+            updateSettings({ showHidden: next });
+            return next;
+          }),
+        { category: "View" },
+      ),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.toggleHiddenFiles",
+        key: "ctrl+.",
+        mac: "cmd+.",
       }),
-      { category: 'View' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.togglePanels',
-      key: 'ctrl+o',
-      mac: 'cmd+o',
-      when: '!terminalCommandRunning',
-    }));
+    );
 
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.showExtensions',
-      'Show Extensions',
-      () => setShowExtensions(true),
-      { category: 'View' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.showExtensions',
-      key: 'f11',
-    }));
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.togglePanels",
+        "Toggle Panels",
+        () =>
+          setPanelsVisible((v) => {
+            const next = !v;
+            if (next) {
+              // Restoring panels should deterministically restore panel command context.
+              focusContext.set("panel");
+            }
+            return next;
+          }),
+        { category: "View" },
+      ),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.togglePanels",
+        key: "ctrl+o",
+        mac: "cmd+o",
+        when: "!terminalCommandRunning",
+      }),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand("faraday.showExtensions", "Show Extensions", () => setShowExtensions(true), {
+        category: "View",
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.showExtensions",
+        key: "f11",
+      }),
+    );
 
     // Navigation commands
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.switchPanel',
-      'Switch Panel',
-      () => setActivePanel(s => s === 'left' ? 'right' : 'left'),
-      { category: 'Navigation', when: 'focusPanel && !dialogOpen' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.switchPanel',
-      key: 'tab',
-      when: 'focusPanel && !dialogOpen',
-    }));
+    disposables.push(
+      commandRegistry.registerCommand("faraday.switchPanel", "Switch Panel", () => setActivePanel((s) => (s === "left" ? "right" : "left")), {
+        category: "Navigation",
+        when: "focusPanel && !dialogOpen",
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.switchPanel",
+        key: "tab",
+        when: "focusPanel && !dialogOpen",
+      }),
+    );
 
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.focusLeftPanel',
-      'Focus Left Panel',
-      () => setActivePanel('left'),
-      { category: 'Navigation', when: 'focusPanel && !leftPanelActive' }
-    ));
+    disposables.push(
+      commandRegistry.registerCommand("faraday.focusLeftPanel", "Focus Left Panel", () => setActivePanel("left"), {
+        category: "Navigation",
+        when: "focusPanel && !leftPanelActive",
+      }),
+    );
 
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.focusRightPanel',
-      'Focus Right Panel',
-      () => setActivePanel('right'),
-      { category: 'Navigation', when: 'focusPanel && !rightPanelActive' }
-    ));
+    disposables.push(
+      commandRegistry.registerCommand("faraday.focusRightPanel", "Focus Right Panel", () => setActivePanel("right"), {
+        category: "Navigation",
+        when: "focusPanel && !rightPanelActive",
+      }),
+    );
 
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.cancelNavigation',
-      'Cancel Navigation',
-      () => {
-        left.cancelNavigation();
-        right.cancelNavigation();
-      },
-      { category: 'Navigation', when: 'focusPanel' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.cancelNavigation',
-      key: 'escape',
-      when: 'focusPanel',
-    }));
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.cancelNavigation",
+        "Cancel Navigation",
+        () => {
+          left.cancelNavigation();
+          right.cancelNavigation();
+        },
+        { category: "Navigation", when: "focusPanel" },
+      ),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.cancelNavigation",
+        key: "escape",
+        when: "focusPanel",
+      }),
+    );
 
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.goToParent',
-      'Go to Parent Directory',
-      () => {
-        const panel = activePanelRef.current === 'left' ? left : right;
-        const currentPath = panel.currentPath;
-        if (isContainerPath(currentPath)) {
-          const { containerFile, innerPath } = parseContainerPath(currentPath);
-          if (innerPath === '/' || innerPath === '') {
-            // Exiting the container root — go to the parent dir, cursor on the archive file.
-            panel.navigateTo(dirname(containerFile), false, basename(containerFile));
-            return;
-          }
-        }
-        const parent = dirname(currentPath);
-        if (parent !== currentPath) {
-          panel.navigateTo(parent);
-        }
-      },
-      { category: 'Navigation', when: 'focusPanel' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.goToParent',
-      key: 'alt+pageup',
-      when: 'focusPanel',
-    }));
-
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.goHome',
-      'Go to Home Directory',
-      async () => {
-        const home = await bridge.utils.getHomePath();
-        const panel = activePanelRef.current === 'left' ? left : right;
-        panel.navigateTo(home);
-      },
-      { category: 'Navigation', when: 'focusPanel' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.goHome',
-      key: 'ctrl+home',
-      mac: 'cmd+home',
-    }));
-
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.newTab',
-      'New Tab',
-      () => handleNewTab(activePanelRef.current),
-      { category: 'File', when: 'focusPanel' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.newTab',
-      key: 'ctrl+t',
-      mac: 'cmd+t',
-      when: 'focusPanel',
-    }));
-
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.closeTab',
-      'Close Tab',
-      () => {
-        const side = activePanelRef.current;
-        const idx = side === 'left' ? leftActiveIndex : rightActiveIndex;
-        void handleCloseTab(side, idx);
-      },
-      { category: 'File', when: 'focusPanel' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.closeTab',
-      key: 'ctrl+w',
-      mac: 'cmd+w',
-      when: 'focusPanel',
-    }));
-
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.previewInOppositePanel',
-      'Show Preview in Opposite Panel',
-      () => handlePreviewInOppositePanel(),
-      { category: 'File', when: 'focusPanel && listItemIsFile' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.previewInOppositePanel',
-      key: 'ctrl+shift+o',
-      mac: 'cmd+shift+o',
-      when: 'focusPanel && listItemIsFile',
-    }));
-
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.openCurrentFolderInOppositePanelCurrentTab',
-      'Open Current Folder in Opposite Panel (Current Tab)',
-      () => handleOpenCurrentFolderInOppositeCurrentTab(),
-      { category: 'File', when: 'focusPanel' }
-    ));
-
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.openCurrentFolderInOppositePanelNewTab',
-      'Open Current Folder in Opposite Panel (New Tab)',
-      () => handleOpenCurrentFolderInOppositeNewTab(),
-      { category: 'File', when: 'focusPanel' }
-    ));
-
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.openSelectedFolderInOppositePanelCurrentTab',
-      'Open Selected Folder in Opposite Panel (Current Tab)',
-      () => handleOpenSelectedFolderInOppositeCurrentTab(),
-      { category: 'File', when: 'focusPanel && listItemIsFolder' }
-    ));
-
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.openSelectedFolderInOppositePanelNewTab',
-      'Open Selected Folder in Opposite Panel (New Tab)',
-      () => handleOpenSelectedFolderInOppositeNewTab(),
-      { category: 'File', when: 'focusPanel && listItemIsFolder' }
-    ));
-
-    // File commands
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.refresh',
-      'Refresh',
-      () => {
-        const panel = activePanelRef.current === 'left' ? left : right;
-        panel.navigateTo(panel.currentPath);
-      },
-      { category: 'File', when: 'focusPanel' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.refresh',
-      key: 'ctrl+r',
-      mac: 'cmd+r',
-      when: 'focusPanel',
-    }));
-
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.openCreateFile',
-      'Open / Create File',
-      () => {
-        const panel = activePanelRef.current === 'left' ? left : right;
-        const currentPath = panel.currentPath;
-        const exts = latestExtensionsRef.current;
-        const langList = exts.flatMap((e) => e.languages ?? []);
-        const seen = new Set<string>();
-        const languages: LanguageOption[] = langList
-          .filter((l) => {
-            if (seen.has(l.id)) return false;
-            seen.add(l.id);
-            return true;
-          })
-          .map((l) => ({ id: l.id, label: l.aliases?.[0] ?? l.id }));
-        showDialog({ type: 'openCreateFile', currentPath, languages, onConfirm: handleOpenCreateFileConfirm, onCancel: () => {} });
-      },
-      { category: 'File', when: 'focusPanel' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.openCreateFile',
-      key: 'shift+f4',
-      when: 'focusPanel',
-    }));
-
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.makeFolder',
-      'Make Folder',
-      () => {
-        const panel = activePanelRef.current === 'left' ? left : right;
-        const currentPath = panel.currentPath;
-        showDialog({
-          type: 'makeFolder',
-          currentPath,
-          onConfirm: async (result) => {
-            const join = (name: string) =>
-              currentPath ? `${currentPath.replace(/\/?$/, '')}/${name}` : name;
-            if (result.mode === 'single') {
-              const fullPath = join(result.name);
-              if (bridge.fs.createDir) await bridge.fs.createDir(fullPath);
-              panel.navigateTo(fullPath);
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.goToParent",
+        "Go to Parent Directory",
+        () => {
+          const panel = activePanelRef.current === "left" ? left : right;
+          const currentPath = panel.currentPath;
+          if (isContainerPath(currentPath)) {
+            const { containerFile, innerPath } = parseContainerPath(currentPath);
+            if (innerPath === "/" || innerPath === "") {
+              // Exiting the container root — go to the parent dir, cursor on the archive file.
+              panel.navigateTo(dirname(containerFile), false, basename(containerFile));
               return;
             }
-            for (const name of result.names) {
-              const fullPath = join(name);
-              if (bridge.fs.createDir) await bridge.fs.createDir(fullPath);
-            }
-            panel.navigateTo(currentPath);
-          },
-          onCancel: () => {},
-        });
-      },
-      { category: 'File', when: 'focusPanel' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.makeFolder',
-      key: 'f7',
-      when: 'focusPanel',
-    }));
+          }
+          const parent = dirname(currentPath);
+          if (parent !== currentPath) {
+            panel.navigateTo(parent);
+          }
+        },
+        { category: "Navigation", when: "focusPanel" },
+      ),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.goToParent",
+        key: "alt+pageup",
+        when: "focusPanel",
+      }),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.goHome",
+        "Go to Home Directory",
+        async () => {
+          const home = await bridge.utils.getHomePath();
+          const panel = activePanelRef.current === "left" ? left : right;
+          panel.navigateTo(home);
+        },
+        { category: "Navigation", when: "focusPanel" },
+      ),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.goHome",
+        key: "ctrl+home",
+        mac: "cmd+home",
+      }),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand("faraday.newTab", "New Tab", () => handleNewTab(activePanelRef.current), {
+        category: "File",
+        when: "focusPanel",
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.newTab",
+        key: "ctrl+t",
+        mac: "cmd+t",
+        when: "focusPanel",
+      }),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.closeTab",
+        "Close Tab",
+        () => {
+          const side = activePanelRef.current;
+          const idx = side === "left" ? leftActiveIndex : rightActiveIndex;
+          void handleCloseTab(side, idx);
+        },
+        { category: "File", when: "focusPanel" },
+      ),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.closeTab",
+        key: "ctrl+w",
+        mac: "cmd+w",
+        when: "focusPanel",
+      }),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand("faraday.previewInOppositePanel", "Show Preview in Opposite Panel", () => handlePreviewInOppositePanel(), {
+        category: "File",
+        when: "focusPanel && listItemIsFile",
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.previewInOppositePanel",
+        key: "ctrl+shift+o",
+        mac: "cmd+shift+o",
+        when: "focusPanel && listItemIsFile",
+      }),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.openCurrentFolderInOppositePanelCurrentTab",
+        "Open Current Folder in Opposite Panel (Current Tab)",
+        () => handleOpenCurrentFolderInOppositeCurrentTab(),
+        { category: "File", when: "focusPanel" },
+      ),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.openCurrentFolderInOppositePanelNewTab",
+        "Open Current Folder in Opposite Panel (New Tab)",
+        () => handleOpenCurrentFolderInOppositeNewTab(),
+        { category: "File", when: "focusPanel" },
+      ),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.openSelectedFolderInOppositePanelCurrentTab",
+        "Open Selected Folder in Opposite Panel (Current Tab)",
+        () => handleOpenSelectedFolderInOppositeCurrentTab(),
+        { category: "File", when: "focusPanel && listItemIsFolder" },
+      ),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.openSelectedFolderInOppositePanelNewTab",
+        "Open Selected Folder in Opposite Panel (New Tab)",
+        () => handleOpenSelectedFolderInOppositeNewTab(),
+        { category: "File", when: "focusPanel && listItemIsFolder" },
+      ),
+    );
+
+    // File commands
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.refresh",
+        "Refresh",
+        () => {
+          const panel = activePanelRef.current === "left" ? left : right;
+          panel.navigateTo(panel.currentPath);
+        },
+        { category: "File", when: "focusPanel" },
+      ),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.refresh",
+        key: "ctrl+r",
+        mac: "cmd+r",
+        when: "focusPanel",
+      }),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.openCreateFile",
+        "Open / Create File",
+        () => {
+          const panel = activePanelRef.current === "left" ? left : right;
+          const currentPath = panel.currentPath;
+          const exts = latestExtensionsRef.current;
+          const langList = exts.flatMap((e) => e.languages ?? []);
+          const seen = new Set<string>();
+          const languages: LanguageOption[] = langList
+            .filter((l) => {
+              if (seen.has(l.id)) return false;
+              seen.add(l.id);
+              return true;
+            })
+            .map((l) => ({ id: l.id, label: l.aliases?.[0] ?? l.id }));
+          showDialog({
+            type: "openCreateFile",
+            currentPath,
+            languages,
+            onConfirm: handleOpenCreateFileConfirm,
+            onCancel: () => {},
+          });
+        },
+        { category: "File", when: "focusPanel" },
+      ),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.openCreateFile",
+        key: "shift+f4",
+        when: "focusPanel",
+      }),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.makeFolder",
+        "Make Folder",
+        () => {
+          const panel = activePanelRef.current === "left" ? left : right;
+          const currentPath = panel.currentPath;
+          showDialog({
+            type: "makeFolder",
+            currentPath,
+            onConfirm: async (result) => {
+              const join = (name: string) => (currentPath ? `${currentPath.replace(/\/?$/, "")}/${name}` : name);
+              if (result.mode === "single") {
+                const fullPath = join(result.name);
+                if (bridge.fs.createDir) await bridge.fs.createDir(fullPath);
+                panel.navigateTo(fullPath);
+                return;
+              }
+              for (const name of result.names) {
+                const fullPath = join(name);
+                if (bridge.fs.createDir) await bridge.fs.createDir(fullPath);
+              }
+              panel.navigateTo(currentPath);
+            },
+            onCancel: () => {},
+          });
+        },
+        { category: "File", when: "focusPanel" },
+      ),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.makeFolder",
+        key: "f7",
+        when: "focusPanel",
+      }),
+    );
 
     // Command palette
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.showCommandPalette',
-      'Show All Commands',
-      () => commandPalette.setOpen((o) => !o),
-      { category: 'View' }
-    ));
+    disposables.push(
+      commandRegistry.registerCommand("faraday.showCommandPalette", "Show All Commands", () => commandPalette.setOpen((o) => !o), { category: "View" }),
+    );
 
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.showCommandPalette',
-      key: 'cmd+shift+p',
-    }));
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.showCommandPalette",
+        key: "cmd+shift+p",
+      }),
+    );
 
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.showCommandPalette',
-      key: 'cmd+p',
-    }));
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.showCommandPalette",
+        key: "cmd+p",
+      }),
+    );
 
     // Close viewer/editor commands
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.closeViewer',
-      'Close Viewer',
-      () => setViewerFile(null),
-      { category: 'View', when: 'focusViewer' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.closeViewer',
-      key: 'escape',
-      when: 'focusViewer',
-    }));
+    disposables.push(
+      commandRegistry.registerCommand("faraday.closeViewer", "Close Viewer", () => setViewerFile(null), {
+        category: "View",
+        when: "focusViewer",
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.closeViewer",
+        key: "escape",
+        when: "focusViewer",
+      }),
+    );
 
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.closeEditor',
-      'Close Editor',
-      () => setEditorFile(null),
-      { category: 'View', when: 'focusEditor' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.closeEditor',
-      key: 'escape',
-      when: 'focusEditor',
-    }));
+    disposables.push(
+      commandRegistry.registerCommand("faraday.closeEditor", "Close Editor", () => setEditorFile(null), {
+        category: "View",
+        when: "focusEditor",
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.closeEditor",
+        key: "escape",
+        when: "focusEditor",
+      }),
+    );
 
     // Exit command
-    disposables.push(commandRegistry.registerCommand(
-      'faraday.exit',
-      'Exit',
-      async () => {
-        if (isTauriApp()) {
-          await getCurrentWindow().close();
-        } else {
-          window.close();
-        }
-      },
-      { category: 'Application' }
-    ));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.exit',
-      key: 'f10',
-    }));
-    disposables.push(commandRegistry.registerKeybinding({
-      command: 'faraday.exit',
-      key: 'cmd+q',
-      mac: 'cmd+q',
-    }));
+    disposables.push(
+      commandRegistry.registerCommand(
+        "faraday.exit",
+        "Exit",
+        async () => {
+          if (isTauriApp()) {
+            await getCurrentWindow().close();
+          } else {
+            window.close();
+          }
+        },
+        { category: "Application" },
+      ),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.exit",
+        key: "f10",
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerKeybinding({
+        command: "faraday.exit",
+        key: "cmd+q",
+        mac: "cmd+q",
+      }),
+    );
 
     return () => {
       for (const dispose of disposables) dispose();
@@ -1130,7 +1282,7 @@ export function App() {
     if (prevLeftActiveIndexRef.current === leftActiveIndex) return;
     prevLeftActiveIndexRef.current = leftActiveIndex;
     const tab = leftTabs[leftActiveIndex];
-    if (tab?.type === 'filelist' && tab.path != null) {
+    if (tab?.type === "filelist" && tab.path != null) {
       left.navigateTo(tab.path);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only run on tab switch; adding leftTabs/left would cause navigate loop
@@ -1139,7 +1291,7 @@ export function App() {
     if (prevRightActiveIndexRef.current === rightActiveIndex) return;
     prevRightActiveIndexRef.current = rightActiveIndex;
     const tab = rightTabs[rightActiveIndex];
-    if (tab?.type === 'filelist' && tab.path != null) {
+    if (tab?.type === "filelist" && tab.path != null) {
       right.navigateTo(tab.path);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only run on tab switch; adding rightTabs/right would cause navigate loop
@@ -1153,7 +1305,7 @@ export function App() {
     setLeftTabs((prev) => {
       if (leftActiveIndex < 0 || leftActiveIndex >= prev.length) return prev;
       const tab = prev[leftActiveIndex];
-      if (tab?.type !== 'filelist' || tab.path === left.currentPath) return prev;
+      if (tab?.type !== "filelist" || tab.path === left.currentPath) return prev;
       const next = [...prev];
       next[leftActiveIndex] = { ...tab, path: left.currentPath };
       return next;
@@ -1165,7 +1317,7 @@ export function App() {
     setRightTabs((prev) => {
       if (rightActiveIndex < 0 || rightActiveIndex >= prev.length) return prev;
       const tab = prev[rightActiveIndex];
-      if (tab?.type !== 'filelist' || tab.path === right.currentPath) return prev;
+      if (tab?.type !== "filelist" || tab.path === right.currentPath) return prev;
       const next = [...prev];
       next[rightActiveIndex] = { ...tab, path: right.currentPath };
       return next;
@@ -1177,21 +1329,17 @@ export function App() {
     if (!settingsLoaded) return;
 
     const browserPath = (() => {
-      if (!isBrowser) return '';
+      if (!isBrowser) return "";
       const url = new URL(window.location.href);
-      const queryPath = url.searchParams.get('path');
+      const queryPath = url.searchParams.get("path");
       if (queryPath) return queryPath;
       const pathName = decodeURIComponent(url.pathname);
-      return pathName.length > 1 ? pathName : '';
+      return pathName.length > 1 ? pathName : "";
     })();
 
     const hasUrlPath = browserPath.length > 0;
 
-    const navigatePanel = async (
-      panel: typeof left,
-      persistedState: PanelPersistedState | undefined,
-      fallbackPath?: string
-    ) => {
+    const navigatePanel = async (panel: typeof left, persistedState: PanelPersistedState | undefined, fallbackPath?: string) => {
       let targetPath = persistedState?.currentPath ?? fallbackPath;
 
       if (targetPath) {
@@ -1257,7 +1405,7 @@ export function App() {
         // Ignore theme load errors; resolver will fall back.
       }
     },
-    [readTextFileAbs]
+    [readTextFileAbs],
   );
 
   // Start Extension Host lazily — re-navigate panels when extensions load
@@ -1281,16 +1429,16 @@ export function App() {
 
     const updateIconTheme = async (exts: LoadedExtension[], themeId: string | undefined): Promise<void> => {
       if (!themeId) {
-        await setIconTheme('fss');
+        await setIconTheme("fss");
         return;
       }
-      const ext = exts.find(e => `${e.ref.publisher}.${e.ref.name}` === themeId);
+      const ext = exts.find((e) => `${e.ref.publisher}.${e.ref.name}` === themeId);
       if (ext?.vscodeIconThemePath) {
-        await setIconTheme('vscode', ext.vscodeIconThemePath);
+        await setIconTheme("vscode", ext.vscodeIconThemePath);
       } else if (ext?.iconThemeFssPath) {
-        await setIconTheme('fss');
+        await setIconTheme("fss");
       } else {
-        await setIconTheme('none');
+        await setIconTheme("none");
       }
     };
 
@@ -1307,7 +1455,7 @@ export function App() {
         try {
           await loadAndApplyColorTheme(match.theme.jsonPath, match.theme.uiTheme);
         } catch (err) {
-          console.warn('[ExtHost] Failed to load color theme:', themeKey, err);
+          console.warn("[ExtHost] Failed to load color theme:", themeKey, err);
           clearColorTheme();
         }
       } else {
@@ -1319,7 +1467,11 @@ export function App() {
     const registerExtensionCommands = (exts: LoadedExtension[]) => {
       // Avoid duplicate registrations on extension host restart.
       for (const d of extensionContributionDisposersRef.current) {
-        try { d(); } catch { /* ignore */ }
+        try {
+          d();
+        } catch {
+          /* ignore */
+        }
       }
       extensionContributionDisposersRef.current = [];
 
@@ -1332,19 +1484,22 @@ export function App() {
               async (...args: unknown[]) => {
                 await extensionHost.executeCommand(cmd.command, args);
               },
-              { category: cmd.category, icon: cmd.icon }
+              { category: cmd.category, icon: cmd.icon },
             );
             extensionContributionDisposersRef.current.push(disposeCmd);
           }
         }
         if (ext.keybindings) {
           for (const kb of ext.keybindings) {
-            const disposeKb = commandRegistry.registerKeybinding({
-              command: kb.command,
-              key: kb.key,
-              mac: kb.mac,
-              when: kb.when,
-            }, 'extension');
+            const disposeKb = commandRegistry.registerKeybinding(
+              {
+                command: kb.command,
+                key: kb.key,
+                mac: kb.mac,
+                when: kb.when,
+              },
+              "extension",
+            );
             extensionContributionDisposersRef.current.push(disposeKb);
           }
         }
@@ -1361,7 +1516,7 @@ export function App() {
         if (bridge.fsProvider) {
           for (const ext of exts) {
             for (const p of ext.fsProviders ?? []) {
-              if (p.runtime === 'backend') {
+              if (p.runtime === "backend") {
                 const wasmPath = join(ext.dirPath, p.entry);
                 bridge.fsProvider!.load(wasmPath).catch(() => {});
               }
@@ -1370,17 +1525,20 @@ export function App() {
         }
 
         // Resolve shell profiles from extension contributions (client-side).
-        bridge.utils.getEnv().then((env) =>
-          resolveShellProfiles(exts, env).then(({ profiles, shellScripts }) => {
-            setResolvedProfiles(profiles);
+        bridge.utils
+          .getEnv()
+          .then((env) =>
+            resolveShellProfiles(exts, env).then(({ profiles, shellScripts }) => {
+              setResolvedProfiles(profiles);
+              setTerminalProfilesLoaded(true);
+              if (bridge.pty.setShellIntegrations && Object.keys(shellScripts).length > 0) {
+                bridge.pty.setShellIntegrations(shellScripts).catch(() => {});
+              }
+            }),
+          )
+          .catch(() => {
             setTerminalProfilesLoaded(true);
-            if (bridge.pty.setShellIntegrations && Object.keys(shellScripts).length > 0) {
-              bridge.pty.setShellIntegrations(shellScripts).catch(() => {});
-            }
-          })
-        ).catch(() => {
-          setTerminalProfilesLoaded(true);
-        });
+          });
 
         // Load only the active FSS icon theme contents (lazy).
         await ensureActiveIconThemeFssLoaded(exts, activeIconThemeRef.current);
@@ -1390,10 +1548,7 @@ export function App() {
         registerExtensionCommands(exts);
 
         // Load themes first, then refresh panels once themes are ready
-        Promise.all([
-          updateIconTheme(exts, activeIconThemeRef.current),
-          updateColorTheme(exts, activeColorThemeRef.current),
-        ]).then(() => {
+        Promise.all([updateIconTheme(exts, activeIconThemeRef.current), updateColorTheme(exts, activeColorThemeRef.current)]).then(() => {
           setThemesReady(true);
           if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
           if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
@@ -1404,20 +1559,24 @@ export function App() {
     return () => {
       unsub();
       for (const d of extensionContributionDisposersRef.current) {
-        try { d(); } catch { /* ignore */ }
+        try {
+          d();
+        } catch {
+          /* ignore */
+        }
       }
       extensionContributionDisposersRef.current = [];
       extensionHost.dispose();
     };
   }, [settingsLoaded]);
 
-  const activePath = activePanel === 'left' ? left.currentPath : right.currentPath;
+  const activePath = activePanel === "left" ? left.currentPath : right.currentPath;
   useEffect(() => {
     if (isBrowser && activePath) {
       const url = new URL(window.location.href);
-      url.pathname = '/';
+      url.pathname = "/";
       url.search = `?path=${encodeURIComponent(activePath)}`;
-      history.replaceState(null, '', url.toString());
+      history.replaceState(null, "", url.toString());
     }
   }, [activePath]);
 
@@ -1430,21 +1589,14 @@ export function App() {
     }
   }, []);
 
-
-  const leftFilteredEntries = useMemo(
-    () => showHidden ? left.entries : left.entries.filter((e) => !e.meta.hidden),
-    [showHidden, left.entries],
-  );
-  const rightFilteredEntries = useMemo(
-    () => showHidden ? right.entries : right.entries.filter((e) => !e.meta.hidden),
-    [showHidden, right.entries],
-  );
+  const leftFilteredEntries = useMemo(() => (showHidden ? left.entries : left.entries.filter((e) => !e.meta.hidden)), [showHidden, left.entries]);
+  const rightFilteredEntries = useMemo(() => (showHidden ? right.entries : right.entries.filter((e) => !e.meta.hidden)), [showHidden, right.entries]);
 
   if (!left.currentPath || !right.currentPath || !themesReady) {
     return <div className="loading">Loading...</div>;
   }
 
-  const activeCwd = requestedTerminalCwd ?? (activePanel === 'left' ? left.currentPath : right.currentPath);
+  const activeCwd = requestedTerminalCwd ?? (activePanel === "left" ? left.currentPath : right.currentPath);
 
   return (
     <div className="app">
@@ -1457,33 +1609,36 @@ export function App() {
         onCwdChange={handleTerminalCwd}
         onPromptActive={handlePromptActive}
         onCommandRunningChange={(running) => {
-          commandRegistry.setContext('terminalCommandRunning', running);
+          commandRegistry.setContext("terminalCommandRunning", running);
         }}
-        onWriteToTerminal={(write) => { writeToTerminalRef.current = write; }}
-        onExecuteCommand={(execute) => { executeCommandRef.current = execute; }}
+        onWriteToTerminal={(write) => {
+          writeToTerminalRef.current = write;
+        }}
+        onExecuteCommand={(execute) => {
+          executeCommandRef.current = execute;
+        }}
       >
         {({ body, toolbar }) => (
           <>
             <div className="terminal-and-panels">
-              <div className={`terminal-background${panelsVisible ? '' : ' expanded'}`}>
-                {body}
-              </div>
-              <div className={`panels-overlay${panelsVisible && promptActive ? '' : ' hidden'}`}
-              >
+              <div className={`terminal-background${panelsVisible ? "" : " expanded"}`}>{body}</div>
+              <div className={`panels-overlay${panelsVisible && promptActive ? "" : " hidden"}`}>
                 <PanelGroup
                   side="left"
-                  active={activePanel === 'left'}
+                  active={activePanel === "left"}
                   panel={left}
                   tabs={leftTabs}
                   activeIndex={leftActiveIndex}
                   onSelectTab={setLeftActiveIndex}
-                  onDoubleClickTab={(i) => handlePinTab('left', i)}
-                  onCloseTab={(i) => { void handleCloseTab('left', i); }}
-                  onNewTab={() => handleNewTab('left')}
-                  onReorderTabs={(from, to) => handleReorderTabs('left', from, to)}
+                  onDoubleClickTab={(i) => handlePinTab("left", i)}
+                  onCloseTab={(i) => {
+                    void handleCloseTab("left", i);
+                  }}
+                  onNewTab={() => handleNewTab("left")}
+                  onReorderTabs={(from, to) => handleReorderTabs("left", from, to)}
                   filteredEntries={leftFilteredEntries}
                   editorFileSizeLimit={editorFileSizeLimit}
-                  onActivatePanel={() => setActivePanel('left')}
+                  onActivatePanel={() => setActivePanel("left")}
                   onRememberExpectedTerminalCwd={rememberExpectedTerminalCwd}
                   onViewFile={handleViewFile}
                   onEditFile={handleEditFile}
@@ -1502,18 +1657,20 @@ export function App() {
                 />
                 <PanelGroup
                   side="right"
-                  active={activePanel === 'right'}
+                  active={activePanel === "right"}
                   panel={right}
                   tabs={rightTabs}
                   activeIndex={rightActiveIndex}
                   onSelectTab={setRightActiveIndex}
-                  onDoubleClickTab={(i) => handlePinTab('right', i)}
-                  onCloseTab={(i) => { void handleCloseTab('right', i); }}
-                  onNewTab={() => handleNewTab('right')}
-                  onReorderTabs={(from, to) => handleReorderTabs('right', from, to)}
+                  onDoubleClickTab={(i) => handlePinTab("right", i)}
+                  onCloseTab={(i) => {
+                    void handleCloseTab("right", i);
+                  }}
+                  onNewTab={() => handleNewTab("right")}
+                  onReorderTabs={(from, to) => handleReorderTabs("right", from, to)}
                   filteredEntries={rightFilteredEntries}
                   editorFileSizeLimit={editorFileSizeLimit}
-                  onActivatePanel={() => setActivePanel('right')}
+                  onActivatePanel={() => setActivePanel("right")}
                   onRememberExpectedTerminalCwd={rememberExpectedTerminalCwd}
                   onViewFile={handleViewFile}
                   onEditFile={handleEditFile}
@@ -1532,12 +1689,7 @@ export function App() {
                 />
               </div>
             </div>
-            <CommandLine
-              cwd={activeCwd}
-              visible={panelsVisible && promptActive}
-              pasteRef={commandLinePasteRef}
-              onExecute={handleCommandLineExecute}
-            />
+            <CommandLine cwd={activeCwd} visible={panelsVisible && promptActive} pasteRef={commandLinePasteRef} onExecute={handleCommandLineExecute} />
             {toolbar}
           </>
         )}
@@ -1555,8 +1707,8 @@ export function App() {
           key={`viewer:${viewerExt.dirPath}:${viewerExt.entry}`}
           extensionDirPath={viewerExt.dirPath}
           entry={viewerExt.entry}
-          filePath={viewerFile?.path ?? ''}
-          fileName={viewerFile?.name ?? ''}
+          filePath={viewerFile?.path ?? ""}
+          fileName={viewerFile?.name ?? ""}
           fileSize={viewerFile?.size ?? 0}
           visible={viewerFile != null && viewerResolved != null}
           onClose={() => setViewerFile(null)}
@@ -1570,29 +1722,30 @@ export function App() {
           onClose={() => setEditorFile(null)}
         />
       )}
-      {editorExt && (() => {
-        const exts = latestExtensionsRef.current;
-        const allLanguages = exts.flatMap((e) => e.languages ?? []);
-        const allGrammarRefs = exts.flatMap((e) => e.grammarRefs ?? []);
-        const grammars = allGrammarRefs.map((gr) => ({
-          contribution: gr.contribution,
-          path: gr.path,
-        }));
-        return (
-          <EditorContainer
-            key={`editor:${editorExt.dirPath}:${editorExt.entry}`}
-            extensionDirPath={editorExt.dirPath}
-            entry={editorExt.entry}
-            filePath={editorFile?.path ?? ''}
-            fileName={editorFile?.name ?? ''}
-            langId={editorFile?.langId ?? 'plaintext'}
-            visible={editorFile != null && editorResolved != null}
-            onClose={() => setEditorFile(null)}
-            languages={allLanguages}
-            grammars={grammars}
-          />
-        );
-      })()}
+      {editorExt &&
+        (() => {
+          const exts = latestExtensionsRef.current;
+          const allLanguages = exts.flatMap((e) => e.languages ?? []);
+          const allGrammarRefs = exts.flatMap((e) => e.grammarRefs ?? []);
+          const grammars = allGrammarRefs.map((gr) => ({
+            contribution: gr.contribution,
+            path: gr.path,
+          }));
+          return (
+            <EditorContainer
+              key={`editor:${editorExt.dirPath}:${editorExt.entry}`}
+              extensionDirPath={editorExt.dirPath}
+              entry={editorExt.entry}
+              filePath={editorFile?.path ?? ""}
+              fileName={editorFile?.name ?? ""}
+              langId={editorFile?.langId ?? "plaintext"}
+              visible={editorFile != null && editorResolved != null}
+              onClose={() => setEditorFile(null)}
+              languages={allLanguages}
+              grammars={grammars}
+            />
+          );
+        })()}
       {showExtensions && (
         <ExtensionsPanel
           onClose={() => setShowExtensions(false)}
@@ -1610,15 +1763,15 @@ export function App() {
               setExtensionLayers(latestExtensionsRef.current, themeId);
               // Update icon resolver
               if (!themeId) {
-                setIconTheme('fss');
+                setIconTheme("fss");
               } else {
-                const ext = latestExtensionsRef.current.find(e => `${e.ref.publisher}.${e.ref.name}` === themeId);
+                const ext = latestExtensionsRef.current.find((e) => `${e.ref.publisher}.${e.ref.name}` === themeId);
                 if (ext?.vscodeIconThemePath) {
-                  setIconTheme('vscode', ext.vscodeIconThemePath);
+                  setIconTheme("vscode", ext.vscodeIconThemePath);
                 } else if (ext?.iconThemeFssPath) {
-                  setIconTheme('fss');
+                  setIconTheme("fss");
                 } else {
-                  setIconTheme('none');
+                  setIconTheme("none");
                 }
               }
               if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);

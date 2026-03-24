@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { commandRegistry, type Command, type Keybinding } from './commands';
+import { useEffect, useState, useCallback } from "react";
+import { commandRegistry, type Command, type Keybinding } from "./commands";
 
 interface ActionBarItem {
   fKey: number;
@@ -9,15 +9,19 @@ interface ActionBarItem {
 
 function getModifierPrefix(ctrl: boolean, shift: boolean, alt: boolean): string {
   const parts: string[] = [];
-  if (ctrl) parts.push('ctrl');
-  if (alt) parts.push('alt');
-  if (shift) parts.push('shift');
-  return parts.length > 0 ? parts.join('+') + '+' : '';
+  if (ctrl) parts.push("ctrl");
+  if (alt) parts.push("alt");
+  if (shift) parts.push("shift");
+  return parts.length > 0 ? parts.join("+") + "+" : "";
 }
 
 export function ActionBar() {
   const [items, setItems] = useState<ActionBarItem[]>([]);
-  const [modifiers, setModifiers] = useState({ ctrl: false, shift: false, alt: false });
+  const [modifiers, setModifiers] = useState({
+    ctrl: false,
+    shift: false,
+    alt: false,
+  });
 
   const updateItems = useCallback(() => {
     const prefix = getModifierPrefix(modifiers.ctrl, modifiers.shift, modifiers.alt);
@@ -27,10 +31,10 @@ export function ActionBar() {
     for (let i = 1; i <= 12; i++) {
       const fKeyName = `f${i}`;
       const targetKey = prefix + fKeyName;
-      
+
       // Find keybinding that matches this F-key with current modifiers
-      const kb = keybindings.find(k => {
-        const key = k.key.toLowerCase().replace(/\s/g, '');
+      const kb = keybindings.find((k) => {
+        const key = k.key.toLowerCase().replace(/\s/g, "");
         return key === targetKey;
       });
 
@@ -43,15 +47,11 @@ export function ActionBar() {
           const cmdWhenSatisfied = cmd ? commandRegistry.evaluateWhen(cmd.when) : true;
           if (cmdWhenSatisfied) {
             newItems.push({ fKey: i, command: cmd, keybinding: kb });
-          } else {
-            newItems.push({ fKey: i });
+            continue;
           }
-        } else {
-          newItems.push({ fKey: i });
         }
-      } else {
-        newItems.push({ fKey: i });
       }
+      newItems.push({ fKey: i });
     }
 
     setItems(newItems);
@@ -83,14 +83,14 @@ export function ActionBar() {
       setModifiers({ ctrl: false, shift: false, alt: false });
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('blur', handleBlur);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
     };
   }, []);
 
@@ -103,15 +103,9 @@ export function ActionBar() {
   return (
     <div className="action-bar">
       {items.map((item) => (
-        <div
-          key={item.fKey}
-          className={`action-bar-item${item.command ? '' : ' disabled'}`}
-          onClick={() => handleClick(item)}
-        >
+        <div key={item.fKey} className={`action-bar-item${item.command ? "" : " disabled"}`} onClick={() => handleClick(item)}>
           <span className="action-bar-key">F{item.fKey}</span>
-          <span className="action-bar-label">
-            {item.command?.title ?? ''}
-          </span>
+          <span className="action-bar-label">{item.command?.title ?? ""}</span>
         </div>
       ))}
     </div>

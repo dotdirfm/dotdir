@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
-import { focusContext } from './focusContext';
-import { useDialogButtonNav } from './useDialogButtonNav';
-import { SmartLabel } from './dialogHotkeys';
+import { useEffect, useRef } from "react";
+import { focusContext } from "./focusContext";
+import { useDialogButtonNav } from "./useDialogButtonNav";
+import { SmartLabel } from "./dialogHotkeys";
 
 interface ModalButton {
   label: string;
@@ -12,15 +12,15 @@ interface ModalButton {
 export interface ModalDialogProps {
   title?: string;
   message: string;
-  variant?: 'error' | 'default';
+  variant?: "error" | "default";
   buttons?: ModalButton[];
   onClose: () => void;
 }
 
-export function ModalDialog({ title, message, variant = 'default', buttons, onClose }: ModalDialogProps) {
+export function ModalDialog({ title, message, variant = "default", buttons, onClose }: ModalDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const buttonsRef = useRef<HTMLDivElement>(null);
-  const resolvedButtons = buttons ?? [{ label: 'OK', default: true }];
+  const resolvedButtons = buttons ?? [{ label: "OK", default: true }];
   const defaultIdx = resolvedButtons.findIndex((b) => b.default);
   const { onKeyDown } = useDialogButtonNav(buttonsRef, {
     defaultIndex: defaultIdx >= 0 ? defaultIdx : resolvedButtons.length - 1,
@@ -29,12 +29,12 @@ export function ModalDialog({ title, message, variant = 'default', buttons, onCl
   useEffect(() => {
     const dialog = dialogRef.current!;
     if (!dialog.open) dialog.showModal();
-    focusContext.push('modal');
+    focusContext.push("modal");
     const handleClose = () => onClose();
-    dialog.addEventListener('close', handleClose);
+    dialog.addEventListener("close", handleClose);
     return () => {
-      dialog.removeEventListener('close', handleClose);
-      focusContext.pop('modal');
+      dialog.removeEventListener("close", handleClose);
+      focusContext.pop("modal");
     };
   }, [onClose]);
 

@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react';
-import { Terminal, type IDisposable } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import '@xterm/xterm/css/xterm.css';
-import { focusContext } from '../focusContext';
-import { normalizeTerminalPath } from './path';
-import type { TerminalSession } from './TerminalSession';
+import { useEffect, useRef } from "react";
+import { Terminal, type IDisposable } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import "@xterm/xterm/css/xterm.css";
+import { focusContext } from "../focusContext";
+import { normalizeTerminalPath } from "./path";
+import type { TerminalSession } from "./TerminalSession";
 
 interface TerminalViewProps {
   session: TerminalSession;
@@ -14,10 +14,10 @@ interface TerminalViewProps {
 
 function resolveTerminalTheme() {
   return {
-    background: '#11131a',
-    foreground: '#d7dae0',
-    cursor: '#f5f7ff',
-    selectionBackground: 'rgba(128, 146, 255, 0.28)',
+    background: "#11131a",
+    foreground: "#d7dae0",
+    cursor: "#f5f7ff",
+    selectionBackground: "rgba(128, 146, 255, 0.28)",
   };
 }
 
@@ -49,8 +49,8 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       scrollOnUserInput: true,
       scrollback: 1000,
-      cursorStyle: 'bar',
-      cursorInactiveStyle: 'none',
+      cursorStyle: "bar",
+      cursorInactiveStyle: "none",
       theme: resolveTerminalTheme(),
     });
 
@@ -108,16 +108,16 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
     const setTerminalFocus = () => {
       if (hasTerminalFocusRef.current || !expandedRef.current) return;
       hasTerminalFocusRef.current = true;
-      focusContext.push('terminal');
+      focusContext.push("terminal");
     };
     const clearTerminalFocus = () => {
       if (!hasTerminalFocusRef.current) return;
       hasTerminalFocusRef.current = false;
-      focusContext.pop('terminal');
+      focusContext.pop("terminal");
     };
     term.attachCustomKeyEventHandler((event) => {
       setTerminalFocus();
-      if (event.key.toLowerCase() === 'o' && event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      if (event.key.toLowerCase() === "o" && event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
         return false;
       }
       return true;
@@ -126,19 +126,19 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
     renderReplay();
 
     const cleanupSession = session.subscribe((event) => {
-      if (event.type === 'data') {
+      if (event.type === "data") {
         term.write(event.data);
         term.scrollToBottom();
         scheduleLayout();
-      } else if (event.type === 'status' && event.status === 'error' && event.error) {
+      } else if (event.type === "status" && event.status === "error" && event.error) {
         term.write(`\r\n[Terminal error: ${event.error}]\r\n`);
         term.scrollToBottom();
         scheduleLayout();
-      } else if (event.type === 'status' && event.status === 'exited') {
-        term.write('\r\n[Process exited]\r\n');
+      } else if (event.type === "status" && event.status === "exited") {
+        term.write("\r\n[Process exited]\r\n");
         term.scrollToBottom();
         scheduleLayout();
-      } else if (event.type === 'capabilities') {
+      } else if (event.type === "capabilities") {
         scheduleLayout();
       }
     });
@@ -175,15 +175,15 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
       if (nextTarget instanceof Node && container.contains(nextTarget)) return;
       clearTerminalFocus();
     };
-    container.addEventListener('pointerdown', handlePointerDown);
-    container.addEventListener('focusin', handleFocusIn);
-    container.addEventListener('focusout', handleFocusOut);
+    container.addEventListener("pointerdown", handlePointerDown);
+    container.addEventListener("focusin", handleFocusIn);
+    container.addEventListener("focusout", handleFocusOut);
     scheduleLayout();
 
     return () => {
-      container.removeEventListener('pointerdown', handlePointerDown);
-      container.removeEventListener('focusin', handleFocusIn);
-      container.removeEventListener('focusout', handleFocusOut);
+      container.removeEventListener("pointerdown", handlePointerDown);
+      container.removeEventListener("focusin", handleFocusIn);
+      container.removeEventListener("focusout", handleFocusOut);
       clearTerminalFocus();
       resizeObserver.disconnect();
       resizeDisposable.dispose();
@@ -202,7 +202,7 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
     if (!term || !expanded) return;
     if (!hasTerminalFocusRef.current) {
       hasTerminalFocusRef.current = true;
-      focusContext.push('terminal');
+      focusContext.push("terminal");
     }
     term.focus();
   }, [expanded, focusRequestKey]);
@@ -233,12 +233,12 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
       if (expanded) {
         if (!hasTerminalFocusRef.current) {
           hasTerminalFocusRef.current = true;
-          focusContext.push('terminal');
+          focusContext.push("terminal");
         }
         term.focus();
       } else if (hasTerminalFocusRef.current) {
         hasTerminalFocusRef.current = false;
-        focusContext.pop('terminal');
+        focusContext.pop("terminal");
         term.blur();
       } else {
         // Panels are visible; ensure hidden terminal cannot keep keyboard focus.

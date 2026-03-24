@@ -1,6 +1,6 @@
-import { marked } from 'marked';
-import { useEffect, useRef } from 'react';
-import { focusContext } from './focusContext';
+import { marked } from "marked";
+import { useEffect, useRef } from "react";
+import { focusContext } from "./focusContext";
 
 interface HelpDialogProps {
   content: string;
@@ -17,20 +17,22 @@ export function HelpDialog({ content, onClose }: HelpDialogProps) {
     if (!dialog.open) dialog.showModal();
     // Focus the body so arrow/page keys scroll immediately.
     bodyRef.current?.focus();
-    focusContext.push('modal');
-    return () => { focusContext.pop('modal'); };
+    focusContext.push("modal");
+    return () => {
+      focusContext.pop("modal");
+    };
   }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.key === 'F1') {
+      if (e.key === "Escape" || e.key === "F1") {
         e.preventDefault();
         e.stopPropagation();
         onClose();
       }
     };
-    document.addEventListener('keydown', handleKeyDown, { capture: true });
-    return () => document.removeEventListener('keydown', handleKeyDown, { capture: true });
+    document.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => document.removeEventListener("keydown", handleKeyDown, { capture: true });
   }, [onClose]);
 
   const html = marked.parse(content) as string;
@@ -39,7 +41,10 @@ export function HelpDialog({ content, onClose }: HelpDialogProps) {
     <dialog
       ref={dialogRef}
       className="help-dialog"
-      onCancel={(e) => { e.preventDefault(); onClose(); }}
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
     >
       <div className="help-dialog-header">Help</div>
       <div

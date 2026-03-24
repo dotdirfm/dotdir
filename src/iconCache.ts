@@ -1,5 +1,5 @@
-import { readFileText } from './fs';
-import { normalizePath } from './path';
+import { readFileText } from "./fs";
+import { normalizePath } from "./path";
 
 const MAX_SIZE = 200;
 
@@ -7,7 +7,7 @@ const cache = new Map<string, string>();
 const pending = new Map<string, Promise<void>>();
 
 function isAbsolutePath(path: string): boolean {
-  return path.startsWith('/') || /^[A-Za-z]:/.test(path);
+  return path.startsWith("/") || /^[A-Za-z]:/.test(path);
 }
 
 function svgToDataUrl(svg: string): string {
@@ -36,7 +36,7 @@ async function loadIconAbsolute(path: string): Promise<void> {
     cache.set(path, svgToDataUrl(content));
     evictIfNeeded();
   } catch (err) {
-    console.warn('[IconCache] loadIconAbsolute failed', normalized, err);
+    console.warn("[IconCache] loadIconAbsolute failed", normalized, err);
     throw err;
   }
 }
@@ -51,7 +51,7 @@ async function loadIconViaHttp(name: string): Promise<void> {
 
 /** Sentinel paths that are fallbacks, not real icon files - skip loading to avoid ENOENT. */
 function isSentinelIconPath(name: string): boolean {
-  return name === '_default' || name.startsWith('_default_');
+  return name === "_default" || name.startsWith("_default_");
 }
 
 export async function loadIcons(names: string[]): Promise<void> {
@@ -74,7 +74,7 @@ export async function loadIcons(names: string[]): Promise<void> {
           await loadIconViaHttp(name);
         }
       } catch (err) {
-        console.warn('[IconCache] loadIcons failed for', name.slice(-60), err);
+        console.warn("[IconCache] loadIcons failed for", name.slice(-60), err);
       } finally {
         pending.delete(name);
       }
@@ -93,4 +93,3 @@ export function getCachedIconUrl(name: string): string | undefined {
   }
   return url;
 }
-

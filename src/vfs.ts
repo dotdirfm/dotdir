@@ -1,17 +1,17 @@
 function encodePathPreservingSlashes(path: string): string {
   // Encode each segment but keep '/' separators.
   return path
-    .split('/')
+    .split("/")
     .map((seg) => encodeURIComponent(seg))
-    .join('/');
+    .join("/");
 }
 
 /** Build a URL that serves an absolute VFS path. */
 export function vfsUrl(absPath: string): string {
-  const p = absPath.startsWith('/') ? absPath : `/${absPath}`;
+  const p = absPath.startsWith("/") ? absPath : `/${absPath}`;
 
   // Tauri runtime detection (same as main.tsx boot logic).
-  const isTauri = '__TAURI_INTERNALS__' in window;
+  const isTauri = "__TAURI_INTERNALS__" in window;
 
   if (isTauri) {
     // macOS/Linux: `vfs://vfs/<abs path>`
@@ -22,7 +22,6 @@ export function vfsUrl(absPath: string): string {
   // Web / headless server:
   // `http://localhost:1420/vfs/Users/...` serves `/Users/...`
   const origin = window.location.origin;
-  const withoutLeading = p.replace(/^\/+/, '');
+  const withoutLeading = p.replace(/^\/+/, "");
   return `${origin}/vfs/${encodePathPreservingSlashes(withoutLeading)}`;
 }
-

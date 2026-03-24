@@ -7,7 +7,7 @@ class ActionQueue {
     this.tail = this.tail.then(async () => {
       try {
         const result = action();
-        if (result && typeof (result as Promise<void>).then === 'function') {
+        if (result && typeof (result as Promise<void>).then === "function") {
           await result;
           await new Promise<void>((r) => setTimeout(r, 0));
         }

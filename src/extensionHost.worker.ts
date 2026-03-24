@@ -14,7 +14,7 @@
  *     { type: 'error', message }                     — fatal loading error
  */
 
-import { dirname, join, normalizePath } from './path';
+import { dirname, join, normalizePath } from "./path";
 
 // ── Types (duplicated subset to avoid importing DOM-dependent modules) ──
 
@@ -96,7 +96,7 @@ interface ExtensionFsProviderContribution {
   patterns: string[];
   entry: string;
   priority?: number;
-  runtime?: 'frontend' | 'backend';
+  runtime?: "frontend" | "backend";
 }
 
 interface ExtensionShellIntegration {
@@ -104,10 +104,10 @@ interface ExtensionShellIntegration {
   label: string;
   scriptPath: string;
   executableCandidates: string[];
-  platforms?: ('darwin' | 'linux' | 'unix' | 'windows')[];
+  platforms?: ("darwin" | "linux" | "unix" | "windows")[];
   hiddenCdTemplate?: string;
-  cwdEscape?: 'posix' | 'powershell' | 'cmd';
-  lineEnding?: '\n' | '\r\n';
+  cwdEscape?: "posix" | "powershell" | "cmd";
+  lineEnding?: "\n" | "\r\n";
   spawnArgs?: string[];
   scriptArg?: boolean;
 }
@@ -184,10 +184,10 @@ export interface WorkerLoadedExtension {
     label: string;
     script: string;
     executableCandidates: string[];
-    platforms?: ('darwin' | 'linux' | 'unix' | 'windows')[];
+    platforms?: ("darwin" | "linux" | "unix" | "windows")[];
     hiddenCdTemplate?: string;
-    cwdEscape?: 'posix' | 'powershell' | 'cmd';
-    lineEnding?: '\n' | '\r\n';
+    cwdEscape?: "posix" | "powershell" | "cmd";
+    lineEnding?: "\n" | "\r\n";
     spawnArgs?: string[];
     scriptArg?: boolean;
   }>;
@@ -198,7 +198,13 @@ export interface WorkerLoadedExtension {
 let nextRequestId = 0;
 const pendingReads = new Map<number, { resolve: (data: string | null) => void; reject: (err: Error) => void }>();
 const loadedExtensions = new Map<string, WorkerLoadedExtension>();
-const activeExtensions = new Map<string, { subscriptions: Array<{ dispose: () => void }>; deactivate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown> }>();
+const activeExtensions = new Map<
+  string,
+  {
+    subscriptions: Array<{ dispose: () => void }>;
+    deactivate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
+  }
+>();
 const commandHandlers = new Map<string, (...args: unknown[]) => void | Promise<void>>();
 
 type BrowserDisposable = { dispose: () => void };
@@ -207,13 +213,8 @@ interface BrowserExtensionContext {
   subscriptions: BrowserDisposable[];
   frdy: {
     commands: {
-      registerCommand: (
-        commandId: string,
-        handler: (...args: unknown[]) => void | Promise<void>,
-      ) => BrowserDisposable;
-      registerKeybinding: (
-        binding: { command: string; key: string; mac?: string; when?: string },
-      ) => BrowserDisposable;
+      registerCommand: (commandId: string, handler: (...args: unknown[]) => void | Promise<void>) => BrowserDisposable;
+      registerKeybinding: (binding: { command: string; key: string; mac?: string; when?: string }) => BrowserDisposable;
     };
   };
 }
@@ -231,7 +232,7 @@ function readTextFile(path: string): Promise<string | null> {
   return new Promise((resolve, reject) => {
     const id = nextRequestId++;
     pendingReads.set(id, { resolve, reject });
-    self.postMessage({ type: 'readFile', id, path });
+    self.postMessage({ type: "readFile", id, path });
   });
 }
 
@@ -242,9 +243,9 @@ function activationKey(ext: WorkerLoadedExtension): string {
 function extensionWantsEvent(ext: WorkerLoadedExtension, event: string): boolean {
   const events = ext.manifest.activationEvents ?? [];
   if (events.length === 0) {
-    return event === '*';
+    return event === "*";
   }
-  return events.includes('*') || events.includes(event);
+  return events.includes("*") || events.includes(event);
 }
 
 async function importBrowserModule(absScriptPath: string): Promise<BrowserExtensionModule> {
@@ -252,7 +253,7 @@ async function importBrowserModule(absScriptPath: string): Promise<BrowserExtens
   if (script == null) {
     throw new Error(`Browser script not found: ${absScriptPath}`);
   }
-  const blobUrl = URL.createObjectURL(new Blob([script], { type: 'text/javascript' }));
+  const blobUrl = URL.createObjectURL(new Blob([script], { type: "text/javascript" }));
   try {
     const mod = await import(/* @vite-ignore */ blobUrl);
     return mod as BrowserExtensionModule;
@@ -266,12 +267,12 @@ async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
   if (activeExtensions.has(key)) return;
   if (!ext.manifest.browser) return;
 
-  const relScript = normalizePath(ext.manifest.browser).replace(/^\/+/, '');
+  const relScript = normalizePath(ext.manifest.browser).replace(/^\/+/, "");
   const absScriptPath = join(ext.dirPath, relScript);
   const mod = await importBrowserModule(absScriptPath);
   const activate = mod.activate ?? mod.default?.activate;
   const deactivate = mod.deactivate ?? mod.default?.deactivate;
-  if (typeof activate !== 'function') {
+  if (typeof activate !== "function") {
     console.warn(`[ExtHost] ${key} browser entry has no activate() export`);
     return;
   }
@@ -279,10 +280,7 @@ async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
   const localDisposables: BrowserDisposable[] = [];
   const frdy = {
     commands: {
-      registerCommand: (
-        commandId: string,
-        handler: (...args: unknown[]) => void | Promise<void>,
-      ): BrowserDisposable => {
+      registerCommand: (commandId: string, handler: (...args: unknown[]) => void | Promise<void>): BrowserDisposable => {
         commandHandlers.set(commandId, handler);
         const disposable = {
           dispose: () => {
@@ -295,9 +293,7 @@ async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
         localDisposables.push(disposable);
         return disposable;
       },
-      registerKeybinding: (
-        _binding: { command: string; key: string; mac?: string; when?: string },
-      ): BrowserDisposable => {
+      registerKeybinding: (_binding: { command: string; key: string; mac?: string; when?: string }): BrowserDisposable => {
         // Keybindings are currently contributed from package.json on the main thread.
         return { dispose() {} };
       },
@@ -321,7 +317,7 @@ async function activateByEvent(event: string): Promise<void> {
     try {
       await activateExtension(ext);
     } catch (err) {
-      console.error('[ExtHost] activate failed:', activationKey(ext), err);
+      console.error("[ExtHost] activate failed:", activationKey(ext), err);
     }
   }
 }
@@ -341,17 +337,16 @@ function extensionDirName(ref: ExtensionRef): string {
 
 async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtension | null> {
   try {
-    const manifestText = await readTextFile(join(extDir, 'package.json'));
+    const manifestText = await readTextFile(join(extDir, "package.json"));
     if (manifestText === null) return null;
     const manifest: ExtensionManifest = JSON.parse(manifestText);
 
     const ref: ExtensionRef = {
-      publisher: manifest.publisher || 'unknown',
-      name: manifest.name || 'unknown',
-      version: manifest.version || '0.0.0',
+      publisher: manifest.publisher || "unknown",
+      name: manifest.name || "unknown",
+      version: manifest.version || "0.0.0",
     };
 
-    let iconThemeFss: string | undefined;
     let iconThemeFssPath: string | undefined;
     let iconThemeBasePath: string | undefined;
     if (manifest.contributes?.iconTheme?.path) {
@@ -393,7 +388,7 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
     const keybindings = manifest.contributes?.keybindings;
     const fsProviders = manifest.contributes?.fsProviders;
 
-    let shellIntegrations: WorkerLoadedExtension['shellIntegrations'];
+    let shellIntegrations: WorkerLoadedExtension["shellIntegrations"];
     if (manifest.contributes?.shellIntegrations?.length) {
       shellIntegrations = [];
       for (const si of manifest.contributes.shellIntegrations) {
@@ -419,7 +414,6 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
       ref,
       manifest,
       dirPath: extDir,
-      iconThemeFss,
       iconThemeFssPath,
       iconThemeBasePath,
       colorThemes,
@@ -441,10 +435,10 @@ async function loadExtensions(homePath: string): Promise<WorkerLoadedExtension[]
   const loaded: WorkerLoadedExtension[] = [];
 
   // Load user extensions from ~/.faraday/extensions/
-  const extensionsDir = join(homePath, '.faraday', 'extensions');
+  const extensionsDir = join(homePath, ".faraday", "extensions");
   let refs: ExtensionRef[];
   try {
-    const text = await readTextFile(join(extensionsDir, 'extensions.json'));
+    const text = await readTextFile(join(extensionsDir, "extensions.json"));
     if (text === null) return loaded;
     const parsed = JSON.parse(text);
     refs = Array.isArray(parsed) ? parsed : [];
@@ -459,7 +453,14 @@ async function loadExtensions(homePath: string): Promise<WorkerLoadedExtension[]
     if (ext) loaded.push(ext);
   }
 
-  console.log('[ExtHost] loaded', loaded.length, 'extensions; FSS:', loaded.filter((e) => e.iconThemeFss).map((e) => `${e.ref.publisher}.${e.ref.name}`), 'vscode:', loaded.filter((e) => e.vscodeIconThemePath).map((e) => `${e.ref.publisher}.${e.ref.name}`));
+  console.log(
+    "[ExtHost] loaded",
+    loaded.length,
+    "extensions; FSS:",
+    loaded.filter((e) => e.iconThemeFss).map((e) => `${e.ref.publisher}.${e.ref.name}`),
+    "vscode:",
+    loaded.filter((e) => e.vscodeIconThemePath).map((e) => `${e.ref.publisher}.${e.ref.name}`),
+  );
   loadedExtensions.clear();
   for (const ext of loaded) {
     loadedExtensions.set(activationKey(ext), ext);
@@ -472,39 +473,40 @@ async function loadExtensions(homePath: string): Promise<WorkerLoadedExtension[]
 self.onmessage = (e: MessageEvent) => {
   const msg = e.data;
 
-  if (msg.type === 'start') {
+  if (msg.type === "start") {
     loadExtensions(msg.homePath)
       .then(async (extensions) => {
-        await activateByEvent('*');
-        self.postMessage({ type: 'loaded', extensions });
+        await activateByEvent("*");
+        self.postMessage({ type: "loaded", extensions });
       })
       .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message) : String(err);
-        self.postMessage({ type: 'error', message: msg });
+        const msg =
+          err instanceof Error ? err.message : err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : String(err);
+        self.postMessage({ type: "error", message: msg });
       });
-  } else if (msg.type === 'activateByEvent') {
+  } else if (msg.type === "activateByEvent") {
     const requestId = Number(msg.requestId);
-    activateByEvent(String(msg.event ?? ''))
+    activateByEvent(String(msg.event ?? ""))
       .then(() => {
-        self.postMessage({ type: 'requestResult', requestId, result: null });
+        self.postMessage({ type: "requestResult", requestId, result: null });
       })
       .catch((err: unknown) => {
         const errMsg = err instanceof Error ? err.message : String(err);
-        self.postMessage({ type: 'requestResult', requestId, error: errMsg });
+        self.postMessage({ type: "requestResult", requestId, error: errMsg });
       });
-  } else if (msg.type === 'executeCommand') {
+  } else if (msg.type === "executeCommand") {
     const requestId = Number(msg.requestId);
-    const command = String(msg.command ?? '');
+    const command = String(msg.command ?? "");
     const args = Array.isArray(msg.args) ? msg.args : [];
     runCommand(command, args)
       .then(() => {
-        self.postMessage({ type: 'requestResult', requestId, result: null });
+        self.postMessage({ type: "requestResult", requestId, result: null });
       })
       .catch((err: unknown) => {
         const errMsg = err instanceof Error ? err.message : String(err);
-        self.postMessage({ type: 'requestResult', requestId, error: errMsg });
+        self.postMessage({ type: "requestResult", requestId, error: errMsg });
       });
-  } else if (msg.type === 'readFileResult') {
+  } else if (msg.type === "readFileResult") {
     const pending = pendingReads.get(msg.id);
     if (pending) {
       pendingReads.delete(msg.id);

@@ -17,7 +17,7 @@
  * splits on '\0' to produce the mixed real-path + inner-path breadcrumb.
  */
 
-export const CONTAINER_SEP = '\0';
+export const CONTAINER_SEP = "\0";
 
 /** Returns true if the path refers to a location inside a container file. */
 export function isContainerPath(path: string): boolean {
@@ -30,10 +30,10 @@ export function isContainerPath(path: string): boolean {
  */
 export function parseContainerPath(path: string): { containerFile: string; innerPath: string } {
   const sep = path.lastIndexOf(CONTAINER_SEP);
-  if (sep < 0) throw new Error('Not a container path: ' + JSON.stringify(path));
+  if (sep < 0) throw new Error("Not a container path: " + JSON.stringify(path));
   const containerFile = path.slice(0, sep);
   const after = path.slice(sep + 1);
-  const innerPath = after.startsWith('/') ? after : '/' + after;
+  const innerPath = after.startsWith("/") ? after : "/" + after;
   return { containerFile, innerPath };
 }
 
@@ -44,8 +44,8 @@ export function parseContainerPath(path: string): { containerFile: string; inner
  */
 export function buildContainerPath(containerFile: string, innerPath: string): string {
   // Normalise inner path: always starts with '/', strip trailing '/' unless root.
-  let inner = innerPath.startsWith('/') ? innerPath : '/' + innerPath;
-  if (inner.length > 1 && inner.endsWith('/')) inner = inner.slice(0, -1);
+  let inner = innerPath.startsWith("/") ? innerPath : "/" + innerPath;
+  if (inner.length > 1 && inner.endsWith("/")) inner = inner.slice(0, -1);
   return containerFile + CONTAINER_SEP + inner;
 }
 
@@ -64,7 +64,7 @@ export function containerFile(path: string): string {
  */
 export function containerInner(path: string): string {
   const sep = path.indexOf(CONTAINER_SEP);
-  if (sep < 0) return '/';
+  if (sep < 0) return "/";
   const after = path.slice(sep + 1);
-  return after || '/';
+  return after || "/";
 }

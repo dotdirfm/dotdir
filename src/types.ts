@@ -1,15 +1,15 @@
 export type EntryKind =
-  | 'file'
-  | 'directory'
-  | 'symlink'
-  | 'block_device'
-  | 'char_device'
-  | 'named_pipe'
-  | 'socket'
-  | 'whiteout'
-  | 'door'
-  | 'event_port'
-  | 'unknown';
+  | "file"
+  | "directory"
+  | "symlink"
+  | "block_device"
+  | "char_device"
+  | "named_pipe"
+  | "socket"
+  | "whiteout"
+  | "door"
+  | "event_port"
+  | "unknown";
 
 export interface FsRawEntry {
   name: string;
@@ -23,7 +23,7 @@ export interface FsRawEntry {
   linkTarget?: string;
 }
 
-export type FsChangeType = 'appeared' | 'disappeared' | 'modified' | 'errored' | 'unknown';
+export type FsChangeType = "appeared" | "disappeared" | "modified" | "errored" | "unknown";
 
 export interface FsChangeEvent {
   watchId: string;

@@ -6,7 +6,7 @@
  * Syntax highlighting and tokenization are handled inside editor extensions (e.g. Monaco).
  */
 
-import { detectLang as detectLangFallback } from './langDetect';
+import { detectLang as detectLangFallback } from "./langDetect";
 
 export interface LanguageContribution {
   id: string;
@@ -79,7 +79,7 @@ class LanguageRegistry {
   detectLanguage(filename: string): string {
     const byName = this.filenameToLang.get(filename) ?? this.filenameToLang.get(filename.toLowerCase());
     if (byName) return byName;
-    const dotIndex = filename.lastIndexOf('.');
+    const dotIndex = filename.lastIndexOf(".");
     if (dotIndex >= 0) {
       const ext = filename.slice(dotIndex).toLowerCase();
       const byExt = this.extToLang.get(ext);
@@ -89,7 +89,7 @@ class LanguageRegistry {
   }
 
   getLanguageForFilename(filename: string): string {
-    return this.detectLanguage(filename) || 'plaintext';
+    return this.detectLanguage(filename) || "plaintext";
   }
 }
 

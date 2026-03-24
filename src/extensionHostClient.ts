@@ -6,10 +6,10 @@
  * and notifies listeners when extensions finish loading.
  */
 
-import { bridge } from './bridge';
-import { readFileText } from './fs';
-import type { LoadedExtension } from './extensions';
-import { normalizePath } from './path';
+import { bridge } from "./bridge";
+import { readFileText } from "./fs";
+import type { LoadedExtension } from "./extensions";
+import { normalizePath } from "./path";
 
 type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
 
@@ -48,7 +48,7 @@ export class ExtensionHostClient {
     this.worker?.terminate();
     this.worker = null;
     for (const [, pending] of this.pendingRequests) {
-      pending.reject(new Error('Extension host restarted'));
+      pending.reject(new Error("Extension host restarted"));
     }
     this.pendingRequests.clear();
     await this.start();
@@ -59,42 +59,41 @@ export class ExtensionHostClient {
     this.worker?.terminate();
     this.worker = null;
     for (const [, pending] of this.pendingRequests) {
-      pending.reject(new Error('Extension host disposed'));
+      pending.reject(new Error("Extension host disposed"));
     }
     this.pendingRequests.clear();
     this.listeners = [];
   }
 
   async activateByEvent(event: string): Promise<void> {
-    await this.request<void>({ type: 'activateByEvent', event });
+    await this.request<void>({ type: "activateByEvent", event });
   }
 
   async executeCommand(command: string, args: unknown[] = []): Promise<void> {
-    await this.request<void>({ type: 'executeCommand', command, args });
+    await this.request<void>({ type: "executeCommand", command, args });
   }
 
   private spawnWorker(): void {
-    const worker = new Worker(
-      new URL('./extensionHost.worker.ts', import.meta.url),
-      { type: 'module' },
-    );
+    const worker = new Worker(new URL("./extensionHost.worker.ts", import.meta.url), {
+      type: "module",
+    });
 
     worker.onmessage = (e: MessageEvent) => {
       const msg = e.data;
 
-      if (msg.type === 'readFile') {
+      if (msg.type === "readFile") {
         this.handleFileRead(worker, msg.id, msg.path);
-      } else if (msg.type === 'loaded') {
+      } else if (msg.type === "loaded") {
         const extensions: LoadedExtension[] = msg.extensions;
         const fss = extensions.filter((e) => e.iconThemeFss).map((e) => `${e.ref.publisher}.${e.ref.name}`);
         const vscode = extensions.filter((e) => e.vscodeIconThemePath).map((e) => `${e.ref.publisher}.${e.ref.name}`);
-        console.log('[ExtHost] loaded', extensions.length, 'extensions; FSS:', fss, 'vscode:', vscode);
+        console.log("[ExtHost] loaded", extensions.length, "extensions; FSS:", fss, "vscode:", vscode);
         for (const cb of this.listeners) {
           cb(extensions);
         }
-      } else if (msg.type === 'error') {
-        console.error('[ExtensionHost] Worker error:', msg.message);
-      } else if (msg.type === 'requestResult') {
+      } else if (msg.type === "error") {
+        console.error("[ExtensionHost] Worker error:", msg.message);
+      } else if (msg.type === "requestResult") {
         const requestId = Number(msg.requestId);
         const pending = this.pendingRequests.get(requestId);
         if (!pending) return;
@@ -108,12 +107,12 @@ export class ExtensionHostClient {
     };
 
     worker.onerror = (e) => {
-      console.error('[ExtensionHost] Worker runtime error:', e);
+      console.error("[ExtensionHost] Worker runtime error:", e);
     };
 
     this.worker = worker;
     void (async () => {
-      worker.postMessage({ type: 'start', homePath: this.homePath, });
+      worker.postMessage({ type: "start", homePath: this.homePath });
     })();
   }
 
@@ -122,7 +121,7 @@ export class ExtensionHostClient {
       await this.start();
     }
     if (!this.worker) {
-      throw new Error('Extension host is not running');
+      throw new Error("Extension host is not running");
     }
     const requestId = this.nextRequestId++;
     return await new Promise<T>((resolve, reject) => {
@@ -135,11 +134,11 @@ export class ExtensionHostClient {
     try {
       const normalizedPath = normalizePath(path);
       const text = await readFileText(normalizedPath);
-      console.log('[ExtHost] readFile ok', normalizedPath);
-      worker.postMessage({ type: 'readFileResult', id, data: text });
+      console.log("[ExtHost] readFile ok", normalizedPath);
+      worker.postMessage({ type: "readFileResult", id, data: text });
     } catch (err) {
-      console.error('[ExtHost] readFile failed', path, err);
-      worker.postMessage({ type: 'readFileResult', id, data: null, error: 'read failed' });
+      console.error("[ExtHost] readFile failed", path, err);
+      worker.postMessage({ type: "readFileResult", id, data: null, error: "read failed" });
     }
   }
 }

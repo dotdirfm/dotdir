@@ -1,23 +1,16 @@
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
-import { HotkeyProvider } from './dialogHotkeys';
-import { ModalDialog } from './ModalDialog';
-import { OpenCreateFileDialog } from './OpenCreateFileDialog';
-import { DeleteProgressDialog } from './DeleteProgressDialog';
-import { MakeFolderDialog, type MakeFolderResult } from './MakeFolderDialog';
-import { CopyConfigDialog } from './CopyConfigDialog';
-import { CopyProgressDialog } from './CopyProgressDialog';
-import { ConflictDialog } from './ConflictDialog';
-import { MoveConfigDialog } from './MoveConfigDialog';
-import { RenameDialog } from './RenameDialog';
-import type { LanguageOption } from './OpenCreateFileDialog';
-import type { CopyOptions, MoveOptions, ConflictResolution } from './bridge';
+import React, { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { HotkeyProvider } from "./dialogHotkeys";
+import { ModalDialog } from "./ModalDialog";
+import { OpenCreateFileDialog } from "./OpenCreateFileDialog";
+import { DeleteProgressDialog } from "./DeleteProgressDialog";
+import { MakeFolderDialog, type MakeFolderResult } from "./MakeFolderDialog";
+import { CopyConfigDialog } from "./CopyConfigDialog";
+import { CopyProgressDialog } from "./CopyProgressDialog";
+import { ConflictDialog } from "./ConflictDialog";
+import { MoveConfigDialog } from "./MoveConfigDialog";
+import { RenameDialog } from "./RenameDialog";
+import type { LanguageOption } from "./OpenCreateFileDialog";
+import type { CopyOptions, MoveOptions, ConflictResolution } from "./bridge";
 
 export interface MessageDialogButton {
   label: string;
@@ -27,45 +20,45 @@ export interface MessageDialogButton {
 
 export type DialogSpec =
   | {
-      type: 'message';
+      type: "message";
       title?: string;
       message: string;
-      variant?: 'error' | 'default';
+      variant?: "error" | "default";
       buttons?: MessageDialogButton[];
     }
   | {
-      type: 'openCreateFile';
+      type: "openCreateFile";
       currentPath: string;
       languages: LanguageOption[];
       onConfirm: (filePath: string, fileName: string, langId: string) => void;
       onCancel: () => void;
     }
   | {
-      type: 'deleteProgress';
+      type: "deleteProgress";
       filesDone: number;
       currentFile: string;
       onCancel: () => void;
     }
   | {
-      type: 'cancelDeleteConfirm';
+      type: "cancelDeleteConfirm";
       onResume: () => void;
       onCancelDeletion: () => void;
     }
   | {
-      type: 'makeFolder';
+      type: "makeFolder";
       currentPath: string;
       onConfirm: (result: MakeFolderResult) => void;
       onCancel: () => void;
     }
   | {
-      type: 'copyConfig';
+      type: "copyConfig";
       itemCount: number;
       destPath: string;
       onConfirm: (options: CopyOptions, destDir: string) => void;
       onCancel: () => void;
     }
   | {
-      type: 'copyProgress';
+      type: "copyProgress";
       bytesCopied: number;
       bytesTotal: number;
       filesDone: number;
@@ -74,7 +67,7 @@ export type DialogSpec =
       onCancel: () => void;
     }
   | {
-      type: 'copyConflict';
+      type: "copyConflict";
       src: string;
       dest: string;
       srcSize: number;
@@ -84,19 +77,19 @@ export type DialogSpec =
       onResolve: (resolution: ConflictResolution) => void;
     }
   | {
-      type: 'cancelCopyConfirm';
+      type: "cancelCopyConfirm";
       onResume: () => void;
       onCancelCopy: () => void;
     }
   | {
-      type: 'moveConfig';
+      type: "moveConfig";
       itemCount: number;
       destPath: string;
       onConfirm: (options: MoveOptions, destDir: string) => void;
       onCancel: () => void;
     }
   | {
-      type: 'moveProgress';
+      type: "moveProgress";
       bytesCopied: number;
       bytesTotal: number;
       filesDone: number;
@@ -105,7 +98,7 @@ export type DialogSpec =
       onCancel: () => void;
     }
   | {
-      type: 'moveConflict';
+      type: "moveConflict";
       src: string;
       dest: string;
       srcSize: number;
@@ -115,21 +108,21 @@ export type DialogSpec =
       onResolve: (resolution: ConflictResolution) => void;
     }
   | {
-      type: 'cancelMoveConfirm';
+      type: "cancelMoveConfirm";
       onResume: () => void;
       onCancelMove: () => void;
     }
   | {
-      type: 'rename';
+      type: "rename";
       currentName: string;
       onConfirm: (newName: string) => void;
       onCancel: () => void;
     };
 
 export type DialogUpdate =
-  | Partial<Pick<DialogSpec & { type: 'deleteProgress' }, 'filesDone' | 'currentFile'>>
-  | Partial<Pick<DialogSpec & { type: 'copyProgress' }, 'bytesCopied' | 'bytesTotal' | 'filesDone' | 'filesTotal' | 'currentFile'>>
-  | Partial<Pick<DialogSpec & { type: 'moveProgress' }, 'bytesCopied' | 'bytesTotal' | 'filesDone' | 'filesTotal' | 'currentFile'>>;
+  | Partial<Pick<DialogSpec & { type: "deleteProgress" }, "filesDone" | "currentFile">>
+  | Partial<Pick<DialogSpec & { type: "copyProgress" }, "bytesCopied" | "bytesTotal" | "filesDone" | "filesTotal" | "currentFile">>
+  | Partial<Pick<DialogSpec & { type: "moveProgress" }, "bytesCopied" | "bytesTotal" | "filesDone" | "filesTotal" | "currentFile">>;
 
 interface DialogContextValue {
   dialog: DialogSpec | null;
@@ -154,38 +147,23 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 
   const updateDialog = useCallback((update: DialogUpdate) => {
     setDialog((prev) => {
-      if (prev?.type === 'deleteProgress' || prev?.type === 'copyProgress' || prev?.type === 'moveProgress') {
+      if (prev?.type === "deleteProgress" || prev?.type === "copyProgress" || prev?.type === "moveProgress") {
         return { ...prev, ...update } as DialogSpec;
       }
       return prev;
     });
   }, []);
 
-  const value = useMemo(
-    () => ({ dialog, showDialog, closeDialog, updateDialog }),
-    [dialog, showDialog, closeDialog, updateDialog]
-  );
+  const value = useMemo(() => ({ dialog, showDialog, closeDialog, updateDialog }), [dialog, showDialog, closeDialog, updateDialog]);
 
-  return (
-    <DialogContext.Provider value={value}>
-      {children}
-    </DialogContext.Provider>
-  );
+  return <DialogContext.Provider value={value}>{children}</DialogContext.Provider>;
 }
 
 function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React.ReactElement | null {
   switch (dialog.type) {
-    case 'message':
-      return (
-        <ModalDialog
-          title={dialog.title}
-          message={dialog.message}
-          variant={dialog.variant}
-          buttons={dialog.buttons}
-          onClose={ctx!.closeDialog}
-        />
-      );
-    case 'openCreateFile':
+    case "message":
+      return <ModalDialog title={dialog.title} message={dialog.message} variant={dialog.variant} buttons={dialog.buttons} onClose={ctx!.closeDialog} />;
+    case "openCreateFile":
       return (
         <OpenCreateFileDialog
           currentPath={dialog.currentPath}
@@ -200,30 +178,27 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
           }}
         />
       );
-    case 'deleteProgress':
-      return (
-        <DeleteProgressDialog
-          filesDone={dialog.filesDone}
-          currentFile={dialog.currentFile}
-          onCancel={dialog.onCancel}
-        />
-      );
-    case 'cancelDeleteConfirm':
+    case "deleteProgress":
+      return <DeleteProgressDialog filesDone={dialog.filesDone} currentFile={dialog.currentFile} onCancel={dialog.onCancel} />;
+    case "cancelDeleteConfirm":
       return (
         <ModalDialog
           title="Cancel deletion?"
           message="Already deleted items cannot be recovered."
           onClose={dialog.onResume}
           buttons={[
-            { label: 'Resume', default: true, onClick: dialog.onResume },
-            { label: 'Cancel deletion', onClick: () => {
-              dialog.onCancelDeletion();
-              ctx!.closeDialog();
-            }},
+            { label: "Resume", default: true, onClick: dialog.onResume },
+            {
+              label: "Cancel deletion",
+              onClick: () => {
+                dialog.onCancelDeletion();
+                ctx!.closeDialog();
+              },
+            },
           ]}
         />
       );
-    case 'makeFolder':
+    case "makeFolder":
       return (
         <MakeFolderDialog
           currentPath={dialog.currentPath}
@@ -237,21 +212,21 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
           }}
         />
       );
-     case 'copyConfig':
-       return (
-         <CopyConfigDialog
-           itemCount={dialog.itemCount}
-           destPath={dialog.destPath}
-           onConfirm={(options, destDir) => {
-             dialog.onConfirm(options, destDir);
-           }}
-           onCancel={() => {
-             dialog.onCancel();
-             ctx!.closeDialog();
-           }}
-         />
+    case "copyConfig":
+      return (
+        <CopyConfigDialog
+          itemCount={dialog.itemCount}
+          destPath={dialog.destPath}
+          onConfirm={(options, destDir) => {
+            dialog.onConfirm(options, destDir);
+          }}
+          onCancel={() => {
+            dialog.onCancel();
+            ctx!.closeDialog();
+          }}
+        />
       );
-    case 'copyProgress':
+    case "copyProgress":
       return (
         <CopyProgressDialog
           bytesCopied={dialog.bytesCopied}
@@ -262,7 +237,7 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
           onCancel={dialog.onCancel}
         />
       );
-    case 'copyConflict':
+    case "copyConflict":
       return (
         <ConflictDialog
           src={dialog.src}
@@ -277,36 +252,39 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
           }}
         />
       );
-    case 'cancelCopyConfirm':
+    case "cancelCopyConfirm":
       return (
         <ModalDialog
           title="Cancel copy?"
           message="Files already copied will remain at the destination."
           onClose={dialog.onResume}
           buttons={[
-            { label: 'Resume', default: true, onClick: dialog.onResume },
-            { label: 'Cancel copy', onClick: () => {
-              dialog.onCancelCopy();
-              ctx!.closeDialog();
-            }},
+            { label: "Resume", default: true, onClick: dialog.onResume },
+            {
+              label: "Cancel copy",
+              onClick: () => {
+                dialog.onCancelCopy();
+                ctx!.closeDialog();
+              },
+            },
           ]}
         />
       );
-     case 'moveConfig':
-       return (
-         <MoveConfigDialog
-           itemCount={dialog.itemCount}
-           destPath={dialog.destPath}
-           onConfirm={(options, destDir) => {
-             dialog.onConfirm(options, destDir);
-           }}
-           onCancel={() => {
-             dialog.onCancel();
-             ctx!.closeDialog();
-           }}
-         />
+    case "moveConfig":
+      return (
+        <MoveConfigDialog
+          itemCount={dialog.itemCount}
+          destPath={dialog.destPath}
+          onConfirm={(options, destDir) => {
+            dialog.onConfirm(options, destDir);
+          }}
+          onCancel={() => {
+            dialog.onCancel();
+            ctx!.closeDialog();
+          }}
+        />
       );
-    case 'moveProgress':
+    case "moveProgress":
       return (
         <CopyProgressDialog
           bytesCopied={dialog.bytesCopied}
@@ -317,7 +295,7 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
           onCancel={dialog.onCancel}
         />
       );
-    case 'moveConflict':
+    case "moveConflict":
       return (
         <ConflictDialog
           src={dialog.src}
@@ -332,22 +310,25 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
           }}
         />
       );
-    case 'cancelMoveConfirm':
+    case "cancelMoveConfirm":
       return (
         <ModalDialog
           title="Cancel move?"
           message="Files already moved cannot be automatically restored."
           onClose={dialog.onResume}
           buttons={[
-            { label: 'Resume', default: true, onClick: dialog.onResume },
-            { label: 'Cancel move', onClick: () => {
-              dialog.onCancelMove();
-              ctx!.closeDialog();
-            }},
+            { label: "Resume", default: true, onClick: dialog.onResume },
+            {
+              label: "Cancel move",
+              onClick: () => {
+                dialog.onCancelMove();
+                ctx!.closeDialog();
+              },
+            },
           ]}
         />
       );
-    case 'rename':
+    case "rename":
       return (
         <RenameDialog
           currentName={dialog.currentName}
@@ -366,7 +347,7 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
   }
 }
 
-const HELP_TEXTS: Partial<Record<DialogSpec['type'], string>> = {
+const HELP_TEXTS: Partial<Record<DialogSpec["type"], string>> = {
   copyConfig: `# Copy
 
 Copies the selected items into the destination directory.
@@ -512,6 +493,6 @@ export function DialogHolder() {
 
 export function useDialog(): DialogContextValue {
   const ctx = useContext(DialogContext);
-  if (!ctx) throw new Error('useDialog must be used within DialogProvider');
+  if (!ctx) throw new Error("useDialog must be used within DialogProvider");
   return ctx;
 }

@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    tags: ["v*"]
 
 permissions:
   contents: write
@@ -45,8 +45,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'Faraday ${{ github.ref_name }}'
-          releaseBody: ''
+          releaseName: "Faraday ${{ github.ref_name }}"
+          releaseBody: ""
           releaseDraft: true
           prerelease: false
 

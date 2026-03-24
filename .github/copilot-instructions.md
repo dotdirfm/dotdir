@@ -12,6 +12,7 @@ pnpm build:rust:dev     # Rust debug build only
 ```
 
 Headless mode (after building Rust):
+
 ```bash
 ./src-tauri/target/release/faraday serve --port 8080 --host 0.0.0.0
 ```
@@ -29,6 +30,7 @@ Faraday is a dual-pane desktop file manager with three runtime modes:
 ### Bridge pattern
 
 The frontend uses a single `Bridge` interface (`bridge.ts`) with two implementations:
+
 - `TauriBridge` — Tauri `invoke`/`listen` IPC
 - `WsBridge` — WebSocket with JSON-RPC 2.0
 
@@ -41,6 +43,7 @@ The bridge is selected at boot in `main.tsx` based on whether Tauri APIs are ava
 ### Rust entry point modes
 
 `main.rs` dispatches based on CLI subcommand:
+
 - No subcommand → desktop Tauri app (`lib.rs`)
 - `serve` → headless HTTP/WS server (`serve.rs`)
 - `rpc` → elevated helper daemon (`rpc.rs`)

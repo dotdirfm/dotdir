@@ -1,12 +1,12 @@
-import './index.css';
+import "./index.css";
 
-import { invoke, isTauri as isTauriApp } from '@tauri-apps/api/core';
-import { initBridge } from './bridge';
-import { createRoot } from 'react-dom/client';
-import { createElement } from 'react';
-import { App } from './app';
-import { DialogProvider } from './dialogContext';
-import { ErrorBoundary } from './ErrorBoundary';
+import { invoke, isTauri as isTauriApp } from "@tauri-apps/api/core";
+import { initBridge } from "./bridge";
+import { createRoot } from "react-dom/client";
+import { createElement } from "react";
+import { App } from "./app";
+import { DialogProvider } from "./dialogContext";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 declare global {
   interface Window {
@@ -18,7 +18,7 @@ async function writeBootLog(message: string): Promise<void> {
   window.__faradayBoot?.(message);
   try {
     if (isTauriApp()) {
-      await invoke('debug_log', { message });
+      await invoke("debug_log", { message });
     }
   } catch {
     // Ignore logging failures so diagnostics never block startup.
@@ -27,30 +27,30 @@ async function writeBootLog(message: string): Promise<void> {
 
 function renderBootError(error: unknown): void {
   const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-  const pre = document.createElement('pre');
+  const pre = document.createElement("pre");
   pre.textContent = `Faraday failed to start\n\n${message}`;
-  pre.style.whiteSpace = 'pre-wrap';
-  pre.style.fontFamily = 'Consolas, monospace';
-  pre.style.fontSize = '14px';
-  pre.style.padding = '16px';
-  pre.style.margin = '0';
-  pre.style.minHeight = '100vh';
-  pre.style.background = '#1e1e2e';
-  pre.style.color = '#f38ba8';
-  document.body.innerHTML = '';
+  pre.style.whiteSpace = "pre-wrap";
+  pre.style.fontFamily = "Consolas, monospace";
+  pre.style.fontSize = "14px";
+  pre.style.padding = "16px";
+  pre.style.margin = "0";
+  pre.style.minHeight = "100vh";
+  pre.style.background = "#1e1e2e";
+  pre.style.color = "#f38ba8";
+  document.body.innerHTML = "";
   document.body.appendChild(pre);
 }
 
 // Track whether the app has booted successfully
 let appBooted = false;
 
-window.addEventListener('error', (event) => {
+window.addEventListener("error", (event) => {
   void writeBootLog(`window.error: ${String(event.error ?? event.message)}`);
   if (!appBooted) renderBootError(event.error ?? event.message);
   // After boot, let React ErrorBoundary and console handle it
 });
 
-window.addEventListener('unhandledrejection', (event) => {
+window.addEventListener("unhandledrejection", (event) => {
   void writeBootLog(`unhandledrejection: ${String(event.reason)}`);
   if (!appBooted) renderBootError(event.reason);
   // After boot, just log — don't nuke the DOM
@@ -76,24 +76,20 @@ new MutationObserver((mutations) => {
 }).observe(document.body, { childList: true, subtree: true });
 
 try {
-  await writeBootLog('main.tsx starting');
+  await writeBootLog("main.tsx starting");
   await initBridge();
-  await writeBootLog('bridge initialized');
+  await writeBootLog("bridge initialized");
 
-  const container = document.getElementById('app');
+  const container = document.getElementById("app");
   if (!container) {
-    throw new Error('Missing #app root element');
+    throw new Error("Missing #app root element");
   }
 
-  document.getElementById('boot-status')?.remove();
+  document.getElementById("boot-status")?.remove();
   const root = createRoot(container);
-  root.render(
-    createElement(ErrorBoundary, null,
-      createElement(DialogProvider, null, createElement(App)),
-    ),
-  );
+  root.render(createElement(ErrorBoundary, null, createElement(DialogProvider, null, createElement(App))));
   appBooted = true;
-  await writeBootLog('React render started');
+  await writeBootLog("React render started");
 } catch (error) {
   await writeBootLog(`startup catch: ${String(error)}`);
   renderBootError(error);

@@ -1,56 +1,53 @@
-import { bridge, type CwdEscapeMode, type TerminalProfile } from '../bridge';
-import type { LoadedExtension } from '../extensions';
+import { bridge, type CwdEscapeMode, type TerminalProfile } from "../bridge";
+import type { LoadedExtension } from "../extensions";
 
 export interface ShellProfilesResult {
   profiles: TerminalProfile[];
   shellScripts: Record<string, { script: string; scriptArg: boolean }>;
 }
 
-function matchesPlatform(
-  platforms: ('darwin' | 'linux' | 'unix' | 'windows')[] | undefined,
-  platform: string,
-): boolean {
+function matchesPlatform(platforms: ("darwin" | "linux" | "unix" | "windows")[] | undefined, platform: string): boolean {
   if (!platforms) return true;
   return platforms.some((p) => {
     if (p === platform) return true;
-    if (p === 'darwin' && platform === 'macos') return true;
-    if (p === 'unix' && (platform === 'macos' || platform === 'linux')) return true;
+    if (p === "darwin" && platform === "macos") return true;
+    if (p === "unix" && (platform === "macos" || platform === "linux")) return true;
     return false;
   });
 }
 
 function substituteVars(path: string, env: Record<string, string>): string {
-  return path.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, name: string) => env[name] ?? '');
+  return path.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, name: string) => env[name] ?? "");
 }
 
 /** Fallback when a contribution omits fields (extensions should normally set all of these). */
 function defaultIntegration(shell: string): {
   hiddenCdTemplate: string;
   cwdEscape: CwdEscapeMode;
-  lineEnding: '\n' | '\r\n';
+  lineEnding: "\n" | "\r\n";
   spawnArgs: string[];
 } {
   const s = shell.toLowerCase();
-  if (s === 'cmd') {
+  if (s === "cmd") {
     return {
-      hiddenCdTemplate: '@cd /d {{cwd}}',
-      cwdEscape: 'cmd',
-      lineEnding: '\r\n',
+      hiddenCdTemplate: "@cd /d {{cwd}}",
+      cwdEscape: "cmd",
+      lineEnding: "\r\n",
       spawnArgs: [],
     };
   }
-  if (s === 'powershell' || s === 'pwsh') {
+  if (s === "powershell" || s === "pwsh") {
     return {
-      hiddenCdTemplate: 'Set-Location -LiteralPath {{cwd}}',
-      cwdEscape: 'powershell',
-      lineEnding: '\r\n',
+      hiddenCdTemplate: "Set-Location -LiteralPath {{cwd}}",
+      cwdEscape: "powershell",
+      lineEnding: "\r\n",
       spawnArgs: [],
     };
   }
   return {
-    hiddenCdTemplate: 'cd {{cwd}}',
-    cwdEscape: 'posix',
-    lineEnding: '\n',
+    hiddenCdTemplate: "cd {{cwd}}",
+    cwdEscape: "posix",
+    lineEnding: "\n",
     spawnArgs: [],
   };
 }
@@ -64,7 +61,7 @@ function profileFromContribution(
     script: string;
     hiddenCdTemplate?: string;
     cwdEscape?: CwdEscapeMode;
-    lineEnding?: '\n' | '\r\n';
+    lineEnding?: "\n" | "\r\n";
     spawnArgs?: string[];
   },
 ): TerminalProfile {
@@ -85,12 +82,9 @@ function profileFromContribution(
  *
  * Each unique shell path becomes a profile (id = shell path).
  */
-export async function resolveShellProfiles(
-  extensions: LoadedExtension[],
-  env: Record<string, string>,
-): Promise<ShellProfilesResult> {
-  const platform = env['__platform__'] ?? '';
-  const shellEnv = env['SHELL'] ?? '';
+export async function resolveShellProfiles(extensions: LoadedExtension[], env: Record<string, string>): Promise<ShellProfilesResult> {
+  const platform = env["__platform__"] ?? "";
+  const shellEnv = env["SHELL"] ?? "";
 
   const profiles: TerminalProfile[] = [];
   const shellScripts: Record<string, { script: string; scriptArg: boolean }> = {};
@@ -101,10 +95,10 @@ export async function resolveShellProfiles(
     label: string;
     script: string;
     executableCandidates: string[];
-    platforms?: ('darwin' | 'linux' | 'unix' | 'windows')[];
+    platforms?: ("darwin" | "linux" | "unix" | "windows")[];
     hiddenCdTemplate?: string;
     cwdEscape?: CwdEscapeMode;
-    lineEnding?: '\n' | '\r\n';
+    lineEnding?: "\n" | "\r\n";
     spawnArgs?: string[];
     scriptArg?: boolean;
   }> = [];
@@ -116,8 +110,8 @@ export async function resolveShellProfiles(
     }
   }
 
-  if (shellEnv && platform !== 'windows') {
-    const shellBasename = shellEnv.split('/').pop() ?? '';
+  if (shellEnv && platform !== "windows") {
+    const shellBasename = shellEnv.split("/").pop() ?? "";
     const matched = contributions.find((c) => c.shell === shellBasename);
     if (matched && !seenPaths.has(shellEnv)) {
       try {
@@ -125,7 +119,10 @@ export async function resolveShellProfiles(
         if (exists) {
           seenPaths.add(shellEnv);
           profiles.push(profileFromContribution(shellEnv, matched.label, matched));
-          shellScripts[shellEnv] = { script: matched.script, scriptArg: matched.scriptArg ?? false };
+          shellScripts[shellEnv] = {
+            script: matched.script,
+            scriptArg: matched.scriptArg ?? false,
+          };
         }
       } catch {
         // Ignore

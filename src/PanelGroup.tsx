@@ -1,12 +1,12 @@
-import type { FsNode } from 'fss-lang';
-import { FileList } from './FileList';
-import { PanelTabs, type PanelTab } from './FileList/PanelTabs';
-import type { PanelPersistedState } from './extensions';
-import { ViewerContainer } from './ExtensionContainer';
-import { viewerRegistry } from './viewerEditorRegistry';
-import type { LayeredResolver } from 'fss-lang';
+import type { FsNode } from "fss-lang";
+import { FileList } from "./FileList";
+import { PanelTabs, type PanelTab } from "./FileList/PanelTabs";
+import type { PanelPersistedState } from "./extensions";
+import { ViewerContainer } from "./ExtensionContainer";
+import { viewerRegistry } from "./viewerEditorRegistry";
+import type { LayeredResolver } from "fss-lang";
 
-type PanelSide = 'left' | 'right';
+type PanelSide = "left" | "right";
 
 interface PanelModel {
   currentPath: string;
@@ -80,7 +80,7 @@ export function PanelGroup({
   const activeTab = tabs[activeIndex];
 
   return (
-    <div className={`panel ${active ? 'active' : ''}`} onClick={onActivatePanel}>
+    <div className={`panel ${active ? "active" : ""}`} onClick={onActivatePanel}>
       {panel.navigating && <div className="panel-progress" />}
       <PanelTabs
         tabs={tabs}
@@ -92,7 +92,7 @@ export function PanelGroup({
         onReorderTabs={onReorderTabs}
       />
       <div className="panel-content">
-        {activeTab?.type === 'filelist' ? (
+        {activeTab?.type === "filelist" ? (
           <FileList
             key={activeTab.id}
             currentPath={panel.currentPath}
@@ -120,10 +120,10 @@ export function PanelGroup({
             requestedTopmostName={requestedTopmostName ?? initialPanelState?.topmostName}
             onStateChange={onStateChange}
           />
-        ) : activeTab?.type === 'preview' ? (
+        ) : activeTab?.type === "preview" ? (
           (() => {
             const tab = activeTab;
-            if (tab.type !== 'preview') return null;
+            if (tab.type !== "preview") return null;
             const resolved = viewerRegistry.resolve(tab.name);
             if (resolved) {
               return (
@@ -139,7 +139,7 @@ export function PanelGroup({
               );
             }
             return (
-              <div style={{ padding: 16, color: 'var(--fg-muted, #888)', textAlign: 'center' }}>
+              <div style={{ padding: 16, color: "var(--fg-muted, #888)", textAlign: "center" }}>
                 No viewer extension for this file type. Install viewer extensions from the extensions panel.
               </div>
             );
@@ -149,4 +149,3 @@ export function PanelGroup({
     </div>
   );
 }
-

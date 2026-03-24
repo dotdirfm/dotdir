@@ -18,7 +18,12 @@ export interface ViewerProps {
 
 /** Grammar contribution + loaded content (from host, for custom syntax highlighting). */
 export interface EditorGrammarPayload {
-  contribution: { language: string; scopeName: string; path: string; embeddedLanguages?: Record<string, string> };
+  contribution: {
+    language: string;
+    scopeName: string;
+    path: string;
+    embeddedLanguages?: Record<string, string>;
+  };
   /** Absolute path to grammar JSON file (used for lazy loading). */
   path?: string;
   /** Parsed TextMate grammar JSON (optional; host may lazy-load and fill it). */
@@ -52,7 +57,7 @@ export interface EditorProps {
 
 export interface ColorThemeData {
   /** Theme kind: 'dark' or 'light'. */
-  kind: 'dark' | 'light';
+  kind: "dark" | "light";
   /** VS Code color theme colors (e.g. 'editor.background' → '#1e1e2e'). Undefined when no VS Code theme active. */
   colors?: Record<string, string>;
   /** VS Code tokenColors for syntax highlighting. Undefined when no VS Code theme active. */
@@ -85,13 +90,11 @@ export interface HostApi {
   registerCommand?(
     commandId: string,
     handler: (...args: unknown[]) => void | Promise<void>,
-    options?: { title?: string; category?: string; icon?: string; when?: string }
+    options?: { title?: string; category?: string; icon?: string; when?: string },
   ): () => void;
 
   /** Contribute a keybinding (extension layer). */
-  registerKeybinding?(
-    binding: { command: string; key: string; mac?: string; when?: string }
-  ): () => void;
+  registerKeybinding?(binding: { command: string; key: string; mac?: string; when?: string }): () => void;
 
   /** Oniguruma WASM binary for TextMate grammars (optional). */
   getOnigurumaWasm?(): Promise<ArrayBuffer>;
@@ -121,7 +124,7 @@ export interface EditorExtensionApi {
 /** A single entry returned by an fsProvider. */
 export interface FsProviderEntry {
   name: string;
-  type: 'file' | 'directory';
+  type: "file" | "directory";
   size?: number;
   mtimeMs?: number;
 }
@@ -196,11 +199,11 @@ declare global {
         registerCommand: (
           commandId: string,
           handler: (...args: unknown[]) => void | Promise<void>,
-          options?: { title?: string; category?: string; icon?: string; when?: string }
+          options?: { title?: string; category?: string; icon?: string; when?: string },
         ) => { dispose: () => void };
-        registerKeybinding: (
-          binding: { command: string; key: string; mac?: string; when?: string }
-        ) => { dispose: () => void };
+        registerKeybinding: (binding: { command: string; key: string; mac?: string; when?: string }) => {
+          dispose: () => void;
+        };
       };
     };
   }

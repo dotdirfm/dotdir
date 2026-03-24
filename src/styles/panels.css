@@ -55,7 +55,7 @@
 }
 
 .panel-progress::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 0;
@@ -66,8 +66,12 @@
 }
 
 @keyframes progress-slide {
-  0% { left: -40%; }
-  100% { left: 100%; }
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
 }
 
 /* Panel tabs (VSCode-style) */

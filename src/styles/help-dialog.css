@@ -72,7 +72,7 @@
 }
 
 .help-dialog-body code {
-  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
   font-size: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);

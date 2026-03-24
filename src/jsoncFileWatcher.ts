@@ -1,15 +1,15 @@
 /**
  * JSONC File Watcher
- * 
+ *
  * Utility for loading and watching JSONC files (JSON with comments).
  * On file change, reloads automatically.
  * On parse error, keeps current value and logs error.
  */
 
-import { parse as parseJsonc, ParseError, printParseErrorCode } from 'jsonc-parser';
-import { bridge } from './bridge';
-import { readFileText } from './fs';
-import { basename, dirname } from './path';
+import { parse as parseJsonc, ParseError, printParseErrorCode } from "jsonc-parser";
+import { bridge } from "./bridge";
+import { readFileText } from "./fs";
+import { basename, dirname } from "./path";
 
 export interface JsoncFileWatcher<T> {
   getValue(): T;
@@ -26,11 +26,9 @@ export interface JsoncFileWatcherOptions<T> {
   onLoad?: (value: T) => void;
 }
 
-export async function createJsoncFileWatcher<T>(
-  options: JsoncFileWatcherOptions<T>
-): Promise<JsoncFileWatcher<T>> {
+export async function createJsoncFileWatcher<T>(options: JsoncFileWatcherOptions<T>): Promise<JsoncFileWatcher<T>> {
   const { name, getPath, validate, defaultValue, onLoad } = options;
-  
+
   let currentValue: T = defaultValue;
   let filePath: string | null = null;
   let watchId: string | null = null;
@@ -49,13 +47,13 @@ export async function createJsoncFileWatcher<T>(
 
   async function load(): Promise<void> {
     try {
-      const path = filePath ?? await getPath();
+      const path = filePath ?? (await getPath());
       filePath = path;
-      
+
       const text = await readFileText(path);
       const errors: ParseError[] = [];
       const parsed = parseJsonc(text, errors, { allowTrailingComma: true });
-      
+
       if (errors.length > 0) {
         console.error(`[${name}] Parse errors:`);
         for (const err of errors) {
@@ -63,18 +61,18 @@ export async function createJsoncFileWatcher<T>(
         }
         return; // Keep current value on parse error
       }
-      
+
       const validated = validate(parsed);
       if (validated === null) {
         return; // Validation failed, keep current value
       }
-      
+
       currentValue = validated;
       console.log(`[${name}] Loaded`);
       onLoad?.(currentValue);
       notifyListeners();
     } catch (err: any) {
-      if (err && typeof err.message === 'string' && (err.message === "ENOENT" || err.message?.includes('not found') || err.name === 'NotFoundError')) {
+      if (err && typeof err.message === "string" && (err.message === "ENOENT" || err.message?.includes("not found") || err.name === "NotFoundError")) {
         currentValue = defaultValue;
         onLoad?.(currentValue);
         notifyListeners();
@@ -87,15 +85,15 @@ export async function createJsoncFileWatcher<T>(
 
   async function setupWatch(): Promise<void> {
     try {
-      const path = filePath ?? await getPath();
+      const path = filePath ?? (await getPath());
       filePath = path;
-      
+
       const dirPath = dirname(path);
       const fileName = basename(path);
       watchId = `${name}-${Date.now()}`;
-      
+
       await bridge.fs.watch(watchId, dirPath);
-      
+
       unsubscribeFsChange = bridge.fs.onFsChange((event) => {
         if (event.watchId === watchId && event.name === fileName) {
           console.log(`[${name}] Detected change, reloading...`);
@@ -113,17 +111,17 @@ export async function createJsoncFileWatcher<T>(
 
   return {
     getValue: () => currentValue,
-    
+
     setValue(value: T): void {
       currentValue = value;
       // Don't notify listeners - this is for internal updates before saving
     },
-    
+
     onChange(callback: (value: T) => void): () => void {
       listeners.add(callback);
       return () => listeners.delete(callback);
     },
-    
+
     async dispose(): Promise<void> {
       if (unsubscribeFsChange) {
         unsubscribeFsChange();

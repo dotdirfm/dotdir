@@ -1,6 +1,6 @@
-import { useRef, useEffect } from 'react';
-import { focusContext } from './focusContext';
-import { SmartLabel } from './dialogHotkeys';
+import { useRef, useEffect } from "react";
+import { focusContext } from "./focusContext";
+import { SmartLabel } from "./dialogHotkeys";
 
 export interface DeleteProgressDialogProps {
   filesDone: number;
@@ -8,20 +8,16 @@ export interface DeleteProgressDialogProps {
   onCancel: () => void;
 }
 
-export function DeleteProgressDialog({
-  filesDone,
-  currentFile,
-  onCancel,
-}: DeleteProgressDialogProps) {
+export function DeleteProgressDialog({ filesDone, currentFile, onCancel }: DeleteProgressDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (!dialog.open) dialog.showModal();
-    focusContext.push('modal');
+    focusContext.push("modal");
     return () => {
-      focusContext.pop('modal');
+      focusContext.pop("modal");
     };
   }, []);
 
@@ -29,9 +25,7 @@ export function DeleteProgressDialog({
     <dialog ref={dialogRef} className="modal-dialog delete-progress-dialog">
       <div className="modal-dialog-header">Permanently deleting</div>
       <div className="modal-dialog-body">
-        <div className="delete-progress-text">
-          {filesDone.toLocaleString()} items deleted
-        </div>
+        <div className="delete-progress-text">{filesDone.toLocaleString()} items deleted</div>
         <div className="delete-progress-path" title={currentFile}>
           {currentFile}
         </div>

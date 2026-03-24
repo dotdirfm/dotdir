@@ -54,7 +54,7 @@
 }
 
 .command-line-cursor::after {
-  content: '';
+  content: "";
   position: absolute;
   left: 0.5px;
   top: 0;

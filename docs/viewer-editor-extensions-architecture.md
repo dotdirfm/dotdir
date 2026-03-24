@@ -23,12 +23,12 @@ Add to `ExtensionContributions` in `extensions.ts`:
 ```ts
 // Viewer: read-only. Matches by filename patterns or MIME.
 export interface ExtensionViewerContribution {
-  id: string;                    // e.g. "faraday.imageViewer"
-  label: string;                 // "Image & Video Viewer"
-  patterns: string[];             // e.g. ["*.png", "*.jpg", "*.mp4"]
-  mimeTypes?: string[];          // optional: ["image/png", "image/jpeg"]
-  entry: string;                 // path to JS entry (relative to extension dir), e.g. "./viewer.js"
-  priority?: number;             // higher = preferred when multiple match; default 0
+  id: string; // e.g. "faraday.imageViewer"
+  label: string; // "Image & Video Viewer"
+  patterns: string[]; // e.g. ["*.png", "*.jpg", "*.mp4"]
+  mimeTypes?: string[]; // optional: ["image/png", "image/jpeg"]
+  entry: string; // path to JS entry (relative to extension dir), e.g. "./viewer.js"
+  priority?: number; // higher = preferred when multiple match; default 0
 }
 
 // Editor: read-write. Same idea.
@@ -37,8 +37,8 @@ export interface ExtensionEditorContribution {
   label: string;
   patterns: string[];
   mimeTypes?: string[];
-  langId?: string;               // default language for syntax (e.g. "markdown")
-  entry: string;                 // path to JS entry, e.g. "./editor.js"
+  langId?: string; // default language for syntax (e.g. "markdown")
+  entry: string; // path to JS entry, e.g. "./editor.js"
   priority?: number;
 }
 ```
@@ -83,6 +83,7 @@ When the user opens a file (view or edit):
 2. **Resolve editor**: Same for edit; if none match, “No editor available” or fallback.
 
 So the **core app** only knows:
+
 - How to resolve (fileName, mime?) → viewer contribution or editor contribution
 - How to load the contribution’s entry in an iframe and establish the postMessage RPC bridge (see below).
 
@@ -114,6 +115,7 @@ Extension UI is loaded via our stateless VFS mount:
 **Cleanup**: When the viewer/editor is closed, the host sends `faraday:dispose` and unmounts the extension API; the iframe is destroyed as part of the UI lifecycle.
 
 ### 4.4 Handshake (postMessage)
+
 We use a lightweight message protocol between host and iframe:
 
 1. The iframe bootstrap installs a `message` listener and immediately notifies the host via `type: "faraday:bootstrap-ready"`.
@@ -144,11 +146,11 @@ interface HostApi {
   writeFile(path: string, content: string | ArrayBuffer): Promise<void>;
 
   // Theme (so extension can match host)
-  getTheme(): Promise<'light' | 'dark'>;
+  getTheme(): Promise<"light" | "dark">;
 
   // Lifecycle / host actions
-  onClose(): void;   // extension requests close (user clicked X)
-  onNavigateMedia?(file: { path: string; name: string; size: number }): void;  // gallery: switch to another file
+  onClose(): void; // extension requests close (user clicked X)
+  onNavigateMedia?(file: { path: string; name: string; size: number }): void; // gallery: switch to another file
 }
 ```
 
@@ -187,7 +189,7 @@ interface ViewerProps {
 interface EditorExtensionApi {
   mount(props: EditorProps): Promise<void>;
   unmount(): Promise<void>;
-  setDirty?(dirty: boolean): void;  // optional: host can show unsaved indicator
+  setDirty?(dirty: boolean): void; // optional: host can show unsaved indicator
 }
 ```
 
@@ -212,6 +214,7 @@ Default viewers and editor live **inside this repo** as regular extensions, so t
 - **faraday-editor-monaco**: Contains the current Monaco-based `FileEditor` as a JS entry (e.g. `editor.js`), contributes one editor with a catch-all or broad pattern and lower priority.
 
 **Loading built-ins**: The host treats these as built-in by either:
+
 - **Option A**: Registering their paths at build time (e.g. `import.meta.env` or a generated list) and loading them from the app bundle/resources (no copy to `~/.faraday/extensions`), or
 - **Option B**: Copying or linking them into `~/.faraday/extensions` on first run so the same `loadExtensions()` path works for both built-ins and user-installed extensions.
 
@@ -226,7 +229,7 @@ Recommendation: **Option A** — resolve built-in extension dirs from app resour
 ## 8. File List and App Flow (Minimal Changes)
 
 - **FileList**: Unchanged. It still calls `onViewFile(path, name, size)` and `onEditFile(path, name, size, langId)`.
-- **App**: 
+- **App**:
   - Keeps `viewerFile` and `editorFile` state.
   - Instead of branching on `isMediaFile()` and rendering `<ImageViewer>` vs `<FileViewer>`, it calls **viewerRegistry.resolve(fileName)** (and optionally mime), then **ViewerContainer** with the resolved contribution + props.
   - Same for editor: **editorRegistry.resolve(fileName)** → **EditorContainer** with contribution + props.
@@ -239,14 +242,14 @@ Recommendation: **Option A** — resolve built-in extension dirs from app resour
 
 ## 10. Summary
 
-| Piece | Responsibility |
-|-------|----------------|
-| **Core app** | Extension host, viewer + editor registries, resolution, ViewerContainer/EditorContainer (iframe + postMessage RPC), hostApi implementation (bridge + theme + onClose) |
-| **Manifest** | `contributes.viewers` / `contributes.editors` with id, label, patterns, entry (JS file path), priority |
-| **Default extensions** | In-repo `extensions/faraday-viewers-basic`, `extensions/faraday-editor-monaco`; loaded from app resources, same format as user extensions |
-| **Third-party extensions** | Add viewers/editors for other formats; same contract (entry JS + hostApi/extensionApi over postMessage RPC) |
-| **Loading** | Frontend-only: load entry JS + iframe bootstrap; host/iframe establish the postMessage RPC bridge (no MessageChannel); no Tauri serving |
-| **API** | HostApi (readFile, writeFile, getTheme, onClose, …) from host to iframe; ViewerExtensionApi / EditorExtensionApi (mount, unmount) from iframe to host; shared types in extension-api module |
+| Piece                      | Responsibility                                                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Core app**               | Extension host, viewer + editor registries, resolution, ViewerContainer/EditorContainer (iframe + postMessage RPC), hostApi implementation (bridge + theme + onClose)                       |
+| **Manifest**               | `contributes.viewers` / `contributes.editors` with id, label, patterns, entry (JS file path), priority                                                                                      |
+| **Default extensions**     | In-repo `extensions/faraday-viewers-basic`, `extensions/faraday-editor-monaco`; loaded from app resources, same format as user extensions                                                   |
+| **Third-party extensions** | Add viewers/editors for other formats; same contract (entry JS + hostApi/extensionApi over postMessage RPC)                                                                                 |
+| **Loading**                | Frontend-only: load entry JS + iframe bootstrap; host/iframe establish the postMessage RPC bridge (no MessageChannel); no Tauri serving                                                     |
+| **API**                    | HostApi (readFile, writeFile, getTheme, onClose, …) from host to iframe; ViewerExtensionApi / EditorExtensionApi (mount, unmount) from iframe to host; shared types in extension-api module |
 
 This keeps the app UI-agnostic for viewing/editing and makes File/Image Viewer and Editor first-class extension points with isolation (iframe) and a clear RPC contract (postMessage).
 
@@ -268,15 +271,15 @@ VSCode’s [Webview API](https://code.visualstudio.com/api/extension-guides/webv
 
 ### 11.2 Alignments (and small adjustments)
 
-| Aspect | VSCode | Faraday (this plan) | Note |
-|--------|--------|----------------------|------|
-| **Contribution** | `customEditors`: viewType, displayName, selector, priority | `viewers` / `editors`: id, label, patterns, entry, priority | Same idea; we use numeric priority for tie-breaking; can add "default" vs "option" semantics later (e.g. `priority: "option"` = don’t use by default). |
-| **Selector** | `selector: [{ filenamePattern: "*.png" }]` | `patterns: ["*.png", "*.jpg"]` | Equivalent; we use a single array of globs. |
-| **Isolation** | Webview in separate context | Iframe (same-origin blob) | Both isolate extension UI from host. |
-| **Host → extension comms** | `webview.postMessage()` | postMessage RPC (host exposes `frdy.*`) | Typed-ish RPC via our postMessage protocol (no Comlink). |
-| **Extension → host comms** | `acquireVsCodeApi().postMessage()` + `onDidReceiveMessage` | postMessage RPC (iframe calls back into host) | Same direction; we use a single RPC surface (mount, unmount, setLanguage/setDirty). |
-| **Theme** | Body class + CSS variables | `getTheme(): Promise<'light' \| 'dark'>` | We can add body class (and optionally CSS variables) in the **host shell HTML** so extension content matches host theme without extra RPC for initial paint. |
-| **Local resources** | `asWebviewUri` + `localResourceRoots` | Entry is one JS bundle; host reads file via bridge | We don’t serve extension dir. Assets either live in the bundle or are fetched via HostApi (e.g. `readFile` for the opened file). For extension-owned assets (icons, CSS), we could add a HostApi such as `readExtensionFile(extensionId, relativePath)` and pass blob/data URLs. |
+| Aspect                     | VSCode                                                     | Faraday (this plan)                                         | Note                                                                                                                                                                                                                                                                             |
+| -------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Contribution**           | `customEditors`: viewType, displayName, selector, priority | `viewers` / `editors`: id, label, patterns, entry, priority | Same idea; we use numeric priority for tie-breaking; can add "default" vs "option" semantics later (e.g. `priority: "option"` = don’t use by default).                                                                                                                           |
+| **Selector**               | `selector: [{ filenamePattern: "*.png" }]`                 | `patterns: ["*.png", "*.jpg"]`                              | Equivalent; we use a single array of globs.                                                                                                                                                                                                                                      |
+| **Isolation**              | Webview in separate context                                | Iframe (same-origin blob)                                   | Both isolate extension UI from host.                                                                                                                                                                                                                                             |
+| **Host → extension comms** | `webview.postMessage()`                                    | postMessage RPC (host exposes `frdy.*`)                     | Typed-ish RPC via our postMessage protocol (no Comlink).                                                                                                                                                                                                                         |
+| **Extension → host comms** | `acquireVsCodeApi().postMessage()` + `onDidReceiveMessage` | postMessage RPC (iframe calls back into host)               | Same direction; we use a single RPC surface (mount, unmount, setLanguage/setDirty).                                                                                                                                                                                              |
+| **Theme**                  | Body class + CSS variables                                 | `getTheme(): Promise<'light' \| 'dark'>`                    | We can add body class (and optionally CSS variables) in the **host shell HTML** so extension content matches host theme without extra RPC for initial paint.                                                                                                                     |
+| **Local resources**        | `asWebviewUri` + `localResourceRoots`                      | Entry is one JS bundle; host reads file via bridge          | We don’t serve extension dir. Assets either live in the bundle or are fetched via HostApi (e.g. `readFile` for the opened file). For extension-owned assets (icons, CSS), we could add a HostApi such as `readExtensionFile(extensionId, relativePath)` and pass blob/data URLs. |
 
 ### 11.3 Intentional Differences
 

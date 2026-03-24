@@ -1,7 +1,7 @@
-import { commandRegistry } from './commands';
-import { join, normalizePath } from './path';
-import { vfsUrl } from './vfs';
-import type { LoadedExtension } from './extensions';
+import { commandRegistry } from "./commands";
+import { join, normalizePath } from "./path";
+import { vfsUrl } from "./vfs";
+import type { LoadedExtension } from "./extensions";
 
 export type BrowserDisposable = { dispose: () => void };
 
@@ -23,7 +23,7 @@ export interface BrowserExtensionContext {
       registerCommand: (
         commandId: string,
         handler: (...args: unknown[]) => void | Promise<void>,
-        options?: { title?: string; category?: string; icon?: string; when?: string }
+        options?: { title?: string; category?: string; icon?: string; when?: string },
       ) => BrowserDisposable;
       registerKeybinding: (binding: BrowserExtensionKeybinding) => BrowserDisposable;
     };
@@ -44,7 +44,7 @@ type BrowserExtensionModule = {
 interface ActiveActivation {
   module: BrowserExtensionModule;
   ctx: BrowserExtensionContext;
-  deactivate?: BrowserExtensionModule['deactivate'];
+  deactivate?: BrowserExtensionModule["deactivate"];
   // Cache keybindings disposables are stored inside ctx.subscriptions by extension code.
 }
 
@@ -55,10 +55,10 @@ function extActivationKey(ext: LoadedExtension): string {
 async function loadBrowserModule(scriptUrl: string): Promise<BrowserExtensionModule> {
   // Try ESM first.
   try {
-    const bust = `${scriptUrl}${scriptUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+    const bust = `${scriptUrl}${scriptUrl.includes("?") ? "&" : "?"}t=${Date.now()}`;
     const mod = await import(/* @vite-ignore */ bust);
     return mod as BrowserExtensionModule;
-  } catch (e) {
+  } catch {
     // Fallback: classic script injection. Non-ESM scripts must attach exports via globals.
     return await new Promise<BrowserExtensionModule>((resolve, reject) => {
       const prevReady = (globalThis as any).__faradayBrowserExtensionReady as undefined | ((m: any) => void);
@@ -82,30 +82,24 @@ async function loadBrowserModule(scriptUrl: string): Promise<BrowserExtensionMod
       const timer = setTimeout(() => {
         if (done) return;
         done = true;
-        const exports =
-          (globalThis as any).__faradayBrowserExtensionExports ??
-          (globalThis as any).__faradayBrowserExports ??
-          {};
+        const exports = (globalThis as any).__faradayBrowserExtensionExports ?? (globalThis as any).__faradayBrowserExports ?? {};
         cleanup();
         resolve(exports as BrowserExtensionModule);
       }, timeoutMs);
 
-      const script = document.createElement('script');
+      const script = document.createElement("script");
       script.src = scriptUrl;
       script.async = true;
       script.onerror = () => {
         if (done) return;
         clearTimeout(timer);
         cleanup();
-        reject(new Error('Failed to load browser extension script'));
+        reject(new Error("Failed to load browser extension script"));
       };
       script.onload = () => {
         if (done) return;
         clearTimeout(timer);
-        const exports =
-          (globalThis as any).__faradayBrowserExtensionExports ??
-          (globalThis as any).__faradayBrowserExports ??
-          null;
+        const exports = (globalThis as any).__faradayBrowserExtensionExports ?? (globalThis as any).__faradayBrowserExports ?? null;
         if (exports) {
           done = true;
           cleanup();
@@ -114,7 +108,7 @@ async function loadBrowserModule(scriptUrl: string): Promise<BrowserExtensionMod
         }
 
         // Last resort: allow scripts to set window.activate / window.deactivate.
-        if (typeof (globalThis as any).activate === 'function') {
+        if (typeof (globalThis as any).activate === "function") {
           done = true;
           cleanup();
           resolve({
@@ -124,7 +118,7 @@ async function loadBrowserModule(scriptUrl: string): Promise<BrowserExtensionMod
           } as BrowserExtensionModule);
         } else {
           cleanup();
-          reject(new Error('Browser script loaded, but no exports were found'));
+          reject(new Error("Browser script loaded, but no exports were found"));
         }
       };
 
@@ -142,7 +136,7 @@ export class BrowserExtensionHost {
       registerCommand: (
         commandId: string,
         handler: (...args: unknown[]) => void | Promise<void>,
-        options?: { title?: string; category?: string; icon?: string; when?: string }
+        options?: { title?: string; category?: string; icon?: string; when?: string },
       ): BrowserDisposable => {
         const existing = commandRegistry.getCommand(commandId);
         const title = options?.title ?? existing?.title ?? commandId;
@@ -150,14 +144,15 @@ export class BrowserExtensionHost {
         const icon = options?.icon ?? existing?.icon;
         const when = options?.when ?? existing?.when;
 
-        const disposeFn = commandRegistry.registerCommand(commandId, title, handler, { category, icon, when });
+        const disposeFn = commandRegistry.registerCommand(commandId, title, handler, {
+          category,
+          icon,
+          when,
+        });
         return { dispose: disposeFn };
       },
       registerKeybinding: (binding: BrowserExtensionKeybinding): BrowserDisposable => {
-        const disposeFn = commandRegistry.registerKeybinding(
-          { command: binding.command, key: binding.key, mac: binding.mac, when: binding.when },
-          'extension'
-        );
+        const disposeFn = commandRegistry.registerKeybinding({ command: binding.command, key: binding.key, mac: binding.mac, when: binding.when }, "extension");
         return { dispose: disposeFn };
       },
     },
@@ -183,7 +178,7 @@ export class BrowserExtensionHost {
         }
       })
       .catch((err) => {
-        console.error('[BrowserExtensionHost] reconcile failed:', err);
+        console.error("[BrowserExtensionHost] reconcile failed:", err);
       });
 
     return this.queue;
@@ -192,14 +187,14 @@ export class BrowserExtensionHost {
   private async activateOne(ext: LoadedExtension): Promise<void> {
     const key = extActivationKey(ext);
     const scriptRel = ext.manifest.browser!;
-    const absScriptPath = join(ext.dirPath, normalizePath(scriptRel).replace(/^\//, ''));
+    const absScriptPath = join(ext.dirPath, normalizePath(scriptRel).replace(/^\//, ""));
     const scriptUrl = vfsUrl(absScriptPath);
 
     const module = await loadBrowserModule(scriptUrl);
     const activateFn = module.activate ?? module.default?.activate;
     const deactivateFn = module.deactivate ?? module.default?.deactivate;
 
-    if (typeof activateFn !== 'function') {
+    if (typeof activateFn !== "function") {
       console.warn(`[BrowserExtensionHost] ${key} has a browser entry but no activate() export`);
       return;
     }
@@ -211,10 +206,7 @@ export class BrowserExtensionHost {
 
     const activationResult = await activateFn(ctx);
 
-    const contributes: BrowserExtensionContributions | undefined =
-      module.contributes ??
-      module.default?.contributes ??
-      (activationResult as any)?.contributes;
+    const contributes: BrowserExtensionContributions | undefined = module.contributes ?? module.default?.contributes ?? (activationResult as any)?.contributes;
 
     if (contributes?.keybindings?.length) {
       for (const kb of contributes.keybindings) {
@@ -250,4 +242,3 @@ export class BrowserExtensionHost {
     await Promise.all(entries.map(([key, active]) => this.deactivateOne(key, active)));
   }
 }
-

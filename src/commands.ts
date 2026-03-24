@@ -1,19 +1,19 @@
 /**
  * Command System
- * 
+ *
  * VS Code compatible command registry with support for:
  * - Command registration and execution
  * - Keyboard shortcuts (keybindings) with layered override system
  * - Extension-contributed commands
  * - Command palette integration
- * 
+ *
  * Keybinding layers (later layers override earlier ones):
  * 1. Default (Faraday built-in)
  * 2. Extensions
  * 3. User (from ~/.faraday/keybindings.json)
  */
 
-import { focusContext } from './focusContext';
+import { focusContext } from "./focusContext";
 
 export interface Command {
   id: string;
@@ -45,7 +45,7 @@ export interface KeybindingContribution {
   when?: string;
 }
 
-export type KeybindingLayer = 'default' | 'extension' | 'user';
+export type KeybindingLayer = "default" | "extension" | "user";
 
 type CommandHandler = (...args: unknown[]) => void | Promise<void>;
 type ContextGetter = () => Record<string, unknown>;
@@ -107,7 +107,7 @@ class CommandRegistry {
     };
   }
 
-  registerKeybinding(binding: Keybinding, layer: KeybindingLayer = 'default'): () => void {
+  registerKeybinding(binding: Keybinding, layer: KeybindingLayer = "default"): () => void {
     this.keybindingLayers[layer].push(binding);
     this.notifyListeners();
     return () => {
@@ -154,13 +154,11 @@ class CommandRegistry {
   }
 
   getVisibleCommands(): Command[] {
-    return Array.from(this.commands.values()).filter(cmd => this.evaluateWhen(cmd.when));
+    return Array.from(this.commands.values()).filter((cmd) => this.evaluateWhen(cmd.when));
   }
 
   getVisibleCommandsForContext(contextOverride: string): Command[] {
-    return Array.from(this.commands.values()).filter(cmd => 
-      this.evaluateWhenWithContext(cmd.when, contextOverride)
-    );
+    return Array.from(this.commands.values()).filter((cmd) => this.evaluateWhenWithContext(cmd.when, contextOverride));
   }
 
   private evaluateWhenWithContext(when: string | undefined, focusOverride: string): boolean {
@@ -169,12 +167,12 @@ class CommandRegistry {
     const context: Record<string, unknown> = {
       ...userContext,
       ...this.contextValues,
-      focusPanel: focusOverride === 'panel',
-      focusViewer: focusOverride === 'viewer',
-      focusEditor: focusOverride === 'editor',
-      focusTerminal: focusOverride === 'terminal',
-      focusCommandPalette: focusOverride === 'commandPalette',
-      focusModal: focusOverride === 'modal',
+      focusPanel: focusOverride === "panel",
+      focusViewer: focusOverride === "viewer",
+      focusEditor: focusOverride === "editor",
+      focusTerminal: focusOverride === "terminal",
+      focusCommandPalette: focusOverride === "commandPalette",
+      focusModal: focusOverride === "modal",
     };
     return CommandRegistry.evalWhen(when, context);
   }
@@ -182,17 +180,17 @@ class CommandRegistry {
   getKeybindings(): Keybinding[] {
     // Merge layers: later layers override earlier ones for the same key
     const merged = new Map<string, Keybinding>();
-    const layers: KeybindingLayer[] = ['default', 'extension', 'user'];
-    
+    const layers: KeybindingLayer[] = ["default", "extension", "user"];
+
     for (const layer of layers) {
       for (const binding of this.keybindingLayers[layer]) {
         const normalizedKey = this.normalizeKey(this.isMac() ? (binding.mac ?? binding.key) : binding.key);
         // Use key + when as the unique identifier for overriding
-        const id = `${normalizedKey}|${binding.when ?? ''}`;
+        const id = `${normalizedKey}|${binding.when ?? ""}`;
         merged.set(id, binding);
       }
     }
-    
+
     return Array.from(merged.values());
   }
 
@@ -211,12 +209,12 @@ class CommandRegistry {
     const context: Record<string, unknown> = {
       ...userContext,
       ...this.contextValues,
-      focusPanel: currentFocus === 'panel',
-      focusViewer: currentFocus === 'viewer',
-      focusEditor: currentFocus === 'editor',
-      focusTerminal: currentFocus === 'terminal',
-      focusCommandPalette: currentFocus === 'commandPalette',
-      focusModal: currentFocus === 'modal',
+      focusPanel: currentFocus === "panel",
+      focusViewer: currentFocus === "viewer",
+      focusEditor: currentFocus === "editor",
+      focusTerminal: currentFocus === "terminal",
+      focusCommandPalette: currentFocus === "commandPalette",
+      focusModal: currentFocus === "modal",
     };
     return CommandRegistry.evalWhen(when, context);
   }
@@ -224,13 +222,16 @@ class CommandRegistry {
   /** Evaluate a `when` expression. Supports `&&` and `||`, and `!` negation. */
   private static evalWhen(when: string, context: Record<string, unknown>): boolean {
     try {
-      return when.split(/\s*&&\s*/).every(andPart =>
-        andPart.trim().split(/\s*\|\|\s*/).some(orPart => {
-          const trimmed = orPart.trim();
-          const negated = trimmed.startsWith('!');
-          const key = negated ? trimmed.slice(1) : trimmed;
-          return negated ? !context[key] : !!context[key];
-        })
+      return when.split(/\s*&&\s*/).every((andPart) =>
+        andPart
+          .trim()
+          .split(/\s*\|\|\s*/)
+          .some((orPart) => {
+            const trimmed = orPart.trim();
+            const negated = trimmed.startsWith("!");
+            const key = negated ? trimmed.slice(1) : trimmed;
+            return negated ? !context[key] : !!context[key];
+          }),
       );
     } catch {
       return true;
@@ -243,7 +244,7 @@ class CommandRegistry {
 
     // Priority: later layers override earlier ones.
     // Evaluate from highest → lowest and stop on first match.
-    const layers: KeybindingLayer[] = ['user', 'extension', 'default'];
+    const layers: KeybindingLayer[] = ["user", "extension", "default"];
     for (const layer of layers) {
       for (const binding of this.keybindingLayers[layer]) {
         const bindingKey = this.normalizeKey(this.isMac() ? (binding.mac ?? binding.key) : binding.key);
@@ -259,7 +260,7 @@ class CommandRegistry {
   }
 
   private isMac(): boolean {
-    return navigator.platform.toUpperCase().includes('MAC');
+    return navigator.platform.toUpperCase().includes("MAC");
   }
 
   /**
@@ -267,10 +268,10 @@ class CommandRegistry {
    * Layout-independent so shortcuts work with non-Latin / non-QWERTY layouts.
    */
   private physicalCodeToKeyPart(code: string): string | null {
-    if (code.startsWith('Key') && code.length === 4) {
+    if (code.startsWith("Key") && code.length === 4) {
       return code[3]!.toLowerCase();
     }
-    if (code.startsWith('Digit')) {
+    if (code.startsWith("Digit")) {
       return code.slice(5);
     }
     const numpadDigit = /^Numpad(\d)$/.exec(code);
@@ -280,34 +281,34 @@ class CommandRegistry {
     if (fn) return `f${fn[1]}`;
 
     const map: Record<string, string> = {
-      Space: 'space',
-      Enter: 'enter',
-      NumpadEnter: 'enter',
-      Tab: 'tab',
-      Escape: 'escape',
-      Backspace: 'backspace',
-      Delete: 'delete',
-      Insert: 'insert',
-      ArrowUp: 'up',
-      ArrowDown: 'down',
-      ArrowLeft: 'left',
-      ArrowRight: 'right',
-      Home: 'home',
-      End: 'end',
-      PageUp: 'pageup',
-      PageDown: 'pagedown',
-      Minus: '-',
-      Equal: '=',
-      BracketLeft: '[',
-      BracketRight: ']',
-      Backslash: '\\',
-      Semicolon: ';',
+      Space: "space",
+      Enter: "enter",
+      NumpadEnter: "enter",
+      Tab: "tab",
+      Escape: "escape",
+      Backspace: "backspace",
+      Delete: "delete",
+      Insert: "insert",
+      ArrowUp: "up",
+      ArrowDown: "down",
+      ArrowLeft: "left",
+      ArrowRight: "right",
+      Home: "home",
+      End: "end",
+      PageUp: "pageup",
+      PageDown: "pagedown",
+      Minus: "-",
+      Equal: "=",
+      BracketLeft: "[",
+      BracketRight: "]",
+      Backslash: "\\",
+      Semicolon: ";",
       Quote: "'",
-      Comma: ',',
-      Period: '.',
-      Slash: '/',
-      Backquote: '`',
-      IntlBackslash: '\\',
+      Comma: ",",
+      Period: ".",
+      Slash: "/",
+      Backquote: "`",
+      IntlBackslash: "\\",
     };
     if (map[code]) return map[code];
 
@@ -319,7 +320,7 @@ class CommandRegistry {
    */
   private keyStringToKeyPart(key: string): string | null {
     if (!key) return null;
-    if (['Control', 'Alt', 'Shift', 'Meta'].includes(key)) return null;
+    if (["Control", "Alt", "Shift", "Meta"].includes(key)) return null;
 
     if (key.length === 1) {
       const k = key.toLowerCase();
@@ -328,46 +329,45 @@ class CommandRegistry {
     }
 
     let k = key.toLowerCase();
-    if (k === ' ') k = 'space';
-    else if (k === 'arrowup') k = 'up';
-    else if (k === 'arrowdown') k = 'down';
-    else if (k === 'arrowleft') k = 'left';
-    else if (k === 'arrowright') k = 'right';
-    else if (k === 'escape') k = 'escape';
-    else if (k === 'enter') k = 'enter';
-    else if (k === 'backspace') k = 'backspace';
-    else if (k === 'delete') k = 'delete';
-    else if (k === 'tab') k = 'tab';
+    if (k === " ") k = "space";
+    else if (k === "arrowup") k = "up";
+    else if (k === "arrowdown") k = "down";
+    else if (k === "arrowleft") k = "left";
+    else if (k === "arrowright") k = "right";
+    else if (k === "escape") k = "escape";
+    else if (k === "enter") k = "enter";
+    else if (k === "backspace") k = "backspace";
+    else if (k === "delete") k = "delete";
+    else if (k === "tab") k = "tab";
 
     return k;
   }
 
   private eventToKeyCombo(e: KeyboardEvent): string | null {
-    if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return null;
+    if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return null;
 
     const parts: string[] = [];
-    if (e.ctrlKey || e.metaKey) parts.push('ctrl');
-    if (e.altKey) parts.push('alt');
-    if (e.shiftKey) parts.push('shift');
+    if (e.ctrlKey || e.metaKey) parts.push("ctrl");
+    if (e.altKey) parts.push("alt");
+    if (e.shiftKey) parts.push("shift");
 
-    const keyPart =
-      (e.code && this.physicalCodeToKeyPart(e.code)) ?? this.keyStringToKeyPart(e.key);
+    const keyPart = (e.code && this.physicalCodeToKeyPart(e.code)) ?? this.keyStringToKeyPart(e.key);
     if (!keyPart) return null;
 
     parts.push(keyPart);
-    return parts.join('+');
+    return parts.join("+");
   }
 
   private normalizeKey(key: string): string {
     return key
       .toLowerCase()
-      .replace(/cmd/g, 'ctrl')
-      .replace(/meta/g, 'ctrl')
-      .replace(/mod/g, 'ctrl')
-      .split('+')
-      .map(p => p.trim())
+      .replace(/cmd/g, "ctrl")
+      .replace(/meta/g, "ctrl")
+      .replace(/mod/g, "ctrl")
+      .split("+")
+      .map((p) => p.trim())
       .sort((a, b) => {
-        const order = ['ctrl', 'alt', 'shift'];
+        const order = ["ctrl", "alt", "shift"];
         const ai = order.indexOf(a);
         const bi = order.indexOf(b);
         if (ai >= 0 && bi >= 0) return ai - bi;
@@ -375,7 +375,7 @@ class CommandRegistry {
         if (bi >= 0) return 1;
         return 0;
       })
-      .join('+');
+      .join("+");
   }
 
   onChange(callback: () => void): () => void {
@@ -391,33 +391,33 @@ class CommandRegistry {
 export const commandRegistry = new CommandRegistry();
 
 export function formatKeybinding(binding: Keybinding): string {
-  const isMac = navigator.platform.toUpperCase().includes('MAC');
+  const isMac = navigator.platform.toUpperCase().includes("MAC");
   const key = isMac ? (binding.mac ?? binding.key) : binding.key;
-  
+
   return key
-    .split('+')
-    .map(part => {
+    .split("+")
+    .map((part) => {
       const p = part.trim().toLowerCase();
       if (isMac) {
-        if (p === 'ctrl' || p === 'cmd' || p === 'mod') return '⌘';
-        if (p === 'alt') return '⌥';
-        if (p === 'shift') return '⇧';
+        if (p === "ctrl" || p === "cmd" || p === "mod") return "⌘";
+        if (p === "alt") return "⌥";
+        if (p === "shift") return "⇧";
       } else {
-        if (p === 'ctrl' || p === 'cmd' || p === 'mod') return 'Ctrl';
-        if (p === 'alt') return 'Alt';
-        if (p === 'shift') return 'Shift';
+        if (p === "ctrl" || p === "cmd" || p === "mod") return "Ctrl";
+        if (p === "alt") return "Alt";
+        if (p === "shift") return "Shift";
       }
-      if (p === 'enter') return '↵';
-      if (p === 'escape') return 'Esc';
-      if (p === 'backspace') return '⌫';
-      if (p === 'delete') return 'Del';
-      if (p === 'up') return '↑';
-      if (p === 'down') return '↓';
-      if (p === 'left') return '←';
-      if (p === 'right') return '→';
-      if (p === 'space') return 'Space';
-      if (p === 'tab') return 'Tab';
+      if (p === "enter") return "↵";
+      if (p === "escape") return "Esc";
+      if (p === "backspace") return "⌫";
+      if (p === "delete") return "Del";
+      if (p === "up") return "↑";
+      if (p === "down") return "↓";
+      if (p === "left") return "←";
+      if (p === "right") return "→";
+      if (p === "space") return "Space";
+      if (p === "tab") return "Tab";
       return p.toUpperCase();
     })
-    .join(isMac ? '' : '+');
+    .join(isMac ? "" : "+");
 }

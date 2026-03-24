@@ -1,8 +1,8 @@
-import { Command } from 'cmdk';
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from './commands';
-import { INPUT_NO_ASSIST } from './inputNoAssist';
-import { focusContext } from './focusContext';
+import { Command } from "cmdk";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from "./commands";
+import { INPUT_NO_ASSIST } from "./inputNoAssist";
+import { focusContext } from "./focusContext";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -18,7 +18,7 @@ interface CommandItem {
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [commands, setCommands] = useState<CommandType[]>([]);
   const [keybindings, setKeybindings] = useState<Keybinding[]>([]);
   const [capturedContext, setCapturedContext] = useState<string | null>(null);
@@ -66,8 +66,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   }, [open, capturedContext]);
 
   const items = useMemo<CommandItem[]>(() => {
-    return commands.map(cmd => {
-      const kb = keybindings.find(k => k.command === cmd.id);
+    return commands.map((cmd) => {
+      const kb = keybindings.find((k) => k.command === cmd.id);
       const displayTitle = cmd.category ? `${cmd.category}: ${cmd.title}` : cmd.title;
       return { command: cmd, keybinding: kb, displayTitle };
     });
@@ -76,28 +76,31 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const groupedItems = useMemo(() => {
     const groups = new Map<string, CommandItem[]>();
     for (const item of items) {
-      const category = item.command.category ?? 'General';
+      const category = item.command.category ?? "General";
       if (!groups.has(category)) groups.set(category, []);
       groups.get(category)!.push(item);
     }
     return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [items]);
 
-  const handleSelect = useCallback((commandId: string) => {
-    onOpenChange(false);
-    setSearch('');
-    commandRegistry.executeCommand(commandId);
-  }, [onOpenChange]);
+  const handleSelect = useCallback(
+    (commandId: string) => {
+      onOpenChange(false);
+      setSearch("");
+      commandRegistry.executeCommand(commandId);
+    },
+    [onOpenChange],
+  );
 
   useEffect(() => {
-    if (!open) setSearch('');
+    if (!open) setSearch("");
   }, [open]);
 
   // Manage focus context
   useEffect(() => {
     if (open) {
-      focusContext.push('commandPalette');
-      return () => focusContext.pop('commandPalette');
+      focusContext.push("commandPalette");
+      return () => focusContext.pop("commandPalette");
     }
   }, [open]);
 
@@ -115,34 +118,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       }}
       onClose={() => onOpenChange(false)}
     >
-      <Command
-        className="command-palette"
-        onKeyDown={handleKeyDown}
-        shouldFilter={true}
-      >
-        <Command.Input
-          ref={inputRef}
-          value={search}
-          onValueChange={setSearch}
-          placeholder="Type a command or search..."
-          {...INPUT_NO_ASSIST}
-        />
+      <Command className="command-palette" onKeyDown={handleKeyDown} shouldFilter={true}>
+        <Command.Input ref={inputRef} value={search} onValueChange={setSearch} placeholder="Type a command or search..." {...INPUT_NO_ASSIST} />
         <Command.List>
           <Command.Empty>No results found.</Command.Empty>
           {groupedItems.map(([category, categoryItems]) => (
             <Command.Group key={category} heading={category}>
               {categoryItems.map(({ command, keybinding, displayTitle }) => (
-                <Command.Item
-                  key={command.id}
-                  value={displayTitle}
-                  onSelect={() => handleSelect(command.id)}
-                >
+                <Command.Item key={command.id} value={displayTitle} onSelect={() => handleSelect(command.id)}>
                   <span className="command-item-title">{command.title}</span>
-                  {keybinding && (
-                    <span className="command-item-keybinding">
-                      {formatKeybinding(keybinding)}
-                    </span>
-                  )}
+                  {keybinding && <span className="command-item-keybinding">{formatKeybinding(keybinding)}</span>}
                 </Command.Item>
               ))}
             </Command.Group>
@@ -159,7 +144,7 @@ export function useCommandPalette() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Escape closes palette
-      if (open && e.key === 'Escape') {
+      if (open && e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
         setOpen(false);
@@ -167,7 +152,7 @@ export function useCommandPalette() {
       }
 
       // When palette is already open, Ctrl/Cmd+P (and Ctrl/Cmd+Shift+P) should close it.
-      if (open && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'p') {
+      if (open && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
         e.preventDefault();
         e.stopPropagation();
         setOpen((o) => !o);
@@ -177,24 +162,24 @@ export function useCommandPalette() {
       // Let command registry handle other shortcuts when palette is closed
       if (!open) {
         const target = e.target as HTMLElement;
-        const inTerminal = target.closest('.terminal-container');
-        
+        const inTerminal = target.closest(".terminal-container");
+
         // When in terminal, only intercept shortcuts with Ctrl/Cmd modifier
         // (but not Ctrl+C/D/Z which are terminal control sequences)
         if (inTerminal) {
           const hasModifier = e.metaKey || e.ctrlKey;
-          const isTerminalControl = hasModifier && ['c', 'd', 'z', 'v'].includes(e.key.toLowerCase());
+          const isTerminalControl = hasModifier && ["c", "d", "z", "v"].includes(e.key.toLowerCase());
           if (!hasModifier || isTerminalControl) {
             return;
           }
         }
-        
+
         commandRegistry.handleKeyboardEvent(e);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [open]);
 
   return { open, setOpen };

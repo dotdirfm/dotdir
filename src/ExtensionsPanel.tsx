@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { focusContext } from './focusContext';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { focusContext } from "./focusContext";
 import {
   type ExtensionRef,
   type MarketplaceExtension,
@@ -13,7 +13,7 @@ import {
   colorThemeKey,
   readSettings,
   writeSettings,
-} from './extensions';
+} from "./extensions";
 import {
   searchVSCodeMarketplace,
   type VSCodeExtension,
@@ -21,13 +21,13 @@ import {
   getVSCodeLatestVersion,
   getVSCodeDownloadUrl,
   getVSCodeIconUrl,
-} from './vscodeMarketplace';
-import { INPUT_NO_ASSIST } from './inputNoAssist';
+} from "./vscodeMarketplace";
+import { INPUT_NO_ASSIST } from "./inputNoAssist";
 
 /** Extract a message from Tauri invoke errors (plain {errno,message} objects) or Error instances. */
 function errMsg(err: unknown): string {
   if (err instanceof Error) return err.message;
-  if (err && typeof err === 'object' && 'message' in err) return String((err as { message: unknown }).message);
+  if (err && typeof err === "object" && "message" in err) return String((err as { message: unknown }).message);
   return String(err);
 }
 
@@ -40,32 +40,32 @@ interface Props {
   onColorThemeChange: (themeKey: string | undefined) => void;
 }
 
-type Tab = 'marketplace' | 'installed';
-type MarketplaceSource = 'faraday' | 'vscode';
+type Tab = "marketplace" | "installed";
+type MarketplaceSource = "faraday" | "vscode";
 
 export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme, onIconThemeChange, activeColorTheme, onColorThemeChange }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [tab, setTab] = useState<Tab>('marketplace');
-  const [marketplaceSource, setMarketplaceSource] = useState<MarketplaceSource>('vscode');
-  const [query, setQuery] = useState('');
+  const [tab, setTab] = useState<Tab>("marketplace");
+  const [marketplaceSource, setMarketplaceSource] = useState<MarketplaceSource>("vscode");
+  const [query, setQuery] = useState("");
   const [results, setResults] = useState<MarketplaceExtension[]>([]);
   const [vscodeResults, setVscodeResults] = useState<VSCodeExtension[]>([]);
   const [installed, setInstalled] = useState<LoadedExtension[]>([]);
   const [loading, setLoading] = useState(false);
   const [installing, setInstalling] = useState<string | null>(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (!dialog.open) dialog.showModal();
-    focusContext.push('modal');
+    focusContext.push("modal");
     const handleClose = () => onClose();
-    dialog.addEventListener('close', handleClose);
+    dialog.addEventListener("close", handleClose);
     return () => {
-      dialog.removeEventListener('close', handleClose);
-      focusContext.pop('modal');
+      dialog.removeEventListener("close", handleClose);
+      focusContext.pop("modal");
     };
   }, [onClose]);
 
@@ -73,16 +73,20 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
     try {
       const exts = await loadExtensions();
       setInstalled(exts);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
-  useEffect(() => { refreshInstalled(); }, [refreshInstalled]);
+  useEffect(() => {
+    refreshInstalled();
+  }, [refreshInstalled]);
 
   const doSearch = useCallback(async (q: string, source: MarketplaceSource) => {
     setLoading(true);
-    setError('');
+    setError("");
     try {
-      if (source === 'vscode') {
+      if (source === "vscode") {
         const data = await searchVSCodeMarketplace(q);
         setVscodeResults(data.extensions);
         setResults([]);
@@ -92,12 +96,14 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
         setVscodeResults([]);
       }
     } catch {
-      setError(`Could not reach ${source === 'vscode' ? 'VS Code' : 'Faraday'} marketplace`);
+      setError(`Could not reach ${source === "vscode" ? "VS Code" : "Faraday"} marketplace`);
     }
     setLoading(false);
   }, []);
 
-  useEffect(() => { doSearch('', marketplaceSource); }, [doSearch, marketplaceSource]);
+  useEffect(() => {
+    doSearch("", marketplaceSource);
+  }, [doSearch, marketplaceSource]);
 
   const handleSearchInput = (value: string) => {
     setQuery(value);
@@ -110,7 +116,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
     if (!downloadUrl) return;
     const key = `${ext.publisher.publisherName}.${ext.extensionName}`;
     setInstalling(key);
-    setError('');
+    setError("");
     try {
       await installVSCodeExtension(ext.publisher.publisherName, ext.extensionName, downloadUrl);
       await refreshInstalled();
@@ -121,13 +127,13 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
     setInstalling(null);
   };
 
-  const installedSet = new Set(installed.map(e => `${e.ref.publisher}.${e.ref.name}`));
+  const installedSet = new Set(installed.map((e) => `${e.ref.publisher}.${e.ref.name}`));
 
   const handleInstall = async (ext: MarketplaceExtension) => {
     if (!ext.latest_version) return;
     const key = `${ext.publisher.username}.${ext.name}`;
     setInstalling(key);
-    setError('');
+    setError("");
     try {
       await installExtension(ext.publisher.username, ext.name, ext.latest_version.version);
       await refreshInstalled();
@@ -141,7 +147,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
   const handleUninstall = async (ref: ExtensionRef) => {
     const key = `${ref.publisher}.${ref.name}`;
     setInstalling(key);
-    setError('');
+    setError("");
     try {
       await uninstallExtension(ref.publisher, ref.name);
       const settings = await readSettings();
@@ -151,7 +157,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
         onIconThemeChange(undefined);
         settingsChanged = true;
       }
-      if (activeColorTheme?.startsWith(key + ':')) {
+      if (activeColorTheme?.startsWith(key + ":")) {
         delete settings.colorTheme;
         onColorThemeChange(undefined);
         settingsChanged = true;
@@ -202,30 +208,38 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
     <dialog ref={dialogRef} className="ext-panel">
       <div className="ext-panel-header">
         <span className="ext-panel-title">Extensions</span>
-        <button className="ext-panel-close" onClick={() => dialogRef.current?.close()}>✕</button>
+        <button className="ext-panel-close" onClick={() => dialogRef.current?.close()}>
+          ✕
+        </button>
       </div>
 
       <div className="ext-panel-tabs">
-        <button className={`ext-tab ${tab === 'marketplace' ? 'active' : ''}`} onClick={() => setTab('marketplace')}>
+        <button className={`ext-tab ${tab === "marketplace" ? "active" : ""}`} onClick={() => setTab("marketplace")}>
           Marketplace
         </button>
-        <button className={`ext-tab ${tab === 'installed' ? 'active' : ''}`} onClick={() => setTab('installed')}>
+        <button className={`ext-tab ${tab === "installed" ? "active" : ""}`} onClick={() => setTab("installed")}>
           Installed ({installed.length})
         </button>
       </div>
 
-      {tab === 'marketplace' && (
+      {tab === "marketplace" && (
         <div className="ext-search">
           <div className="ext-source-selector">
             <button
-              className={`ext-source-btn ${marketplaceSource === 'vscode' ? 'active' : ''}`}
-              onClick={() => { setMarketplaceSource('vscode'); setQuery(''); }}
+              className={`ext-source-btn ${marketplaceSource === "vscode" ? "active" : ""}`}
+              onClick={() => {
+                setMarketplaceSource("vscode");
+                setQuery("");
+              }}
             >
               VS Code
             </button>
             <button
-              className={`ext-source-btn ${marketplaceSource === 'faraday' ? 'active' : ''}`}
-              onClick={() => { setMarketplaceSource('faraday'); setQuery(''); }}
+              className={`ext-source-btn ${marketplaceSource === "faraday" ? "active" : ""}`}
+              onClick={() => {
+                setMarketplaceSource("faraday");
+                setQuery("");
+              }}
             >
               Faraday
             </button>
@@ -244,8 +258,9 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
       {error && <div className="ext-error">{error}</div>}
 
       <div className="ext-list">
-        {tab === 'marketplace' && marketplaceSource === 'faraday' && (
-          loading ? (
+        {tab === "marketplace" &&
+          marketplaceSource === "faraday" &&
+          (loading ? (
             <div className="ext-empty">Searching...</div>
           ) : results.length === 0 ? (
             <div className="ext-empty">No extensions found</div>
@@ -257,9 +272,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
               return (
                 <div key={ext.id} className="ext-item">
                   <div className="ext-icon">
-                    {ext.icon_url
-                      ? <img src={ext.icon_url} width={36} height={36} alt="" />
-                      : ext.display_name[0]?.toUpperCase() ?? '?'}
+                    {ext.icon_url ? <img src={ext.icon_url} width={36} height={36} alt="" /> : (ext.display_name[0]?.toUpperCase() ?? "?")}
                   </div>
                   <div className="ext-info">
                     <div className="ext-name">{ext.display_name}</div>
@@ -273,25 +286,23 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
                   </div>
                   <div className="ext-actions">
                     {isInstalled ? (
-                      <button className="ext-btn installed" disabled>Installed</button>
+                      <button className="ext-btn installed" disabled>
+                        Installed
+                      </button>
                     ) : (
-                      <button
-                        className="ext-btn install"
-                        disabled={isBusy || !ext.latest_version}
-                        onClick={() => handleInstall(ext)}
-                      >
-                        {isBusy ? 'Installing...' : 'Install'}
+                      <button className="ext-btn install" disabled={isBusy || !ext.latest_version} onClick={() => handleInstall(ext)}>
+                        {isBusy ? "Installing..." : "Install"}
                       </button>
                     )}
                   </div>
                 </div>
               );
             })
-          )
-        )}
+          ))}
 
-        {tab === 'marketplace' && marketplaceSource === 'vscode' && (
-          loading ? (
+        {tab === "marketplace" &&
+          marketplaceSource === "vscode" &&
+          (loading ? (
             <div className="ext-empty">Searching...</div>
           ) : vscodeResults.length === 0 ? (
             <div className="ext-empty">No extensions found</div>
@@ -305,11 +316,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
               const installs = getVSCodeInstallCount(ext);
               return (
                 <div key={key} className="ext-item">
-                  <div className="ext-icon">
-                    {iconUrl
-                      ? <img src={iconUrl} width={36} height={36} alt="" />
-                      : ext.displayName[0]?.toUpperCase() ?? '?'}
-                  </div>
+                  <div className="ext-icon">{iconUrl ? <img src={iconUrl} width={36} height={36} alt="" /> : (ext.displayName[0]?.toUpperCase() ?? "?")}</div>
                   <div className="ext-info">
                     <div className="ext-name">{ext.displayName}</div>
                     <div className="ext-publisher">{ext.publisher.displayName || ext.publisher.publisherName}</div>
@@ -321,25 +328,22 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
                   </div>
                   <div className="ext-actions">
                     {isInstalled ? (
-                      <button className="ext-btn installed" disabled>Installed</button>
+                      <button className="ext-btn installed" disabled>
+                        Installed
+                      </button>
                     ) : (
-                      <button
-                        className="ext-btn install"
-                        disabled={isBusy || !version}
-                        onClick={() => handleVSCodeInstall(ext)}
-                      >
-                        {isBusy ? 'Installing...' : 'Install'}
+                      <button className="ext-btn install" disabled={isBusy || !version} onClick={() => handleVSCodeInstall(ext)}>
+                        {isBusy ? "Installing..." : "Install"}
                       </button>
                     )}
                   </div>
                 </div>
               );
             })
-          )
-        )}
+          ))}
 
-        {tab === 'installed' && (
-          installed.length === 0 ? (
+        {tab === "installed" &&
+          (installed.length === 0 ? (
             <div className="ext-empty">No extensions installed</div>
           ) : (
             installed.map((ext) => {
@@ -351,34 +355,35 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
               return (
                 <div key={key} className="ext-item">
                   <div className="ext-icon">
-                    {ext.iconUrl
-                      ? <img src={ext.iconUrl} width={36} height={36} alt="" />
-                      : (ext.manifest.displayName || ext.manifest.name)[0]?.toUpperCase() ?? '?'}
+                    {ext.iconUrl ? (
+                      <img src={ext.iconUrl} width={36} height={36} alt="" />
+                    ) : (
+                      ((ext.manifest.displayName || ext.manifest.name)[0]?.toUpperCase() ?? "?")
+                    )}
                   </div>
                   <div className="ext-info">
                     <div className="ext-name">{ext.manifest.displayName || ext.manifest.name}</div>
                     <div className="ext-publisher">{ext.manifest.publisher}</div>
-                    <div className="ext-desc">{ext.manifest.description || ''}</div>
+                    <div className="ext-desc">{ext.manifest.description || ""}</div>
                     <div className="ext-meta">
                       <span>v{ext.ref.version}</span>
                       {iconThemeId && (
-                        <span className={`ext-theme-badge${isActiveIconTheme ? ' active' : ''}`}>
-                          {isActiveIconTheme ? '● Icon theme' : 'Icon theme'}
-                        </span>
+                        <span className={`ext-theme-badge${isActiveIconTheme ? " active" : ""}`}>{isActiveIconTheme ? "● Icon theme" : "Icon theme"}</span>
                       )}
                       {hasColorThemes && (
                         <span className="ext-theme-badge">
-                          {ext.colorThemes!.length} color theme{ext.colorThemes!.length > 1 ? 's' : ''}
+                          {ext.colorThemes!.length} color theme
+                          {ext.colorThemes!.length > 1 ? "s" : ""}
                         </span>
                       )}
                       {ext.languages && ext.languages.length > 0 && (
                         <span className="ext-theme-badge">
-                          {ext.languages.length} language{ext.languages.length > 1 ? 's' : ''}
+                          {ext.languages.length} language{ext.languages.length > 1 ? "s" : ""}
                         </span>
                       )}
                       {ext.grammarRefs && ext.grammarRefs.length > 0 && (
                         <span className="ext-theme-badge">
-                          {ext.grammarRefs.length} grammar{ext.grammarRefs.length > 1 ? 's' : ''}
+                          {ext.grammarRefs.length} grammar{ext.grammarRefs.length > 1 ? "s" : ""}
                         </span>
                       )}
                     </div>
@@ -390,12 +395,12 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
                           return (
                             <button
                               key={ct.id}
-                              className={`ext-btn ext-color-theme-btn ${isActive ? 'installed' : 'install'}`}
+                              className={`ext-btn ext-color-theme-btn ${isActive ? "installed" : "install"}`}
                               onClick={() => handleSetColorTheme(ext, ct.id)}
                             >
                               <span className="ext-color-theme-indicator" data-ui-theme={ct.uiTheme} />
                               {ct.label}
-                              {isActive && ' ●'}
+                              {isActive && " ●"}
                             </button>
                           );
                         })}
@@ -404,26 +409,18 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
                   </div>
                   <div className="ext-actions">
                     {iconThemeId && (
-                      <button
-                        className={`ext-btn ${isActiveIconTheme ? 'installed' : 'install'}`}
-                        onClick={() => handleSetIconTheme(ext)}
-                      >
-                        {isActiveIconTheme ? 'Deactivate' : 'Activate'}
+                      <button className={`ext-btn ${isActiveIconTheme ? "installed" : "install"}`} onClick={() => handleSetIconTheme(ext)}>
+                        {isActiveIconTheme ? "Deactivate" : "Activate"}
                       </button>
                     )}
-                    <button
-                      className="ext-btn uninstall"
-                      disabled={isBusy}
-                      onClick={() => handleUninstall(ext.ref)}
-                    >
-                      {isBusy ? 'Removing...' : 'Uninstall'}
+                    <button className="ext-btn uninstall" disabled={isBusy} onClick={() => handleUninstall(ext.ref)}>
+                      {isBusy ? "Removing..." : "Uninstall"}
                     </button>
                   </div>
                 </div>
               );
             })
-          )
-        )}
+          ))}
       </div>
     </dialog>
   );

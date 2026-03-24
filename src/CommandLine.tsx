@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  MouseEvent as ReactMouseEvent,
-  MutableRefObject,
-  ReactNode,
-} from "react";
+import type { MouseEvent as ReactMouseEvent, MutableRefObject, ReactNode } from "react";
 import { commandRegistry } from "./commands";
 
 interface CommandLineProps {
@@ -13,12 +9,7 @@ interface CommandLineProps {
   pasteRef?: MutableRefObject<(text: string) => void>;
 }
 
-export function CommandLine({
-  cwd,
-  visible,
-  onExecute,
-  pasteRef,
-}: CommandLineProps) {
+export function CommandLine({ cwd, visible, onExecute, pasteRef }: CommandLineProps) {
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
   const [anchor, setAnchor] = useState(0);
@@ -51,10 +42,7 @@ export function CommandLine({
 
   // Keep commandRegistry context in sync so Enter/Backspace route correctly
   useEffect(() => {
-    commandRegistry.setContext(
-      "commandLineHasText",
-      visible && value.length > 0,
-    );
+    commandRegistry.setContext("commandLineHasText", visible && value.length > 0);
   }, [visible, value]);
 
   // Helpers used inside command handlers (always read via refs)
@@ -79,7 +67,10 @@ export function CommandLine({
   useEffect(() => {
     const d: Array<() => void> = [];
     const options = { category: "Command Line", when: "focusPanel" };
-    const optionsWhenHasText = { category: "Command Line", when: "focusPanel && commandLineHasText" };
+    const optionsWhenHasText = {
+      category: "Command Line",
+      when: "focusPanel && commandLineHasText",
+    };
 
     d.push(
       commandRegistry.registerCommand(
@@ -186,7 +177,7 @@ export function CommandLine({
         () => {
           moveCursor(0, false);
         },
-        optionsWhenHasText
+        optionsWhenHasText,
       ),
     );
 
@@ -231,10 +222,7 @@ export function CommandLine({
         "commandLine.selectRight",
         "Extend Selection Right",
         () => {
-          moveCursor(
-            Math.min(valueRef.current.length, cursorRef.current + 1),
-            true,
-          );
+          moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), true);
         },
         optionsWhenHasText,
       ),
@@ -272,9 +260,7 @@ export function CommandLine({
           if (pos === anch) return;
           const s = Math.min(pos, anch);
           const e = Math.max(pos, anch);
-          navigator.clipboard
-            .writeText(valueRef.current.slice(s, e))
-            .catch(() => { });
+          navigator.clipboard.writeText(valueRef.current.slice(s, e)).catch(() => {});
         },
         optionsWhenHasText,
       ),
@@ -290,9 +276,7 @@ export function CommandLine({
           if (pos === anch) return;
           const s = Math.min(pos, anch);
           const e = Math.max(pos, anch);
-          navigator.clipboard
-            .writeText(valueRef.current.slice(s, e))
-            .catch(() => { });
+          navigator.clipboard.writeText(valueRef.current.slice(s, e)).catch(() => {});
           deleteSelection();
         },
         optionsWhenHasText,
@@ -317,7 +301,7 @@ export function CommandLine({
               setCursor(newPos);
               setAnchor(newPos);
             })
-            .catch(() => { });
+            .catch(() => {});
         },
         options,
       ),
@@ -527,8 +511,7 @@ export function CommandLine({
     [getPositionFromPoint],
   );
 
-  const promptLabel =
-    cwd.length > 40 ? "\u2026" + cwd.slice(cwd.length - 39) : cwd;
+  const promptLabel = cwd.length > 40 ? "\u2026" + cwd.slice(cwd.length - 39) : cwd;
 
   const selStart = Math.min(cursor, anchor);
   const selEnd = Math.max(cursor, anchor);
@@ -584,11 +567,7 @@ export function CommandLine({
   return (
     <div className={`command-line${visible ? "" : " hidden"}`}>
       <span className="command-line-prompt">{promptLabel}&gt;</span>
-      <span
-        ref={inputRef}
-        className="command-line-input"
-        onMouseDown={handleMouseDown}
-      >
+      <span ref={inputRef} className="command-line-input" onMouseDown={handleMouseDown}>
         {inputContent}
       </span>
     </div>

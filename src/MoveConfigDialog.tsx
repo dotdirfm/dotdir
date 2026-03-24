@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { focusContext } from './focusContext';
-import { useDialogButtonNav } from './useDialogButtonNav';
-import type { ConflictPolicy, MoveOptions } from './bridge';
-import { SmartLabel } from './dialogHotkeys';
-import { INPUT_NO_ASSIST } from './inputNoAssist';
+import { useEffect, useRef, useState } from "react";
+import { focusContext } from "./focusContext";
+import { useDialogButtonNav } from "./useDialogButtonNav";
+import type { ConflictPolicy, MoveOptions } from "./bridge";
+import { SmartLabel } from "./dialogHotkeys";
+import { INPUT_NO_ASSIST } from "./inputNoAssist";
 
 export interface MoveConfigDialogProps {
   itemCount: number;
@@ -16,15 +16,17 @@ export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: M
   const dialogRef = useRef<HTMLDialogElement>(null);
   const buttonsRef = useRef<HTMLDivElement>(null);
   const [destValue, setDestValue] = useState(destPath);
-  const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>('ask');
+  const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("ask");
   const { onKeyDown } = useDialogButtonNav(buttonsRef, { defaultIndex: 1 });
 
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (!dialog.open) dialog.showModal();
-    focusContext.push('modal');
-    return () => { focusContext.pop('modal'); };
+    focusContext.push("modal");
+    return () => {
+      focusContext.pop("modal");
+    };
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -35,30 +37,32 @@ export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: M
   };
 
   return (
-    <dialog ref={dialogRef} className="modal-dialog move-config-dialog" onCancel={(e) => { e.preventDefault(); onCancel(); }} onKeyDown={onKeyDown}>
+    <dialog
+      ref={dialogRef}
+      className="modal-dialog move-config-dialog"
+      onCancel={(e) => {
+        e.preventDefault();
+        onCancel();
+      }}
+      onKeyDown={onKeyDown}
+    >
       <div className="modal-dialog-header">
-        Move {itemCount} item{itemCount !== 1 ? 's' : ''}
+        Move {itemCount} item{itemCount !== 1 ? "s" : ""}
       </div>
       <form onSubmit={handleSubmit}>
         <div className="modal-dialog-body">
           <div className="copy-config-field">
-            <label htmlFor="move-dest"><SmartLabel>Destination</SmartLabel></label>
-            <input
-              id="move-dest"
-              type="text"
-              value={destValue}
-              onChange={(e) => setDestValue(e.target.value)}
-              {...INPUT_NO_ASSIST}
-            />
+            <label htmlFor="move-dest">
+              <SmartLabel>Destination</SmartLabel>
+            </label>
+            <input id="move-dest" type="text" value={destValue} onChange={(e) => setDestValue(e.target.value)} {...INPUT_NO_ASSIST} />
           </div>
 
           <div className="copy-config-field">
-            <label htmlFor="move-conflict"><SmartLabel>Conflict handling</SmartLabel></label>
-            <select
-              id="move-conflict"
-              value={conflictPolicy}
-              onChange={(e) => setConflictPolicy(e.target.value as ConflictPolicy)}
-            >
+            <label htmlFor="move-conflict">
+              <SmartLabel>Conflict handling</SmartLabel>
+            </label>
+            <select id="move-conflict" value={conflictPolicy} onChange={(e) => setConflictPolicy(e.target.value as ConflictPolicy)}>
               <option value="ask">Ask</option>
               <option value="overwrite">Overwrite</option>
               <option value="skip">Skip</option>
@@ -68,8 +72,12 @@ export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: M
           </div>
         </div>
         <div className="modal-dialog-buttons" ref={buttonsRef}>
-          <button type="button" onClick={onCancel}><SmartLabel>Cancel</SmartLabel></button>
-          <button type="submit" disabled={!destValue.trim()}><SmartLabel>Move</SmartLabel></button>
+          <button type="button" onClick={onCancel}>
+            <SmartLabel>Cancel</SmartLabel>
+          </button>
+          <button type="submit" disabled={!destValue.trim()}>
+            <SmartLabel>Move</SmartLabel>
+          </button>
         </div>
       </form>
     </dialog>

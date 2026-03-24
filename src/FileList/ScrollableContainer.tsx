@@ -1,6 +1,6 @@
-import type React from 'react';
-import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react';
-import { useMediaQuery } from '../hooks/useMediaQuery';
+import type React from "react";
+import { type CSSProperties, type ReactNode, useEffect, useRef } from "react";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 
 interface ScrollableContainerProps {
   children: ReactNode;
@@ -26,7 +26,7 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollTopRef = useRef(scrollTop);
   const onScrollRef = useRef(onScroll);
-  const isTouchscreen = useMediaQuery('(pointer: coarse)');
+  const isTouchscreen = useMediaQuery("(pointer: coarse)");
 
   scrollTopRef.current = scrollTop;
   onScrollRef.current = onScroll;
@@ -51,7 +51,7 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
       }
     };
 
-    const isWindows = navigator.platform.startsWith('Win');
+    const isWindows = navigator.platform.startsWith("Win");
 
     const handleWheel = (event: WheelEvent) => {
       const delta = lineSize && isWindows ? Math.sign(event.deltaY) * lineSize : event.deltaY;
@@ -100,31 +100,28 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
       }
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: true });
+    container.addEventListener("wheel", handleWheel, { passive: true });
     if (isTouchscreen) {
-      container.addEventListener('pointerdown', handlePointerDown);
-      container.addEventListener('pointermove', handlePointerMove);
-      container.addEventListener('pointerup', handlePointerUp);
-      container.addEventListener('pointercancel', handlePointerUp);
+      container.addEventListener("pointerdown", handlePointerDown);
+      container.addEventListener("pointermove", handlePointerMove);
+      container.addEventListener("pointerup", handlePointerUp);
+      container.addEventListener("pointercancel", handlePointerUp);
     }
 
     return () => {
-      container.removeEventListener('wheel', handleWheel);
+      container.removeEventListener("wheel", handleWheel);
       if (isTouchscreen) {
-        container.removeEventListener('pointerdown', handlePointerDown);
-        container.removeEventListener('pointermove', handlePointerMove);
-        container.removeEventListener('pointerup', handlePointerUp);
-        container.removeEventListener('pointercancel', handlePointerUp);
+        container.removeEventListener("pointerdown", handlePointerDown);
+        container.removeEventListener("pointermove", handlePointerMove);
+        container.removeEventListener("pointerup", handlePointerUp);
+        container.removeEventListener("pointercancel", handlePointerUp);
       }
     };
   }, [velocityFactor, frictionFactor, scrollHeight, lineSize, isTouchscreen]);
 
   return (
-    <div style={{ overflow: 'hidden', position: 'relative', touchAction: 'none', ...style }}>
-      <div
-        ref={containerRef}
-        style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}
-      >
+    <div style={{ overflow: "hidden", position: "relative", touchAction: "none", ...style }}>
+      <div ref={containerRef} style={{ position: "absolute", inset: 0, pointerEvents: "auto" }}>
         {children}
       </div>
     </div>

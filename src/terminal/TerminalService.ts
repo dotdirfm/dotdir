@@ -1,9 +1,9 @@
-import type { TerminalProfile } from '../bridge';
-import { TerminalSession } from './TerminalSession';
-import { formatHiddenCd, normalizeTerminalPath } from './path';
-import type { TerminalSessionStatus } from './types';
+import type { TerminalProfile } from "../bridge";
+import { TerminalSession } from "./TerminalSession";
+import { formatHiddenCd, normalizeTerminalPath } from "./path";
+import type { TerminalSessionStatus } from "./types";
 
-const TERMINAL_STATE_STORAGE_KEY = 'faraday.terminalSessions';
+const TERMINAL_STATE_STORAGE_KEY = "faraday.terminalSessions";
 
 interface StoredTerminalSession {
   profileId: string;
@@ -64,7 +64,7 @@ export class TerminalService {
   private sessions: ManagedTerminalSession[] = [];
   private activeSessionId: string | null = null;
   private profiles: TerminalProfile[] = [];
-  private currentCwd = '';
+  private currentCwd = "";
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
@@ -93,19 +93,18 @@ export class TerminalService {
     const stored = readStoredState();
     // Try to restore stored profile IDs; fall back to first profile if none match
     const storedProfileIds = stored?.sessions.map((s) => s.profileId) ?? [];
-    const resolvedProfiles = storedProfileIds
-      .map((id) => profiles.find((p) => p.id === id))
-      .filter((p): p is TerminalProfile => p != null);
+    const resolvedProfiles = storedProfileIds.map((id) => profiles.find((p) => p.id === id)).filter((p): p is TerminalProfile => p != null);
 
-    const startProfiles = resolvedProfiles.length > 0 ? resolvedProfiles : (profiles[0] ? [profiles[0]] : []);
+    const startProfiles = resolvedProfiles.length > 0 ? resolvedProfiles : profiles[0] ? [profiles[0]] : [];
 
     for (const profile of startProfiles) {
       this.sessions.push(this.createManagedSession(profile, cwd));
     }
 
-    this.activeSessionId = stored?.activeSessionId && this.sessions.some((session) => session.id === stored.activeSessionId)
-      ? stored.activeSessionId
-      : this.sessions[0]?.id ?? null;
+    this.activeSessionId =
+      stored?.activeSessionId && this.sessions.some((session) => session.id === stored.activeSessionId)
+        ? stored.activeSessionId
+        : (this.sessions[0]?.id ?? null);
 
     this.persistAndEmit();
   }
@@ -190,7 +189,7 @@ export class TerminalService {
     if (!active) return;
     const normalizedCwd = normalizeTerminalPath(cwd);
     await active.session.writeHidden(formatHiddenCd(normalizedCwd, active.profile));
-    const eol = active.profile.lineEnding === '\r\n' ? '\r\n' : '\n';
+    const eol = active.profile.lineEnding === "\r\n" ? "\r\n" : "\n";
     await active.session.write(command + eol);
   }
 
@@ -224,17 +223,17 @@ export class TerminalService {
       profileLabel: profile.label,
       cwd: normalizeTerminalPath(cwd),
       cwdUserInitiated: false,
-      status: 'idle',
+      status: "idle",
     };
 
     session.subscribe((event) => {
-      if (event.type === 'cwd') {
+      if (event.type === "cwd") {
         managed.cwd = normalizeTerminalPath(event.cwd);
         managed.cwdUserInitiated = event.userInitiated;
-      } else if (event.type === 'status') {
+      } else if (event.type === "status") {
         managed.status = event.status;
         managed.error = event.error;
-      } else if (event.type === 'launch') {
+      } else if (event.type === "launch") {
         managed.cwd = normalizeTerminalPath(event.launch.cwd);
       }
       this.emit();

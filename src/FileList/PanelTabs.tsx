@@ -1,16 +1,16 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { basename } from '../path';
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { basename } from "../path";
 
 export type PanelTab =
-  | { id: string; type: 'filelist'; path: string }
+  | { id: string; type: "filelist"; path: string }
   | {
       id: string;
-      type: 'preview';
+      type: "preview";
       path: string;
       name: string;
       size: number;
       isTemp: boolean;
-      sourcePanel?: 'left' | 'right';
+      sourcePanel?: "left" | "right";
     };
 
 interface PanelTabsProps {
@@ -24,22 +24,14 @@ interface PanelTabsProps {
 }
 
 function tabLabel(tab: PanelTab): string {
-  if (tab.type === 'filelist') {
+  if (tab.type === "filelist") {
     const base = basename(tab.path);
-    return base || tab.path || 'File list';
+    return base || tab.path || "File list";
   }
   return tab.name;
 }
 
-export const PanelTabs = memo(function PanelTabs({
-  tabs,
-  activeIndex,
-  onSelectTab,
-  onDoubleClickTab,
-  onCloseTab,
-  onNewTab,
-  onReorderTabs,
-}: PanelTabsProps) {
+export const PanelTabs = memo(function PanelTabs({ tabs, activeIndex, onSelectTab, onDoubleClickTab, onCloseTab, onNewTab, onReorderTabs }: PanelTabsProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<(HTMLDivElement | null)[]>([]);
   const dragFromRef = useRef<number | null>(null);
@@ -69,33 +61,39 @@ export const PanelTabs = memo(function PanelTabs({
 
   const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
     dragFromRef.current = index;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(index));
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(index));
     e.dataTransfer.setDragImage(new Image(), 0, 0);
     requestAnimationFrame(() => {
-      (e.target as HTMLElement).classList.add('panel-tab-dragging');
+      (e.target as HTMLElement).classList.add("panel-tab-dragging");
     });
   }, []);
 
-  const handleListDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const idx = getDropIndex(e.clientX);
-    setDropIndex(idx);
-  }, [getDropIndex]);
+  const handleListDragOver = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const idx = getDropIndex(e.clientX);
+      setDropIndex(idx);
+    },
+    [getDropIndex],
+  );
 
-  const handleListDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const from = dragFromRef.current;
-    const to = getDropIndex(e.clientX);
-    if (from != null && to != null && onReorderTabs) {
-      if (to > from) onReorderTabs(from, to - 1);
-      else if (to < from) onReorderTabs(from, to);
-      else;
-    }
-    dragFromRef.current = null;
-    setDropIndex(null);
-  }, [getDropIndex, onReorderTabs]);
+  const handleListDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const from = dragFromRef.current;
+      const to = getDropIndex(e.clientX);
+      if (from != null && to != null && onReorderTabs) {
+        if (to > from) onReorderTabs(from, to - 1);
+        else if (to < from) onReorderTabs(from, to);
+        else;
+      }
+      dragFromRef.current = null;
+      setDropIndex(null);
+    },
+    [getDropIndex, onReorderTabs],
+  );
 
   const handleListDragLeave = useCallback((e: React.DragEvent) => {
     if (!listRef.current?.contains(e.relatedTarget as Node)) {
@@ -104,7 +102,7 @@ export const PanelTabs = memo(function PanelTabs({
   }, []);
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
-    (e.target as HTMLElement).classList.remove('panel-tab-dragging');
+    (e.target as HTMLElement).classList.remove("panel-tab-dragging");
     dragFromRef.current = null;
     setDropIndex(null);
   }, []);
@@ -113,8 +111,8 @@ export const PanelTabs = memo(function PanelTabs({
     const el = listRef.current;
     if (!el) return;
     const suppress = (e: WheelEvent) => e.preventDefault();
-    el.addEventListener('wheel', suppress, { passive: false });
-    return () => el.removeEventListener('wheel', suppress);
+    el.addEventListener("wheel", suppress, { passive: false });
+    return () => el.removeEventListener("wheel", suppress);
   }, []);
 
   return (
@@ -128,7 +126,7 @@ export const PanelTabs = memo(function PanelTabs({
         onDragLeave={handleListDragLeave}
       >
         {tabs.flatMap((tab, i) => {
-          const isPreview = tab.type === 'preview';
+          const isPreview = tab.type === "preview";
           const isTemp = isPreview && tab.isTemp;
           const isActive = i === activeIndex;
           const showDropBefore = dropIndex === i;
@@ -136,10 +134,15 @@ export const PanelTabs = memo(function PanelTabs({
             showDropBefore ? <div key={`drop-${i}`} className="panel-tab-drop-indicator" aria-hidden /> : null,
             <div
               key={tab.id}
-              ref={(el) => { tabRefs.current[i] = el; }}
-              className={'panel-tab' + (isActive ? ' active' : '') + (isTemp ? ' temp' : '')}
+              ref={(el) => {
+                tabRefs.current[i] = el;
+              }}
+              className={"panel-tab" + (isActive ? " active" : "") + (isTemp ? " temp" : "")}
               onClick={() => onSelectTab(i)}
-              onDoubleClick={(e) => { e.preventDefault(); onDoubleClickTab(i); }}
+              onDoubleClick={(e) => {
+                e.preventDefault();
+                onDoubleClickTab(i);
+              }}
               title={tab.path}
               draggable
               onDragStart={(e) => handleDragStart(e, i)}
@@ -164,13 +167,7 @@ export const PanelTabs = memo(function PanelTabs({
         })}
         {dropIndex === tabs.length ? <div key="drop-end" className="panel-tab-drop-indicator" aria-hidden /> : null}
       </div>
-      <button
-        type="button"
-        className="panel-tab-new"
-        onClick={onNewTab}
-        aria-label="New tab"
-        title="New tab"
-      >
+      <button type="button" className="panel-tab-new" onClick={onNewTab} aria-label="New tab" title="New tab">
         +
       </button>
     </div>

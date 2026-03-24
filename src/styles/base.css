@@ -22,7 +22,7 @@
   --accent-fg: #1e1e2e;
 }
 
-[data-theme='light'] {
+[data-theme="light"] {
   --bg: #eff1f5;
   --fg: #4c4f69;
   --bg-secondary: #e6e9ef;
@@ -41,7 +41,7 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 13px;
   background: var(--bg);
   color: var(--fg);

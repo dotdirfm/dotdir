@@ -1,19 +1,19 @@
-import { normalizePath } from '../path';
-import type { CwdEscapeMode, TerminalProfile } from '../bridge';
+import { normalizePath } from "../path";
+import type { CwdEscapeMode, TerminalProfile } from "../bridge";
 
 export function normalizeTerminalPath(raw: string): string {
-  const normalized = raw.replace(/\\/g, '/');
+  const normalized = raw.replace(/\\/g, "/");
   const match = normalized.match(/^\/([A-Za-z]:(?:\/.*)?)/);
   return normalizePath(match ? match[1] : normalized);
 }
 
 function escapeCwdForMode(cwd: string, mode: CwdEscapeMode): string {
   switch (mode) {
-    case 'posix':
+    case "posix":
       return "'" + cwd.replace(/'/g, "'\\''") + "'";
-    case 'powershell':
+    case "powershell":
       return "'" + cwd.replace(/'/g, "''") + "'";
-    case 'cmd':
+    case "cmd":
       return '"' + cwd.replace(/"/g, '""') + '"';
   }
 }
@@ -26,6 +26,6 @@ export function formatHiddenCd(absoluteCwd: string, profile: TerminalProfile): s
   const normalized = normalizeTerminalPath(absoluteCwd);
   const escaped = escapeCwdForMode(normalized, profile.cwdEscape);
   const body = profile.hiddenCdTemplate.replace(/\{\{cwd\}\}/g, escaped);
-  const eol = profile.lineEnding ?? '\n';
+  const eol = profile.lineEnding ?? "\n";
   return body + eol;
 }

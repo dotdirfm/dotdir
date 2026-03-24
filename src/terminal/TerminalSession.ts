@@ -1,12 +1,8 @@
-import { bridge } from '../bridge';
-import type { PtyLaunchInfo, TerminalProfile } from '../bridge';
-import { focusContext } from '../focusContext';
-import { formatHiddenCd, normalizeTerminalPath } from './path';
-import type {
-  TerminalCapabilities,
-  TerminalSessionEvent,
-  TerminalSessionStatus,
-} from './types';
+import { bridge } from "../bridge";
+import type { PtyLaunchInfo, TerminalProfile } from "../bridge";
+import { focusContext } from "../focusContext";
+import { formatHiddenCd, normalizeTerminalPath } from "./path";
+import type { TerminalCapabilities, TerminalSessionEvent, TerminalSessionStatus } from "./types";
 
 type SessionListener = (event: TerminalSessionEvent) => void;
 
@@ -17,11 +13,11 @@ export class TerminalSession {
   private readonly initialCwd: string;
   private ptyId: number | null = null;
   private currentCwd: string;
-  private status: TerminalSessionStatus = 'idle';
+  private status: TerminalSessionStatus = "idle";
   private capabilities: TerminalCapabilities;
   private launchInfo: PtyLaunchInfo | null = null;
-  private replayData = '';
-  private inputBuffer = '';
+  private replayData = "";
+  private inputBuffer = "";
   private activeCommand: string | null = null;
   private suppressNextCommandFinish = false;
   private cleanupData: (() => void) | null = null;
@@ -50,12 +46,12 @@ export class TerminalSession {
   subscribe(listener: SessionListener): () => void {
     this.listeners.add(listener);
     if (this.launchInfo) {
-      listener({ type: 'launch', launch: this.launchInfo });
+      listener({ type: "launch", launch: this.launchInfo });
     }
-    listener({ type: 'status', status: this.status });
-    listener({ type: 'capabilities', capabilities: this.capabilities });
+    listener({ type: "status", status: this.status });
+    listener({ type: "capabilities", capabilities: this.capabilities });
     if (this.replayData) {
-      listener({ type: 'data', data: this.replayData });
+      listener({ type: "data", data: this.replayData });
     }
     return () => {
       this.listeners.delete(listener);
@@ -86,8 +82,8 @@ export class TerminalSession {
    */
   notifyFaradayPromptOsc(payload: string): void {
     if (this.oscHooksSuppressed) return;
-    const body = payload.replace(/^;/, '').trimStart();
-    if (body.startsWith('S')) {
+    const body = payload.replace(/^;/, "").trimStart();
+    if (body.startsWith("S")) {
       // preexec: a user command is about to run (not fired for hidden cd — suppress flag is set)
       if (!this.suppressNextCommandFinish) {
         if (!this.capabilities.hasFaradayOsc) {
@@ -100,7 +96,7 @@ export class TerminalSession {
       }
       return;
     }
-    if (!body.startsWith('F')) return;
+    if (!body.startsWith("F")) return;
     if (!this.capabilities.hasFaradayOsc) {
       this.capabilities = { ...this.capabilities, hasFaradayOsc: true };
       this.emitCapabilities();
@@ -109,9 +105,9 @@ export class TerminalSession {
   }
 
   async start(): Promise<void> {
-    if (this.ptyId !== null || this.status === 'starting') return;
+    if (this.ptyId !== null || this.status === "starting") return;
 
-    this.setStatus('starting');
+    this.setStatus("starting");
     try {
       const launch = await bridge.pty.spawn(this.initialCwd, this.profile.shell, {
         spawnArgs: this.profile.spawnArgs.length > 0 ? this.profile.spawnArgs : undefined,
@@ -120,13 +116,13 @@ export class TerminalSession {
 
       this.cleanupData = bridge.pty.onData((ptyId, data) => {
         if (ptyId !== this.ptyId) return;
-        this.handleData(typeof data === 'string' ? data : this.decoder.decode(data, { stream: true }));
+        this.handleData(typeof data === "string" ? data : this.decoder.decode(data, { stream: true }));
       });
 
       this.cleanupExit = bridge.pty.onExit((ptyId) => {
         if (ptyId !== this.ptyId) return;
         if (this.activeCommand) {
-          this.emit({ type: 'command-finish', command: this.activeCommand });
+          this.emit({ type: "command-finish", command: this.activeCommand });
         }
         this.activeCommand = null;
         this.capabilities = {
@@ -136,11 +132,11 @@ export class TerminalSession {
         };
         this.emitCapabilities();
         this.ptyId = null;
-        this.setStatus('exited');
+        this.setStatus("exited");
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.setStatus('error', message);
+      this.setStatus("error", message);
       throw error;
     }
   }
@@ -169,7 +165,7 @@ export class TerminalSession {
   async syncToCwd(nextCwd: string): Promise<void> {
     const normalizedNextCwd = normalizeTerminalPath(nextCwd);
     if (this.ptyId === null || normalizedNextCwd === this.currentCwd) return;
-    if (this.capabilities.commandRunning || (this.inputBuffer.length > 0 && focusContext.is('terminal'))) {
+    if (this.capabilities.commandRunning || (this.inputBuffer.length > 0 && focusContext.is("terminal"))) {
       this.pendingCwdSync = normalizedNextCwd;
       return;
     }
@@ -180,7 +176,7 @@ export class TerminalSession {
   async refreshPrompt(): Promise<void> {
     if (this.ptyId === null) return;
     if (this.capabilities.commandRunning) return;
-    await bridge.pty.write(this.ptyId, '\r');
+    await bridge.pty.write(this.ptyId, "\r");
   }
 
   async dispose(): Promise<void> {
@@ -208,9 +204,9 @@ export class TerminalSession {
       profileId: this.profile.id,
     };
 
-    this.emit({ type: 'launch', launch });
+    this.emit({ type: "launch", launch });
     this.emitCapabilities();
-    this.setStatus('running');
+    this.setStatus("running");
   }
 
   private handleData(data: string): void {
@@ -220,7 +216,7 @@ export class TerminalSession {
   private appendVisibleData(data: string): void {
     if (!data) return;
     this.replayData = (this.replayData + data).slice(-TerminalSession.replayLimit);
-    this.emit({ type: 'data', data });
+    this.emit({ type: "data", data });
   }
 
   private finishCommand(): void {
@@ -231,7 +227,7 @@ export class TerminalSession {
       return;
     }
     if (this.activeCommand) {
-      this.emit({ type: 'command-finish', command: this.activeCommand });
+      this.emit({ type: "command-finish", command: this.activeCommand });
     }
     this.activeCommand = null;
     this.capabilities = {
@@ -252,15 +248,15 @@ export class TerminalSession {
       cwd: normalizedCwd,
       hasOsc7Cwd: true,
     };
-    this.emit({ type: 'cwd', cwd: normalizedCwd, userInitiated });
+    this.emit({ type: "cwd", cwd: normalizedCwd, userInitiated });
     this.emitCapabilities();
   }
 
   private consumeUserInput(data: string): void {
     for (const ch of data) {
-      if (ch === '\r' || ch === '\n') {
+      if (ch === "\r" || ch === "\n") {
         const command = this.inputBuffer.trim();
-        this.inputBuffer = '';
+        this.inputBuffer = "";
         if (!command) continue;
         this.activeCommand = command;
         this.capabilities = {
@@ -269,11 +265,11 @@ export class TerminalSession {
           promptReady: false,
           lastCommand: command,
         };
-        this.emit({ type: 'command-start', command });
+        this.emit({ type: "command-start", command });
         this.emitCapabilities();
-      } else if (ch === '\u007f' || ch === '\b') {
+      } else if (ch === "\u007f" || ch === "\b") {
         this.inputBuffer = this.inputBuffer.slice(0, -1);
-      } else if (ch >= ' ' || ch === '\t') {
+      } else if (ch >= " " || ch === "\t") {
         this.inputBuffer += ch;
       }
     }
@@ -286,18 +282,18 @@ export class TerminalSession {
   }
 
   private emitCapabilities(): void {
-    this.emit({ type: 'capabilities', capabilities: this.capabilities });
+    this.emit({ type: "capabilities", capabilities: this.capabilities });
   }
 
   private setStatus(status: TerminalSessionStatus, error?: string): void {
     this.status = status;
-    this.emit({ type: 'status', status, error });
+    this.emit({ type: "status", status, error });
   }
 
   private flushPendingCwdSync(): void {
     const nextCwd = this.pendingCwdSync;
     if (!nextCwd) return;
-    if (this.ptyId === null || this.capabilities.commandRunning || (this.inputBuffer.length > 0 && focusContext.is('terminal'))) {
+    if (this.ptyId === null || this.capabilities.commandRunning || (this.inputBuffer.length > 0 && focusContext.is("terminal"))) {
       return;
     }
     this.pendingCwdSync = null;

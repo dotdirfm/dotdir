@@ -5,7 +5,7 @@
  * based on glob patterns and priority.
  */
 
-import type { ExtensionViewerContribution, ExtensionEditorContribution, ExtensionFsProviderContribution, LoadedExtension } from './extensions';
+import type { ExtensionViewerContribution, ExtensionEditorContribution, ExtensionFsProviderContribution, LoadedExtension } from "./extensions";
 
 export interface ResolvedViewer {
   contribution: ExtensionViewerContribution;
@@ -28,9 +28,9 @@ interface RegistryEntry<T> {
 }
 
 function matchPattern(pattern: string, fileName: string): boolean {
-  if (pattern === '*' || pattern === '*.*') return true;
+  if (pattern === "*" || pattern === "*.*") return true;
 
-  if (pattern.startsWith('*.')) {
+  if (pattern.startsWith("*.")) {
     const ext = pattern.slice(1); // e.g. ".png"
     return fileName.toLowerCase().endsWith(ext.toLowerCase());
   }
@@ -43,10 +43,7 @@ function matchesAny(patterns: string[], fileName: string): boolean {
   return patterns.some((p) => matchPattern(p, fileName));
 }
 
-function resolve<T extends { patterns: string[]; priority?: number }>(
-  entries: RegistryEntry<T>[],
-  fileName: string,
-): RegistryEntry<T> | null {
+function resolve<T extends { patterns: string[]; priority?: number }>(entries: RegistryEntry<T>[], fileName: string): RegistryEntry<T> | null {
   const matches = entries.filter((e) => matchesAny(e.contribution.patterns, fileName));
   if (matches.length === 0) return null;
   matches.sort((a, b) => (b.contribution.priority ?? 0) - (a.contribution.priority ?? 0));
@@ -77,7 +74,9 @@ class ViewerRegistry {
 
   onChange(listener: RegistryListener): () => void {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   notifyListeners(): void {
@@ -107,7 +106,9 @@ class EditorRegistry {
 
   onChange(listener: RegistryListener): () => void {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   notifyListeners(): void {
@@ -133,7 +134,9 @@ class FsProviderRegistry {
 
   onChange(listener: RegistryListener): () => void {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   notifyListeners(): void {

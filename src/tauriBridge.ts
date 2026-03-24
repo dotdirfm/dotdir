@@ -2,11 +2,21 @@
 ///
 /// Provides the same interface so renderer components need minimal changes.
 /// Uses Tauri's invoke() for commands and listen() for events.
-import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { PtyLaunchInfo, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent, FspEntry, Bridge } from './bridge';
-import type { FsRawEntry, FsChangeEvent } from './types';
-import { normalizePath } from './path';
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type {
+  PtyLaunchInfo,
+  CopyOptions,
+  ConflictResolution,
+  CopyProgressEvent,
+  MoveOptions,
+  MoveProgressEvent,
+  DeleteProgressEvent,
+  FspEntry,
+  Bridge,
+} from "./bridge";
+import type { FsRawEntry, FsChangeEvent } from "./types";
+import { normalizePath } from "./path";
 
 const ptyWriteEncoder = new TextEncoder();
 
@@ -36,7 +46,7 @@ interface RustPtySpawnResult {
 function mapEntry(e: RustFsEntry): FsRawEntry {
   return {
     name: e.name,
-    kind: e.kind as FsRawEntry['kind'],
+    kind: e.kind as FsRawEntry["kind"],
     size: e.size,
     mtimeMs: e.mtime_ms,
     mode: e.mode,
@@ -49,57 +59,57 @@ function mapEntry(e: RustFsEntry): FsRawEntry {
 export const tauriBridge: Bridge = {
   fs: {
     async entries(dirPath: string): Promise<FsRawEntry[]> {
-      const raw = await invoke<RustFsEntry[]>('fs_entries', { dirPath });
+      const raw = await invoke<RustFsEntry[]>("fs_entries", { dirPath });
       return raw.map(mapEntry);
     },
     async stat(filePath: string): Promise<{ size: number; mtimeMs: number }> {
-      const raw = await invoke<{ size: number; mtime_ms: number }>('fs_stat', { filePath });
+      const raw = await invoke<{ size: number; mtime_ms: number }>("fs_stat", { filePath });
       return { size: raw.size, mtimeMs: raw.mtime_ms };
     },
     async exists(filePath: string): Promise<boolean> {
-      return invoke<boolean>('fs_exists', { filePath });
+      return invoke<boolean>("fs_exists", { filePath });
     },
     async readFile(filePath: string): Promise<ArrayBuffer> {
-      const bytes = await invoke<number[]>('fs_read_file', { filePath });
+      const bytes = await invoke<number[]>("fs_read_file", { filePath });
       return new Uint8Array(bytes).buffer;
     },
     async writeFile(filePath: string, data: string): Promise<void> {
-      return invoke<void>('fs_write_text', { filePath, data });
+      return invoke<void>("fs_write_text", { filePath, data });
     },
     async writeBinaryFile(filePath: string, data: Uint8Array): Promise<void> {
-      return invoke<void>('fs_write_binary', { filePath, data: Array.from(data) });
+      return invoke<void>("fs_write_binary", { filePath, data: Array.from(data) });
     },
     async createDir(dirPath: string): Promise<void> {
-      return invoke<void>('fs_create_dir', { dirPath });
+      return invoke<void>("fs_create_dir", { dirPath });
     },
     async moveToTrash(paths: string[]): Promise<void> {
-      return invoke<void>('move_to_trash', { paths });
+      return invoke<void>("move_to_trash", { paths });
     },
     async open(filePath: string): Promise<number> {
-      return invoke<number>('fs_open', { filePath });
+      return invoke<number>("fs_open", { filePath });
     },
     async read(fd: number, offset: number, length: number): Promise<ArrayBuffer> {
       const offsetInt = Math.max(0, Math.floor(offset));
       const lengthInt = Math.max(0, Math.floor(length));
-      const bytes = await invoke<number[]>('fs_read', { fd, offset: offsetInt, length: lengthInt });
+      const bytes = await invoke<number[]>("fs_read", { fd, offset: offsetInt, length: lengthInt });
       return new Uint8Array(bytes).buffer;
     },
     async close(fd: number): Promise<void> {
-      return invoke<void>('fs_close', { fd });
+      return invoke<void>("fs_close", { fd });
     },
     async watch(watchId: string, dirPath: string): Promise<boolean> {
-      return invoke<boolean>('fs_watch', { watchId, dirPath });
+      return invoke<boolean>("fs_watch", { watchId, dirPath });
     },
     async unwatch(watchId: string): Promise<void> {
-      return invoke<void>('fs_unwatch', { watchId });
+      return invoke<void>("fs_unwatch", { watchId });
     },
     onFsChange(callback: (event: FsChangeEvent) => void): () => void {
       let unlisten: UnlistenFn | null = null;
       let disposed = false;
-      const unlistenPromise = listen<RustFsChangeEvent>('fsa:change', (event) => {
+      const unlistenPromise = listen<RustFsChangeEvent>("fsa:change", (event) => {
         callback({
           watchId: event.payload.watch_id,
-          type: event.payload.kind as FsChangeEvent['type'],
+          type: event.payload.kind as FsChangeEvent["type"],
           name: event.payload.name,
         });
       }).then((fn) => {
@@ -119,11 +129,10 @@ export const tauriBridge: Bridge = {
   },
   pty: {
     async spawn(cwd: string, shellPath: string, options?: { spawnArgs?: string[] }): Promise<PtyLaunchInfo> {
-      const raw = await invoke<RustPtySpawnResult>('pty_spawn', {
+      const raw = await invoke<RustPtySpawnResult>("pty_spawn", {
         cwd,
         shellPath,
-        spawnArgs:
-          options?.spawnArgs && options.spawnArgs.length > 0 ? options.spawnArgs : null,
+        spawnArgs: options?.spawnArgs && options.spawnArgs.length > 0 ? options.spawnArgs : null,
       });
       return {
         ptyId: raw.pty_id,
@@ -132,150 +141,202 @@ export const tauriBridge: Bridge = {
       };
     },
     async write(ptyId: number, data: string): Promise<void> {
-      return invoke<void>('pty_write', {
+      return invoke<void>("pty_write", {
         ptyId,
         dataBytes: Array.from(ptyWriteEncoder.encode(data)),
       });
     },
     async resize(ptyId: number, cols: number, rows: number): Promise<void> {
-      return invoke<void>('pty_resize', {
+      return invoke<void>("pty_resize", {
         ptyId,
         cols: Math.max(2, Math.floor(cols)),
         rows: Math.max(1, Math.floor(rows)),
       });
     },
     async close(ptyId: number): Promise<void> {
-      return invoke<void>('pty_close', { ptyId });
+      return invoke<void>("pty_close", { ptyId });
     },
     async setShellIntegrations(integrations: Record<string, { script: string; scriptArg: boolean }>): Promise<void> {
-      return invoke<void>('pty_set_shell_integrations', { integrations });
+      return invoke<void>("pty_set_shell_integrations", { integrations });
     },
     onData(callback: (ptyId: number, data: Uint8Array) => void): () => void {
       let unlisten: UnlistenFn | null = null;
-      listen<{ pty_id: number; data: number[] }>('pty:data', (event) => {
+      listen<{ pty_id: number; data: number[] }>("pty:data", (event) => {
         callback(event.payload.pty_id, new Uint8Array(event.payload.data));
-      }).then((fn) => { unlisten = fn; });
-      return () => { unlisten?.(); };
+      }).then((fn) => {
+        unlisten = fn;
+      });
+      return () => {
+        unlisten?.();
+      };
     },
     onExit(callback: (ptyId: number) => void): () => void {
       let unlisten: UnlistenFn | null = null;
-      listen<{ pty_id: number }>('pty:exit', (event) => {
+      listen<{ pty_id: number }>("pty:exit", (event) => {
         callback(event.payload.pty_id);
-      }).then((fn) => { unlisten = fn; });
-      return () => { unlisten?.(); };
+      }).then((fn) => {
+        unlisten = fn;
+      });
+      return () => {
+        unlisten?.();
+      };
     },
   },
   utils: {
     async getHomePath(): Promise<string> {
-      return normalizePath(await invoke<string>('get_home_path'));
+      return normalizePath(await invoke<string>("get_home_path"));
     },
     async getEnv(): Promise<Record<string, string>> {
-      return invoke<Record<string, string>>('get_env');
+      return invoke<Record<string, string>>("get_env");
     },
   },
   copy: {
     async start(sources: string[], destDir: string, options: CopyOptions): Promise<number> {
-      return invoke<number>('copy_start', { sources, destDir, options });
+      return invoke<number>("copy_start", { sources, destDir, options });
     },
     async cancel(copyId: number): Promise<void> {
-      return invoke<void>('copy_cancel', { copyId });
+      return invoke<void>("copy_cancel", { copyId });
     },
     async resolveConflict(copyId: number, resolution: ConflictResolution): Promise<void> {
       // Map TS discriminated union to Rust serde format
       let rustRes: unknown;
       switch (resolution.type) {
-        case 'overwrite': rustRes = 'overwrite'; break;
-        case 'skip': rustRes = 'skip'; break;
-        case 'rename': rustRes = { rename: resolution.newName }; break;
-        case 'overwriteAll': rustRes = 'overwriteAll'; break;
-        case 'skipAll': rustRes = 'skipAll'; break;
-        case 'cancel': rustRes = 'cancel'; break;
+        case "overwrite":
+          rustRes = "overwrite";
+          break;
+        case "skip":
+          rustRes = "skip";
+          break;
+        case "rename":
+          rustRes = { rename: resolution.newName };
+          break;
+        case "overwriteAll":
+          rustRes = "overwriteAll";
+          break;
+        case "skipAll":
+          rustRes = "skipAll";
+          break;
+        case "cancel":
+          rustRes = "cancel";
+          break;
       }
-      return invoke<void>('copy_resolve_conflict', { copyId, resolution: rustRes });
+      return invoke<void>("copy_resolve_conflict", { copyId, resolution: rustRes });
     },
     onProgress(callback: (event: CopyProgressEvent) => void): () => void {
       let unlisten: (() => void) | null = null;
-      listen<CopyProgressEvent>('copy:progress', (event) => {
+      listen<CopyProgressEvent>("copy:progress", (event) => {
         callback(event.payload);
-      }).then((fn) => { unlisten = fn; });
-      return () => { unlisten?.(); };
+      }).then((fn) => {
+        unlisten = fn;
+      });
+      return () => {
+        unlisten?.();
+      };
     },
   },
   move: {
     async start(sources: string[], destDir: string, options: MoveOptions): Promise<number> {
-      return invoke<number>('move_start', { sources, destDir, options });
+      return invoke<number>("move_start", { sources, destDir, options });
     },
     async cancel(moveId: number): Promise<void> {
-      return invoke<void>('move_cancel', { moveId });
+      return invoke<void>("move_cancel", { moveId });
     },
     async resolveConflict(moveId: number, resolution: ConflictResolution): Promise<void> {
       let rustRes: unknown;
       switch (resolution.type) {
-        case 'overwrite': rustRes = 'overwrite'; break;
-        case 'skip': rustRes = 'skip'; break;
-        case 'rename': rustRes = { rename: resolution.newName }; break;
-        case 'overwriteAll': rustRes = 'overwriteAll'; break;
-        case 'skipAll': rustRes = 'skipAll'; break;
-        case 'cancel': rustRes = 'cancel'; break;
+        case "overwrite":
+          rustRes = "overwrite";
+          break;
+        case "skip":
+          rustRes = "skip";
+          break;
+        case "rename":
+          rustRes = { rename: resolution.newName };
+          break;
+        case "overwriteAll":
+          rustRes = "overwriteAll";
+          break;
+        case "skipAll":
+          rustRes = "skipAll";
+          break;
+        case "cancel":
+          rustRes = "cancel";
+          break;
       }
-      return invoke<void>('move_resolve_conflict', { moveId, resolution: rustRes });
+      return invoke<void>("move_resolve_conflict", { moveId, resolution: rustRes });
     },
     onProgress(callback: (event: MoveProgressEvent) => void): () => void {
       let unlisten: (() => void) | null = null;
-      listen<MoveProgressEvent>('move:progress', (event) => {
+      listen<MoveProgressEvent>("move:progress", (event) => {
         callback(event.payload);
-      }).then((fn) => { unlisten = fn; });
-      return () => { unlisten?.(); };
+      }).then((fn) => {
+        unlisten = fn;
+      });
+      return () => {
+        unlisten?.();
+      };
     },
   },
   delete: {
     async start(paths: string[]): Promise<number> {
-      return invoke<number>('delete_start', { paths });
+      return invoke<number>("delete_start", { paths });
     },
     async cancel(deleteId: number): Promise<void> {
-      return invoke<void>('delete_cancel', { deleteId });
+      return invoke<void>("delete_cancel", { deleteId });
     },
     onProgress(callback: (event: DeleteProgressEvent) => void): () => void {
       let unlisten: (() => void) | null = null;
-      listen<DeleteProgressEvent>('delete:progress', (event) => {
+      listen<DeleteProgressEvent>("delete:progress", (event) => {
         callback(event.payload);
-      }).then((fn) => { unlisten = fn; });
-      return () => { unlisten?.(); };
+      }).then((fn) => {
+        unlisten = fn;
+      });
+      return () => {
+        unlisten?.();
+      };
     },
   },
   rename: {
     async rename(source: string, newName: string): Promise<void> {
-      return invoke<void>('rename_item', { source, newName });
+      return invoke<void>("rename_item", { source, newName });
     },
   },
   theme: {
     async get(): Promise<string> {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     },
     onChange(callback: (theme: string) => void): () => void {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      const handler = (e: MediaQueryListEvent) => callback(e.matches ? 'dark' : 'light');
-      mq.addEventListener('change', handler);
-      return () => mq.removeEventListener('change', handler);
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+      const handler = (e: MediaQueryListEvent) => callback(e.matches ? "dark" : "light");
+      mq.addEventListener("change", handler);
+      return () => mq.removeEventListener("change", handler);
     },
   },
   fsProvider: {
     async load(wasmPath: string): Promise<void> {
-      return invoke<void>('fsp_load', { wasmPath });
+      return invoke<void>("fsp_load", { wasmPath });
     },
     async listEntries(wasmPath: string, containerPath: string, innerPath: string): Promise<FspEntry[]> {
-      const raw = await invoke<Array<{ name: string; kind: string; size?: number; mtime_ms?: number }>>(
-        'fsp_list_entries', { wasmPath, containerPath, innerPath }
-      );
+      const raw = await invoke<Array<{ name: string; kind: string; size?: number; mtime_ms?: number }>>("fsp_list_entries", {
+        wasmPath,
+        containerPath,
+        innerPath,
+      });
       return raw.map((e) => ({
         name: e.name,
-        kind: e.kind as FspEntry['kind'],
+        kind: e.kind as FspEntry["kind"],
         size: e.size,
         mtimeMs: e.mtime_ms,
       }));
     },
     async readFileRange(wasmPath: string, containerPath: string, innerPath: string, offset: number, length: number): Promise<ArrayBuffer> {
-      const bytes = await invoke<number[]>('fsp_read_file_range', { wasmPath, containerPath, innerPath, offset, length });
+      const bytes = await invoke<number[]>("fsp_read_file_range", {
+        wasmPath,
+        containerPath,
+        innerPath,
+        offset,
+        length,
+      });
       return new Uint8Array(bytes).buffer;
     },
   },

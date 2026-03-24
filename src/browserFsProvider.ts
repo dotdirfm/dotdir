@@ -14,10 +14,10 @@
  * evaluated once per extension.
  */
 
-import { bridge } from './bridge';
-import { join } from './path';
-import { readFileBuffer, readFileText } from './fs';
-import type { FsProviderExtensionApi, FsProviderHostApi } from './extensionApi';
+import { bridge } from "./bridge";
+import { join } from "./path";
+import { readFileBuffer, readFileText } from "./fs";
+import type { FsProviderExtensionApi, FsProviderHostApi } from "./extensionApi";
 
 /** Cache: key → settled Promise<FsProviderExtensionApi> */
 const cache = new Map<string, Promise<FsProviderExtensionApi>>();
@@ -38,11 +38,8 @@ function makeHostApi(): FsProviderHostApi {
   };
 }
 
-export function loadFsProvider(
-  extensionDirPath: string,
-  entry: string,
-): Promise<FsProviderExtensionApi> {
-  const key = extensionDirPath + '\x1f' + entry;
+export function loadFsProvider(extensionDirPath: string, entry: string): Promise<FsProviderExtensionApi> {
+  const key = extensionDirPath + "\x1f" + entry;
   const cached = cache.get(key);
   if (cached) return cached;
 
@@ -58,9 +55,9 @@ export function loadFsProvider(
       }, 5000);
 
       // Inject the blob script; the bundle must assign window.__faradayProviderReady.
-      const blob = new Blob([code], { type: 'application/javascript' });
+      const blob = new Blob([code], { type: "application/javascript" });
       const url = URL.createObjectURL(blob);
-      const script = document.createElement('script');
+      const script = document.createElement("script");
       script.src = url;
 
       script.onerror = () => {
@@ -73,7 +70,7 @@ export function loadFsProvider(
         URL.revokeObjectURL(url);
         clearTimeout(timeout);
         const factory = window.__faradayProviderReady;
-        if (typeof factory !== 'function') {
+        if (typeof factory !== "function") {
           reject(new Error(`fsProvider "${entry}" did not set window.__faradayProviderReady`));
           return;
         }

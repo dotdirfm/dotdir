@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { focusContext } from './focusContext';
-import { SmartLabel } from './dialogHotkeys';
-import { INPUT_NO_ASSIST } from './inputNoAssist';
+import { useEffect, useRef, useState } from "react";
+import { focusContext } from "./focusContext";
+import { SmartLabel } from "./dialogHotkeys";
+import { INPUT_NO_ASSIST } from "./inputNoAssist";
 
 export interface RenameDialogProps {
   currentName: string;
@@ -18,12 +18,12 @@ export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogP
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (!dialog.open) dialog.showModal();
-    focusContext.push('modal');
+    focusContext.push("modal");
     // Select the filename without extension
     const input = inputRef.current;
     if (input) {
       input.focus();
-      const dotIndex = currentName.lastIndexOf('.');
+      const dotIndex = currentName.lastIndexOf(".");
       if (dotIndex > 0) {
         input.setSelectionRange(0, dotIndex);
       } else {
@@ -31,10 +31,10 @@ export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogP
       }
     }
     const handleClose = () => onCancel();
-    dialog.addEventListener('close', handleClose);
+    dialog.addEventListener("close", handleClose);
     return () => {
-      dialog.removeEventListener('close', handleClose);
-      focusContext.pop('modal');
+      dialog.removeEventListener("close", handleClose);
+      focusContext.pop("modal");
     };
   }, [onCancel, currentName]);
 
@@ -57,19 +57,16 @@ export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogP
       <form className="rename-form" onSubmit={handleSubmit}>
         <div className="modal-dialog-body">
           <div className="rename-field">
-            <label htmlFor="rename-input"><SmartLabel>New name</SmartLabel></label>
-            <input
-              ref={inputRef}
-              id="rename-input"
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              {...INPUT_NO_ASSIST}
-            />
+            <label htmlFor="rename-input">
+              <SmartLabel>New name</SmartLabel>
+            </label>
+            <input ref={inputRef} id="rename-input" type="text" value={newName} onChange={(e) => setNewName(e.target.value)} {...INPUT_NO_ASSIST} />
           </div>
         </div>
         <div className="modal-dialog-buttons">
-          <button type="button" onClick={handleCancel}><SmartLabel>Cancel</SmartLabel></button>
+          <button type="button" onClick={handleCancel}>
+            <SmartLabel>Cancel</SmartLabel>
+          </button>
           <button type="submit" disabled={!newName.trim() || newName.trim() === currentName}>
             <SmartLabel>Rename</SmartLabel>
           </button>

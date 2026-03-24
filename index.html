@@ -9,19 +9,16 @@
       window.__faradayBoot = function (message) {
         try {
           window.__FARADAY_BOOT_MARKER__.push(message);
-          var el = document.getElementById('boot-status');
+          var el = document.getElementById("boot-status");
           if (el) el.textContent = message;
         } catch (_) {}
       };
-      window.__faradayBoot('Faraday HTML loaded');
+      window.__faradayBoot("Faraday HTML loaded");
     </script>
   </head>
 
-  <body style="margin: 0; padding: 0;">
-    <div
-      id="boot-status"
-      style="padding:16px;font-family:Consolas,monospace;font-size:14px;color:#f38ba8;background:#1e1e2e;min-height:100vh;"
-    >
+  <body style="margin: 0; padding: 0">
+    <div id="boot-status" style="padding: 16px; font-family: Consolas, monospace; font-size: 14px; color: #f38ba8; background: #1e1e2e; min-height: 100vh">
       Starting Faraday...
     </div>
     <div id="app"></div>

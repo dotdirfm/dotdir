@@ -165,7 +165,7 @@
 }
 
 .entry.marked::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0 4px;
   background: var(--entry-marked-bg, rgba(229, 192, 123, 0.15));

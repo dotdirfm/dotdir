@@ -15,19 +15,8 @@
  *  - Hotkey is the physical key code (e.g. KeyM → 'm'), so it works regardless
  *    of the OS input language.
  */
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
-import { HelpDialog } from './HelpDialog';
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { HelpDialog } from "./HelpDialog";
 
 interface Registration {
   label: string;
@@ -43,9 +32,7 @@ interface HotkeyContextValue {
 const HotkeyContext = createContext<HotkeyContextValue | null>(null);
 
 function computeAssignments(registrations: Map<string, Registration>): Map<string, string> {
-  const sorted = Array.from(registrations.entries()).sort(
-    ([, a], [, b]) => a.label.length - b.label.length,
-  );
+  const sorted = Array.from(registrations.entries()).sort(([, a], [, b]) => a.label.length - b.label.length);
   const used = new Set<string>();
   const result = new Map<string, string>();
 
@@ -103,7 +90,7 @@ export function HotkeyProvider({ children, helpText }: { children: ReactNode; he
   // Keyboard handler: F1 for help, Alt+<physical key> for hotkeys.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F1') {
+      if (e.key === "F1") {
         if (helpTextRef.current) {
           e.preventDefault();
           e.stopPropagation();
@@ -114,7 +101,7 @@ export function HotkeyProvider({ children, helpText }: { children: ReactNode; he
 
       if (!e.altKey || e.ctrlKey || e.metaKey) return;
       // Use the physical key code so the hotkey works with any OS input language.
-      if (!e.code.startsWith('Key')) return;
+      if (!e.code.startsWith("Key")) return;
       const baseKey = e.code.slice(3).toLowerCase(); // 'KeyM' → 'm'
 
       for (const [id, char] of assignmentsRef.current) {
@@ -129,21 +116,16 @@ export function HotkeyProvider({ children, helpText }: { children: ReactNode; he
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown, { capture: true });
-    return () => document.removeEventListener('keydown', handleKeyDown, { capture: true });
+    document.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => document.removeEventListener("keydown", handleKeyDown, { capture: true });
   }, []); // refs are stable; no deps needed
 
-  const value = useMemo(
-    () => ({ register, unregister, assignments }),
-    [register, unregister, assignments],
-  );
+  const value = useMemo(() => ({ register, unregister, assignments }), [register, unregister, assignments]);
 
   return (
     <HotkeyContext.Provider value={value}>
       {children}
-      {showHelp && helpText && (
-        <HelpDialog content={helpText} onClose={() => setShowHelp(false)} />
-      )}
+      {showHelp && helpText && <HelpDialog content={helpText} onClose={() => setShowHelp(false)} />}
     </HotkeyContext.Provider>
   );
 }
@@ -172,7 +154,7 @@ export function SmartLabel({ children }: { children: string }) {
 
     // Walk up to the nearest <button> or <label> ancestor.
     let el: HTMLElement | null = span.parentElement;
-    while (el && el.tagName !== 'BUTTON' && el.tagName !== 'LABEL') {
+    while (el && el.tagName !== "BUTTON" && el.tagName !== "LABEL") {
       el = el.parentElement;
     }
     if (!el) return;

@@ -2,7 +2,7 @@
  * VS Code Marketplace API and VSIX support
  */
 
-const VSCODE_MARKETPLACE_URL = 'https://marketplace.visualstudio.com/_apis/public/gallery';
+const VSCODE_MARKETPLACE_URL = "https://marketplace.visualstudio.com/_apis/public/gallery";
 
 export interface VSCodeExtension {
   publisher: { publisherName: string; displayName: string };
@@ -22,10 +22,7 @@ export async function searchVSCodeMarketplace(query: string, page = 1): Promise<
   const body = {
     filters: [
       {
-        criteria: [
-          { filterType: 8, value: 'Microsoft.VisualStudio.Code' },
-          ...(query ? [{ filterType: 10, value: query }] : []),
-        ],
+        criteria: [{ filterType: 8, value: "Microsoft.VisualStudio.Code" }, ...(query ? [{ filterType: 10, value: query }] : [])],
         pageNumber: page,
         pageSize,
         sortBy: query ? 0 : 4, // 0 = relevance, 4 = install count
@@ -37,22 +34,22 @@ export async function searchVSCodeMarketplace(query: string, page = 1): Promise<
   };
 
   const res = await fetch(`${VSCODE_MARKETPLACE_URL}/extensionquery`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json;api-version=7.1-preview.1',
+      "Content-Type": "application/json",
+      Accept: "application/json;api-version=7.1-preview.1",
     },
     body: JSON.stringify(body),
   });
 
-  if (!res.ok) throw new Error('VS Code marketplace request failed');
+  if (!res.ok) throw new Error("VS Code marketplace request failed");
   const data: VSCodeSearchResult = await res.json();
   const extensions = data.results?.[0]?.extensions ?? [];
   return { extensions, total: extensions.length };
 }
 
 export function getVSCodeInstallCount(ext: VSCodeExtension): number {
-  const stat = ext.statistics?.find(s => s.statisticName === 'install');
+  const stat = ext.statistics?.find((s) => s.statisticName === "install");
   return stat?.value ?? 0;
 }
 

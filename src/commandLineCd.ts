@@ -6,15 +6,15 @@
  * - `cd:name` — navigate to folder saved under alias `name`
  */
 
-import { bridge } from './bridge';
-import { join, normalizePath, resolveDotSegments } from './path';
-import { normalizeTerminalPath } from './terminal/path';
+import { bridge } from "./bridge";
+import { join, normalizePath, resolveDotSegments } from "./path";
+import { normalizeTerminalPath } from "./terminal/path";
 
 export type ParsedCdCommand =
-  | { kind: 'setAlias'; alias: string }
-  | { kind: 'goAlias'; alias: string }
-  | { kind: 'chdir'; pathArg: string }
-  | { kind: 'error'; message: string };
+  | { kind: "setAlias"; alias: string }
+  | { kind: "goAlias"; alias: string }
+  | { kind: "chdir"; pathArg: string }
+  | { kind: "error"; message: string };
 
 /** Returns null if this is not a `cd` command (should run in terminal). */
 export function parseCdCommand(cmd: string): ParsedCdCommand | null {
@@ -25,30 +25,27 @@ export function parseCdCommand(cmd: string): ParsedCdCommand | null {
   if (/^cd::/i.test(t)) {
     const m = t.match(/^cd::\s*(\S+)\s*$/i);
     if (!m) {
-      return { kind: 'error', message: 'Usage: cd::alias — save current folder as alias' };
+      return { kind: "error", message: "Usage: cd::alias — save current folder as alias" };
     }
-    return { kind: 'setAlias', alias: m[1]! };
+    return { kind: "setAlias", alias: m[1]! };
   }
 
   if (/^cd:/i.test(t)) {
     const m = t.match(/^cd:\s*(\S+)\s*$/i);
     if (!m) {
-      return { kind: 'error', message: 'Usage: cd:alias — go to folder saved under alias' };
+      return { kind: "error", message: "Usage: cd:alias — go to folder saved under alias" };
     }
-    return { kind: 'goAlias', alias: m[1]! };
+    return { kind: "goAlias", alias: m[1]! };
   }
 
   if (/^cd(?:\s|$)/i.test(t) || /^cd$/i.test(t)) {
     const m = t.match(/^cd(?:\s+(.*))?$/i);
     if (!m) return null;
-    let pathArg = (m[1] ?? '').trim();
-    if (
-      (pathArg.startsWith('"') && pathArg.endsWith('"')) ||
-      (pathArg.startsWith("'") && pathArg.endsWith("'"))
-    ) {
+    let pathArg = (m[1] ?? "").trim();
+    if ((pathArg.startsWith('"') && pathArg.endsWith('"')) || (pathArg.startsWith("'") && pathArg.endsWith("'"))) {
       pathArg = pathArg.slice(1, -1);
     }
-    return { kind: 'chdir', pathArg };
+    return { kind: "chdir", pathArg };
   }
 
   return null;
@@ -62,20 +59,17 @@ export async function resolveCdPath(pathArg: string, cwd: string): Promise<strin
   }
 
   let p = t;
-  if (p.startsWith('~')) {
+  if (p.startsWith("~")) {
     const home = await bridge.utils.getHomePath();
     const nh = normalizeTerminalPath(home);
-    if (p === '~' || p === '~/') {
+    if (p === "~" || p === "~/") {
       return nh;
     }
-    const rest = p.slice(1).replace(/^\//, '');
+    const rest = p.slice(1).replace(/^\//, "");
     p = rest ? join(home, rest) : home;
   }
 
-  const combined =
-    p.startsWith('/') || p.startsWith('//') || /^[A-Za-z]:\//.test(p) || /^[A-Za-z]:$/i.test(p)
-      ? p
-      : join(cwd, p);
+  const combined = p.startsWith("/") || p.startsWith("//") || /^[A-Za-z]:\//.test(p) || /^[A-Za-z]:$/i.test(p) ? p : join(cwd, p);
   const resolved = resolveDotSegments(normalizePath(combined));
   return normalizeTerminalPath(resolved);
 }

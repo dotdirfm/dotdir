@@ -4,8 +4,8 @@
  * Parses VS Code icon theme JSON format and provides icon resolution.
  */
 
-import { readFileBuffer, readFileText } from './fs';
-import { join, dirname } from './path';
+import { readFileBuffer, readFileText } from "./fs";
+import { join, dirname } from "./path";
 
 export interface VSCodeIconDefinition {
   iconPath: string;
@@ -61,12 +61,12 @@ function svgToDataUrl(svg: string): string {
 export class VSCodeIconThemeResolver {
   private theme: LoadedVSCodeIconTheme | null = null;
   private loadingIcons = new Map<string, Promise<string | null>>();
-  private themeKind: 'dark' | 'light' = 'dark';
+  private themeKind: "dark" | "light" = "dark";
 
   async load(jsonPath: string): Promise<void> {
     const text = await readFileText(jsonPath);
     const json: VSCodeIconThemeJson = JSON.parse(text);
-    
+
     this.theme = {
       json,
       basePath: dirname(jsonPath),
@@ -74,7 +74,7 @@ export class VSCodeIconThemeResolver {
     };
   }
 
-  setTheme(kind: 'dark' | 'light'): void {
+  setTheme(kind: "dark" | "light"): void {
     this.themeKind = kind;
   }
 
@@ -87,26 +87,17 @@ export class VSCodeIconThemeResolver {
     return this.theme !== null;
   }
 
-  private getEffectiveMap<T>(
-    darkValue: T | undefined,
-    lightValue: T | undefined,
-  ): T | undefined {
-    if (this.themeKind === 'light' && lightValue !== undefined) {
+  private getEffectiveMap<T>(darkValue: T | undefined, lightValue: T | undefined): T | undefined {
+    if (this.themeKind === "light" && lightValue !== undefined) {
       return lightValue;
     }
     return darkValue;
   }
 
-  resolveIcon(
-    name: string,
-    isDirectory: boolean,
-    isExpanded: boolean,
-    isRoot: boolean,
-    langId?: string,
-  ): string | null {
+  resolveIcon(name: string, isDirectory: boolean, isExpanded: boolean, isRoot: boolean, langId?: string): string | null {
     if (!this.theme) return null;
     const { json } = this.theme;
-    const light = this.themeKind === 'light' ? json.light : undefined;
+    const light = this.themeKind === "light" ? json.light : undefined;
 
     let iconKey: string | undefined;
 
@@ -120,18 +111,11 @@ export class VSCodeIconThemeResolver {
       } else if (folderNames?.[name.toLowerCase()]) {
         iconKey = folderNames[name.toLowerCase()];
       } else if (isRoot) {
-        iconKey = this.getEffectiveMap(
-          isExpanded ? json.rootFolderExpanded : json.rootFolder,
-          undefined,
-        ) ?? this.getEffectiveMap(
-          isExpanded ? json.folderExpanded : json.folder,
-          isExpanded ? light?.folderExpanded : light?.folder,
-        );
+        iconKey =
+          this.getEffectiveMap(isExpanded ? json.rootFolderExpanded : json.rootFolder, undefined) ??
+          this.getEffectiveMap(isExpanded ? json.folderExpanded : json.folder, isExpanded ? light?.folderExpanded : light?.folder);
       } else {
-        iconKey = this.getEffectiveMap(
-          isExpanded ? json.folderExpanded : json.folder,
-          isExpanded ? light?.folderExpanded : light?.folder,
-        );
+        iconKey = this.getEffectiveMap(isExpanded ? json.folderExpanded : json.folder, isExpanded ? light?.folderExpanded : light?.folder);
       }
     } else {
       // File: check filename, then extension, then languageId, then default
@@ -144,9 +128,9 @@ export class VSCodeIconThemeResolver {
         // Try extensions (longest match first)
         const fileExtensions = this.getEffectiveMap(json.fileExtensions, light?.fileExtensions);
         if (fileExtensions) {
-          const parts = name.split('.');
+          const parts = name.split(".");
           for (let i = 1; i < parts.length; i++) {
-            const ext = parts.slice(i).join('.').toLowerCase();
+            const ext = parts.slice(i).join(".").toLowerCase();
             if (fileExtensions[ext]) {
               iconKey = fileExtensions[ext];
               break;
@@ -186,17 +170,15 @@ export class VSCodeIconThemeResolver {
     const promise = (async () => {
       try {
         const buf = await readFileBuffer(iconPath);
-        const ext = iconPath.split('.').pop()?.toLowerCase() ?? '';
-        
+        const ext = iconPath.split(".").pop()?.toLowerCase() ?? "";
+
         let dataUrl: string;
-        if (ext === 'svg') {
+        if (ext === "svg") {
           const text = new TextDecoder().decode(buf);
           dataUrl = svgToDataUrl(text);
         } else {
-          const mime = ext === 'png' ? 'image/png'
-            : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
-            : ext === 'webp' ? 'image/webp'
-            : 'application/octet-stream';
+          const mime =
+            ext === "png" ? "image/png" : ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "application/octet-stream";
           const blob = new Blob([buf], { type: mime });
           dataUrl = URL.createObjectURL(blob);
         }
@@ -215,7 +197,7 @@ export class VSCodeIconThemeResolver {
   }
 
   async preloadIcons(paths: string[]): Promise<void> {
-    await Promise.all(paths.map(p => this.loadIcon(p)));
+    await Promise.all(paths.map((p) => this.loadIcon(p)));
   }
 
   getCachedIcon(iconPath: string): string | null {

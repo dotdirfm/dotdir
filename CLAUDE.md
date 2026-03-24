@@ -14,11 +14,13 @@ pnpm build:rust:dev         # Rust debug build
 ```
 
 Headless server (browser mode):
+
 ```bash
 pnpm build:rust && ./src-tauri/target/release/faraday serve  # http://127.0.0.1:3001
 ```
 
 Headless dev with HMR:
+
 ```bash
 pnpm build:rust:dev && ./src-tauri/target/debug/faraday serve &
 pnpm dev:web                # Vite at http://localhost:5173 (proxies /ws → :3001)
@@ -45,6 +47,7 @@ Faraday is a dual-pane file manager with three runtime modes:
 ### Bridge Pattern
 
 The frontend depends on a single `Bridge` interface (`bridge.ts`) with two implementations:
+
 - `tauriBridge.ts` — Tauri `invoke()`/`listen()` IPC
 - `wsBridge.ts` — WebSocket with JSON-RPC 2.0 text messages + binary frames for PTY data
 

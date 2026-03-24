@@ -2,15 +2,15 @@
 ///
 /// Uses ES module live bindings: importers of `bridge` always see the current value.
 /// Must call `initBridge()` before rendering (from main.tsx).
-import { isTauri as isTauriApp } from '@tauri-apps/api/core';
-import type { FsRawEntry, FsChangeEvent } from './types';
-import { tauriBridge } from './tauriBridge';
-import { createWsBridge } from './wsBridge';
+import { isTauri as isTauriApp } from "@tauri-apps/api/core";
+import type { FsRawEntry, FsChangeEvent } from "./types";
+import { tauriBridge } from "./tauriBridge";
+import { createWsBridge } from "./wsBridge";
 
 // ── Copy types ──────────────────────────────────────────────────────
 
-export type ConflictPolicy = 'ask' | 'overwrite' | 'skip' | 'rename' | 'append' | 'onlyNewer';
-export type SymlinkMode = 'smart' | 'alwaysLink' | 'alwaysTarget';
+export type ConflictPolicy = "ask" | "overwrite" | "skip" | "rename" | "append" | "onlyNewer";
+export type SymlinkMode = "smart" | "alwaysLink" | "alwaysTarget";
 
 export interface CopyOptions {
   conflictPolicy: ConflictPolicy;
@@ -23,12 +23,12 @@ export interface CopyOptions {
 }
 
 export type ConflictResolution =
-  | { type: 'overwrite' }
-  | { type: 'skip' }
-  | { type: 'rename'; newName: string }
-  | { type: 'overwriteAll' }
-  | { type: 'skipAll' }
-  | { type: 'cancel' };
+  | { type: "overwrite" }
+  | { type: "skip" }
+  | { type: "rename"; newName: string }
+  | { type: "overwriteAll" }
+  | { type: "skipAll" }
+  | { type: "cancel" };
 
 export interface CopyProgress {
   bytesCopied: number;
@@ -41,10 +41,25 @@ export interface CopyProgress {
 export type CopyProgressEvent = {
   copyId: number;
   event:
-    | { kind: 'progress'; bytesCopied: number; bytesTotal: number; filesDone: number; filesTotal: number; currentFile: string }
-    | { kind: 'conflict'; src: string; dest: string; srcSize: number; srcMtimeMs: number; destSize: number; destMtimeMs: number }
-    | { kind: 'done'; filesDone: number; bytesCopied: number }
-    | { kind: 'error'; message: string };
+    | {
+        kind: "progress";
+        bytesCopied: number;
+        bytesTotal: number;
+        filesDone: number;
+        filesTotal: number;
+        currentFile: string;
+      }
+    | {
+        kind: "conflict";
+        src: string;
+        dest: string;
+        srcSize: number;
+        srcMtimeMs: number;
+        destSize: number;
+        destMtimeMs: number;
+      }
+    | { kind: "done"; filesDone: number; bytesCopied: number }
+    | { kind: "error"; message: string };
 };
 
 // ── Move types ──────────────────────────────────────────────────────
@@ -56,20 +71,32 @@ export interface MoveOptions {
 export type MoveProgressEvent = {
   moveId: number;
   event:
-    | { kind: 'progress'; bytesCopied: number; bytesTotal: number; filesDone: number; filesTotal: number; currentFile: string }
-    | { kind: 'conflict'; src: string; dest: string; srcSize: number; srcMtimeMs: number; destSize: number; destMtimeMs: number }
-    | { kind: 'done'; filesDone: number; bytesCopied: number }
-    | { kind: 'error'; message: string };
+    | {
+        kind: "progress";
+        bytesCopied: number;
+        bytesTotal: number;
+        filesDone: number;
+        filesTotal: number;
+        currentFile: string;
+      }
+    | {
+        kind: "conflict";
+        src: string;
+        dest: string;
+        srcSize: number;
+        srcMtimeMs: number;
+        destSize: number;
+        destMtimeMs: number;
+      }
+    | { kind: "done"; filesDone: number; bytesCopied: number }
+    | { kind: "error"; message: string };
 };
 
 // ── Delete types ─────────────────────────────────────────────────────
 
 export type DeleteProgressEvent = {
   deleteId: number;
-  event:
-    | { kind: 'progress'; filesDone: number; currentFile: string }
-    | { kind: 'done'; filesDone: number }
-    | { kind: 'error'; message: string };
+  event: { kind: "progress"; filesDone: number; currentFile: string } | { kind: "done"; filesDone: number } | { kind: "error"; message: string };
 };
 
 export interface PtyLaunchInfo {
@@ -79,7 +106,7 @@ export interface PtyLaunchInfo {
 }
 
 /** How to embed `{{cwd}}` in `hiddenCdTemplate` — set per shell-integration contribution. */
-export type CwdEscapeMode = 'posix' | 'powershell' | 'cmd';
+export type CwdEscapeMode = "posix" | "powershell" | "cmd";
 
 export interface TerminalProfile {
   id: string;
@@ -92,7 +119,7 @@ export interface TerminalProfile {
   hiddenCdTemplate: string;
   cwdEscape: CwdEscapeMode;
   /** Line ending appended after the hidden cd line. */
-  lineEnding: '\n' | '\r\n';
+  lineEnding: "\n" | "\r\n";
   /** Extra argv after the shell executable (e.g. `--noprofile` for bash). From contributions. */
   spawnArgs: string[];
 }
@@ -102,7 +129,7 @@ export interface TerminalProfile {
 export interface FspEntry {
   name: string;
   /** "file" or "directory" */
-  kind: 'file' | 'directory';
+  kind: "file" | "directory";
   size?: number;
   mtimeMs?: number;
 }

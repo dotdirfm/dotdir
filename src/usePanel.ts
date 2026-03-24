@@ -6,20 +6,20 @@
  * refreshes or navigates up automatically.
  */
 
-import { FsNode } from 'fss-lang';
-import type { LayeredResolver, ThemeKind } from 'fss-lang';
-import { createFsNode } from 'fss-lang/helpers';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FsChangeType } from './types';
-import { bridge } from './bridge';
-import { fsProviderRegistry } from './viewerEditorRegistry';
-import { isContainerPath, parseContainerPath, buildContainerPath } from './containerPath';
-import { loadFsProvider } from './browserFsProvider';
-import { createPanelResolver, invalidateFssCache, syncLayers } from './fss';
-import { FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from './fs';
-import { basename, dirname, isFileExecutable, isRootPath, join } from './path';
-import { languageRegistry } from './languageRegistry';
-import type { FsRawEntry } from './types';
+import { FsNode } from "fss-lang";
+import type { LayeredResolver, ThemeKind } from "fss-lang";
+import { createFsNode } from "fss-lang/helpers";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { FsChangeType } from "./types";
+import { bridge } from "./bridge";
+import { fsProviderRegistry } from "./viewerEditorRegistry";
+import { isContainerPath, parseContainerPath, buildContainerPath } from "./containerPath";
+import { loadFsProvider } from "./browserFsProvider";
+import { createPanelResolver, invalidateFssCache, syncLayers } from "./fss";
+import { FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from "./fs";
+import { basename, dirname, isFileExecutable, isRootPath, join } from "./path";
+import { languageRegistry } from "./languageRegistry";
+import type { FsRawEntry } from "./types";
 
 // ── Helper functions ──────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ function buildParentChain(dirPath: string): FsNode | undefined {
   for (const p of ancestors) {
     node = createFsNode({
       name: basename(p) || p,
-      type: 'folder',
+      type: "folder",
       path: p,
       parent: node,
     });
@@ -49,7 +49,7 @@ function buildParentChain(dirPath: string): FsNode | undefined {
 }
 
 function isDirectoryEntry(entry: FsRawEntry): boolean {
-  return entry.kind === 'directory' || (entry.kind === 'symlink' && (entry.mode & 0o170000) === 0o040000);
+  return entry.kind === "directory" || (entry.kind === "symlink" && (entry.mode & 0o170000) === 0o040000);
 }
 
 function entryToFsNode(entry: FsRawEntry, dirPath: string, parent?: FsNode): FsNode {
@@ -65,15 +65,15 @@ function entryToFsNode(entry: FsRawEntry, dirPath: string, parent?: FsNode): FsN
   };
   return createFsNode({
     name: entry.name,
-    type: isDir ? 'folder' : 'file',
-    lang: isDir ? '' : languageRegistry.detectLanguage(entry.name),
+    type: isDir ? "folder" : "file",
+    lang: isDir ? "" : languageRegistry.detectLanguage(entry.name),
     meta: {
       size: meta.size,
       mtimeMs: meta.mtimeMs,
       executable: !isDir && isFileExecutable(meta.mode ?? 0, entry.name),
-      hidden: meta.hidden ?? entry.name.startsWith('.'),
+      hidden: meta.hidden ?? entry.name.startsWith("."),
       nlink: meta.nlink ?? 1,
-      entryKind: meta.kind ?? (isDir ? 'directory' : 'file'),
+      entryKind: meta.kind ?? (isDir ? "directory" : "file"),
       linkTarget: meta.linkTarget,
     },
     path: join(dirPath, entry.name),
@@ -114,7 +114,7 @@ export interface PanelState {
 }
 
 export const emptyPanel: PanelState = {
-  currentPath: '',
+  currentPath: "",
   parentNode: undefined,
   entries: [],
   requestedCursor: undefined,
@@ -134,7 +134,7 @@ export function usePanel(theme: ThemeKind, showError: (message: string) => void)
 
   const observerRef = useRef<FileSystemObserver | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const currentPathRef = useRef<string>('');
+  const currentPathRef = useRef<string>("");
 
   useEffect(() => {
     resolverRef.current!.setTheme(theme);
@@ -149,7 +149,7 @@ export function usePanel(theme: ThemeKind, showError: (message: string) => void)
     const paths: string[] = [];
     for (const ancestor of ancestors) {
       paths.push(ancestor);
-      paths.push(join(ancestor, '.faraday'));
+      paths.push(join(ancestor, ".faraday"));
     }
     observer.sync(paths);
   }, []);
@@ -176,17 +176,19 @@ export function usePanel(theme: ThemeKind, showError: (message: string) => void)
             if (!providerMatch) {
               throw new Error(`No fsProvider registered for "${basename(hostFile)}"`);
             }
-            let entries: import('./extensionApi').FsProviderEntry[];
-            if (providerMatch.contribution.runtime === 'backend' && bridge.fsProvider) {
+            let entries: import("./extensionApi").FsProviderEntry[];
+            if (providerMatch.contribution.runtime === "backend" && bridge.fsProvider) {
               const wasmPath = join(providerMatch.extensionDirPath, providerMatch.contribution.entry);
               const raw = await bridge.fsProvider.listEntries(wasmPath, hostFile, innerPath);
               if (abort.signal.aborted) return;
-              entries = raw.map((e) => ({ name: e.name, type: e.kind, size: e.size, mtimeMs: e.mtimeMs }));
+              entries = raw.map((e) => ({
+                name: e.name,
+                type: e.kind,
+                size: e.size,
+                mtimeMs: e.mtimeMs,
+              }));
             } else {
-              const provider = await loadFsProvider(
-                providerMatch.extensionDirPath,
-                providerMatch.contribution.entry,
-              );
+              const provider = await loadFsProvider(providerMatch.extensionDirPath, providerMatch.contribution.entry);
               if (abort.signal.aborted) return;
               entries = await provider.listEntries(hostFile, innerPath);
               if (abort.signal.aborted) return;
@@ -194,24 +196,29 @@ export function usePanel(theme: ThemeKind, showError: (message: string) => void)
 
             const parent = buildParentChain(path);
             const nodes: FsNode[] = entries.map((entry) => {
-              const entryInner = (innerPath === '/' ? '' : innerPath) + '/' + entry.name;
+              const entryInner = (innerPath === "/" ? "" : innerPath) + "/" + entry.name;
               return createFsNode({
                 name: entry.name,
-                type: entry.type === 'directory' ? 'folder' : 'file',
-                lang: entry.type === 'file' ? languageRegistry.detectLanguage(entry.name) : '',
+                type: entry.type === "directory" ? "folder" : "file",
+                lang: entry.type === "file" ? languageRegistry.detectLanguage(entry.name) : "",
                 meta: {
                   size: entry.size ?? 0,
                   mtimeMs: entry.mtimeMs ?? 0,
                   executable: false,
-                  hidden: entry.name.startsWith('.'),
+                  hidden: entry.name.startsWith("."),
                   nlink: 1,
-                  entryKind: entry.type === 'directory' ? 'directory' : 'file',
+                  entryKind: entry.type === "directory" ? "directory" : "file",
                 },
                 path: buildContainerPath(hostFile, entryInner),
                 parent,
               });
             });
-            setState({ currentPath: path, parentNode: parent, entries: nodes, requestedCursor: cursorName });
+            setState({
+              currentPath: path,
+              parentNode: parent,
+              entries: nodes,
+              requestedCursor: cursorName,
+            });
             // No filesystem watches inside containers.
           } else {
             // ── Normal filesystem path ────────────────────────────────────────
@@ -222,7 +229,12 @@ export function usePanel(theme: ThemeKind, showError: (message: string) => void)
             if (abort.signal.aborted) return;
             const nodes: FsNode[] = rawEntries.map((entry) => entryToFsNode(entry, path, parent));
             if (abort.signal.aborted) return;
-            setState({ currentPath: path, parentNode: parent, entries: nodes, requestedCursor: cursorName });
+            setState({
+              currentPath: path,
+              parentNode: parent,
+              entries: nodes,
+              requestedCursor: cursorName,
+            });
             setupWatches(path);
           }
         })();
@@ -230,14 +242,12 @@ export function usePanel(theme: ThemeKind, showError: (message: string) => void)
         await Promise.race([
           work,
           new Promise<void>((resolve) => {
-            abort.signal.addEventListener('abort', () => resolve(), { once: true });
+            abort.signal.addEventListener("abort", () => resolve(), { once: true });
           }),
         ]);
       } catch (err) {
         if (!abort.signal.aborted) {
-          const msg = err && typeof err === 'object' && 'message' in err
-            ? (err as { message: string }).message
-            : String(err);
+          const msg = err && typeof err === "object" && "message" in err ? (err as { message: string }).message : String(err);
           showErrorRef.current(`Failed to read directory: ${msg}`);
         }
       } finally {
@@ -277,25 +287,25 @@ export function usePanel(theme: ThemeKind, showError: (message: string) => void)
         const type: FsChangeType = record.type;
 
         if (rootPath === curPath) {
-          if (type === 'errored') {
+          if (type === "errored") {
             navigateUp = true;
           } else {
             needsRefresh = true;
           }
-        } else if (rootPath.endsWith('/.faraday')) {
-          if (changedName === 'fs.css') {
+        } else if (rootPath.endsWith("/.faraday")) {
+          if (changedName === "fs.css") {
             const parentDir = dirname(rootPath);
             invalidateFssCache(parentDir);
             needsFssRefresh = true;
           }
-        } else if (curPath.startsWith(rootPath + '/') || curPath === rootPath) {
-          if (changedName === '.faraday') {
+        } else if (curPath.startsWith(rootPath + "/") || curPath === rootPath) {
+          if (changedName === ".faraday") {
             invalidateFssCache(rootPath);
             needsFssRefresh = true;
           } else if (changedName) {
             const relative = curPath.slice(rootPath.length + 1);
-            const nextSegment = relative.split('/')[0];
-            if (changedName === nextSegment && type === 'disappeared') {
+            const nextSegment = relative.split("/")[0];
+            if (changedName === nextSegment && type === "disappeared") {
               navigateUp = true;
             }
           }

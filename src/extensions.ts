@@ -1,8 +1,8 @@
-import { bridge, type CwdEscapeMode, type DeleteProgressEvent } from './bridge';
-import { readFileBuffer, readFileText } from './fs';
-import { dirname, join, normalizePath } from './path';
+import { bridge, type CwdEscapeMode, type DeleteProgressEvent } from "./bridge";
+import { readFileBuffer, readFileText } from "./fs";
+import { dirname, join, normalizePath } from "./path";
 
-export const MARKETPLACE_URL = 'https://faraday-marketplace.troubleshooters.dev';
+export const MARKETPLACE_URL = "https://faraday-marketplace.troubleshooters.dev";
 
 // FSS-based icon theme (Faraday format)
 export interface ExtensionIconThemeFss {
@@ -90,7 +90,7 @@ export interface ExtensionFsProviderContribution {
    * - 'frontend' (default): a JS/CJS bundle loaded in the browser context.
    * - 'backend': a WASM module executed by the Rust host via wasmtime.
    */
-  runtime?: 'frontend' | 'backend';
+  runtime?: "frontend" | "backend";
 }
 
 export interface ExtensionColorTheme {
@@ -120,11 +120,11 @@ export interface ExtensionShellIntegration {
    */
   executableCandidates: string[];
   /** Optional platform filter. If omitted, applies to all platforms. */
-  platforms?: ('darwin' | 'linux' | 'unix' | 'windows')[];
+  platforms?: ("darwin" | "linux" | "unix" | "windows")[];
   /** Hidden `cd` line before running a command from the UI; must contain `{{cwd}}`. */
   hiddenCdTemplate?: string;
   cwdEscape?: CwdEscapeMode;
-  lineEnding?: '\n' | '\r\n';
+  lineEnding?: "\n" | "\r\n";
   /** Extra argv after the shell executable (e.g. `--noprofile` for bash). */
   spawnArgs?: string[];
   /**
@@ -144,7 +144,7 @@ export interface ExtensionContributions {
   keybindings?: ExtensionKeybinding[];
   menus?: {
     commandPalette?: ExtensionMenu[];
-    'explorer/context'?: ExtensionMenu[];
+    "explorer/context"?: ExtensionMenu[];
   };
   viewers?: ExtensionViewerContribution[];
   editors?: ExtensionEditorContribution[];
@@ -232,10 +232,10 @@ export interface LoadedExtension {
     label: string;
     script: string;
     executableCandidates: string[];
-    platforms?: ('darwin' | 'linux' | 'unix' | 'windows')[];
+    platforms?: ("darwin" | "linux" | "unix" | "windows")[];
     hiddenCdTemplate?: string;
     cwdEscape?: CwdEscapeMode;
-    lineEnding?: '\n' | '\r\n';
+    lineEnding?: "\n" | "\r\n";
     spawnArgs?: string[];
     scriptArg?: boolean;
   }>;
@@ -251,7 +251,11 @@ export interface MarketplaceExtension {
   tags: string[];
   total_downloads: number;
   publisher: { username: string; display_name: string | null };
-  latest_version: { version: string; archive_size: number; created_at: string } | null;
+  latest_version: {
+    version: string;
+    archive_size: number;
+    created_at: string;
+  } | null;
 }
 
 function extensionDirName(ref: ExtensionRef): string {
@@ -260,13 +264,13 @@ function extensionDirName(ref: ExtensionRef): string {
 
 async function getExtensionsDir(): Promise<string> {
   const homePath = await bridge.utils.getHomePath();
-  return join(homePath, '.faraday', 'extensions');
+  return join(homePath, ".faraday", "extensions");
 }
 
 async function readRefs(): Promise<ExtensionRef[]> {
   const extensionsDir = await getExtensionsDir();
   try {
-    const text = await readFileText(join(extensionsDir, 'extensions.json'));
+    const text = await readFileText(join(extensionsDir, "extensions.json"));
     const refs = JSON.parse(text);
     return Array.isArray(refs) ? refs : [];
   } catch {
@@ -276,10 +280,7 @@ async function readRefs(): Promise<ExtensionRef[]> {
 
 async function writeRefs(refs: ExtensionRef[]): Promise<void> {
   const extensionsDir = await getExtensionsDir();
-  await bridge.fs.writeFile(
-    join(extensionsDir, 'extensions.json'),
-    JSON.stringify(refs, null, 2),
-  );
+  await bridge.fs.writeFile(join(extensionsDir, "extensions.json"), JSON.stringify(refs, null, 2));
 }
 
 export async function loadExtensions(): Promise<LoadedExtension[]> {
@@ -291,11 +292,8 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
     if (!ref.publisher || !ref.name || !ref.version) continue;
     try {
       const extDir = ref.path ? normalizePath(ref.path) : join(extensionsDir, extensionDirName(ref));
-      const manifest: ExtensionManifest = JSON.parse(
-        await readFileText(join(extDir, 'package.json')),
-      );
+      const manifest: ExtensionManifest = JSON.parse(await readFileText(join(extDir, "package.json")));
 
-      let iconThemeFss: string | undefined;
       let iconThemeFssPath: string | undefined;
       let iconThemeBasePath: string | undefined;
       let vscodeIconThemePath: string | undefined;
@@ -305,7 +303,7 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
       if (manifest.contributes?.iconTheme?.path) {
         const themePath = join(extDir, manifest.contributes.iconTheme.path);
         // Detect if it's FSS or JSON based on extension
-        if (themePath.endsWith('.json')) {
+        if (themePath.endsWith(".json")) {
           vscodeIconThemePath = themePath;
           vscodeIconThemeId = manifest.contributes.iconTheme.id;
         } else {
@@ -332,7 +330,10 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         for (const grammarContrib of manifest.contributes.grammars) {
           try {
             const grammarPath = join(extDir, grammarContrib.path);
-            grammarRefs.push({ contribution: grammarContrib, path: grammarPath });
+            grammarRefs.push({
+              contribution: grammarContrib,
+              path: grammarPath,
+            });
           } catch {
             // Skip grammars that fail to load
           }
@@ -345,12 +346,17 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         try {
           const iconPath = join(extDir, manifest.icon);
           const buf = await readFileBuffer(iconPath);
-          const ext = manifest.icon.split('.').pop()?.toLowerCase() ?? '';
-          const mime = ext === 'svg' ? 'image/svg+xml'
-            : ext === 'png' ? 'image/png'
-            : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
-            : ext === 'webp' ? 'image/webp'
-            : 'application/octet-stream';
+          const ext = manifest.icon.split(".").pop()?.toLowerCase() ?? "";
+          const mime =
+            ext === "svg"
+              ? "image/svg+xml"
+              : ext === "png"
+                ? "image/png"
+                : ext === "jpg" || ext === "jpeg"
+                  ? "image/jpeg"
+                  : ext === "webp"
+                    ? "image/webp"
+                    : "application/octet-stream";
           iconUrl = URL.createObjectURL(new Blob([buf], { type: mime }));
         } catch {
           // Icon file not found — ignore
@@ -378,7 +384,7 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
       const fsProviders = manifest.contributes?.fsProviders;
 
       // Load shell integration contributions
-      let shellIntegrations: LoadedExtension['shellIntegrations'];
+      let shellIntegrations: LoadedExtension["shellIntegrations"];
       if (manifest.contributes?.shellIntegrations?.length) {
         shellIntegrations = [];
         for (const si of manifest.contributes.shellIntegrations) {
@@ -407,7 +413,6 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
         manifest,
         dirPath: extDir,
         iconUrl,
-        iconThemeFss,
         iconThemeFssPath,
         iconThemeBasePath,
         vscodeIconThemePath,
@@ -430,16 +435,16 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
   return loaded;
 }
 
-export async function searchMarketplace(query = '', page = 1): Promise<{ extensions: MarketplaceExtension[]; total: number }> {
-  const params = new URLSearchParams({ page: String(page), pageSize: '30' });
-  if (query) params.set('q', query);
+export async function searchMarketplace(query = "", page = 1): Promise<{ extensions: MarketplaceExtension[]; total: number }> {
+  const params = new URLSearchParams({ page: String(page), pageSize: "30" });
+  if (query) params.set("q", query);
   const res = await fetch(`${MARKETPLACE_URL}/api/extensions/search?${params}`);
-  if (!res.ok) throw new Error('Failed to search marketplace');
+  if (!res.ok) throw new Error("Failed to search marketplace");
   return res.json();
 }
 
 async function inflateRaw(compressed: Uint8Array): Promise<Uint8Array> {
-  const ds = new DecompressionStream('deflate-raw');
+  const ds = new DecompressionStream("deflate-raw");
   const writer = ds.writable.getWriter();
   const reader = ds.readable.getReader();
   writer.write(compressed as unknown as ArrayBuffer);
@@ -469,9 +474,12 @@ async function extractZipFiles(buffer: ArrayBuffer): Promise<Map<string, Uint8Ar
 
   let eocdOffset = -1;
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
-    if (read4(i) === 0x06054b50) { eocdOffset = i; break; }
+    if (read4(i) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
   }
-  if (eocdOffset === -1) throw new Error('Invalid ZIP archive');
+  if (eocdOffset === -1) throw new Error("Invalid ZIP archive");
 
   const cdOffset = read4(eocdOffset + 16);
   const cdEntries = read2(eocdOffset + 10);
@@ -490,7 +498,7 @@ async function extractZipFiles(buffer: ArrayBuffer): Promise<Map<string, Uint8Ar
     const fileName = new TextDecoder().decode(bytes.slice(pos + 46, pos + 46 + nameLen));
     pos += 46 + nameLen + extraLen + commentLen;
 
-    if (fileName.endsWith('/')) continue;
+    if (fileName.endsWith("/")) continue;
 
     const localNameLen = read2(localHeaderOffset + 26);
     const localExtraLen = read2(localHeaderOffset + 28);
@@ -518,13 +526,13 @@ async function extractZipFiles(buffer: ArrayBuffer): Promise<Map<string, Uint8Ar
  */
 function getZipStripPrefix(fileNames: Iterable<string>): string {
   const names = [...fileNames];
-  if (names.length === 0) return '';
+  if (names.length === 0) return "";
   const first = names[0];
-  const slash = first.indexOf('/');
-  if (slash === -1) return '';
+  const slash = first.indexOf("/");
+  if (slash === -1) return "";
   const prefix = first.slice(0, slash + 1);
   const allSamePrefix = names.every((n) => n.startsWith(prefix));
-  return allSamePrefix ? prefix : '';
+  return allSamePrefix ? prefix : "";
 }
 
 export async function installExtension(publisherUsername: string, extName: string, version: string): Promise<void> {
@@ -536,7 +544,11 @@ export async function installExtension(publisherUsername: string, extName: strin
   const files = await extractZipFiles(buffer);
 
   const extensionsDir = await getExtensionsDir();
-  const ref: ExtensionRef = { publisher: publisherUsername, name: extName, version };
+  const ref: ExtensionRef = {
+    publisher: publisherUsername,
+    name: extName,
+    version,
+  };
   const extDir = join(extensionsDir, extensionDirName(ref));
 
   const stripPrefix = getZipStripPrefix(files.keys());
@@ -548,7 +560,7 @@ export async function installExtension(publisherUsername: string, extName: strin
   }
 
   const refs = await readRefs();
-  const filtered = refs.filter(r => !(r.publisher === publisherUsername && r.name === extName));
+  const filtered = refs.filter((r) => !(r.publisher === publisherUsername && r.name === extName));
   filtered.push(ref);
   await writeRefs(filtered);
 }
@@ -566,9 +578,12 @@ async function extractVsixFiles(buffer: ArrayBuffer): Promise<Map<string, Uint8A
 
   let eocdOffset = -1;
   for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
-    if (read4(i) === 0x06054b50) { eocdOffset = i; break; }
+    if (read4(i) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
   }
-  if (eocdOffset === -1) throw new Error('Invalid VSIX archive');
+  if (eocdOffset === -1) throw new Error("Invalid VSIX archive");
 
   const cdOffset = read4(eocdOffset + 16);
   const cdEntries = read2(eocdOffset + 10);
@@ -587,10 +602,10 @@ async function extractVsixFiles(buffer: ArrayBuffer): Promise<Map<string, Uint8A
     const fileName = new TextDecoder().decode(bytes.slice(pos + 46, pos + 46 + nameLen));
     pos += 46 + nameLen + extraLen + commentLen;
 
-    if (fileName.endsWith('/')) continue;
+    if (fileName.endsWith("/")) continue;
 
     // VSIX files have extension content under 'extension/' prefix
-    if (!fileName.startsWith('extension/')) continue;
+    if (!fileName.startsWith("extension/")) continue;
 
     const localNameLen = read2(localHeaderOffset + 26);
     const localExtraLen = read2(localHeaderOffset + 28);
@@ -607,7 +622,7 @@ async function extractVsixFiles(buffer: ArrayBuffer): Promise<Map<string, Uint8A
     }
 
     // Remove 'extension/' prefix
-    const normalizedName = fileName.slice('extension/'.length);
+    const normalizedName = fileName.slice("extension/".length);
     if (normalizedName) {
       files.set(normalizedName, content);
     }
@@ -620,43 +635,49 @@ export async function installVSCodeExtension(publisherName: string, extName: str
   // Add timeout for CORS-blocked requests that hang
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000);
-  
+
   let res: Response;
   try {
     res = await fetch(downloadUrl, { signal: controller.signal });
   } catch (err) {
     clearTimeout(timeoutId);
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error('Download timed out - VS Code marketplace may be blocked by CORS');
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Download timed out - VS Code marketplace may be blocked by CORS");
     }
-    const msg = err instanceof Error ? err.message : (err && typeof err === 'object' && 'message' in err) ? String((err as { message: unknown }).message) : String(err);
+    const msg =
+      err instanceof Error ? err.message : err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : String(err);
     throw new Error(`Download failed: ${msg}`);
   }
   clearTimeout(timeoutId);
-  
+
   if (!res.ok) throw new Error(`Download failed: ${res.status} ${res.statusText}`);
 
   const buffer = await res.arrayBuffer();
   const files = await extractVsixFiles(buffer);
 
   // Find package.json to get version
-  const packageJsonBytes = files.get('package.json');
-  if (!packageJsonBytes) throw new Error('Invalid VSIX: no package.json');
+  const packageJsonBytes = files.get("package.json");
+  if (!packageJsonBytes) throw new Error("Invalid VSIX: no package.json");
   const packageJson = JSON.parse(new TextDecoder().decode(packageJsonBytes));
-  const version = packageJson.version || '0.0.0';
+  const version = packageJson.version || "0.0.0";
 
   const extensionsDir = await getExtensionsDir();
-  const ref: ExtensionRef = { publisher: publisherName, name: extName, version };
+  const ref: ExtensionRef = {
+    publisher: publisherName,
+    name: extName,
+    version,
+  };
   const extDir = join(extensionsDir, extensionDirName(ref));
 
   for (const [fileName, content] of files) {
     const filePath = join(extDir, fileName);
     // Write as text for known text files, binary otherwise
-    const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
-    const isTextFile = ['json', 'txt', 'md', 'js', 'ts', 'css', 'html', 'xml', 'yaml', 'yml', 'tmLanguage', 'tmGrammar'].includes(ext)
-      || fileName.endsWith('.tmLanguage.json')
-      || fileName.endsWith('.language-configuration.json');
-    
+    const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+    const isTextFile =
+      ["json", "txt", "md", "js", "ts", "css", "html", "xml", "yaml", "yml", "tmLanguage", "tmGrammar"].includes(ext) ||
+      fileName.endsWith(".tmLanguage.json") ||
+      fileName.endsWith(".language-configuration.json");
+
     if (isTextFile) {
       await bridge.fs.writeFile(filePath, new TextDecoder().decode(content));
     } else {
@@ -665,7 +686,7 @@ export async function installVSCodeExtension(publisherName: string, extName: str
   }
 
   const refs = await readRefs();
-  const filtered = refs.filter(r => !(r.publisher === publisherName && r.name === extName));
+  const filtered = refs.filter((r) => !(r.publisher === publisherName && r.name === extName));
   filtered.push(ref);
   await writeRefs(filtered);
 }
@@ -680,10 +701,10 @@ async function deleteFilesystemPathRecursive(absPath: string): Promise<void> {
     const unsub = bridge.delete.onProgress((payload: DeleteProgressEvent) => {
       if (payload.deleteId !== deleteId) return;
       const ev = payload.event;
-      if (ev.kind === 'done') {
+      if (ev.kind === "done") {
         unsub();
         resolve();
-      } else if (ev.kind === 'error') {
+      } else if (ev.kind === "error") {
         unsub();
         reject(new Error(ev.message));
       }
@@ -706,7 +727,7 @@ export async function uninstallExtension(publisherUsername: string, extName: str
 // ── Settings ────────────────────────────────────────────────────────
 
 export interface PersistedTab {
-  type: 'filelist';
+  type: "filelist";
   path: string;
 }
 
@@ -731,7 +752,7 @@ export interface FaradaySettings {
   pathAliases?: Record<string, string>;
   leftPanel?: PanelPersistedState;
   rightPanel?: PanelPersistedState;
-  activePanel?: 'left' | 'right';
+  activePanel?: "left" | "right";
 }
 
 // 0 disables the limit (allows editing any size file).
@@ -739,7 +760,7 @@ export const DEFAULT_EDITOR_FILE_SIZE_LIMIT = 0;
 
 async function getSettingsPath(): Promise<string> {
   const homePath = await bridge.utils.getHomePath();
-  return join(homePath, '.faraday', 'settings.json');
+  return join(homePath, ".faraday", "settings.json");
 }
 
 export async function readSettings(): Promise<FaradaySettings> {
@@ -770,10 +791,7 @@ export function colorThemeKey(ext: LoadedExtension, themeId: string): string {
   return `${ext.ref.publisher}.${ext.ref.name}:${themeId}`;
 }
 
-export function findColorTheme(
-  exts: LoadedExtension[],
-  key: string,
-): { ext: LoadedExtension; theme: LoadedColorTheme } | null {
+export function findColorTheme(exts: LoadedExtension[], key: string): { ext: LoadedExtension; theme: LoadedColorTheme } | null {
   for (const ext of exts) {
     if (!ext.colorThemes) continue;
     for (const theme of ext.colorThemes) {

@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useState, type RefObject } from "react";
 
 interface Size {
   width: number;

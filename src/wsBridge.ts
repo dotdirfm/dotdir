@@ -3,8 +3,18 @@
 /// Implements the same Bridge interface as tauriBridge.ts, using JSON-RPC 2.0
 /// over WebSocket. Binary frames are used for fs.read responses.
 /// Automatically reconnects on disconnection with exponential backoff.
-import type { Bridge, PtyLaunchInfo, CopyOptions, ConflictResolution, CopyProgressEvent, MoveOptions, MoveProgressEvent, DeleteProgressEvent, FspEntry } from './bridge';
-import type { FsRawEntry, FsChangeEvent, FsChangeType } from './types';
+import type {
+  Bridge,
+  PtyLaunchInfo,
+  CopyOptions,
+  ConflictResolution,
+  CopyProgressEvent,
+  MoveOptions,
+  MoveProgressEvent,
+  DeleteProgressEvent,
+  FspEntry,
+} from "./bridge";
+import type { FsRawEntry, FsChangeEvent, FsChangeType } from "./types";
 
 type Pending = {
   resolve: (value: unknown) => void;
@@ -40,7 +50,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
   }
 
   function handleMessage(event: MessageEvent) {
-    if (typeof event.data === 'string') {
+    if (typeof event.data === "string") {
       handleText(event.data);
     } else {
       handleBinary(event.data as ArrayBuffer);
@@ -49,24 +59,27 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
 
   function handleText(text: string): void {
     const msg = JSON.parse(text);
-    if (!('id' in msg)) {
-      if (msg.method === 'fs.change') {
+    if (!("id" in msg)) {
+      if (msg.method === "fs.change") {
         const event: FsChangeEvent = {
           watchId: msg.params.watchId as string,
           type: msg.params.type as FsChangeType,
           name: (msg.params.name as string) ?? null,
         };
         for (const cb of changeListeners) cb(event);
-      } else if (msg.method === 'pty.exit') {
+      } else if (msg.method === "pty.exit") {
         for (const cb of ptyExitListeners) cb(msg.params.ptyId);
-      } else if (msg.method === 'copy.progress') {
+      } else if (msg.method === "copy.progress") {
         const event: CopyProgressEvent = { copyId: msg.params.copyId, event: msg.params.event };
         for (const cb of copyProgressListeners) cb(event);
-      } else if (msg.method === 'move.progress') {
+      } else if (msg.method === "move.progress") {
         const event: MoveProgressEvent = { moveId: msg.params.moveId, event: msg.params.event };
         for (const cb of moveProgressListeners) cb(event);
-      } else if (msg.method === 'delete.progress') {
-        const event: DeleteProgressEvent = { deleteId: msg.params.deleteId, event: msg.params.event };
+      } else if (msg.method === "delete.progress") {
+        const event: DeleteProgressEvent = {
+          deleteId: msg.params.deleteId,
+          event: msg.params.event,
+        };
         for (const cb of deleteProgressListeners) cb(event);
       }
       return;
@@ -107,7 +120,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
 
   function rejectPending() {
     for (const { reject } of pending.values()) {
-      reject(new Error('WebSocket closed'));
+      reject(new Error("WebSocket closed"));
     }
     pending.clear();
   }
@@ -118,7 +131,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       const timeout = setTimeout(() => {
         ws.close();
       }, 5000);
-      rpc('ping', {})
+      rpc("ping", {})
         .then(() => clearTimeout(timeout))
         .catch(() => clearTimeout(timeout));
     }, 30000);
@@ -134,21 +147,29 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
   function connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(wsUrl);
-      socket.binaryType = 'arraybuffer';
+      socket.binaryType = "arraybuffer";
       let opened = false;
 
-      socket.addEventListener('open', () => {
-        opened = true;
-        ws = socket;
-        resolve();
-      }, { once: true });
+      socket.addEventListener(
+        "open",
+        () => {
+          opened = true;
+          ws = socket;
+          resolve();
+        },
+        { once: true },
+      );
 
-      socket.addEventListener('error', () => {
-        if (!opened) reject(new Error('WebSocket connection failed'));
-      }, { once: true });
+      socket.addEventListener(
+        "error",
+        () => {
+          if (!opened) reject(new Error("WebSocket connection failed"));
+        },
+        { once: true },
+      );
 
-      socket.addEventListener('message', handleMessage);
-      socket.addEventListener('close', () => {
+      socket.addEventListener("message", handleMessage);
+      socket.addEventListener("close", () => {
         if (!opened) return;
         stopHeartbeat();
         rejectPending();
@@ -176,15 +197,16 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
 
   function rpc(method: string, params: Record<string, unknown>): Promise<unknown> {
     return wsReady.then(
-      () => new Promise((resolve, reject) => {
-        if (ws.readyState !== WebSocket.OPEN) {
-          reject(new Error('WebSocket is not connected'));
-          return;
-        }
-        const id = nextId++;
-        pending.set(id, { resolve, reject });
-        ws.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
-      }),
+      () =>
+        new Promise((resolve, reject) => {
+          if (ws.readyState !== WebSocket.OPEN) {
+            reject(new Error("WebSocket is not connected"));
+            return;
+          }
+          const id = nextId++;
+          pending.set(id, { resolve, reject });
+          ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+        }),
     );
   }
 
@@ -195,20 +217,19 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
 
   return {
     fs: {
-      entries: (dirPath: string) => rpc('fs.entries', { path: dirPath }) as Promise<FsRawEntry[]>,
-      stat: (filePath: string) => rpc('fs.stat', { path: filePath }) as Promise<{ size: number; mtimeMs: number }>,
-      exists: (filePath: string) => rpc('fs.exists', { path: filePath }) as Promise<boolean>,
-      readFile: (filePath: string) => rpc('fs.readFile', { path: filePath }) as Promise<ArrayBuffer>,
-      open: (filePath: string) => rpc('fs.open', { path: filePath }) as Promise<number>,
-      read: (fd: number, offset: number, length: number) =>
-        rpc('fs.read', { handle: fd, offset, length }) as Promise<ArrayBuffer>,
-      close: (fd: number) => rpc('fs.close', { handle: fd }) as Promise<void>,
-      watch: (watchId: string, dirPath: string) => rpc('fs.watch', { watchId, path: dirPath }) as Promise<boolean>,
-      unwatch: (watchId: string) => rpc('fs.unwatch', { watchId }) as Promise<void>,
-      writeFile: (filePath: string, data: string) => rpc('fs.writeFile', { path: filePath, data }) as Promise<void>,
-      writeBinaryFile: (filePath: string, data: Uint8Array) => rpc('fs.writeBinary', { path: filePath, data: Array.from(data) }) as Promise<void>,
-      createDir: (dirPath: string) => rpc('fs.createDir', { path: dirPath }) as Promise<void>,
-      moveToTrash: (paths: string[]) => rpc('fs.moveToTrash', { paths }) as Promise<void>,
+      entries: (dirPath: string) => rpc("fs.entries", { path: dirPath }) as Promise<FsRawEntry[]>,
+      stat: (filePath: string) => rpc("fs.stat", { path: filePath }) as Promise<{ size: number; mtimeMs: number }>,
+      exists: (filePath: string) => rpc("fs.exists", { path: filePath }) as Promise<boolean>,
+      readFile: (filePath: string) => rpc("fs.readFile", { path: filePath }) as Promise<ArrayBuffer>,
+      open: (filePath: string) => rpc("fs.open", { path: filePath }) as Promise<number>,
+      read: (fd: number, offset: number, length: number) => rpc("fs.read", { handle: fd, offset, length }) as Promise<ArrayBuffer>,
+      close: (fd: number) => rpc("fs.close", { handle: fd }) as Promise<void>,
+      watch: (watchId: string, dirPath: string) => rpc("fs.watch", { watchId, path: dirPath }) as Promise<boolean>,
+      unwatch: (watchId: string) => rpc("fs.unwatch", { watchId }) as Promise<void>,
+      writeFile: (filePath: string, data: string) => rpc("fs.writeFile", { path: filePath, data }) as Promise<void>,
+      writeBinaryFile: (filePath: string, data: Uint8Array) => rpc("fs.writeBinary", { path: filePath, data: Array.from(data) }) as Promise<void>,
+      createDir: (dirPath: string) => rpc("fs.createDir", { path: dirPath }) as Promise<void>,
+      moveToTrash: (paths: string[]) => rpc("fs.moveToTrash", { paths }) as Promise<void>,
       onFsChange(callback: (event: FsChangeEvent) => void): () => void {
         changeListeners.add(callback);
         return () => {
@@ -218,115 +239,161 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
     },
     pty: {
       spawn: (cwd: string, shellPath: string, options?: { spawnArgs?: string[] }) =>
-        rpc('pty.spawn', {
+        rpc("pty.spawn", {
           cwd,
           shellPath,
           spawnArgs: options?.spawnArgs && options.spawnArgs.length > 0 ? options.spawnArgs : undefined,
         }) as Promise<PtyLaunchInfo>,
-      write: (ptyId: number, data: string) => rpc('pty.write', { ptyId, data }) as Promise<void>,
+      write: (ptyId: number, data: string) => rpc("pty.write", { ptyId, data }) as Promise<void>,
       resize: (ptyId: number, cols: number, rows: number) =>
-        rpc('pty.resize', {
+        rpc("pty.resize", {
           ptyId,
           cols: Math.max(2, Math.floor(cols)),
           rows: Math.max(1, Math.floor(rows)),
         }) as Promise<void>,
-      close: (ptyId: number) => rpc('pty.close', { ptyId }) as Promise<void>,
+      close: (ptyId: number) => rpc("pty.close", { ptyId }) as Promise<void>,
       setShellIntegrations: (_integrations: Record<string, { script: string; scriptArg: boolean }>) => Promise.resolve(),
       onData(callback: PtyDataCallback): () => void {
         ptyDataListeners.add(callback);
-        return () => { ptyDataListeners.delete(callback); };
+        return () => {
+          ptyDataListeners.delete(callback);
+        };
       },
       onExit(callback: PtyExitCallback): () => void {
         ptyExitListeners.add(callback);
-        return () => { ptyExitListeners.delete(callback); };
+        return () => {
+          ptyExitListeners.delete(callback);
+        };
       },
     },
     utils: {
-      getHomePath: () => rpc('utils.getHomePath', {}) as Promise<string>,
-      getEnv: () => rpc('utils.getEnv', {}) as Promise<Record<string, string>>,
+      getHomePath: () => rpc("utils.getHomePath", {}) as Promise<string>,
+      getEnv: () => rpc("utils.getEnv", {}) as Promise<Record<string, string>>,
     },
     copy: {
-      start: (sources: string[], destDir: string, options: CopyOptions) =>
-        rpc('copy.start', { sources, destDir, options }) as Promise<number>,
-      cancel: (copyId: number) => rpc('copy.cancel', { copyId }) as Promise<void>,
+      start: (sources: string[], destDir: string, options: CopyOptions) => rpc("copy.start", { sources, destDir, options }) as Promise<number>,
+      cancel: (copyId: number) => rpc("copy.cancel", { copyId }) as Promise<void>,
       resolveConflict: (copyId: number, resolution: ConflictResolution) => {
         let rustRes: unknown;
         switch (resolution.type) {
-          case 'overwrite': rustRes = 'overwrite'; break;
-          case 'skip': rustRes = 'skip'; break;
-          case 'rename': rustRes = { rename: resolution.newName }; break;
-          case 'overwriteAll': rustRes = 'overwriteAll'; break;
-          case 'skipAll': rustRes = 'skipAll'; break;
-          case 'cancel': rustRes = 'cancel'; break;
+          case "overwrite":
+            rustRes = "overwrite";
+            break;
+          case "skip":
+            rustRes = "skip";
+            break;
+          case "rename":
+            rustRes = { rename: resolution.newName };
+            break;
+          case "overwriteAll":
+            rustRes = "overwriteAll";
+            break;
+          case "skipAll":
+            rustRes = "skipAll";
+            break;
+          case "cancel":
+            rustRes = "cancel";
+            break;
         }
-        return rpc('copy.resolveConflict', { copyId, resolution: rustRes }) as Promise<void>;
+        return rpc("copy.resolveConflict", { copyId, resolution: rustRes }) as Promise<void>;
       },
       onProgress(callback: (event: CopyProgressEvent) => void): () => void {
         copyProgressListeners.add(callback);
-        return () => { copyProgressListeners.delete(callback); };
+        return () => {
+          copyProgressListeners.delete(callback);
+        };
       },
     },
     move: {
-      start: (sources: string[], destDir: string, options: MoveOptions) =>
-        rpc('move.start', { sources, destDir, options }) as Promise<number>,
-      cancel: (moveId: number) => rpc('move.cancel', { moveId }) as Promise<void>,
+      start: (sources: string[], destDir: string, options: MoveOptions) => rpc("move.start", { sources, destDir, options }) as Promise<number>,
+      cancel: (moveId: number) => rpc("move.cancel", { moveId }) as Promise<void>,
       resolveConflict: (moveId: number, resolution: ConflictResolution) => {
         let rustRes: unknown;
         switch (resolution.type) {
-          case 'overwrite': rustRes = 'overwrite'; break;
-          case 'skip': rustRes = 'skip'; break;
-          case 'rename': rustRes = { rename: resolution.newName }; break;
-          case 'overwriteAll': rustRes = 'overwriteAll'; break;
-          case 'skipAll': rustRes = 'skipAll'; break;
-          case 'cancel': rustRes = 'cancel'; break;
+          case "overwrite":
+            rustRes = "overwrite";
+            break;
+          case "skip":
+            rustRes = "skip";
+            break;
+          case "rename":
+            rustRes = { rename: resolution.newName };
+            break;
+          case "overwriteAll":
+            rustRes = "overwriteAll";
+            break;
+          case "skipAll":
+            rustRes = "skipAll";
+            break;
+          case "cancel":
+            rustRes = "cancel";
+            break;
         }
-        return rpc('move.resolveConflict', { moveId, resolution: rustRes }) as Promise<void>;
+        return rpc("move.resolveConflict", { moveId, resolution: rustRes }) as Promise<void>;
       },
       onProgress(callback: (event: MoveProgressEvent) => void): () => void {
         moveProgressListeners.add(callback);
-        return () => { moveProgressListeners.delete(callback); };
+        return () => {
+          moveProgressListeners.delete(callback);
+        };
       },
     },
     delete: {
-      start: (paths: string[]) => rpc('delete.start', { paths }) as Promise<number>,
-      cancel: (deleteId: number) => rpc('delete.cancel', { deleteId }) as Promise<void>,
+      start: (paths: string[]) => rpc("delete.start", { paths }) as Promise<number>,
+      cancel: (deleteId: number) => rpc("delete.cancel", { deleteId }) as Promise<void>,
       onProgress(callback: (event: DeleteProgressEvent) => void): () => void {
         deleteProgressListeners.add(callback);
-        return () => { deleteProgressListeners.delete(callback); };
+        return () => {
+          deleteProgressListeners.delete(callback);
+        };
       },
     },
     rename: {
-      rename: (source: string, newName: string) => rpc('fs.rename', { source, newName }) as Promise<void>,
+      rename: (source: string, newName: string) => rpc("fs.rename", { source, newName }) as Promise<void>,
     },
     theme: {
-      get: () => Promise.resolve(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+      get: () => Promise.resolve(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
       onChange(callback: (theme: string) => void): () => void {
-        const mq = window.matchMedia('(prefers-color-scheme: dark)');
-        const handler = (e: MediaQueryListEvent) => callback(e.matches ? 'dark' : 'light');
-        mq.addEventListener('change', handler);
-        return () => mq.removeEventListener('change', handler);
+        const mq = window.matchMedia("(prefers-color-scheme: dark)");
+        const handler = (e: MediaQueryListEvent) => callback(e.matches ? "dark" : "light");
+        mq.addEventListener("change", handler);
+        return () => mq.removeEventListener("change", handler);
       },
     },
     onReconnect(callback: () => void): () => void {
       reconnectCallbacks.add(callback);
-      return () => { reconnectCallbacks.delete(callback); };
+      return () => {
+        reconnectCallbacks.delete(callback);
+      };
     },
     fsProvider: {
-      load: (wasmPath: string) =>
-        rpc('fsp.load', { wasmPath }) as Promise<void>,
+      load: (wasmPath: string) => rpc("fsp.load", { wasmPath }) as Promise<void>,
       listEntries: async (wasmPath: string, containerPath: string, innerPath: string) => {
-        const raw = await rpc('fsp.listEntries', { wasmPath, containerPath, innerPath }) as Array<{
-          name: string; kind: string; size?: number; mtimeMs?: number;
+        const raw = (await rpc("fsp.listEntries", {
+          wasmPath,
+          containerPath,
+          innerPath,
+        })) as Array<{
+          name: string;
+          kind: string;
+          size?: number;
+          mtimeMs?: number;
         }>;
         return raw.map((e) => ({
           name: e.name,
-          kind: e.kind as FspEntry['kind'],
+          kind: e.kind as FspEntry["kind"],
           size: e.size,
           mtimeMs: e.mtimeMs,
         }));
       },
       readFileRange: async (wasmPath: string, containerPath: string, innerPath: string, offset: number, length: number) => {
-        const bytes = await rpc('fsp.readFileRange', { wasmPath, containerPath, innerPath, offset, length }) as number[];
+        const bytes = (await rpc("fsp.readFileRange", {
+          wasmPath,
+          containerPath,
+          innerPath,
+          offset,
+          length,
+        })) as number[];
         return new Uint8Array(bytes).buffer;
       },
     },

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import { focusContext } from './focusContext';
-import { languageRegistry } from './languageRegistry';
-import { SmartLabel } from './dialogHotkeys';
-import { INPUT_NO_ASSIST } from './inputNoAssist';
+import { useEffect, useRef, useState } from "react";
+import { focusContext } from "./focusContext";
+import { languageRegistry } from "./languageRegistry";
+import { SmartLabel } from "./dialogHotkeys";
+import { INPUT_NO_ASSIST } from "./inputNoAssist";
 
 export interface LanguageOption {
   id: string;
@@ -16,16 +16,11 @@ export interface OpenCreateFileDialogProps {
   onCancel: () => void;
 }
 
-export function OpenCreateFileDialog({
-  currentPath,
-  languages,
-  onConfirm,
-  onCancel,
-}: OpenCreateFileDialogProps) {
+export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCancel }: OpenCreateFileDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [filename, setFilename] = useState('');
-  const [langId, setLangId] = useState('plaintext');
+  const [filename, setFilename] = useState("");
+  const [langId, setLangId] = useState("plaintext");
   const [userTouchedLanguage, setUserTouchedLanguage] = useState(false);
 
   // Suggest language from filename when filename changes (only if user hasn't touched the dropdown)
@@ -39,13 +34,13 @@ export function OpenCreateFileDialog({
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (!dialog.open) dialog.showModal();
-    focusContext.push('modal');
+    focusContext.push("modal");
     inputRef.current?.focus();
     const handleClose = () => onCancel();
-    dialog.addEventListener('close', handleClose);
+    dialog.addEventListener("close", handleClose);
     return () => {
-      dialog.removeEventListener('close', handleClose);
-      focusContext.pop('modal');
+      dialog.removeEventListener("close", handleClose);
+      focusContext.pop("modal");
     };
   }, [onCancel]);
 
@@ -53,7 +48,7 @@ export function OpenCreateFileDialog({
     e.preventDefault();
     const name = filename.trim();
     if (!name) return;
-    const path = currentPath ? `${currentPath.replace(/\/?$/, '')}/${name}` : name;
+    const path = currentPath ? `${currentPath.replace(/\/?$/, "")}/${name}` : name;
     dialogRef.current?.close();
     onConfirm(path, name, langId);
   };
@@ -69,7 +64,9 @@ export function OpenCreateFileDialog({
       <form className="open-create-file-form" onSubmit={handleSubmit}>
         <div className="modal-dialog-body">
           <div className="open-create-file-field">
-            <label htmlFor="open-create-filename"><SmartLabel>Filename</SmartLabel></label>
+            <label htmlFor="open-create-filename">
+              <SmartLabel>Filename</SmartLabel>
+            </label>
             <input
               ref={inputRef}
               id="open-create-filename"
@@ -85,7 +82,9 @@ export function OpenCreateFileDialog({
             </span>
           </div>
           <div className="open-create-file-field">
-            <label htmlFor="open-create-language"><SmartLabel>Language</SmartLabel></label>
+            <label htmlFor="open-create-language">
+              <SmartLabel>Language</SmartLabel>
+            </label>
             <select
               id="open-create-language"
               value={langId}

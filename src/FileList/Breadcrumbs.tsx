@@ -1,5 +1,5 @@
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { getBreadcrumbSegments } from '../path';
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { getBreadcrumbSegments } from "../path";
 
 interface BreadcrumbsProps {
   currentPath: string;
@@ -83,20 +83,20 @@ export const Breadcrumbs = memo(function Breadcrumbs({ currentPath, onNavigate }
       updateOverflowState();
     });
     ro.observe(root);
-    root.addEventListener('scroll', onScroll, { passive: true });
+    root.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       ro.disconnect();
-      root.removeEventListener('scroll', onScroll);
+      root.removeEventListener("scroll", onScroll);
     };
   }, [scrollToEnd, updateOverflowState]);
 
   if (segments.length === 0) return null;
 
-  const separator = /^[A-Za-z]:[\\/]/.test(currentPath) || currentPath.includes('\\') ? '\\' : '/';
+  const separator = /^[A-Za-z]:[\\/]/.test(currentPath) || currentPath.includes("\\") ? "\\" : "/";
 
   return (
     <div
-      className={`breadcrumbs${canScrollLeft ? ' is-cropped-left' : ''}${canScrollRight ? ' is-cropped-right' : ''}`}
+      className={`breadcrumbs${canScrollLeft ? " is-cropped-left" : ""}${canScrollRight ? " is-cropped-right" : ""}`}
       ref={containerRef}
       onWheel={(e) => {
         const root = containerRef.current;
@@ -124,7 +124,11 @@ export const Breadcrumbs = memo(function Breadcrumbs({ currentPath, onNavigate }
             >
               <span className="breadcrumb-segment-text">{seg.label}</span>
             </div>
-            {!isLast && seg.label !== '/' && <span className="breadcrumb-separator" aria-hidden>{separator}</span>}
+            {!isLast && seg.label !== "/" && (
+              <span className="breadcrumb-separator" aria-hidden>
+                {separator}
+              </span>
+            )}
           </Fragment>
         );
       })}

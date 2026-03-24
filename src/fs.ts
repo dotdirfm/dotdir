@@ -1,6 +1,6 @@
-import type { EntryKind, FsChangeEvent, FsChangeType } from './types';
-import { bridge } from './bridge';
-import { join, normalizePath } from './path';
+import type { EntryKind, FsChangeEvent, FsChangeType } from "./types";
+import { bridge } from "./bridge";
+import { join, normalizePath } from "./path";
 
 export interface HandleMeta {
   size: number;
@@ -82,7 +82,17 @@ export class FileSystemObserver {
     if (!ok) {
       this.#watches.delete(watchId);
       this.#pathToId.delete(normalizedPath);
-      this.#callback([{ root: { path: normalizedPath }, changedHandle: null, relativePathComponents: [], type: 'errored' }], this);
+      this.#callback(
+        [
+          {
+            root: { path: normalizedPath },
+            changedHandle: null,
+            relativePathComponents: [],
+            type: "errored",
+          },
+        ],
+        this,
+      );
     }
   }
 
