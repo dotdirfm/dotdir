@@ -32,6 +32,7 @@ import { normalizeTerminalPath } from "./terminal/path";
 import { resolveShellProfiles } from "./terminal/shellProfiles";
 import { initUserKeybindings } from "./userKeybindings";
 import type { ThemeKind } from "fss-lang";
+import { OPPOSITE_PANEL, PANEL_SETTINGS_KEY, PANEL_SIDES } from "./panelSide";
 import { usePanel, findExistingParent } from "./usePanel";
 import { useFileOperations, type PanelSide } from "./useFileOperations";
 import { languageRegistry } from "./languageRegistry";
@@ -78,26 +79,10 @@ export function App() {
   const [panelsVisible, setPanelsVisible] = useState(true);
   const [promptActive, setPromptActive] = useState(true);
   const promptHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [viewerFile, setViewerFile] = useState<{
-    path: string;
-    name: string;
-    size: number;
-    panel: PanelSide;
-  } | null>(null);
-  const [editorFile, setEditorFile] = useState<{
-    path: string;
-    name: string;
-    size: number;
-    langId: string;
-  } | null>(null);
-  const [viewerExt, setViewerExt] = useState<{
-    dirPath: string;
-    entry: string;
-  } | null>(null);
-  const [editorExt, setEditorExt] = useState<{
-    dirPath: string;
-    entry: string;
-  } | null>(null);
+  const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
+  const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
+  const [viewerExt, setViewerExt] = useState<{ dirPath: string; entry: string } | null>(null);
+  const [editorExt, setEditorExt] = useState<{ dirPath: string; entry: string } | null>(null);
   const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
   const [showExtensions, setShowExtensions] = useState(false);
   const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
@@ -112,6 +97,8 @@ export function App() {
   const [rightActiveIndex, setRightActiveIndex] = useState(0);
   const leftSelectedNameRef = useRef<string | undefined>(undefined);
   const rightSelectedNameRef = useRef<string | undefined>(undefined);
+  const leftTabSelectionRef = useRef<Record<string, { selectedName?: string; topmostName?: string }>>({});
+  const rightTabSelectionRef = useRef<Record<string, { selectedName?: string; topmostName?: string }>>({});
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [themesReady, setThemesReady] = useState(false);
   const [resolvedProfiles, setResolvedProfiles] = useState<TerminalProfile[]>([]);
@@ -155,10 +142,26 @@ export function App() {
         return null;
       };
 
-      const restoredLeftTabs = restoreTabs(s.leftPanel);
-      const restoredRightTabs = restoreTabs(s.rightPanel);
-      const restoredLeftIndex = restoredLeftTabs ? Math.min(s.leftPanel?.activeTabIndex ?? 0, restoredLeftTabs.length - 1) : 0;
-      const restoredRightIndex = restoredRightTabs ? Math.min(s.rightPanel?.activeTabIndex ?? 0, restoredRightTabs.length - 1) : 0;
+      const leftPanelM = s.leftPanel;
+      const rightPanelM = s.rightPanel;
+
+      const seedTabSelections = (refs: typeof leftTabSelectionRef, restored: PanelTab[] | null, persisted: PanelPersistedState | undefined) => {
+        if (!restored?.length || !persisted?.tabs?.length) return;
+        for (let i = 0; i < restored.length && i < persisted.tabs.length; i++) {
+          const t = restored[i];
+          const p = persisted.tabs[i];
+          if (t.type === "filelist" && p.type === "filelist" && (p.selectedName != null || p.topmostName != null)) {
+            refs.current[t.id] = { selectedName: p.selectedName, topmostName: p.topmostName };
+          }
+        }
+      };
+
+      const restoredLeftTabs = restoreTabs(leftPanelM);
+      const restoredRightTabs = restoreTabs(rightPanelM);
+      if (restoredLeftTabs) seedTabSelections(leftTabSelectionRef, restoredLeftTabs, leftPanelM);
+      if (restoredRightTabs) seedTabSelections(rightTabSelectionRef, restoredRightTabs, rightPanelM);
+      const restoredLeftIndex = restoredLeftTabs ? Math.min(leftPanelM?.activeTabIndex ?? 0, restoredLeftTabs.length - 1) : 0;
+      const restoredRightIndex = restoredRightTabs ? Math.min(rightPanelM?.activeTabIndex ?? 0, restoredRightTabs.length - 1) : 0;
 
       // Update prev refs so tab sync effects don't fire redundantly
       prevLeftActiveIndexRef.current = restoredLeftIndex;
@@ -169,8 +172,8 @@ export function App() {
       setLeftActiveIndex(restoredLeftIndex);
       setRightActiveIndex(restoredRightIndex);
 
-      if (s.leftPanel) setInitialLeftPanel(s.leftPanel);
-      if (s.rightPanel) setInitialRightPanel(s.rightPanel);
+      if (leftPanelM) setInitialLeftPanel(leftPanelM);
+      if (rightPanelM) setInitialRightPanel(rightPanelM);
       if (s.activePanel) setInitialActivePanel(s.activePanel);
       setSettingsLoaded(true);
     });
@@ -433,13 +436,19 @@ export function App() {
     rightPanel?: PanelPersistedState;
   }>({});
 
-  const buildPersistedTabs = useCallback((tabs: PanelTab[], activeIdx: number): { tabs: PersistedTab[]; activeTabIndex: number } => {
+  const buildPersistedTabs = useCallback((side: PanelSide, tabs: PanelTab[], activeIdx: number): { tabs: PersistedTab[]; activeTabIndex: number } => {
+    const selectionRef = side === "left" ? leftTabSelectionRef : rightTabSelectionRef;
     const persisted: PersistedTab[] = [];
     let mappedIdx = 0;
     for (let i = 0; i < tabs.length; i++) {
-      if (tabs[i].type === "filelist") {
+      const tab = tabs[i];
+      if (tab.type === "filelist") {
         if (i === activeIdx) mappedIdx = persisted.length;
-        persisted.push({ type: "filelist", path: tabs[i].path });
+        const sel = selectionRef.current[tab.id];
+        const pt: PersistedTab = { type: "filelist", path: tab.path };
+        if (sel?.selectedName != null) pt.selectedName = sel.selectedName;
+        if (sel?.topmostName != null) pt.topmostName = sel.topmostName;
+        persisted.push(pt);
       }
     }
     return { tabs: persisted, activeTabIndex: mappedIdx };
@@ -450,16 +459,16 @@ export function App() {
       clearTimeout(panelStateSaveTimerRef.current);
       panelStateSaveTimerRef.current = null;
     }
-    // Always include fresh tab state in the flush
     const pending = pendingPanelStateRef.current;
-    if (!pending.leftPanel) {
-      pending.leftPanel = { currentPath: left.currentPath };
+    for (const side of PANEL_SIDES) {
+      const key = PANEL_SETTINGS_KEY[side];
+      if (!pending[key]) {
+        pending[key] = { currentPath: side === "left" ? left.currentPath : right.currentPath };
+      }
+      const tabsRef = side === "left" ? leftTabsRef : rightTabsRef;
+      const activeIdxRef = side === "left" ? leftActiveIndexRef : rightActiveIndexRef;
+      Object.assign(pending[key]!, buildPersistedTabs(side, tabsRef.current, activeIdxRef.current));
     }
-    if (!pending.rightPanel) {
-      pending.rightPanel = { currentPath: right.currentPath };
-    }
-    Object.assign(pending.leftPanel, buildPersistedTabs(leftTabsRef.current, leftActiveIndexRef.current));
-    Object.assign(pending.rightPanel, buildPersistedTabs(rightTabsRef.current, rightActiveIndexRef.current));
     updateSettings(pending);
     pendingPanelStateRef.current = {};
   }, [buildPersistedTabs, left.currentPath, right.currentPath]);
@@ -484,57 +493,33 @@ export function App() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [flushPanelState]);
 
-  const handleLeftStateChange = useCallback(
-    (selectedName: string | undefined, topmostName: string | undefined) => {
-      leftSelectedNameRef.current = selectedName;
-      pendingPanelStateRef.current.leftPanel = {
-        currentPath: left.currentPath,
-        ...buildPersistedTabs(leftTabsRef.current, leftActiveIndexRef.current),
-        selectedName,
-        topmostName,
-      };
-      savePanelStateDebounced();
-      // Update opposite panel's temp preview tab and switch to it
-      const tabs = rightTabsRef.current;
-      const tempIdx = tabs.findIndex((t) => t.type === "preview" && t.isTemp && t.sourcePanel === "left");
-      if (tempIdx < 0 || !selectedName) return;
-      const entry = left.entries.find((e) => e.name === selectedName);
-      if (!entry || entry.type !== "file") return;
-      const path = entry.path as string;
-      const name = entry.name;
-      const size = Number(entry.meta.size);
-      const current = tabs[tempIdx];
-      if (current.type === "preview" && current.path === path && current.name === name) return;
-      const next = [...tabs];
-      next[tempIdx] = {
-        id: current.id,
-        type: "preview" as const,
-        path,
-        name,
-        size,
-        isTemp: true,
-        sourcePanel: "left" as const,
-      };
-      setRightTabs(next);
-      setRightActiveIndex(tempIdx);
-    },
-    [left.currentPath, left.entries, savePanelStateDebounced],
-  );
+  const handlePanelStateChange = useCallback(
+    (side: PanelSide, selectedName: string | undefined, topmostName: string | undefined) => {
+      const selfTabsRef = side === "left" ? leftTabsRef : rightTabsRef;
+      const selfActiveIdxRef = side === "left" ? leftActiveIndexRef : rightActiveIndexRef;
+      const selfTabSelRef = side === "left" ? leftTabSelectionRef : rightTabSelectionRef;
+      const selfSelectedNameRef = side === "left" ? leftSelectedNameRef : rightSelectedNameRef;
+      const panel = side === "left" ? left : right;
 
-  const handleRightStateChange = useCallback(
-    (selectedName: string | undefined, topmostName: string | undefined) => {
-      rightSelectedNameRef.current = selectedName;
-      pendingPanelStateRef.current.rightPanel = {
-        currentPath: right.currentPath,
-        ...buildPersistedTabs(rightTabsRef.current, rightActiveIndexRef.current),
-        selectedName,
-        topmostName,
+      const tab = selfTabsRef.current[selfActiveIdxRef.current];
+      if (tab?.type === "filelist") {
+        selfTabSelRef.current[tab.id] = { selectedName, topmostName };
+      }
+      selfSelectedNameRef.current = selectedName;
+      pendingPanelStateRef.current[PANEL_SETTINGS_KEY[side]] = {
+        currentPath: panel.currentPath,
+        ...buildPersistedTabs(side, selfTabsRef.current, selfActiveIdxRef.current),
       };
       savePanelStateDebounced();
-      const tabs = leftTabsRef.current;
-      const tempIdx = tabs.findIndex((t) => t.type === "preview" && t.isTemp && t.sourcePanel === "right");
+
+      const opposite = OPPOSITE_PANEL[side];
+      const oppTabsRef = opposite === "left" ? leftTabsRef : rightTabsRef;
+      const setOppTabs = opposite === "right" ? setRightTabs : setLeftTabs;
+      const setOppActiveIndex = opposite === "right" ? setRightActiveIndex : setLeftActiveIndex;
+      const tabs = oppTabsRef.current;
+      const tempIdx = tabs.findIndex((t) => t.type === "preview" && t.isTemp && t.sourcePanel === side);
       if (tempIdx < 0 || !selectedName) return;
-      const entry = right.entries.find((e) => e.name === selectedName);
+      const entry = panel.entries.find((e) => e.name === selectedName);
       if (!entry || entry.type !== "file") return;
       const path = entry.path as string;
       const name = entry.name;
@@ -549,12 +534,12 @@ export function App() {
         name,
         size,
         isTemp: true,
-        sourcePanel: "right" as const,
+        sourcePanel: side,
       };
-      setLeftTabs(next);
-      setLeftActiveIndex(tempIdx);
+      setOppTabs(next);
+      setOppActiveIndex(tempIdx);
     },
-    [right.currentPath, right.entries, savePanelStateDebounced],
+    [left, right, buildPersistedTabs, savePanelStateDebounced],
   );
 
   // Save active panel when it changes (only after settings loaded to avoid overwriting on mount)
@@ -583,31 +568,23 @@ export function App() {
   const handleCloseTab = useCallback(
     async (side: PanelSide, index: number) => {
       const tabs = side === "left" ? leftTabs : rightTabs;
+      const activeIdx = side === "left" ? leftActiveIndex : rightActiveIndex;
+      const setTabs = side === "left" ? setLeftTabs : setRightTabs;
+      const setActiveIndex = side === "left" ? setLeftActiveIndex : setRightActiveIndex;
+      const panel = side === "left" ? left : right;
       if (tabs.length > 1) {
         const next = tabs.filter((_, i) => i !== index);
-        const activeIdx = side === "left" ? leftActiveIndex : rightActiveIndex;
-        const newIdx = activeIdx === index ? Math.min(activeIdx, next.length - 1) : activeIdx > index ? activeIdx - 1 : activeIdx;
-        if (side === "left") {
-          setLeftTabs(next);
-          setLeftActiveIndex(newIdx);
-        } else {
-          setRightTabs(next);
-          setRightActiveIndex(newIdx);
-        }
+        const newIdx =
+          activeIdx === index ? Math.min(activeIdx, next.length - 1) : activeIdx > index ? activeIdx - 1 : activeIdx;
+        setTabs(next);
+        setActiveIndex(newIdx);
         return;
       }
-      // Last tab: replace with new filelist tab at home
       const home = await bridge.utils.getHomePath();
       const newTab = createFilelistTab(home);
-      if (side === "left") {
-        setLeftTabs([newTab]);
-        setLeftActiveIndex(0);
-        left.navigateTo(home);
-      } else {
-        setRightTabs([newTab]);
-        setRightActiveIndex(0);
-        right.navigateTo(home);
-      }
+      setTabs([newTab]);
+      setActiveIndex(0);
+      panel.navigateTo(home);
     },
     [leftTabs, rightTabs, leftActiveIndex, rightActiveIndex, left, right],
   );
@@ -616,6 +593,8 @@ export function App() {
     (side: PanelSide, fromIndex: number, toIndex: number) => {
       const tabs = side === "left" ? leftTabs : rightTabs;
       const activeIdx = side === "left" ? leftActiveIndex : rightActiveIndex;
+      const setTabs = side === "left" ? setLeftTabs : setRightTabs;
+      const setActiveIndex = side === "left" ? setLeftActiveIndex : setRightActiveIndex;
       const next = [...tabs];
       const [moved] = next.splice(fromIndex, 1);
       next.splice(toIndex, 0, moved);
@@ -626,35 +605,21 @@ export function App() {
         if (fromIndex < activeIdx && toIndex >= activeIdx) newActiveIdx--;
         else if (fromIndex > activeIdx && toIndex <= activeIdx) newActiveIdx++;
       }
-      if (side === "left") {
-        setLeftTabs(next);
-        setLeftActiveIndex(newActiveIdx);
-      } else {
-        setRightTabs(next);
-        setRightActiveIndex(newActiveIdx);
-      }
+      setTabs(next);
+      setActiveIndex(newActiveIdx);
     },
     [leftTabs, rightTabs, leftActiveIndex, rightActiveIndex],
   );
 
   const handlePinTab = useCallback((side: PanelSide, index: number) => {
-    if (side === "left") {
-      setLeftTabs((prev) => {
-        const t = prev[index];
-        if (t?.type !== "preview" || !t.isTemp) return prev;
-        const next = [...prev];
-        next[index] = { ...t, isTemp: false };
-        return next;
-      });
-    } else {
-      setRightTabs((prev) => {
-        const t = prev[index];
-        if (t?.type !== "preview" || !t.isTemp) return prev;
-        const next = [...prev];
-        next[index] = { ...t, isTemp: false };
-        return next;
-      });
-    }
+    const setTabs = side === "left" ? setLeftTabs : setRightTabs;
+    setTabs((prev) => {
+      const t = prev[index];
+      if (t?.type !== "preview" || !t.isTemp) return prev;
+      const next = [...prev];
+      next[index] = { ...t, isTemp: false };
+      return next;
+    });
   }, []);
 
   const handleOpenCurrentFolderInOppositeCurrentTab = useCallback(() => {
@@ -1376,7 +1341,7 @@ export function App() {
     }
 
     // Clear initial state after first navigation to prevent cursor jumping
-    // when viewer is closed (was falling back to initial selectedName)
+    // when viewer is closed (was falling back to initial per-tab selection)
     setTimeout(() => {
       setInitialLeftPanel(undefined);
       setInitialRightPanel(undefined);
@@ -1653,7 +1618,7 @@ export function App() {
                   requestedActiveName={leftRequestedCursor}
                   requestedTopmostName={undefined}
                   initialPanelState={initialLeftPanel}
-                  onStateChange={handleLeftStateChange}
+                  onStateChange={(sel, top) => handlePanelStateChange("left", sel, top)}
                 />
                 <PanelGroup
                   side="right"
@@ -1685,7 +1650,7 @@ export function App() {
                   requestedActiveName={rightRequestedCursor}
                   requestedTopmostName={undefined}
                   initialPanelState={initialRightPanel}
-                  onStateChange={handleRightStateChange}
+                  onStateChange={(sel, top) => handlePanelStateChange("right", sel, top)}
                 />
               </div>
             </div>

@@ -26,7 +26,6 @@ use faraday_core::{
 use futures::{SinkExt, StreamExt};
 use log::debug;
 use rust_embed::RustEmbed;
-use serde::Serialize;
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -39,40 +38,11 @@ use std::{
 
 use tokio::sync::mpsc;
 
+use crate::FsEntry;
+
 #[derive(RustEmbed)]
 #[folder = "../dist"]
 struct EmbeddedAssets;
-
-// ── JSON entry for the wire ─────────────────────────────────────────
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct JsEntry {
-    name: String,
-    kind: String,
-    size: f64,
-    mtime_ms: f64,
-    mode: u32,
-    nlink: u32,
-    hidden: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    link_target: Option<String>,
-}
-
-impl From<ops::EntryInfo> for JsEntry {
-    fn from(e: ops::EntryInfo) -> Self {
-        Self {
-            name: e.name,
-            kind: e.kind.as_str().to_string(),
-            size: e.size,
-            mtime_ms: e.mtime_ms,
-            mode: e.mode,
-            nlink: e.nlink,
-            hidden: e.hidden,
-            link_target: e.link_target,
-        }
-    }
-}
 
 // ── Per-connection session ──────────────────────────────────────────
 
@@ -598,7 +568,7 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
         "fs.entries" => {
             let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
             debug!("[ws] fs.entries {:?}", path);
-            let entries: Vec<JsEntry> = ops::entries(path)?.into_iter().map(Into::into).collect();
+            let entries: Vec<FsEntry> = ops::entries(path)?.into_iter().map(FsEntry::from).collect();
             debug!("[ws] fs.entries {:?} → {} entries", path, entries.len());
             Ok(serde_json::to_value(entries).unwrap())
         }

@@ -299,6 +299,17 @@ export const FileList = memo(
       }, 150);
     }, [activeIndex, topmostIndex, displayEntries]);
 
+    // Flush selection when unmounting (e.g. tab switch) so debounced callback cannot drop it
+    useEffect(() => {
+      return () => {
+        clearTimeout(stateChangeTimerRef.current);
+        if (!onStateChangeRef.current) return;
+        const selectedName = displayEntriesRef.current[activeIndexRef.current]?.entry.name;
+        const topmostName = displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
+        onStateChangeRef.current(selectedName, topmostName);
+      };
+    }, []);
+
     const handleBreadcrumbNavigate = useCallback((path: string) => {
       void onNavigateRef.current(path);
     }, []);

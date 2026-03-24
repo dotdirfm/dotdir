@@ -1,6 +1,7 @@
 import type { FsNode } from "fss-lang";
+import { useMemo } from "react";
 import { FileList } from "./FileList";
-import { PanelTabs, type PanelTab } from "./FileList/PanelTabs";
+import { PanelTabs, filelistPersistedTabIndex, type PanelTab } from "./FileList/PanelTabs";
 import type { PanelPersistedState } from "./extensions";
 import { ViewerContainer } from "./ExtensionContainer";
 import { viewerRegistry } from "./viewerEditorRegistry";
@@ -79,6 +80,12 @@ export function PanelGroup({
 }: PanelGroupProps) {
   const activeTab = tabs[activeIndex];
 
+  const persistedFilelistIdx = useMemo(() => filelistPersistedTabIndex(tabs, activeIndex), [tabs, activeIndex]);
+  const initialTabPersisted =
+    persistedFilelistIdx >= 0 && initialPanelState?.tabs
+      ? initialPanelState.tabs[persistedFilelistIdx]
+      : undefined;
+
   return (
     <div className={`panel ${active ? "active" : ""}`} onClick={onActivatePanel}>
       {panel.navigating && <div className="panel-progress" />}
@@ -116,8 +123,8 @@ export function PanelGroup({
             editorFileSizeLimit={editorFileSizeLimit}
             active={active}
             resolver={panel.resolver}
-            requestedActiveName={requestedActiveName ?? initialPanelState?.selectedName}
-            requestedTopmostName={requestedTopmostName ?? initialPanelState?.topmostName}
+            requestedActiveName={requestedActiveName ?? initialTabPersisted?.selectedName}
+            requestedTopmostName={requestedTopmostName ?? initialTabPersisted?.topmostName}
             onStateChange={onStateChange}
           />
         ) : activeTab?.type === "preview" ? (

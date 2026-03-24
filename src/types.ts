@@ -19,7 +19,7 @@ export interface FsRawEntry {
   mode: number;
   nlink: number;
   hidden: boolean;
-  /** Populated only when kind === 'symlink'. */
+  /** Populated only when kind === 'symlink'. Omitted when not a symlink. */
   linkTarget?: string;
 }
 

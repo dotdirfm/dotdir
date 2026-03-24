@@ -13,6 +13,16 @@ export type PanelTab =
       sourcePanel?: "left" | "right";
     };
 
+/** Index in persisted `tabs[]` (filelist-only) for the tab at `activeIndex`, or -1 if not a filelist. */
+export function filelistPersistedTabIndex(tabs: PanelTab[], activeIndex: number): number {
+  let fl = 0;
+  for (let i = 0; i < tabs.length; i++) {
+    if (i === activeIndex) return tabs[i]?.type === "filelist" ? fl : -1;
+    if (tabs[i]?.type === "filelist") fl++;
+  }
+  return -1;
+}
+
 interface PanelTabsProps {
   tabs: PanelTab[];
   activeIndex: number;

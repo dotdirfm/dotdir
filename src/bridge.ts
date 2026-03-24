@@ -152,6 +152,26 @@ export interface Bridge {
     createDir?(dirPath: string): Promise<void>;
     /** Move files/folders to OS trash (batched for single trash sound). */
     moveToTrash(paths: string[]): Promise<void>;
+    copy: {
+      start(sources: string[], destDir: string, options: CopyOptions): Promise<number>;
+      cancel(copyId: number): Promise<void>;
+      resolveConflict(copyId: number, resolution: ConflictResolution): Promise<void>;
+      onProgress(callback: (event: CopyProgressEvent) => void): () => void;
+    };
+    move: {
+      start(sources: string[], destDir: string, options: MoveOptions): Promise<number>;
+      cancel(moveId: number): Promise<void>;
+      resolveConflict(moveId: number, resolution: ConflictResolution): Promise<void>;
+      onProgress(callback: (event: MoveProgressEvent) => void): () => void;
+    };
+    delete: {
+      start(paths: string[]): Promise<number>;
+      cancel(deleteId: number): Promise<void>;
+      onProgress(callback: (event: DeleteProgressEvent) => void): () => void;
+    };
+    rename: {
+      rename(source: string, newName: string): Promise<void>;
+    };
   };
   pty: {
     spawn(cwd: string, shellPath: string, options?: { spawnArgs?: string[] }): Promise<PtyLaunchInfo>;
@@ -167,26 +187,6 @@ export interface Bridge {
     getHomePath(): Promise<string>;
     /** Returns all process environment variables plus `__platform__` (e.g. "macos", "linux", "windows"). */
     getEnv(): Promise<Record<string, string>>;
-  };
-  copy: {
-    start(sources: string[], destDir: string, options: CopyOptions): Promise<number>;
-    cancel(copyId: number): Promise<void>;
-    resolveConflict(copyId: number, resolution: ConflictResolution): Promise<void>;
-    onProgress(callback: (event: CopyProgressEvent) => void): () => void;
-  };
-  move: {
-    start(sources: string[], destDir: string, options: MoveOptions): Promise<number>;
-    cancel(moveId: number): Promise<void>;
-    resolveConflict(moveId: number, resolution: ConflictResolution): Promise<void>;
-    onProgress(callback: (event: MoveProgressEvent) => void): () => void;
-  };
-  delete: {
-    start(paths: string[]): Promise<number>;
-    cancel(deleteId: number): Promise<void>;
-    onProgress(callback: (event: DeleteProgressEvent) => void): () => void;
-  };
-  rename: {
-    rename(source: string, newName: string): Promise<void>;
   };
   theme: {
     get(): Promise<string>;
@@ -204,8 +204,6 @@ export interface Bridge {
   };
 }
 
-// Live-binding: fs.ts and iconCache.ts import `bridge` and always get the current value.
-// eslint-disable-next-line import/no-mutable-exports
 export let bridge: Bridge;
 
 export async function initBridge(): Promise<void> {

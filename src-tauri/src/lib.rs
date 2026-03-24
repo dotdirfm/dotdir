@@ -30,6 +30,7 @@ pub mod serve;
 // ── Serializable types for Tauri IPC ─────────────────────────────────
 
 #[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct FsEntry {
     pub name: String,
     pub kind: String,
@@ -38,6 +39,7 @@ pub struct FsEntry {
     pub mode: u32,
     pub nlink: u32,
     pub hidden: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub link_target: Option<String>,
 }
 
@@ -57,6 +59,7 @@ impl From<EntryInfo> for FsEntry {
 }
 
 #[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct FsStat {
     pub size: f64,
     pub mtime_ms: f64,

@@ -20,17 +20,6 @@ import { normalizePath } from "./path";
 
 const ptyWriteEncoder = new TextEncoder();
 
-interface RustFsEntry {
-  name: string;
-  kind: string;
-  size: number;
-  mtime_ms: number;
-  mode: number;
-  nlink: number;
-  hidden: boolean;
-  link_target: string | null;
-}
-
 interface RustFsChangeEvent {
   watch_id: string;
   kind: string;
@@ -43,28 +32,13 @@ interface RustPtySpawnResult {
   shell: string;
 }
 
-function mapEntry(e: RustFsEntry): FsRawEntry {
-  return {
-    name: e.name,
-    kind: e.kind as FsRawEntry["kind"],
-    size: e.size,
-    mtimeMs: e.mtime_ms,
-    mode: e.mode,
-    nlink: e.nlink,
-    hidden: e.hidden,
-    linkTarget: e.link_target ?? undefined,
-  };
-}
-
 export const tauriBridge: Bridge = {
   fs: {
     async entries(dirPath: string): Promise<FsRawEntry[]> {
-      const raw = await invoke<RustFsEntry[]>("fs_entries", { dirPath });
-      return raw.map(mapEntry);
+      return await invoke<FsRawEntry[]>("fs_entries", { dirPath });
     },
     async stat(filePath: string): Promise<{ size: number; mtimeMs: number }> {
-      const raw = await invoke<{ size: number; mtime_ms: number }>("fs_stat", { filePath });
-      return { size: raw.size, mtimeMs: raw.mtime_ms };
+      return await invoke<{ size: number; mtimeMs: number }>("fs_stat", { filePath });
     },
     async exists(filePath: string): Promise<boolean> {
       return invoke<boolean>("fs_exists", { filePath });
@@ -125,6 +99,117 @@ export const tauriBridge: Bridge = {
           void unlistenPromise.then((fn) => fn());
         }
       };
+    },
+    copy: {
+      async start(sources: string[], destDir: string, options: CopyOptions): Promise<number> {
+        return invoke<number>("copy_start", { sources, destDir, options });
+      },
+      async cancel(copyId: number): Promise<void> {
+        return invoke<void>("copy_cancel", { copyId });
+      },
+      async resolveConflict(copyId: number, resolution: ConflictResolution): Promise<void> {
+        // Map TS discriminated union to Rust serde format
+        let rustRes: unknown;
+        switch (resolution.type) {
+          case "overwrite":
+            rustRes = "overwrite";
+            break;
+          case "skip":
+            rustRes = "skip";
+            break;
+          case "rename":
+            rustRes = { rename: resolution.newName };
+            break;
+          case "overwriteAll":
+            rustRes = "overwriteAll";
+            break;
+          case "skipAll":
+            rustRes = "skipAll";
+            break;
+          case "cancel":
+            rustRes = "cancel";
+            break;
+        }
+        return invoke<void>("copy_resolve_conflict", { copyId, resolution: rustRes });
+      },
+      onProgress(callback: (event: CopyProgressEvent) => void): () => void {
+        let unlisten: (() => void) | null = null;
+        listen<CopyProgressEvent>("copy:progress", (event) => {
+          callback(event.payload);
+        }).then((fn) => {
+          unlisten = fn;
+        });
+        return () => {
+          unlisten?.();
+        };
+      },
+    },
+    move: {
+      async start(sources: string[], destDir: string, options: MoveOptions): Promise<number> {
+        return invoke<number>("move_start", { sources, destDir, options });
+      },
+      async cancel(moveId: number): Promise<void> {
+        return invoke<void>("move_cancel", { moveId });
+      },
+      async resolveConflict(moveId: number, resolution: ConflictResolution): Promise<void> {
+        let rustRes: unknown;
+        switch (resolution.type) {
+          case "overwrite":
+            rustRes = "overwrite";
+            break;
+          case "skip":
+            rustRes = "skip";
+            break;
+          case "rename":
+            rustRes = { rename: resolution.newName };
+            break;
+          case "overwriteAll":
+            rustRes = "overwriteAll";
+            break;
+          case "skipAll":
+            rustRes = "skipAll";
+            break;
+          case "cancel":
+            rustRes = "cancel";
+            break;
+        }
+        return invoke<void>("move_resolve_conflict", { moveId, resolution: rustRes });
+      },
+      onProgress(callback: (event: MoveProgressEvent) => void): () => void {
+        let unlisten: (() => void) | null = null;
+        listen<MoveProgressEvent>("move:progress", (event) => {
+          callback(event.payload);
+        }).then((fn) => {
+          unlisten = fn;
+        });
+        return () => {
+          unlisten?.();
+        };
+      },
+    },
+    delete: {
+      async start(paths: string[]): Promise<number> {
+        return invoke<number>("delete_start", { paths });
+      },
+      async cancel(deleteId: number): Promise<void> {
+        return invoke<void>("delete_cancel", { deleteId });
+      },
+      onProgress(callback: (event: DeleteProgressEvent) => void): () => void {
+        let unlisten: (() => void) | null = null;
+        listen<DeleteProgressEvent>("delete:progress", (event) => {
+          callback(event.payload);
+        }).then((fn) => {
+          unlisten = fn;
+        });
+        return () => {
+          unlisten?.();
+        };
+      },
+    },
+    rename: {
+      async rename(source: string, newName: string): Promise<void> {
+        return invoke<void>("rename_item", { source, newName });
+      },
     },
   },
   pty: {
@@ -188,117 +273,6 @@ export const tauriBridge: Bridge = {
     },
     async getEnv(): Promise<Record<string, string>> {
       return invoke<Record<string, string>>("get_env");
-    },
-  },
-  copy: {
-    async start(sources: string[], destDir: string, options: CopyOptions): Promise<number> {
-      return invoke<number>("copy_start", { sources, destDir, options });
-    },
-    async cancel(copyId: number): Promise<void> {
-      return invoke<void>("copy_cancel", { copyId });
-    },
-    async resolveConflict(copyId: number, resolution: ConflictResolution): Promise<void> {
-      // Map TS discriminated union to Rust serde format
-      let rustRes: unknown;
-      switch (resolution.type) {
-        case "overwrite":
-          rustRes = "overwrite";
-          break;
-        case "skip":
-          rustRes = "skip";
-          break;
-        case "rename":
-          rustRes = { rename: resolution.newName };
-          break;
-        case "overwriteAll":
-          rustRes = "overwriteAll";
-          break;
-        case "skipAll":
-          rustRes = "skipAll";
-          break;
-        case "cancel":
-          rustRes = "cancel";
-          break;
-      }
-      return invoke<void>("copy_resolve_conflict", { copyId, resolution: rustRes });
-    },
-    onProgress(callback: (event: CopyProgressEvent) => void): () => void {
-      let unlisten: (() => void) | null = null;
-      listen<CopyProgressEvent>("copy:progress", (event) => {
-        callback(event.payload);
-      }).then((fn) => {
-        unlisten = fn;
-      });
-      return () => {
-        unlisten?.();
-      };
-    },
-  },
-  move: {
-    async start(sources: string[], destDir: string, options: MoveOptions): Promise<number> {
-      return invoke<number>("move_start", { sources, destDir, options });
-    },
-    async cancel(moveId: number): Promise<void> {
-      return invoke<void>("move_cancel", { moveId });
-    },
-    async resolveConflict(moveId: number, resolution: ConflictResolution): Promise<void> {
-      let rustRes: unknown;
-      switch (resolution.type) {
-        case "overwrite":
-          rustRes = "overwrite";
-          break;
-        case "skip":
-          rustRes = "skip";
-          break;
-        case "rename":
-          rustRes = { rename: resolution.newName };
-          break;
-        case "overwriteAll":
-          rustRes = "overwriteAll";
-          break;
-        case "skipAll":
-          rustRes = "skipAll";
-          break;
-        case "cancel":
-          rustRes = "cancel";
-          break;
-      }
-      return invoke<void>("move_resolve_conflict", { moveId, resolution: rustRes });
-    },
-    onProgress(callback: (event: MoveProgressEvent) => void): () => void {
-      let unlisten: (() => void) | null = null;
-      listen<MoveProgressEvent>("move:progress", (event) => {
-        callback(event.payload);
-      }).then((fn) => {
-        unlisten = fn;
-      });
-      return () => {
-        unlisten?.();
-      };
-    },
-  },
-  delete: {
-    async start(paths: string[]): Promise<number> {
-      return invoke<number>("delete_start", { paths });
-    },
-    async cancel(deleteId: number): Promise<void> {
-      return invoke<void>("delete_cancel", { deleteId });
-    },
-    onProgress(callback: (event: DeleteProgressEvent) => void): () => void {
-      let unlisten: (() => void) | null = null;
-      listen<DeleteProgressEvent>("delete:progress", (event) => {
-        callback(event.payload);
-      }).then((fn) => {
-        unlisten = fn;
-      });
-      return () => {
-        unlisten?.();
-      };
-    },
-  },
-  rename: {
-    async rename(source: string, newName: string): Promise<void> {
-      return invoke<void>("rename_item", { source, newName });
     },
   },
   theme: {

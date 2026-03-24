@@ -696,9 +696,9 @@ export async function installVSCodeExtension(publisherName: string, extName: str
  */
 async function deleteFilesystemPathRecursive(absPath: string): Promise<void> {
   if (!(await bridge.fs.exists(absPath))) return;
-  const deleteId = await bridge.delete.start([absPath]);
+  const deleteId = await bridge.fs.delete.start([absPath]);
   await new Promise<void>((resolve, reject) => {
-    const unsub = bridge.delete.onProgress((payload: DeleteProgressEvent) => {
+    const unsub = bridge.fs.delete.onProgress((payload: DeleteProgressEvent) => {
       if (payload.deleteId !== deleteId) return;
       const ev = payload.event;
       if (ev.kind === "done") {
@@ -729,14 +729,16 @@ export async function uninstallExtension(publisherUsername: string, extName: str
 export interface PersistedTab {
   type: "filelist";
   path: string;
+  /** Cursor / active row for this tab. */
+  selectedName?: string;
+  /** Scroll position (top visible row) for this tab. */
+  topmostName?: string;
 }
 
 export interface PanelPersistedState {
   currentPath: string;
   tabs?: PersistedTab[];
   activeTabIndex?: number;
-  selectedName?: string;
-  topmostName?: string;
 }
 
 export interface FaradaySettings {

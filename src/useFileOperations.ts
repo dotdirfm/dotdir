@@ -6,16 +6,16 @@
  * goes through the shared DialogContext (useDialog()).
  */
 
+import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef } from "react";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "./bridge";
 import { bridge } from "./bridge";
-import type { CopyOptions, CopyProgressEvent, ConflictResolution, MoveOptions, MoveProgressEvent, DeleteProgressEvent } from "./bridge";
-import { isContainerPath, parseContainerPath } from "./containerPath";
-import { fsProviderRegistry } from "./viewerEditorRegistry";
 import { loadFsProvider } from "./browserFsProvider";
-import { basename, dirname, join } from "./path";
-import type { FsProviderExtensionApi } from "./extensionApi";
+import { isContainerPath, parseContainerPath } from "./containerPath";
 import { useDialog } from "./dialogContext";
+import type { FsProviderExtensionApi } from "./extensionApi";
+import { basename, dirname, join } from "./path";
+import { fsProviderRegistry } from "./viewerEditorRegistry";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,9 +48,9 @@ async function collectContainerFiles(
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useFileOperations(
-  activePanelRef: MutableRefObject<PanelSide>,
-  leftRef: MutableRefObject<PanelHandle>,
-  rightRef: MutableRefObject<PanelHandle>,
+  activePanelRef: RefObject<PanelSide>,
+  leftRef: RefObject<PanelHandle>,
+  rightRef: RefObject<PanelHandle>,
   setSelectionKey: Dispatch<SetStateAction<number>>,
 ) {
   const { showDialog, closeDialog, updateDialog } = useDialog();
@@ -159,7 +159,7 @@ export function useFileOperations(
                     },
                     onCancelDeletion: () => {
                       if (activeDeleteIdRef.current !== null) {
-                        void bridge.delete.cancel(activeDeleteIdRef.current);
+                        void bridge.fs.delete.cancel(activeDeleteIdRef.current);
                       }
                       activeDeleteIdRef.current = null;
                       deleteProgressSpecRef.current = null;
@@ -175,7 +175,7 @@ export function useFileOperations(
                 };
                 deleteProgressSpecRef.current = progressSpec;
                 showDialog(progressSpec);
-                const deleteId = await bridge.delete.start(sourcePaths);
+                const deleteId = await bridge.fs.delete.start(sourcePaths);
                 if (deleteProgressSpecRef.current !== null) {
                   activeDeleteIdRef.current = deleteId;
                 }
@@ -300,7 +300,7 @@ export function useFileOperations(
                 },
                 onCancelCopy: () => {
                   if (activeCopyIdRef.current !== null) {
-                    bridge.copy.cancel(activeCopyIdRef.current);
+                    bridge.fs.copy.cancel(activeCopyIdRef.current);
                   }
                   activeCopyIdRef.current = null;
                   copyProgressSpecRef.current = null;
@@ -321,7 +321,7 @@ export function useFileOperations(
             copyProgressSpecRef.current = progressSpec;
             showDialog(progressSpec);
 
-            const copyId = await bridge.copy.start(sourcePaths, newDestDir, options);
+            const copyId = await bridge.fs.copy.start(sourcePaths, newDestDir, options);
             if (copyProgressSpecRef.current !== null) {
               activeCopyIdRef.current = copyId;
             }
@@ -346,7 +346,7 @@ export function useFileOperations(
   // ── Copy progress listener ────────────────────────────────────────────────
 
   useEffect(() => {
-    const unsub = bridge.copy.onProgress((payload: CopyProgressEvent) => {
+    const unsub = bridge.fs.copy.onProgress((payload: CopyProgressEvent) => {
       if (activeCopyIdRef.current === null) {
         if (copyProgressSpecRef.current !== null) {
           activeCopyIdRef.current = payload.copyId;
@@ -383,7 +383,7 @@ export function useFileOperations(
             destSize: event.destSize,
             destMtimeMs: event.destMtimeMs,
             onResolve: (resolution: ConflictResolution) => {
-              bridge.copy.resolveConflict(activeCopyIdRef.current!, resolution);
+              bridge.fs.copy.resolveConflict(activeCopyIdRef.current!, resolution);
               if (copyProgressSpecRef.current) showDialog(copyProgressSpecRef.current);
             },
           });
@@ -436,7 +436,7 @@ export function useFileOperations(
                 },
                 onCancelMove: () => {
                   if (activeMoveIdRef.current !== null) {
-                    bridge.move.cancel(activeMoveIdRef.current);
+                    bridge.fs.move.cancel(activeMoveIdRef.current);
                   }
                   activeMoveIdRef.current = null;
                   moveProgressSpecRef.current = null;
@@ -457,7 +457,7 @@ export function useFileOperations(
             moveProgressSpecRef.current = progressSpec;
             showDialog(progressSpec);
 
-            const moveId = await bridge.move.start(sourcePaths, newDestDir, options);
+            const moveId = await bridge.fs.move.start(sourcePaths, newDestDir, options);
             if (moveProgressSpecRef.current !== null) {
               activeMoveIdRef.current = moveId;
             }
@@ -482,7 +482,7 @@ export function useFileOperations(
   // ── Move progress listener ────────────────────────────────────────────────
 
   useEffect(() => {
-    const unsub = bridge.move.onProgress((payload: MoveProgressEvent) => {
+    const unsub = bridge.fs.move.onProgress((payload: MoveProgressEvent) => {
       if (activeMoveIdRef.current === null) {
         if (moveProgressSpecRef.current !== null) {
           activeMoveIdRef.current = payload.moveId;
@@ -519,7 +519,7 @@ export function useFileOperations(
             destSize: event.destSize,
             destMtimeMs: event.destMtimeMs,
             onResolve: (resolution: ConflictResolution) => {
-              bridge.move.resolveConflict(activeMoveIdRef.current!, resolution);
+              bridge.fs.move.resolveConflict(activeMoveIdRef.current!, resolution);
               if (moveProgressSpecRef.current) showDialog(moveProgressSpecRef.current);
             },
           });
@@ -553,7 +553,7 @@ export function useFileOperations(
   // ── Delete progress listener ──────────────────────────────────────────────
 
   useEffect(() => {
-    const unsub = bridge.delete.onProgress((payload: DeleteProgressEvent) => {
+    const unsub = bridge.fs.delete.onProgress((payload: DeleteProgressEvent) => {
       if (activeDeleteIdRef.current === null) {
         if (deleteProgressSpecRef.current !== null) {
           activeDeleteIdRef.current = payload.deleteId;
@@ -608,7 +608,7 @@ export function useFileOperations(
         currentName,
         onConfirm: async (newName: string) => {
           try {
-            await bridge.rename.rename(sourcePath, newName);
+            await bridge.fs.rename.rename(sourcePath, newName);
             refresh();
           } catch (e) {
             showDialog({
