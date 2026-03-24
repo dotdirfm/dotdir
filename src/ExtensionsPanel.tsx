@@ -22,6 +22,7 @@ import {
   getVSCodeDownloadUrl,
   getVSCodeIconUrl,
 } from './vscodeMarketplace';
+import { INPUT_NO_ASSIST } from './inputNoAssist';
 
 /** Extract a message from Tauri invoke errors (plain {errno,message} objects) or Error instances. */
 function errMsg(err: unknown): string {
@@ -235,6 +236,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
             value={query}
             onChange={(e) => handleSearchInput(e.target.value)}
             autoFocus
+            {...INPUT_NO_ASSIST}
           />
         </div>
       )}

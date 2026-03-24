@@ -429,7 +429,11 @@ export function CommandLine({
     if (!visible) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest?.(".terminal-container")) return;
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest?.(".terminal-container")) return;
+      // Let native <dialog> modals (Make Folder, etc.) receive typing — not the prompt.
+      if (target.closest?.("dialog")) return;
       const ctrl = e.ctrlKey || e.metaKey;
       if (!ctrl && !e.altKey && !e.metaKey && e.key.length === 1) {
         e.preventDefault();

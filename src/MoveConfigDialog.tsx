@@ -3,6 +3,7 @@ import { focusContext } from './focusContext';
 import { useDialogButtonNav } from './useDialogButtonNav';
 import type { ConflictPolicy, MoveOptions } from './bridge';
 import { SmartLabel } from './dialogHotkeys';
+import { INPUT_NO_ASSIST } from './inputNoAssist';
 
 export interface MoveConfigDialogProps {
   itemCount: number;
@@ -47,8 +48,7 @@ export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: M
               type="text"
               value={destValue}
               onChange={(e) => setDestValue(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
+              {...INPUT_NO_ASSIST}
             />
           </div>
 

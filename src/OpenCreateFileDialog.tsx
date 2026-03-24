@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { focusContext } from './focusContext';
 import { languageRegistry } from './languageRegistry';
 import { SmartLabel } from './dialogHotkeys';
+import { INPUT_NO_ASSIST } from './inputNoAssist';
 
 export interface LanguageOption {
   id: string;
@@ -76,8 +77,8 @@ export function OpenCreateFileDialog({
               value={filename}
               onChange={(e) => setFilename(e.target.value)}
               placeholder="e.g. script.js"
-              autoComplete="off"
               aria-describedby="open-create-file-hint"
+              {...INPUT_NO_ASSIST}
             />
             <span id="open-create-file-hint" className="open-create-file-hint">
               File will be created in the current panel directory if it does not exist.

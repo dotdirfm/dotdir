@@ -10,7 +10,7 @@ import { HotkeyProvider } from './dialogHotkeys';
 import { ModalDialog } from './ModalDialog';
 import { OpenCreateFileDialog } from './OpenCreateFileDialog';
 import { DeleteProgressDialog } from './DeleteProgressDialog';
-import { MakeFolderDialog } from './MakeFolderDialog';
+import { MakeFolderDialog, type MakeFolderResult } from './MakeFolderDialog';
 import { CopyConfigDialog } from './CopyConfigDialog';
 import { CopyProgressDialog } from './CopyProgressDialog';
 import { ConflictDialog } from './ConflictDialog';
@@ -54,7 +54,7 @@ export type DialogSpec =
   | {
       type: 'makeFolder';
       currentPath: string;
-      onConfirm: (folderName: string) => void;
+      onConfirm: (result: MakeFolderResult) => void;
       onCancel: () => void;
     }
   | {
@@ -227,8 +227,8 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
       return (
         <MakeFolderDialog
           currentPath={dialog.currentPath}
-          onConfirm={(name: string) => {
-            dialog.onConfirm(name);
+          onConfirm={(result: MakeFolderResult) => {
+            dialog.onConfirm(result);
             ctx!.closeDialog();
           }}
           onCancel={() => {
@@ -454,6 +454,10 @@ The source and destination file sizes and modification times are shown above to 
   makeFolder: `# New folder
 
 Enter a name for the new folder. The folder will be created in the active panel's current directory.
+
+With **Process multiple names** checked, separate names with semicolons (\`;\`); multiple folders are created and the list stays in the current directory.
+
+With it unchecked, a single folder is created and the panel navigates into it.
 
 Intermediate directories are not created automatically — the parent directory must already exist.
 `,

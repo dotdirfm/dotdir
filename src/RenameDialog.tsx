@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { focusContext } from './focusContext';
 import { SmartLabel } from './dialogHotkeys';
+import { INPUT_NO_ASSIST } from './inputNoAssist';
 
 export interface RenameDialogProps {
   currentName: string;
@@ -63,7 +64,7 @@ export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogP
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              autoComplete="off"
+              {...INPUT_NO_ASSIST}
             />
           </div>
         </div>

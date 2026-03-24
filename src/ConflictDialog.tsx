@@ -3,6 +3,7 @@ import { focusContext } from './focusContext';
 import { useDialogButtonNav } from './useDialogButtonNav';
 import type { ConflictResolution } from './bridge';
 import { SmartLabel } from './dialogHotkeys';
+import { INPUT_NO_ASSIST } from './inputNoAssist';
 
 export interface ConflictDialogProps {
   src: string;
@@ -71,6 +72,7 @@ export function ConflictDialog({
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
+              {...INPUT_NO_ASSIST}
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && newName.trim()) {

@@ -1,7 +1,5 @@
 /* ── Dialog hotkey highlight ──────────────────────────────────────── */
 .hotkey-char {
-  /* color: var(--accent); */
-  color: var(--fg-muted);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -138,6 +136,20 @@
 }
 .make-folder-field input:focus {
   outline: 2px solid var(--border-active);
+}
+
+.make-folder-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.make-folder-checkbox input {
+  margin: 0;
 }
 
 .modal-dialog-buttons button[type="submit"]:disabled {

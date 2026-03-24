@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { focusContext } from './focusContext';
 import { SmartLabel } from './dialogHotkeys';
+import { INPUT_NO_ASSIST } from './inputNoAssist';
+
+export type MakeFolderResult =
+  | { mode: 'single'; name: string }
+  | { mode: 'multiple'; names: string[] };
 
 export interface MakeFolderDialogProps {
   currentPath: string;
-  onConfirm: (folderName: string) => void;
+  onConfirm: (result: MakeFolderResult) => void;
   onCancel: () => void;
 }
 
@@ -16,6 +21,7 @@ export function MakeFolderDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [folderName, setFolderName] = useState('');
+  const [processMultiple, setProcessMultiple] = useState(false);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -33,11 +39,27 @@ export function MakeFolderDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const name = folderName.trim();
-    if (!name) return;
+    const raw = folderName.trim();
+    if (!raw) return;
+
+    if (processMultiple) {
+      const names = raw
+        .split(';')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      if (names.length === 0) return;
+      dialogRef.current?.close();
+      onConfirm({ mode: 'multiple', names });
+      return;
+    }
+
     dialogRef.current?.close();
-    onConfirm(name);
+    onConfirm({ mode: 'single', name: raw });
   };
+
+  const canSubmit = processMultiple
+    ? folderName.split(';').some((s) => s.trim().length > 0)
+    : folderName.trim().length > 0;
 
   const handleCancel = () => {
     dialogRef.current?.close();
@@ -50,23 +72,33 @@ export function MakeFolderDialog({
       <form className="make-folder-form" onSubmit={handleSubmit}>
         <div className="modal-dialog-body">
           <div className="make-folder-field">
-            <label htmlFor="make-folder-name"><SmartLabel>Folder name</SmartLabel></label>
+            <label htmlFor="make-folder-name">
+              <SmartLabel>{processMultiple ? 'Folder names' : 'Folder name'}</SmartLabel>
+            </label>
             <input
               ref={inputRef}
               id="make-folder-name"
               type="text"
               value={folderName}
               onChange={(e) => setFolderName(e.target.value)}
-              placeholder="e.g. my-folder"
-              autoComplete="off"
+              placeholder={processMultiple ? 'e.g. a; b; c' : 'e.g. my-folder'}
+              {...INPUT_NO_ASSIST}
             />
           </div>
+          <label className="make-folder-checkbox">
+            <input
+              type="checkbox"
+              checked={processMultiple}
+              onChange={(e) => setProcessMultiple(e.target.checked)}
+            />
+            <span><SmartLabel>Process multiple names</SmartLabel></span>
+          </label>
         </div>
         <div className="modal-dialog-buttons">
           <button type="button" onClick={handleCancel}>
             <SmartLabel>Cancel</SmartLabel>
           </button>
-          <button type="submit" disabled={!folderName.trim()}>
+          <button type="submit" disabled={!canSubmit}>
             <SmartLabel>OK</SmartLabel>
           </button>
         </div>

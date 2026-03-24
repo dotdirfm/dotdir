@@ -8,8 +8,8 @@
   display: flex;
   align-items: center;
   background: #11131a;
-  padding: 0 8px;
-  height: 26px;
+  padding: 0 4px;
+  height: 23px;
   min-height: 0;
   flex-shrink: 0;
   font-family: Menlo, Monaco, "Courier New", monospace;
@@ -18,8 +18,7 @@
 }
 
 .command-line.hidden {
-  visibility: hidden;
-  pointer-events: none;
+  display: none;
 }
 
 .command-line-prompt {
@@ -29,7 +28,8 @@
   text-overflow: ellipsis;
   max-width: 40%;
   flex-shrink: 0;
-  margin-right: 4px;
+  margin-right: 8px;
+  font-weight: 600;
 }
 
 .command-line-input {
@@ -47,7 +47,7 @@
   display: inline-block;
   width: 0;
   overflow: visible;
-  height: 1em;
+  height: 15px;
   position: relative;
   vertical-align: text-bottom;
   pointer-events: none;
@@ -56,9 +56,9 @@
 .command-line-cursor::after {
   content: '';
   position: absolute;
-  left: -1px;
+  left: 0.5px;
   top: 0;
-  width: 2px;
+  width: 1px;
   height: 100%;
   background-color: #f5f7ff;
 }

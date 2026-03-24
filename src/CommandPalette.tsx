@@ -1,6 +1,7 @@
 import { Command } from 'cmdk';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from './commands';
+import { INPUT_NO_ASSIST } from './inputNoAssist';
 import { focusContext } from './focusContext';
 
 interface CommandPaletteProps {
@@ -124,6 +125,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           value={search}
           onValueChange={setSearch}
           placeholder="Type a command or search..."
+          {...INPUT_NO_ASSIST}
         />
         <Command.List>
           <Command.Empty>No results found.</Command.Empty>

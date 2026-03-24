@@ -3,6 +3,7 @@ import { focusContext } from './focusContext';
 import { useDialogButtonNav } from './useDialogButtonNav';
 import type { ConflictPolicy, CopyOptions, SymlinkMode } from './bridge';
 import { SmartLabel } from './dialogHotkeys';
+import { INPUT_NO_ASSIST } from './inputNoAssist';
 
 export interface CopyConfigDialogProps {
   itemCount: number;
@@ -61,8 +62,7 @@ export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: C
               type="text"
               value={destValue}
               onChange={(e) => setDestValue(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
+              {...INPUT_NO_ASSIST}
             />
           </div>
 

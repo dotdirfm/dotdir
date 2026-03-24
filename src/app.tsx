@@ -936,9 +936,19 @@ export function App() {
         showDialog({
           type: 'makeFolder',
           currentPath,
-          onConfirm: async (folderName: string) => {
-            const fullPath = currentPath ? `${currentPath.replace(/\/?$/, '')}/${folderName}` : folderName;
-            if (bridge.fs.createDir) await bridge.fs.createDir(fullPath);
+          onConfirm: async (result) => {
+            const join = (name: string) =>
+              currentPath ? `${currentPath.replace(/\/?$/, '')}/${name}` : name;
+            if (result.mode === 'single') {
+              const fullPath = join(result.name);
+              if (bridge.fs.createDir) await bridge.fs.createDir(fullPath);
+              panel.navigateTo(fullPath);
+              return;
+            }
+            for (const name of result.names) {
+              const fullPath = join(name);
+              if (bridge.fs.createDir) await bridge.fs.createDir(fullPath);
+            }
             panel.navigateTo(currentPath);
           },
           onCancel: () => {},

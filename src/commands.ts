@@ -262,6 +262,86 @@ class CommandRegistry {
     return navigator.platform.toUpperCase().includes('MAC');
   }
 
+  /**
+   * Map physical key position (`KeyboardEvent.code`) to our normalized key id.
+   * Layout-independent so shortcuts work with non-Latin / non-QWERTY layouts.
+   */
+  private physicalCodeToKeyPart(code: string): string | null {
+    if (code.startsWith('Key') && code.length === 4) {
+      return code[3]!.toLowerCase();
+    }
+    if (code.startsWith('Digit')) {
+      return code.slice(5);
+    }
+    const numpadDigit = /^Numpad(\d)$/.exec(code);
+    if (numpadDigit) return numpadDigit[1]!;
+
+    const fn = /^F(\d{1,2})$/.exec(code);
+    if (fn) return `f${fn[1]}`;
+
+    const map: Record<string, string> = {
+      Space: 'space',
+      Enter: 'enter',
+      NumpadEnter: 'enter',
+      Tab: 'tab',
+      Escape: 'escape',
+      Backspace: 'backspace',
+      Delete: 'delete',
+      Insert: 'insert',
+      ArrowUp: 'up',
+      ArrowDown: 'down',
+      ArrowLeft: 'left',
+      ArrowRight: 'right',
+      Home: 'home',
+      End: 'end',
+      PageUp: 'pageup',
+      PageDown: 'pagedown',
+      Minus: '-',
+      Equal: '=',
+      BracketLeft: '[',
+      BracketRight: ']',
+      Backslash: '\\',
+      Semicolon: ';',
+      Quote: "'",
+      Comma: ',',
+      Period: '.',
+      Slash: '/',
+      Backquote: '`',
+      IntlBackslash: '\\',
+    };
+    if (map[code]) return map[code];
+
+    return null;
+  }
+
+  /**
+   * Fallback when `code` is missing (e.g. synthetic events) or unmapped: use `key` (layout-dependent).
+   */
+  private keyStringToKeyPart(key: string): string | null {
+    if (!key) return null;
+    if (['Control', 'Alt', 'Shift', 'Meta'].includes(key)) return null;
+
+    if (key.length === 1) {
+      const k = key.toLowerCase();
+      // Latin letters / digits / ASCII punctuation — keep as-is
+      return k;
+    }
+
+    let k = key.toLowerCase();
+    if (k === ' ') k = 'space';
+    else if (k === 'arrowup') k = 'up';
+    else if (k === 'arrowdown') k = 'down';
+    else if (k === 'arrowleft') k = 'left';
+    else if (k === 'arrowright') k = 'right';
+    else if (k === 'escape') k = 'escape';
+    else if (k === 'enter') k = 'enter';
+    else if (k === 'backspace') k = 'backspace';
+    else if (k === 'delete') k = 'delete';
+    else if (k === 'tab') k = 'tab';
+
+    return k;
+  }
+
   private eventToKeyCombo(e: KeyboardEvent): string | null {
     if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return null;
 
@@ -270,19 +350,11 @@ class CommandRegistry {
     if (e.altKey) parts.push('alt');
     if (e.shiftKey) parts.push('shift');
 
-    let key = e.key.toLowerCase();
-    if (key === ' ') key = 'space';
-    else if (key === 'arrowup') key = 'up';
-    else if (key === 'arrowdown') key = 'down';
-    else if (key === 'arrowleft') key = 'left';
-    else if (key === 'arrowright') key = 'right';
-    else if (key === 'escape') key = 'escape';
-    else if (key === 'enter') key = 'enter';
-    else if (key === 'backspace') key = 'backspace';
-    else if (key === 'delete') key = 'delete';
-    else if (key === 'tab') key = 'tab';
+    const keyPart =
+      (e.code && this.physicalCodeToKeyPart(e.code)) ?? this.keyStringToKeyPart(e.key);
+    if (!keyPart) return null;
 
-    parts.push(key);
+    parts.push(keyPart);
     return parts.join('+');
   }
 
