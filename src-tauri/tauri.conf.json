@@ -18,12 +18,18 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; frame-src 'self' vfs: blob: data:; connect-src 'self' https://faraday-marketplace.troubleshooters.dev https://marketplace.visualstudio.com https://*.gallerycdn.vsassets.io https://*.vo.msecnd.net blob: data:; img-src 'self' data: blob: https://faraday-marketplace.troubleshooters.dev https://*.gallerycdn.vsassets.io; media-src 'self' blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' vfs: blob: 'unsafe-inline' 'unsafe-eval'"
+      "csp": "default-src 'self'; frame-src 'self' vfs: blob: data:; connect-src 'self' https://mkt.frdy.pro https://marketplace.visualstudio.com https://*.gallerycdn.vsassets.io https://*.vo.msecnd.net blob: data:; img-src 'self' data: blob: https://mkt.frdy.pro https://*.gallerycdn.vsassets.io; media-src 'self' blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' vfs: blob: 'unsafe-inline' 'unsafe-eval'"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
   }
 }

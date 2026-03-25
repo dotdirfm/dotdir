@@ -2,7 +2,7 @@ import { bridge, type CwdEscapeMode, type DeleteProgressEvent } from "./bridge";
 import { readFileBuffer, readFileText } from "./fs";
 import { dirname, join, normalizePath } from "./path";
 
-export const MARKETPLACE_URL = "https://faraday-marketplace.troubleshooters.dev";
+export const MARKETPLACE_URL = "https://mkt.frdy.pro";
 
 // FSS-based icon theme (Faraday format)
 export interface ExtensionIconThemeFss {

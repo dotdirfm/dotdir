@@ -18,6 +18,7 @@ import { ExtensionsPanel } from "./ExtensionsPanel";
 import { PanelGroup } from "./PanelGroup";
 import { CommandPalette, useCommandPalette } from "./CommandPalette";
 import { commandRegistry } from "./commands";
+import { registerAppBuiltInKeybindings, registerExtensionKeybindings } from "./registerKeybindings";
 import { focusContext } from "./focusContext";
 import { readFileText } from "./fs";
 import { setExtensionLayers } from "./fss";
@@ -813,13 +814,6 @@ export function App() {
         { category: "View" },
       ),
     );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.toggleHiddenFiles",
-        key: "ctrl+.",
-        mac: "cmd+.",
-      }),
-    );
 
     disposables.push(
       commandRegistry.registerCommand(
@@ -837,24 +831,10 @@ export function App() {
         { category: "View" },
       ),
     );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.togglePanels",
-        key: "ctrl+o",
-        mac: "cmd+o",
-        when: "!terminalCommandRunning",
-      }),
-    );
 
     disposables.push(
       commandRegistry.registerCommand("faraday.showExtensions", "Show Extensions", () => setShowExtensions(true), {
         category: "View",
-      }),
-    );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.showExtensions",
-        key: "f11",
       }),
     );
 
@@ -862,13 +842,6 @@ export function App() {
     disposables.push(
       commandRegistry.registerCommand("faraday.switchPanel", "Switch Panel", () => setActivePanel((s) => (s === "left" ? "right" : "left")), {
         category: "Navigation",
-        when: "focusPanel && !dialogOpen",
-      }),
-    );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.switchPanel",
-        key: "tab",
         when: "focusPanel && !dialogOpen",
       }),
     );
@@ -898,13 +871,6 @@ export function App() {
         { category: "Navigation", when: "focusPanel" },
       ),
     );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.cancelNavigation",
-        key: "escape",
-        when: "focusPanel",
-      }),
-    );
 
     disposables.push(
       commandRegistry.registerCommand(
@@ -929,13 +895,6 @@ export function App() {
         { category: "Navigation", when: "focusPanel" },
       ),
     );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.goToParent",
-        key: "alt+pageup",
-        when: "focusPanel",
-      }),
-    );
 
     disposables.push(
       commandRegistry.registerCommand(
@@ -949,25 +908,10 @@ export function App() {
         { category: "Navigation", when: "focusPanel" },
       ),
     );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.goHome",
-        key: "ctrl+home",
-        mac: "cmd+home",
-      }),
-    );
 
     disposables.push(
       commandRegistry.registerCommand("faraday.newTab", "New Tab", () => handleNewTab(activePanelRef.current), {
         category: "File",
-        when: "focusPanel",
-      }),
-    );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.newTab",
-        key: "ctrl+t",
-        mac: "cmd+t",
         when: "focusPanel",
       }),
     );
@@ -984,26 +928,10 @@ export function App() {
         { category: "File", when: "focusPanel" },
       ),
     );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.closeTab",
-        key: "ctrl+w",
-        mac: "cmd+w",
-        when: "focusPanel",
-      }),
-    );
 
     disposables.push(
       commandRegistry.registerCommand("faraday.previewInOppositePanel", "Show Preview in Opposite Panel", () => handlePreviewInOppositePanel(), {
         category: "File",
-        when: "focusPanel && listItemIsFile",
-      }),
-    );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.previewInOppositePanel",
-        key: "ctrl+shift+o",
-        mac: "cmd+shift+o",
         when: "focusPanel && listItemIsFile",
       }),
     );
@@ -1056,14 +984,6 @@ export function App() {
         { category: "File", when: "focusPanel" },
       ),
     );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.refresh",
-        key: "ctrl+r",
-        mac: "cmd+r",
-        when: "focusPanel",
-      }),
-    );
 
     disposables.push(
       commandRegistry.registerCommand(
@@ -1092,13 +1012,6 @@ export function App() {
         },
         { category: "File", when: "focusPanel" },
       ),
-    );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.openCreateFile",
-        key: "shift+f4",
-        when: "focusPanel",
-      }),
     );
 
     disposables.push(
@@ -1131,31 +1044,10 @@ export function App() {
         { category: "File", when: "focusPanel" },
       ),
     );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.makeFolder",
-        key: "f7",
-        when: "focusPanel",
-      }),
-    );
 
     // Command palette
     disposables.push(
       commandRegistry.registerCommand("faraday.showCommandPalette", "Show All Commands", () => commandPalette.setOpen((o) => !o), { category: "View" }),
-    );
-
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.showCommandPalette",
-        key: "cmd+shift+p",
-      }),
-    );
-
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.showCommandPalette",
-        key: "cmd+p",
-      }),
     );
 
     // Close viewer/editor commands
@@ -1165,24 +1057,10 @@ export function App() {
         when: "focusViewer",
       }),
     );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.closeViewer",
-        key: "escape",
-        when: "focusViewer",
-      }),
-    );
 
     disposables.push(
       commandRegistry.registerCommand("faraday.closeEditor", "Close Editor", () => setEditorFile(null), {
         category: "View",
-        when: "focusEditor",
-      }),
-    );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.closeEditor",
-        key: "escape",
         when: "focusEditor",
       }),
     );
@@ -1202,19 +1080,9 @@ export function App() {
         { category: "Application" },
       ),
     );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.exit",
-        key: "f10",
-      }),
-    );
-    disposables.push(
-      commandRegistry.registerKeybinding({
-        command: "faraday.exit",
-        key: "cmd+q",
-        mac: "cmd+q",
-      }),
-    );
+
+    // Register built-in shortcuts (moved to `registerKeybindings.ts`).
+    disposables.push(...registerAppBuiltInKeybindings(commandRegistry));
 
     return () => {
       for (const dispose of disposables) dispose();
@@ -1454,19 +1322,8 @@ export function App() {
             extensionContributionDisposersRef.current.push(disposeCmd);
           }
         }
-        if (ext.keybindings) {
-          for (const kb of ext.keybindings) {
-            const disposeKb = commandRegistry.registerKeybinding(
-              {
-                command: kb.command,
-                key: kb.key,
-                mac: kb.mac,
-                when: kb.when,
-              },
-              "extension",
-            );
-            extensionContributionDisposersRef.current.push(disposeKb);
-          }
+        if (ext.keybindings?.length) {
+          extensionContributionDisposersRef.current.push(...registerExtensionKeybindings(commandRegistry, ext.keybindings));
         }
       }
     };

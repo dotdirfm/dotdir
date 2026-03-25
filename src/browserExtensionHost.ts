@@ -1,4 +1,5 @@
 import { commandRegistry } from "./commands";
+import { registerExtensionKeybinding } from "./registerKeybindings";
 import { join, normalizePath } from "./path";
 import { vfsUrl } from "./vfs";
 import type { LoadedExtension } from "./extensions";
@@ -152,7 +153,7 @@ export class BrowserExtensionHost {
         return { dispose: disposeFn };
       },
       registerKeybinding: (binding: BrowserExtensionKeybinding): BrowserDisposable => {
-        const disposeFn = commandRegistry.registerKeybinding({ command: binding.command, key: binding.key, mac: binding.mac, when: binding.when }, "extension");
+        const disposeFn = registerExtensionKeybinding(commandRegistry, { command: binding.command, key: binding.key, mac: binding.mac, when: binding.when });
         return { dispose: disposeFn };
       },
     },

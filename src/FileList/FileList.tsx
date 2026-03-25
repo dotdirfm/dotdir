@@ -3,6 +3,7 @@ import type { LayeredResolver } from "fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { actionQueue } from "../actionQueue";
 import { commandRegistry } from "../commands";
+import { registerFileListKeybindings } from "../registerKeybindings";
 import { viewerRegistry, editorRegistry } from "../viewerEditorRegistry";
 import { resolveEntryStyle } from "../fss";
 import type { ResolvedEntryStyle } from "../types";
@@ -446,13 +447,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.cursorUp",
-          key: "up",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -465,13 +459,6 @@ export const FileList = memo(
             }),
           options,
         ),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.cursorDown",
-          key: "down",
-          when: whenFocusPanel,
-        }),
       );
 
       disposables.push(
@@ -486,13 +473,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.cursorLeft",
-          key: "left",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -505,13 +485,6 @@ export const FileList = memo(
             }),
           options,
         ),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.cursorRight",
-          key: "right",
-          when: whenFocusPanel,
-        }),
       );
 
       disposables.push(
@@ -526,13 +499,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.cursorHome",
-          key: "home",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -545,13 +511,6 @@ export const FileList = memo(
             }),
           options,
         ),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.cursorEnd",
-          key: "end",
-          when: whenFocusPanel,
-        }),
       );
 
       disposables.push(
@@ -566,13 +525,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.cursorPageUp",
-          key: "pageup",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -585,13 +537,6 @@ export const FileList = memo(
             }),
           options,
         ),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.cursorPageDown",
-          key: "pagedown",
-          when: whenFocusPanel,
-        }),
       );
 
       // Selection commands (Shift+Arrow)
@@ -609,13 +554,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.selectUp",
-          key: "shift+up",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -632,13 +570,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.selectDown",
-          key: "shift+down",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -652,13 +583,6 @@ export const FileList = memo(
             }),
           options,
         ),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.selectLeft",
-          key: "shift+left",
-          when: whenFocusPanel,
-        }),
       );
 
       disposables.push(
@@ -674,13 +598,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.selectRight",
-          key: "shift+right",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -694,13 +611,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.selectHome",
-          key: "shift+home",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -713,13 +623,6 @@ export const FileList = memo(
             }),
           options,
         ),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.selectEnd",
-          key: "shift+end",
-          when: whenFocusPanel,
-        }),
       );
 
       disposables.push(
@@ -735,13 +638,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.selectPageUp",
-          key: "shift+pageup",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -755,13 +651,6 @@ export const FileList = memo(
             }),
           options,
         ),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.selectPageDown",
-          key: "shift+pagedown",
-          when: whenFocusPanel,
-        }),
       );
 
       disposables.push(
@@ -782,13 +671,6 @@ export const FileList = memo(
           { category, when: "focusPanel && listItemIsExecutable" },
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.execute",
-          key: "enter",
-          when: "focusPanel && listItemIsExecutable && !commandLineHasText",
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -801,20 +683,6 @@ export const FileList = memo(
             }),
           options,
         ),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.open",
-          key: "enter",
-          when: "focusPanel && !listItemIsExecutable && !commandLineHasText",
-        }),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.open",
-          key: "alt+pagedown",
-          when: whenFocusPanel,
-        }),
       );
 
       disposables.push(
@@ -830,13 +698,6 @@ export const FileList = memo(
             }),
           { category, when: "focusPanel && listItemHasViewer" },
         ),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.viewFile",
-          key: "f3",
-          when: "focusPanel && listItemHasViewer",
-        }),
       );
 
       disposables.push(
@@ -857,13 +718,6 @@ export const FileList = memo(
             }),
           { category, when: "focusPanel && listItemHasEditor" },
         ),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.editFile",
-          key: "f4",
-          when: "focusPanel && listItemHasEditor",
-        }),
       );
 
       disposables.push(
@@ -892,13 +746,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.moveToTrash",
-          key: "f8",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -925,13 +772,6 @@ export const FileList = memo(
             }),
           options,
         ),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.permanentDelete",
-          key: "shift+delete",
-          when: whenFocusPanel,
-        }),
       );
 
       disposables.push(
@@ -962,13 +802,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.copy",
-          key: "f5",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -996,13 +829,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.move",
-          key: "f6",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -1019,13 +845,6 @@ export const FileList = memo(
             }),
           options,
         ),
-      );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.rename",
-          key: "shift+f6",
-          when: whenFocusPanel,
-        }),
       );
 
       disposables.push(
@@ -1044,13 +863,6 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.pasteFilename",
-          key: "ctrl+enter",
-          when: whenFocusPanel,
-        }),
-      );
 
       disposables.push(
         commandRegistry.registerCommand(
@@ -1068,13 +880,9 @@ export const FileList = memo(
           options,
         ),
       );
-      disposables.push(
-        commandRegistry.registerKeybinding({
-          command: "list.pastePath",
-          key: "ctrl+f",
-          when: whenFocusPanel,
-        }),
-      );
+
+      // Register list keybindings in one place.
+      disposables.push(...registerFileListKeybindings(commandRegistry));
 
       return () => {
         for (const dispose of disposables) dispose();

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "./bridge";
 import { commandRegistry } from "./commands";
+import { registerExtensionKeybinding } from "./registerKeybindings";
 import { readFileText as readFileTextFromFs } from "./fs";
 import { basename, dirname, join, normalizePath } from "./path";
 import { vfsUrl } from "./vfs";
@@ -311,7 +312,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       },
 
       registerKeybinding(binding: { command: string; key: string; mac?: string; when?: string }): () => void {
-        const dispose = commandRegistry.registerKeybinding({ command: binding.command, key: binding.key, mac: binding.mac, when: binding.when }, "extension");
+        const dispose = registerExtensionKeybinding(commandRegistry, { command: binding.command, key: binding.key, mac: binding.mac, when: binding.when });
         return dispose;
       },
 
@@ -503,7 +504,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         if (!bindingId || !binding || typeof binding !== "object") return;
         if (extensionKeybindingDisposers.has(bindingId)) return;
 
-        const dispose = commandRegistry.registerKeybinding({ command: binding.command, key: binding.key, mac: binding.mac, when: binding.when }, "extension");
+        const dispose = registerExtensionKeybinding(commandRegistry, { command: binding.command, key: binding.key, mac: binding.mac, when: binding.when });
         extensionKeybindingDisposers.set(bindingId, dispose);
         return;
       }

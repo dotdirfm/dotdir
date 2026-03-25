@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, MutableRefObject, ReactNode } from "react";
 import { commandRegistry } from "./commands";
+import { registerCommandLineKeybindings } from "./registerKeybindings";
 
 interface CommandLineProps {
   cwd: string;
@@ -317,90 +318,7 @@ export function CommandLine({ cwd, visible, onExecute, pasteRef }: CommandLinePr
     if (!visible) return;
     const d: Array<() => void> = [];
 
-    d.push(
-      commandRegistry.registerKeybinding({
-        command: "commandLine.execute",
-        key: "enter",
-        when: "focusPanel && commandLineHasText",
-      }),
-    );
-    d.push(
-      commandRegistry.registerKeybinding({
-        command: "commandLine.clear",
-        key: "escape",
-        when: "focusPanel && commandLineHasText",
-      }),
-    );
-    d.push(
-      commandRegistry.registerKeybinding({
-        command: "commandLine.deleteLeft",
-        key: "backspace",
-        when: "focusPanel && commandLineHasText",
-      }),
-    );
-    d.push(
-      commandRegistry.registerKeybinding({
-        command: "commandLine.deleteRight",
-        key: "delete",
-        when: "focusPanel && commandLineHasText",
-      }),
-    );
-    d.push(
-      commandRegistry.registerKeybinding({
-        command: "commandLine.moveWordLeft",
-        key: "ctrl+left",
-        when: "focusPanel && commandLineHasText",
-      }),
-    );
-    d.push(
-      commandRegistry.registerKeybinding({
-        command: "commandLine.moveWordRight",
-        key: "ctrl+right",
-        when: "focusPanel && commandLineHasText",
-      }),
-    );
-    d.push(
-      commandRegistry.registerKeybinding({
-        command: "commandLine.home",
-        key: "home",
-        when: "focusPanel && commandLineHasText",
-      }),
-    );
-    d.push(
-      commandRegistry.registerKeybinding({
-        command: "commandLine.end",
-        key: "end",
-        when: "focusPanel && commandLineHasText",
-      }),
-    );
-    d.push(
-      commandRegistry.registerKeybinding({
-        command: "commandLine.selectAll",
-        key: "ctrl+a",
-        when: "focusPanel && commandLineHasText",
-      }),
-    );
-    d.push(
-      commandRegistry.registerKeybinding({
-        command: "commandLine.copy",
-        key: "ctrl+c",
-        when: "focusPanel && commandLineHasText",
-      }),
-    );
-    d.push(
-      commandRegistry.registerKeybinding({
-        command: "commandLine.cut",
-        key: "ctrl+x",
-        when: "focusPanel && commandLineHasText",
-      }),
-    );
-    d.push(
-      commandRegistry.registerKeybinding({
-        command: "commandLine.paste",
-        key: "ctrl+v",
-        when: "focusPanel",
-      }),
-    );
+    d.push(...registerCommandLineKeybindings(commandRegistry));
 
     return () => {
       for (const fn of d) fn();
