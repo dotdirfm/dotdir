@@ -1,4 +1,19 @@
+import type { TerminalProfile } from "../bridge";
+import type { TerminalSession } from "./TerminalSession";
+
 export type TerminalSessionStatus = "idle" | "starting" | "running" | "exited" | "error";
+
+export interface ManagedTerminalSession {
+  id: string;
+  session: TerminalSession;
+  profile: TerminalProfile;
+  profileId: string;
+  profileLabel: string;
+  cwd: string;
+  cwdUserInitiated: boolean;
+  status: TerminalSessionStatus;
+  error?: string;
+}
 
 export interface PtyLaunchInfo {
   ptyId: number;

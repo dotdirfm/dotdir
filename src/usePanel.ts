@@ -6,10 +6,12 @@
  * refreshes or navigates up automatically.
  */
 
+import { useAtomValue } from "jotai";
 import { FsNode } from "fss-lang";
-import type { LayeredResolver, ThemeKind } from "fss-lang";
+import type { LayeredResolver } from "fss-lang";
 import { createFsNode } from "fss-lang/helpers";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { osThemeAtom } from "./atoms";
 import type { FsChangeType } from "./types";
 import { bridge } from "./bridge";
 import { fsProviderRegistry } from "./viewerEditorRegistry";
@@ -122,26 +124,28 @@ export const emptyPanel: PanelState = {
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-export function usePanel(theme: ThemeKind, showError: (message: string) => void) {
+export function usePanel(showError: (message: string) => void) {
+  const theme = useAtomValue(osThemeAtom);
   const [state, setState] = useState<PanelState>(emptyPanel);
   const [navigating, setNavigating] = useState(false);
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navAbortRef = useRef<AbortController | null>(null);
-  const resolverRef = useRef<LayeredResolver | null>(null);
-  if (!resolverRef.current) {
-    resolverRef.current = createPanelResolver(theme);
-  }
+  const resolver = useMemo(() => createPanelResolver(theme), [theme]);
+  const resolverRef = useRef<LayeredResolver>(resolver);
+  resolverRef.current = resolver;
 
   const observerRef = useRef<FileSystemObserver | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentPathRef = useRef<string>("");
 
-  useEffect(() => {
-    resolverRef.current!.setTheme(theme);
-  }, [theme]);
-
   const showErrorRef = useRef(showError);
   showErrorRef.current = showError;
+
+  // When the OS theme changes, resolver is a new object — re-navigate to re-sync FSS layers.
+  // currentPathRef is used instead of state to avoid a stale closure; skips mount (path is "").
+  useEffect(() => {
+    if (currentPathRef.current) navigateTo(currentPathRef.current, true);
+  }, [resolver]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setupWatches = useCallback((dirPath: string) => {
     const observer = observerRef.current!;
@@ -347,5 +351,9 @@ export function usePanel(theme: ThemeKind, showError: (message: string) => void)
   const navigateToRef = useRef(navigateTo);
   navigateToRef.current = navigateTo;
 
-  return { ...state, navigateTo, navigating, cancelNavigation, resolver: resolverRef.current! };
+  const refresh = useCallback(() => {
+    navigateToRef.current(currentPathRef.current, true);
+  }, []);
+
+  return { ...state, navigateTo, navigating, cancelNavigation, refresh, resolver: resolverRef.current! };
 }

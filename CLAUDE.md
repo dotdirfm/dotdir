@@ -70,7 +70,7 @@ Detection at boot (`main.tsx`): `'__TAURI_INTERNALS__' in window` selects Tauri 
 - **Field naming**: Rust `snake_case` ↔ TypeScript `camelCase` (e.g., `mtime_ms` → `mtimeMs`). Bridges handle conversion.
 - **EntryKind**: Unified enum shared between Rust (`ops.rs`) and TypeScript (`types.ts`), serialized as `u8`.
 - **File descriptors**: Positive = local (Tauri), negative = proxied through elevated helper.
-- **State management**: React hooks only (`useState`, `useRef`, `useCallback`) — no external state library.
+- **State management**: React hooks + Jotai atoms. Never call `getDefaultStore()` — all atom reads/writes must happen inside React components or hooks via `useAtomValue` / `useSetAtom` / `useAtom`.
 - **Platform code**: Rust uses `#[cfg(unix)]`/`#[cfg(windows)]` with separate modules (`elevate.rs` vs `elevate_stub.rs`). TypeScript path utils (`path.ts`) handle both separators.
 - **Virtual scrolling**: `FileList/` uses custom multi-column virtualization (26px row height, 350px column width).
 

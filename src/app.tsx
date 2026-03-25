@@ -1,42 +1,49 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { bridge, type TerminalProfile } from "./bridge";
-import type { PanelTab } from "./FileList/PanelTabs";
-import { isMediaFile } from "./mediaFiles";
-import { ViewerContainer, EditorContainer } from "./ExtensionContainer";
-import { viewerRegistry, editorRegistry, fsProviderRegistry, populateRegistries } from "./viewerEditorRegistry";
-import { isContainerPath, parseContainerPath, CONTAINER_SEP } from "./containerPath";
-import { clearFsProviderCache } from "./browserFsProvider";
-import type { LanguageOption } from "./OpenCreateFileDialog";
-import { useDialog, DialogHolder } from "./dialogContext";
-import { ModalDialog } from "./ModalDialog";
-import { TerminalController } from "./Terminal";
-import { CommandLine } from "./CommandLine";
+import type { ThemeKind } from "fss-lang";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionBar } from "./ActionBar";
-import { ExtensionsPanel } from "./ExtensionsPanel";
-import { PanelGroup } from "./PanelGroup";
+import {
+  activeColorThemeAtom,
+  activeIconThemeAtom,
+  commandLineOnExecuteAtom,
+  commandLinePasteFnAtom,
+  loadedExtensionsAtom,
+  osThemeAtom,
+  panelsVisibleAtom,
+  promptActiveAtom,
+  showExtensionsAtom,
+  themesReadyAtom,
+} from "./atoms";
+import { bridge } from "./bridge";
+import { CommandLine } from "./CommandLine";
+import { isExistingDirectory, parseCdCommand, resolveCdPath } from "./commandLineCd";
 import { CommandPalette, useCommandPalette } from "./CommandPalette";
 import { commandRegistry } from "./commands";
-import { registerAppBuiltInKeybindings, registerExtensionKeybindings } from "./registerKeybindings";
+import { CONTAINER_SEP, isContainerPath, parseContainerPath } from "./containerPath";
+import { DialogHolder, useDialog } from "./dialogContext";
+import { EditorContainer, ViewerContainer } from "./ExtensionContainer";
+import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type PanelPersistedState, type PersistedTab } from "./extensions";
+import { ExtensionsPanel } from "./ExtensionsPanel";
+import type { PanelTab } from "./FileList/PanelTabs";
 import { focusContext } from "./focusContext";
-import { readFileText } from "./fs";
-import { setExtensionLayers } from "./fss";
-import { extensionHost } from "./extensionHostClient";
-import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, findColorTheme, type LoadedExtension, type PanelPersistedState, type PersistedTab } from "./extensions";
-import { loadAndApplyColorTheme, clearColorTheme, uiThemeToKind } from "./vscodeColorTheme";
-import { getSettings, initUserSettings, onSettingsChange, updateSettings } from "./userSettings";
-import { isExistingDirectory, parseCdCommand, resolveCdPath } from "./commandLineCd";
-import { setIconTheme, setIconThemeKind } from "./iconResolver";
-import { basename, dirname, join, normalizePath, resolveDotSegments } from "./path";
-import { normalizeTerminalPath } from "./terminal/path";
-import { resolveShellProfiles } from "./terminal/shellProfiles";
-import { initUserKeybindings } from "./userKeybindings";
-import type { ThemeKind } from "fss-lang";
+import { isMediaFile } from "./mediaFiles";
+import { ModalDialog } from "./ModalDialog";
+import type { LanguageOption } from "./OpenCreateFileDialog";
+import { PanelGroup } from "./PanelGroup";
 import { OPPOSITE_PANEL, PANEL_SETTINGS_KEY, PANEL_SIDES } from "./panelSide";
-import { usePanel, findExistingParent } from "./usePanel";
+import { basename, dirname, normalizePath, resolveDotSegments } from "./path";
+import { registerAppBuiltInKeybindings } from "./registerKeybindings";
+import { normalizeTerminalPath } from "./terminal/path";
+import { useExtensionHost } from "./useExtensionHost";
 import { useFileOperations, type PanelSide } from "./useFileOperations";
-import { languageRegistry } from "./languageRegistry";
+import { findExistingParent, usePanel } from "./usePanel";
+import { useTerminal } from "./useTerminal";
+import { initUserKeybindings } from "./userKeybindings";
+import { getSettings, initUserSettings, onSettingsChange, updateSettings } from "./userSettings";
+import { editorRegistry, fsProviderRegistry, viewerRegistry } from "./viewerEditorRegistry";
+import { TerminalPanelBody, TerminalToolbar } from "./Terminal";
 
 let nextTabId = 0;
 function genTabId(): string {
@@ -60,7 +67,7 @@ function createPreviewTab(path: string, name: string, size: number, sourcePanel:
 }
 
 export function App() {
-  const [theme, setTheme] = useState<ThemeKind>("dark");
+  const setTheme = useSetAtom(osThemeAtom);
   const { dialog, showDialog, closeDialog, updateDialog } = useDialog();
   const [showHidden, setShowHidden] = useState(false);
   const showError = useCallback(
@@ -74,20 +81,19 @@ export function App() {
     },
     [showDialog],
   );
-  const left = usePanel(theme, showError);
-  const right = usePanel(theme, showError);
+  const left = usePanel(showError);
+  const right = usePanel(showError);
   const [activePanel, setActivePanel] = useState<PanelSide>("left");
-  const [panelsVisible, setPanelsVisible] = useState(true);
-  const [promptActive, setPromptActive] = useState(true);
-  const promptHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panelsVisible = useAtomValue(panelsVisibleAtom);
+  const promptActive = useAtomValue(promptActiveAtom);
+  const setPanelsVisible = useSetAtom(panelsVisibleAtom);
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
   const [viewerExt, setViewerExt] = useState<{ dirPath: string; entry: string } | null>(null);
   const [editorExt, setEditorExt] = useState<{ dirPath: string; entry: string } | null>(null);
-  const [requestedTerminalCwd, setRequestedTerminalCwd] = useState<string | null>(null);
-  const [showExtensions, setShowExtensions] = useState(false);
-  const [activeIconTheme, setActiveIconTheme] = useState<string | undefined>(undefined);
-  const [activeColorTheme, setActiveColorTheme] = useState<string | undefined>(undefined);
+  const [showExtensions, setShowExtensions] = useAtom(showExtensionsAtom);
+  const setActiveIconTheme = useSetAtom(activeIconThemeAtom);
+  const setActiveColorTheme = useSetAtom(activeColorThemeAtom);
   const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
   const [initialLeftPanel, setInitialLeftPanel] = useState<PanelPersistedState | undefined>(undefined);
   const [initialRightPanel, setInitialRightPanel] = useState<PanelPersistedState | undefined>(undefined);
@@ -101,9 +107,8 @@ export function App() {
   const leftTabSelectionRef = useRef<Record<string, { selectedName?: string; topmostName?: string }>>({});
   const rightTabSelectionRef = useRef<Record<string, { selectedName?: string; topmostName?: string }>>({});
   const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const [themesReady, setThemesReady] = useState(false);
-  const [resolvedProfiles, setResolvedProfiles] = useState<TerminalProfile[]>([]);
-  const [terminalProfilesLoaded, setTerminalProfilesLoaded] = useState(false);
+  const loadedExtensions = useAtomValue(loadedExtensionsAtom);
+  const themesReady = useAtomValue(themesReadyAtom);
   const leftTabsRef = useRef(leftTabs);
   leftTabsRef.current = leftTabs;
   const rightTabsRef = useRef(rightTabs);
@@ -113,16 +118,11 @@ export function App() {
   const rightActiveIndexRef = useRef(rightActiveIndex);
   rightActiveIndexRef.current = rightActiveIndex;
   const [selectionKey, setSelectionKey] = useState(0);
-  const [terminalFocusRequestKey, setTerminalFocusRequestKey] = useState(0);
-  const activeIconThemeRef = useRef(activeIconTheme);
-  activeIconThemeRef.current = activeIconTheme;
-  const activeColorThemeRef = useRef(activeColorTheme);
-  activeColorThemeRef.current = activeColorTheme;
   const commandPalette = useCommandPalette();
-  const writeToTerminalRef = useRef<(data: string) => Promise<void>>(async () => {});
-  const executeCommandRef = useRef<(command: string, cwd: string) => Promise<void>>(async () => {});
+  const setCommandLineOnExecute = useSetAtom(commandLineOnExecuteAtom);
+  const commandLinePasteFnAtomValue = useAtomValue(commandLinePasteFnAtom);
   const commandLinePasteRef = useRef<(text: string) => void>(() => {});
-  const hiddenForCommandRef = useRef(false);
+  if (commandLinePasteFnAtomValue) commandLinePasteRef.current = commandLinePasteFnAtomValue;
 
   useEffect(() => {
     // Initialize settings with watch
@@ -204,17 +204,12 @@ export function App() {
   rightRef.current = right;
 
   const activeCwdForExecuteRef = useRef("");
-  activeCwdForExecuteRef.current = requestedTerminalCwd ?? (activePanel === "left" ? left.currentPath : right.currentPath);
 
   const handleCommandLineExecute = useCallback(
     async (cmd: string) => {
       const parsed = parseCdCommand(cmd);
       if (!parsed) {
-        hiddenForCommandRef.current = true;
-        setPanelsVisible(false);
-        focusContext.set("terminal");
-        setTerminalFocusRequestKey((k) => k + 1);
-        void executeCommandRef.current(cmd, activeCwdForExecuteRef.current);
+        void terminal.runCommand(cmd, activeCwdForExecuteRef.current);
         return;
       }
       if (parsed.kind === "error") {
@@ -280,6 +275,10 @@ export function App() {
     [showDialog],
   );
 
+  useEffect(() => {
+    setCommandLineOnExecute(() => handleCommandLineExecute);
+  }, [handleCommandLineExecute, setCommandLineOnExecute]);
+
   const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } = useFileOperations(
     activePanelRef,
     leftRef,
@@ -297,16 +296,6 @@ export function App() {
   useEffect(() => {
     commandRegistry.setContext("dialogOpen", dialog !== null);
   }, [dialog]);
-
-  useEffect(() => {
-    if (!panelsVisible || !promptActive) return;
-    // Terminal focus handlers may run during the same toggle frame.
-    // Re-assert panel focus after layout settles.
-    const frame = requestAnimationFrame(() => {
-      focusContext.set("panel");
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [panelsVisible, promptActive]);
 
   const handleViewFile = useCallback((filePath: string, fileName: string, fileSize: number) => {
     // If an fsProvider is registered for this file type, enter it like a directory.
@@ -333,10 +322,6 @@ export function App() {
     }
     const size = exists ? (await bridge.fs.stat(filePath)).size : 0;
     setEditorFile({ path: filePath, name: fileName, size, langId });
-  }, []);
-
-  const rememberExpectedTerminalCwd = useCallback((path: string) => {
-    setRequestedTerminalCwd(normalizeTerminalPath(path));
   }, []);
 
   const viewerPanelEntries = viewerFile ? (viewerFile.panel === "left" ? left.entries : right.entries) : [];
@@ -575,8 +560,7 @@ export function App() {
       const panel = side === "left" ? left : right;
       if (tabs.length > 1) {
         const next = tabs.filter((_, i) => i !== index);
-        const newIdx =
-          activeIdx === index ? Math.min(activeIdx, next.length - 1) : activeIdx > index ? activeIdx - 1 : activeIdx;
+        const newIdx = activeIdx === index ? Math.min(activeIdx, next.length - 1) : activeIdx > index ? activeIdx - 1 : activeIdx;
         setTabs(next);
         setActiveIndex(newIdx);
         return;
@@ -741,60 +725,10 @@ export function App() {
     setActivePanel(opposite);
   }, [left.entries, right.entries, leftTabs, rightTabs]);
 
-  const handleTerminalCwd = useCallback((path: string) => {
-    const normalizedPath = normalizeTerminalPath(path);
-    const panel = activePanelRef.current === "left" ? leftRef.current : rightRef.current;
-    if (normalizedPath === normalizeTerminalPath(panel.currentPath)) return;
-    panel.navigateTo(normalizedPath);
-    setRequestedTerminalCwd(null);
-  }, []);
-
-  useEffect(() => {
-    if (!requestedTerminalCwd) return;
-    const activePath = normalizeTerminalPath(activePanel === "left" ? left.currentPath : right.currentPath);
-    if (activePath === requestedTerminalCwd) {
-      setRequestedTerminalCwd(null);
-    }
-  }, [activePanel, left.currentPath, requestedTerminalCwd, right.currentPath]);
-
-  // Debounced prompt active handler - delay hiding panels to avoid flashing on fast commands
-  const handlePromptActive = useCallback((active: boolean) => {
-    if (promptHideTimerRef.current) {
-      clearTimeout(promptHideTimerRef.current);
-      promptHideTimerRef.current = null;
-    }
-    if (active) {
-      // Show panels immediately when command finishes
-      setPromptActive(true);
-      if (hiddenForCommandRef.current) {
-        hiddenForCommandRef.current = false;
-        setPanelsVisible(true);
-      }
-    } else {
-      // Delay hiding panels by 60ms to avoid flashing on fast commands
-      promptHideTimerRef.current = setTimeout(() => {
-        setPromptActive(false);
-      }, 60);
-    }
-  }, []);
-
   useEffect(() => {
     bridge.theme.get().then((t) => setTheme(t as ThemeKind));
     return bridge.theme.onChange((t) => setTheme(t as ThemeKind));
   }, []);
-
-  useEffect(() => {
-    // If a color theme is active, determine light/dark from its uiTheme.
-    // Otherwise fall back to OS/system theme.
-    const colorThemeMatch = activeColorTheme ? findColorTheme(latestExtensionsRef.current, activeColorTheme) : null;
-    const effectiveKind = colorThemeMatch
-      ? uiThemeToKind(colorThemeMatch.theme.uiTheme)
-      : theme === "light" || theme === "high-contrast-light"
-        ? "light"
-        : "dark";
-    document.documentElement.dataset.theme = effectiveKind;
-    setIconThemeKind(effectiveKind);
-  }, [theme, activeColorTheme]);
 
   // Register built-in commands
   useEffect(() => {
@@ -992,8 +926,7 @@ export function App() {
         () => {
           const panel = activePanelRef.current === "left" ? left : right;
           const currentPath = panel.currentPath;
-          const exts = latestExtensionsRef.current;
-          const langList = exts.flatMap((e) => e.languages ?? []);
+          const langList = loadedExtensions.flatMap((e) => e.languages ?? []);
           const seen = new Set<string>();
           const languages: LanguageOption[] = langList
             .filter((l) => {
@@ -1095,16 +1028,6 @@ export function App() {
   leftPathRef.current = left.currentPath;
   const rightPathRef = useRef(right.currentPath);
   rightPathRef.current = right.currentPath;
-
-  // Re-navigate when theme changes to refresh FSS styles
-  const prevThemeRef = useRef(theme);
-  useEffect(() => {
-    if (prevThemeRef.current !== theme) {
-      prevThemeRef.current = theme;
-      if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
-      if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
-    }
-  }, [theme]);
 
   // Sync panel path with active filelist tab.
   // Only navigate when the user *switches* tabs (activeIndex changes). Do NOT depend on leftTabs/rightTabs
@@ -1218,179 +1141,23 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally fires once when settingsLoaded becomes true
   }, [settingsLoaded]);
 
-  const latestExtensionsRef = useRef<LoadedExtension[]>([]);
-  const extensionContributionDisposersRef = useRef<(() => void)[]>([]);
+  useExtensionHost({
+    settingsLoaded,
+    onRefreshPanels: () => {
+      leftRef.current.refresh();
+      rightRef.current.refresh();
+    },
+  });
 
-  const readTextFileAbs = useCallback(async (absPath: string): Promise<string> => {
-    return readFileText(absPath);
+  const onNavigatePanel = useCallback((path: string) => {
+    (activePanelRef.current === "left" ? leftRef.current : rightRef.current).navigateTo(path);
   }, []);
 
-  const ensureActiveIconThemeFssLoaded = useCallback(
-    async (exts: LoadedExtension[], themeId: string | undefined): Promise<void> => {
-      if (!themeId) return;
-      const ext = exts.find((e) => `${e.ref.publisher}.${e.ref.name}` === themeId);
-      if (!ext?.iconThemeFssPath) return;
-      if (ext.iconThemeFss) return; // already loaded
-      try {
-        ext.iconThemeFss = await readTextFileAbs(ext.iconThemeFssPath);
-        if (!ext.iconThemeBasePath) ext.iconThemeBasePath = dirname(ext.iconThemeFssPath);
-      } catch {
-        // Ignore theme load errors; resolver will fall back.
-      }
-    },
-    [readTextFileAbs],
-  );
-
-  // Start Extension Host lazily — re-navigate panels when extensions load
-  useEffect(() => {
-    if (!settingsLoaded) return;
-    languageRegistry.initialize();
-
-    const registerLanguages = async (exts: LoadedExtension[]) => {
-      languageRegistry.clear();
-      // First pass: register all languages and grammar contents
-      for (const ext of exts) {
-        if (ext.languages) {
-          for (const lang of ext.languages) {
-            languageRegistry.registerLanguage(lang);
-          }
-        }
-      }
-      // Second pass: activate tokenization (after all grammars are available for cross-references)
-      await languageRegistry.activateGrammars();
-    };
-
-    const updateIconTheme = async (exts: LoadedExtension[], themeId: string | undefined): Promise<void> => {
-      if (!themeId) {
-        await setIconTheme("fss");
-        return;
-      }
-      const ext = exts.find((e) => `${e.ref.publisher}.${e.ref.name}` === themeId);
-      if (ext?.vscodeIconThemePath) {
-        await setIconTheme("vscode", ext.vscodeIconThemePath);
-      } else if (ext?.iconThemeFssPath) {
-        await setIconTheme("fss");
-      } else {
-        await setIconTheme("none");
-      }
-    };
-
-    const updateColorTheme = async (exts: LoadedExtension[], themeKey: string | undefined): Promise<void> => {
-      if (!themeKey) {
-        clearColorTheme();
-        return;
-      }
-      const match = findColorTheme(exts, themeKey);
-      if (match) {
-        const kind = uiThemeToKind(match.theme.uiTheme);
-        document.documentElement.dataset.theme = kind;
-        setIconThemeKind(kind);
-        try {
-          await loadAndApplyColorTheme(match.theme.jsonPath, match.theme.uiTheme);
-        } catch (err) {
-          console.warn("[ExtHost] Failed to load color theme:", themeKey, err);
-          clearColorTheme();
-        }
-      } else {
-        clearColorTheme();
-      }
-    };
-
-    // Register extension commands and keybindings
-    const registerExtensionCommands = (exts: LoadedExtension[]) => {
-      // Avoid duplicate registrations on extension host restart.
-      for (const d of extensionContributionDisposersRef.current) {
-        try {
-          d();
-        } catch {
-          /* ignore */
-        }
-      }
-      extensionContributionDisposersRef.current = [];
-
-      for (const ext of exts) {
-        if (ext.commands) {
-          for (const cmd of ext.commands) {
-            const disposeCmd = commandRegistry.registerCommand(
-              cmd.command,
-              cmd.title,
-              async (...args: unknown[]) => {
-                await extensionHost.executeCommand(cmd.command, args);
-              },
-              { category: cmd.category, icon: cmd.icon },
-            );
-            extensionContributionDisposersRef.current.push(disposeCmd);
-          }
-        }
-        if (ext.keybindings?.length) {
-          extensionContributionDisposersRef.current.push(...registerExtensionKeybindings(commandRegistry, ext.keybindings));
-        }
-      }
-    };
-
-    const unsub = extensionHost.onLoaded((exts) => {
-      void (async () => {
-        latestExtensionsRef.current = exts;
-        populateRegistries(exts);
-        clearFsProviderCache();
-
-        // Pre-compile backend WASM providers so first navigation is fast.
-        if (bridge.fsProvider) {
-          for (const ext of exts) {
-            for (const p of ext.fsProviders ?? []) {
-              if (p.runtime === "backend") {
-                const wasmPath = join(ext.dirPath, p.entry);
-                bridge.fsProvider!.load(wasmPath).catch(() => {});
-              }
-            }
-          }
-        }
-
-        // Resolve shell profiles from extension contributions (client-side).
-        bridge.utils
-          .getEnv()
-          .then((env) =>
-            resolveShellProfiles(exts, env).then(({ profiles, shellScripts }) => {
-              setResolvedProfiles(profiles);
-              setTerminalProfilesLoaded(true);
-              if (bridge.pty.setShellIntegrations && Object.keys(shellScripts).length > 0) {
-                bridge.pty.setShellIntegrations(shellScripts).catch(() => {});
-              }
-            }),
-          )
-          .catch(() => {
-            setTerminalProfilesLoaded(true);
-          });
-
-        // Load only the active FSS icon theme contents (lazy).
-        await ensureActiveIconThemeFssLoaded(exts, activeIconThemeRef.current);
-        setExtensionLayers(exts, activeIconThemeRef.current);
-
-        registerLanguages(exts);
-        registerExtensionCommands(exts);
-
-        // Load themes first, then refresh panels once themes are ready
-        Promise.all([updateIconTheme(exts, activeIconThemeRef.current), updateColorTheme(exts, activeColorThemeRef.current)]).then(() => {
-          setThemesReady(true);
-          if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
-          if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
-        });
-      })();
-    });
-    extensionHost.start();
-    return () => {
-      unsub();
-      for (const d of extensionContributionDisposersRef.current) {
-        try {
-          d();
-        } catch {
-          /* ignore */
-        }
-      }
-      extensionContributionDisposersRef.current = [];
-      extensionHost.dispose();
-    };
-  }, [settingsLoaded]);
+  const terminal = useTerminal({
+    activePanelCwd: activePanel === "left" ? left.currentPath : right.currentPath,
+    onNavigatePanel,
+  });
+  activeCwdForExecuteRef.current = terminal.activeCwd;
 
   const activePath = activePanel === "left" ? left.currentPath : right.currentPath;
   useEffect(() => {
@@ -1418,104 +1185,83 @@ export function App() {
     return <div className="loading">Loading...</div>;
   }
 
-  const activeCwd = requestedTerminalCwd ?? (activePanel === "left" ? left.currentPath : right.currentPath);
-
   return (
     <div className="app">
-      <TerminalController
-        cwd={activeCwd}
-        expanded={!panelsVisible}
-        focusRequestKey={terminalFocusRequestKey}
-        profiles={resolvedProfiles}
-        profilesLoaded={terminalProfilesLoaded}
-        onCwdChange={handleTerminalCwd}
-        onPromptActive={handlePromptActive}
-        onCommandRunningChange={(running) => {
-          commandRegistry.setContext("terminalCommandRunning", running);
-        }}
-        onWriteToTerminal={(write) => {
-          writeToTerminalRef.current = write;
-        }}
-        onExecuteCommand={(execute) => {
-          executeCommandRef.current = execute;
-        }}
-      >
-        {({ body, toolbar }) => (
-          <>
-            <div className="terminal-and-panels">
-              <div className={`terminal-background${panelsVisible ? "" : " expanded"}`}>{body}</div>
-              <div className={`panels-overlay${panelsVisible && promptActive ? "" : " hidden"}`}>
-                <PanelGroup
-                  side="left"
-                  active={activePanel === "left"}
-                  panel={left}
-                  tabs={leftTabs}
-                  activeIndex={leftActiveIndex}
-                  onSelectTab={setLeftActiveIndex}
-                  onDoubleClickTab={(i) => handlePinTab("left", i)}
-                  onCloseTab={(i) => {
-                    void handleCloseTab("left", i);
-                  }}
-                  onNewTab={() => handleNewTab("left")}
-                  onReorderTabs={(from, to) => handleReorderTabs("left", from, to)}
-                  filteredEntries={leftFilteredEntries}
-                  editorFileSizeLimit={editorFileSizeLimit}
-                  onActivatePanel={() => setActivePanel("left")}
-                  onRememberExpectedTerminalCwd={rememberExpectedTerminalCwd}
-                  onViewFile={handleViewFile}
-                  onEditFile={handleEditFile}
-                  onMoveToTrash={(sourcePaths, refresh) => handleMoveToTrash(sourcePaths, refresh)}
-                  onPermanentDelete={(sourcePaths, refresh) => handlePermanentDelete(sourcePaths, refresh)}
-                  onCopy={(sourcePaths, refresh) => handleCopy(sourcePaths, refresh)}
-                  onMove={(sourcePaths, refresh) => handleMove(sourcePaths, refresh)}
-                  onRename={(sourcePath, currentName, refresh) => handleRename(sourcePath, currentName, refresh)}
-                  onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
-                  onPasteToCommandLine={(text) => commandLinePasteRef.current(text)}
-                  selectionKey={selectionKey}
-                  requestedActiveName={leftRequestedCursor}
-                  requestedTopmostName={undefined}
-                  initialPanelState={initialLeftPanel}
-                  onStateChange={(sel, top) => handlePanelStateChange("left", sel, top)}
-                />
-                <PanelGroup
-                  side="right"
-                  active={activePanel === "right"}
-                  panel={right}
-                  tabs={rightTabs}
-                  activeIndex={rightActiveIndex}
-                  onSelectTab={setRightActiveIndex}
-                  onDoubleClickTab={(i) => handlePinTab("right", i)}
-                  onCloseTab={(i) => {
-                    void handleCloseTab("right", i);
-                  }}
-                  onNewTab={() => handleNewTab("right")}
-                  onReorderTabs={(from, to) => handleReorderTabs("right", from, to)}
-                  filteredEntries={rightFilteredEntries}
-                  editorFileSizeLimit={editorFileSizeLimit}
-                  onActivatePanel={() => setActivePanel("right")}
-                  onRememberExpectedTerminalCwd={rememberExpectedTerminalCwd}
-                  onViewFile={handleViewFile}
-                  onEditFile={handleEditFile}
-                  onMoveToTrash={(sourcePaths, refresh) => handleMoveToTrash(sourcePaths, refresh)}
-                  onPermanentDelete={(sourcePaths, refresh) => handlePermanentDelete(sourcePaths, refresh)}
-                  onCopy={(sourcePaths, refresh) => handleCopy(sourcePaths, refresh)}
-                  onMove={(sourcePaths, refresh) => handleMove(sourcePaths, refresh)}
-                  onRename={(sourcePath, currentName, refresh) => handleRename(sourcePath, currentName, refresh)}
-                  onExecuteInTerminal={(cmd) => writeToTerminalRef.current(cmd)}
-                  onPasteToCommandLine={(text) => commandLinePasteRef.current(text)}
-                  selectionKey={selectionKey}
-                  requestedActiveName={rightRequestedCursor}
-                  requestedTopmostName={undefined}
-                  initialPanelState={initialRightPanel}
-                  onStateChange={(sel, top) => handlePanelStateChange("right", sel, top)}
-                />
-              </div>
-            </div>
-            <CommandLine cwd={activeCwd} visible={panelsVisible && promptActive} pasteRef={commandLinePasteRef} onExecute={handleCommandLineExecute} />
-            {toolbar}
-          </>
-        )}
-      </TerminalController>
+      <>
+        <div className="terminal-and-panels">
+          <div className={`terminal-background${panelsVisible ? "" : " expanded"}`}>
+            <TerminalPanelBody />
+          </div>
+          <div className={`panels-overlay${panelsVisible && promptActive ? "" : " hidden"}`}>
+            <PanelGroup
+              side="left"
+              active={activePanel === "left"}
+              panel={left}
+              tabs={leftTabs}
+              activeIndex={leftActiveIndex}
+              onSelectTab={setLeftActiveIndex}
+              onDoubleClickTab={(i) => handlePinTab("left", i)}
+              onCloseTab={(i) => {
+                void handleCloseTab("left", i);
+              }}
+              onNewTab={() => handleNewTab("left")}
+              onReorderTabs={(from, to) => handleReorderTabs("left", from, to)}
+              filteredEntries={leftFilteredEntries}
+              editorFileSizeLimit={editorFileSizeLimit}
+              onActivatePanel={() => setActivePanel("left")}
+              onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
+              onViewFile={handleViewFile}
+              onEditFile={handleEditFile}
+              onMoveToTrash={(sourcePaths, refresh) => handleMoveToTrash(sourcePaths, refresh)}
+              onPermanentDelete={(sourcePaths, refresh) => handlePermanentDelete(sourcePaths, refresh)}
+              onCopy={(sourcePaths, refresh) => handleCopy(sourcePaths, refresh)}
+              onMove={(sourcePaths, refresh) => handleMove(sourcePaths, refresh)}
+              onRename={(sourcePath, currentName, refresh) => handleRename(sourcePath, currentName, refresh)}
+              onExecuteInTerminal={(cmd) => terminal.writeToTerminal(cmd)}
+              onPasteToCommandLine={(text) => commandLinePasteRef.current(text)}
+              selectionKey={selectionKey}
+              requestedActiveName={leftRequestedCursor}
+              requestedTopmostName={undefined}
+              initialPanelState={initialLeftPanel}
+              onStateChange={(sel, top) => handlePanelStateChange("left", sel, top)}
+            />
+            <PanelGroup
+              side="right"
+              active={activePanel === "right"}
+              panel={right}
+              tabs={rightTabs}
+              activeIndex={rightActiveIndex}
+              onSelectTab={setRightActiveIndex}
+              onDoubleClickTab={(i) => handlePinTab("right", i)}
+              onCloseTab={(i) => {
+                void handleCloseTab("right", i);
+              }}
+              onNewTab={() => handleNewTab("right")}
+              onReorderTabs={(from, to) => handleReorderTabs("right", from, to)}
+              filteredEntries={rightFilteredEntries}
+              editorFileSizeLimit={editorFileSizeLimit}
+              onActivatePanel={() => setActivePanel("right")}
+              onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
+              onViewFile={handleViewFile}
+              onEditFile={handleEditFile}
+              onMoveToTrash={(sourcePaths, refresh) => handleMoveToTrash(sourcePaths, refresh)}
+              onPermanentDelete={(sourcePaths, refresh) => handlePermanentDelete(sourcePaths, refresh)}
+              onCopy={(sourcePaths, refresh) => handleCopy(sourcePaths, refresh)}
+              onMove={(sourcePaths, refresh) => handleMove(sourcePaths, refresh)}
+              onRename={(sourcePath, currentName, refresh) => handleRename(sourcePath, currentName, refresh)}
+              onExecuteInTerminal={(cmd) => terminal.writeToTerminal(cmd)}
+              onPasteToCommandLine={(text) => commandLinePasteRef.current(text)}
+              selectionKey={selectionKey}
+              requestedActiveName={rightRequestedCursor}
+              requestedTopmostName={undefined}
+              initialPanelState={initialRightPanel}
+              onStateChange={(sel, top) => handlePanelStateChange("right", sel, top)}
+            />
+          </div>
+        </div>
+        <CommandLine />
+        <TerminalToolbar />
+      </>
       <ActionBar />
       {viewerFile && !viewerResolved && (
         <ModalDialog
@@ -1546,9 +1292,8 @@ export function App() {
       )}
       {editorExt &&
         (() => {
-          const exts = latestExtensionsRef.current;
-          const allLanguages = exts.flatMap((e) => e.languages ?? []);
-          const allGrammarRefs = exts.flatMap((e) => e.grammarRefs ?? []);
+          const allLanguages = loadedExtensions.flatMap((e) => e.languages ?? []);
+          const allGrammarRefs = loadedExtensions.flatMap((e) => e.grammarRefs ?? []);
           const grammars = allGrammarRefs.map((gr) => ({
             contribution: gr.contribution,
             path: gr.path,
@@ -1568,53 +1313,7 @@ export function App() {
             />
           );
         })()}
-      {showExtensions && (
-        <ExtensionsPanel
-          onClose={() => setShowExtensions(false)}
-          onExtensionsChanged={() => {
-            void (async () => {
-              await extensionHost.restart();
-            })();
-          }}
-          activeIconTheme={activeIconTheme}
-          onIconThemeChange={(themeId) => {
-            setActiveIconTheme(themeId);
-            activeIconThemeRef.current = themeId;
-            void (async () => {
-              await ensureActiveIconThemeFssLoaded(latestExtensionsRef.current, themeId);
-              setExtensionLayers(latestExtensionsRef.current, themeId);
-              // Update icon resolver
-              if (!themeId) {
-                setIconTheme("fss");
-              } else {
-                const ext = latestExtensionsRef.current.find((e) => `${e.ref.publisher}.${e.ref.name}` === themeId);
-                if (ext?.vscodeIconThemePath) {
-                  setIconTheme("vscode", ext.vscodeIconThemePath);
-                } else if (ext?.iconThemeFssPath) {
-                  setIconTheme("fss");
-                } else {
-                  setIconTheme("none");
-                }
-              }
-              if (leftPathRef.current) leftRef.current.navigateTo(leftPathRef.current, true);
-              if (rightPathRef.current) rightRef.current.navigateTo(rightPathRef.current, true);
-            })();
-          }}
-          activeColorTheme={activeColorTheme}
-          onColorThemeChange={(themeKey) => {
-            setActiveColorTheme(themeKey);
-            activeColorThemeRef.current = themeKey;
-            if (!themeKey) {
-              clearColorTheme();
-            } else {
-              const match = findColorTheme(latestExtensionsRef.current, themeKey);
-              if (match) {
-                loadAndApplyColorTheme(match.theme.jsonPath, match.theme.uiTheme).catch(() => clearColorTheme());
-              }
-            }
-          }}
-        />
-      )}
+      {showExtensions && <ExtensionsPanel />}
       <DialogHolder />
       <CommandPalette open={commandPalette.open} onOpenChange={commandPalette.setOpen} />
     </div>

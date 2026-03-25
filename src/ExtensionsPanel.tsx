@@ -1,5 +1,8 @@
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { showExtensionsAtom, activeIconThemeAtom, activeColorThemeAtom, loadedExtensionsAtom } from "./atoms";
 import { focusContext } from "./focusContext";
+import { extensionHost } from "./extensionHostClient";
 import {
   type ExtensionRef,
   type MarketplaceExtension,
@@ -7,7 +10,6 @@ import {
   installExtension,
   installVSCodeExtension,
   uninstallExtension,
-  loadExtensions,
   type LoadedExtension,
   extensionIconThemeId,
   colorThemeKey,
@@ -31,26 +33,20 @@ function errMsg(err: unknown): string {
   return String(err);
 }
 
-interface Props {
-  onClose: () => void;
-  onExtensionsChanged: () => void;
-  activeIconTheme?: string;
-  onIconThemeChange: (themeId: string | undefined) => void;
-  activeColorTheme?: string;
-  onColorThemeChange: (themeKey: string | undefined) => void;
-}
-
 type Tab = "marketplace" | "installed";
 type MarketplaceSource = "faraday" | "vscode";
 
-export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme, onIconThemeChange, activeColorTheme, onColorThemeChange }: Props) {
+export function ExtensionsPanel() {
+  const setShowExtensions = useSetAtom(showExtensionsAtom);
+  const [activeIconTheme, setActiveIconTheme] = useAtom(activeIconThemeAtom);
+  const [activeColorTheme, setActiveColorTheme] = useAtom(activeColorThemeAtom);
+  const installed = useAtomValue(loadedExtensionsAtom);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<Tab>("marketplace");
   const [marketplaceSource, setMarketplaceSource] = useState<MarketplaceSource>("vscode");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MarketplaceExtension[]>([]);
   const [vscodeResults, setVscodeResults] = useState<VSCodeExtension[]>([]);
-  const [installed, setInstalled] = useState<LoadedExtension[]>([]);
   const [loading, setLoading] = useState(false);
   const [installing, setInstalling] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -61,26 +57,13 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
     if (!dialog) return;
     if (!dialog.open) dialog.showModal();
     focusContext.push("modal");
-    const handleClose = () => onClose();
+    const handleClose = () => setShowExtensions(false);
     dialog.addEventListener("close", handleClose);
     return () => {
       dialog.removeEventListener("close", handleClose);
       focusContext.pop("modal");
     };
-  }, [onClose]);
-
-  const refreshInstalled = useCallback(async () => {
-    try {
-      const exts = await loadExtensions();
-      setInstalled(exts);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshInstalled();
-  }, [refreshInstalled]);
+  }, [setShowExtensions]);
 
   const doSearch = useCallback(async (q: string, source: MarketplaceSource) => {
     setLoading(true);
@@ -119,8 +102,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
     setError("");
     try {
       await installVSCodeExtension(ext.publisher.publisherName, ext.extensionName, downloadUrl);
-      await refreshInstalled();
-      onExtensionsChanged();
+      void extensionHost.restart();
     } catch (err) {
       setError(`Install failed: ${errMsg(err)}`);
     }
@@ -136,8 +118,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
     setError("");
     try {
       await installExtension(ext.publisher.username, ext.name, ext.latest_version.version);
-      await refreshInstalled();
-      onExtensionsChanged();
+      void extensionHost.restart();
     } catch (err) {
       setError(`Install failed: ${errMsg(err)}`);
     }
@@ -154,17 +135,16 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
       let settingsChanged = false;
       if (activeIconTheme === key) {
         delete settings.iconTheme;
-        onIconThemeChange(undefined);
+        setActiveIconTheme(undefined);
         settingsChanged = true;
       }
       if (activeColorTheme?.startsWith(key + ":")) {
         delete settings.colorTheme;
-        onColorThemeChange(undefined);
+        setActiveColorTheme(undefined);
         settingsChanged = true;
       }
       if (settingsChanged) await writeSettings(settings);
-      await refreshInstalled();
-      onExtensionsChanged();
+      void extensionHost.restart();
     } catch (err) {
       setError(`Uninstall failed: ${errMsg(err)}`);
     }
@@ -182,7 +162,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
       delete settings.iconTheme;
     }
     await writeSettings(settings);
-    onIconThemeChange(newId);
+    setActiveIconTheme(newId);
   };
 
   const handleSetColorTheme = async (ext: LoadedExtension, themeId: string) => {
@@ -195,7 +175,7 @@ export function ExtensionsPanel({ onClose, onExtensionsChanged, activeIconTheme,
       delete settings.colorTheme;
     }
     await writeSettings(settings);
-    onColorThemeChange(newKey);
+    setActiveColorTheme(newKey);
   };
 
   const formatSize = (bytes: number) => {

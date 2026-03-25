@@ -1,16 +1,15 @@
+import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, MutableRefObject, ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import { commandLineCwdAtom, commandLineOnExecuteAtom, commandLinePasteFnAtom, commandLineVisibleAtom } from "./atoms";
 import { commandRegistry } from "./commands";
 import { registerCommandLineKeybindings } from "./registerKeybindings";
 
-interface CommandLineProps {
-  cwd: string;
-  visible: boolean;
-  onExecute: (command: string) => void;
-  pasteRef?: MutableRefObject<(text: string) => void>;
-}
-
-export function CommandLine({ cwd, visible, onExecute, pasteRef }: CommandLineProps) {
+export function CommandLine() {
+  const cwd = useAtomValue(commandLineCwdAtom);
+  const visible = useAtomValue(commandLineVisibleAtom);
+  const onExecute = useAtomValue(commandLineOnExecuteAtom);
+  const setPasteFn = useSetAtom(commandLinePasteFnAtom);
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
   const [anchor, setAnchor] = useState(0);
@@ -21,15 +20,15 @@ export function CommandLine({ cwd, visible, onExecute, pasteRef }: CommandLinePr
   const valueRef = useRef(value);
   const cursorRef = useRef(cursor);
   const anchorRef = useRef(anchor);
-  const onExecuteRef = useRef(onExecute);
+  const onExecuteRef = useRef<((cmd: string) => void) | null>(null);
   valueRef.current = value;
   cursorRef.current = cursor;
   anchorRef.current = anchor;
-  onExecuteRef.current = onExecute;
+  if (onExecute) onExecuteRef.current = onExecute;
 
-  // Expose paste injection — inserts at cursor position, replacing any selection
-  if (pasteRef) {
-    pasteRef.current = (text: string) => {
+  // Expose paste injection via atom — inserts at cursor position, replacing any selection
+  useEffect(() => {
+    setPasteFn(() => (text: string) => {
       const pos = cursorRef.current;
       const anch = anchorRef.current;
       const s = Math.min(pos, anch);
@@ -38,8 +37,9 @@ export function CommandLine({ cwd, visible, onExecute, pasteRef }: CommandLinePr
       setValue((v) => v.slice(0, s) + text + v.slice(e));
       setCursor(newPos);
       setAnchor(newPos);
-    };
-  }
+    });
+    return () => setPasteFn(() => () => {});
+  }, [setPasteFn]);
 
   // Keep commandRegistry context in sync so Enter/Backspace route correctly
   useEffect(() => {
@@ -80,7 +80,7 @@ export function CommandLine({ cwd, visible, onExecute, pasteRef }: CommandLinePr
         () => {
           const cmd = valueRef.current.trim();
           if (!cmd) return;
-          onExecuteRef.current(cmd);
+          onExecuteRef.current?.(cmd);
           setValue("");
           setCursor(0);
           setAnchor(0);
