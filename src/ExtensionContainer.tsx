@@ -741,7 +741,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const entryRelForIframe = normalizePath(entry.replace(/^\.\//, "")) || "index.js";
   const entryPathForIframe = join(extensionDirPath, entryRelForIframe);
   const entryDirForIframe = dirname(entryPathForIframe);
-  const iframeSrc = vfsUrl(`/_ext${entryDirForIframe}/`);
+  // Must keep `_ext/` and the Windows drive root separate: `/_ext` + `C:/...` → `_extC:` (broken).
+  const iframeSrc = vfsUrl(`/_ext/${entryDirForIframe.replace(/^\//, "")}/`);
 
   return (
     <div className={className} style={{ ...style, position: "relative" }}>
@@ -763,7 +764,9 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         <iframe
           ref={iframeRef}
           src={iframeSrc}
-          sandbox="allow-scripts"
+          // Chromium/WebView2: loading `vfs://…` as iframe `src` is top navigation to a custom
+          // scheme; without this token the sandbox blocks it (Windows).
+          sandbox="allow-scripts allow-top-navigation-to-custom-protocols"
           style={{
             width: "100%",
             height: "100%",

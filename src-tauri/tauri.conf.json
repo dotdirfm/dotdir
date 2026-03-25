@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Faraday",
   "version": "0.1.0",
-  "identifier": "io.faraday-fm",
+  "identifier": "pro.frdy",
   "build": {
     "beforeDevCommand": "pnpm build && pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -18,7 +18,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; frame-src 'self' vfs: blob: data:; connect-src 'self' https://mkt.frdy.pro https://marketplace.visualstudio.com https://*.gallerycdn.vsassets.io https://*.vo.msecnd.net blob: data:; img-src 'self' data: blob: https://mkt.frdy.pro https://*.gallerycdn.vsassets.io; media-src 'self' blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' vfs: blob: 'unsafe-inline' 'unsafe-eval'"
+      "csp": "default-src 'self'; frame-src 'self' vfs: blob: data: http://vfs.localhost https://vfs.localhost; connect-src 'self' https://frdy.pro https://mkt.frdy.pro https://marketplace.visualstudio.com https://*.gallerycdn.vsassets.io https://*.vo.msecnd.net blob: data: http://vfs.localhost https://vfs.localhost; img-src 'self' data: blob: https://frdy.pro https://mkt.frdy.pro https://*.gallerycdn.vsassets.io http://vfs.localhost https://vfs.localhost; media-src 'self' blob: http://vfs.localhost https://vfs.localhost; font-src 'self' data: http://vfs.localhost https://vfs.localhost; style-src 'self' 'unsafe-inline' http://vfs.localhost https://vfs.localhost; script-src 'self' vfs: blob: 'unsafe-inline' 'unsafe-eval' http://vfs.localhost https://vfs.localhost; worker-src 'self' blob: http://vfs.localhost https://vfs.localhost"
     }
   },
   "bundle": {

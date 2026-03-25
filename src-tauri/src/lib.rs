@@ -773,14 +773,24 @@ fn vfs_request_path_to_os(path: &str) -> Option<PathBuf> {
 
 #[cfg(windows)]
 fn vfs_request_path_to_os(path: &str) -> Option<PathBuf> {
-    // Windows: `/C/Program Files/...` where the first segment is the drive letter.
+    // Accept both `/C/Users/...` (single-letter segments) and `C:/Users/...` (colon after
+    // drive), which is what the frontend path helpers and percent-decoded URLs produce.
     let trimmed = path.trim_start_matches('/');
     let mut parts = trimmed.split('/').filter(|s| !s.is_empty());
-    let drive = parts.next()?;
-    if drive.len() != 1 || !drive.chars().all(|c| c.is_ascii_alphabetic()) {
+    let first = parts.next()?;
+    let mut pb = if first.len() == 2
+        && first.as_bytes().get(1) == Some(&b':')
+        && first.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+    {
+        PathBuf::from(format!(
+            "{}:\\",
+            first.chars().next().unwrap().to_ascii_uppercase()
+        ))
+    } else if first.len() == 1 && first.chars().all(|c| c.is_ascii_alphabetic()) {
+        PathBuf::from(format!("{}:\\", first.to_ascii_uppercase()))
+    } else {
         return None;
-    }
-    let mut pb = PathBuf::from(format!("{}:\\", drive.to_ascii_uppercase()));
+    };
     for seg in parts {
         pb.push(seg);
     }
