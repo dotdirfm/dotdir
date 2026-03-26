@@ -1,4 +1,4 @@
-import { type ReactNode, memo, useCallback, useLayoutEffect, useRef } from "react";
+import { type ReactNode, memo, useCallback, useLayoutEffect, useRef, useEffect } from "react";
 import { ScrollableContainer } from "./ScrollableContainer";
 import { useElementSize } from "./useElementSize";
 
@@ -76,6 +76,8 @@ export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrol
     onColumnCountChangedRef.current?.(columnCount);
   }, [columnCount]);
 
+  const propsTopmostIndex = props.topmostIndex;
+
   if (activeIndex < topmostIndex) {
     topmostIndex = activeIndex;
   } else if (activeIndex > topmostIndex + columnCount * itemsPerColumn - 1) {
@@ -83,6 +85,14 @@ export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrol
   } else if (topmostIndex > totalCount - columnCount * itemsPerColumn) {
     topmostIndex = Math.max(0, totalCount - columnCount * itemsPerColumn);
   }
+
+  // Propagate the clamped topmostIndex back to the parent whenever it diverges
+  // from the incoming prop (e.g. keyboard navigation that scrolls the viewport).
+  useEffect(() => {
+    if (topmostIndex !== propsTopmostIndex) {
+      onPosChangeRef.current?.(topmostIndex, activeIndex);
+    }
+  });
 
   const topmostIndexRef = useRef(topmostIndex);
   const activeIndexRef = useRef(activeIndex);
