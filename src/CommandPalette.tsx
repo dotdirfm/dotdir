@@ -1,8 +1,10 @@
 import { Command } from "cmdk";
+import { useAtom } from "jotai";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { commandPaletteOpenAtom } from "./atoms";
 import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from "./commands";
-import { INPUT_NO_ASSIST } from "./inputNoAssist";
 import { focusContext } from "./focusContext";
+import { INPUT_NO_ASSIST } from "./inputNoAssist";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -21,8 +23,6 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const [search, setSearch] = useState("");
   const [commands, setCommands] = useState<CommandType[]>([]);
   const [keybindings, setKeybindings] = useState<Keybinding[]>([]);
-  const [capturedContext, setCapturedContext] = useState<string | null>(null);
-
   // Show/hide dialog
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -44,26 +44,15 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     }
   }, [open]);
 
-  // Capture the focus context when palette opens (before we push commandPalette)
-  useEffect(() => {
-    if (open && capturedContext === null) {
-      setCapturedContext(focusContext.current);
-    } else if (!open) {
-      setCapturedContext(null);
-    }
-  }, [open, capturedContext]);
-
   useEffect(() => {
     const updateCommands = () => {
-      // Use captured context for filtering, or current if not captured yet
-      const contextToUse = capturedContext ?? focusContext.current;
-      setCommands(commandRegistry.getVisibleCommandsForContext(contextToUse));
+      setCommands(commandRegistry.getAllCommands());
       setKeybindings(commandRegistry.getKeybindings());
     };
     updateCommands();
     if (!open) return;
     return commandRegistry.onChange(updateCommands);
-  }, [open, capturedContext]);
+  }, [open]);
 
   const items = useMemo<CommandItem[]>(() => {
     return commands.map((cmd) => {
@@ -139,7 +128,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 }
 
 export function useCommandPalette() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useAtom(commandPaletteOpenAtom);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

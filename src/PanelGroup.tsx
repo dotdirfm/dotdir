@@ -1,11 +1,23 @@
-import type { FsNode } from "fss-lang";
-import { useMemo } from "react";
-import { FileList } from "./FileList";
-import { PanelTabs, filelistPersistedTabIndex, type PanelTab } from "./FileList/PanelTabs";
-import type { PanelPersistedState } from "./extensions";
+import type { FsNode, LayeredResolver } from "fss-lang";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { ViewerContainer } from "./ExtensionContainer";
+import { FileList } from "./FileList";
+import { PanelTabs } from "./FileList/PanelTabs";
+import { activePanelAtom, showHiddenAtom } from "./atoms";
+import { bridge } from "./bridge";
+import type { PanelPersistedState } from "./extensions";
+import {
+  createFilelistTab,
+  leftActiveIndexAtom,
+  leftActiveTabIdAtom,
+  leftTabsAtom,
+  rightActiveIndexAtom,
+  rightActiveTabIdAtom,
+  rightTabsAtom,
+} from "./tabsAtoms";
+import { setActivePanelGroupHandlers } from "./panelGroupHandlers";
 import { viewerRegistry } from "./viewerEditorRegistry";
-import type { LayeredResolver } from "fss-lang";
 
 type PanelSide = "left" | "right";
 
@@ -20,27 +32,13 @@ interface PanelModel {
 
 interface PanelGroupProps {
   side: PanelSide;
-  active: boolean;
   panel: PanelModel;
-  tabs: PanelTab[];
-  activeIndex: number;
-  onSelectTab: (idx: number) => void;
-  onDoubleClickTab: (idx: number) => void;
-  onCloseTab: (idx: number) => void;
-  onNewTab: () => void;
-  onReorderTabs: (from: number, to: number) => void;
-  filteredEntries: FsNode[];
-  editorFileSizeLimit: number;
-  onActivatePanel: () => void;
   onRememberExpectedTerminalCwd: (path: string) => void;
-  onViewFile: (filePath: string, fileName: string, fileSize: number) => void;
-  onEditFile: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
   onMoveToTrash: (sourcePaths: string[], refresh: () => void) => void;
   onPermanentDelete: (sourcePaths: string[], refresh: () => void) => void;
   onCopy?: (sourcePaths: string[], refresh: () => void) => void;
   onMove?: (sourcePaths: string[], refresh: () => void) => void;
   onRename?: (sourcePath: string, currentName: string, refresh: () => void) => void;
-  onExecuteInTerminal: (cmd: string) => Promise<void>;
   onPasteToCommandLine?: (text: string) => void;
   selectionKey?: number;
   requestedActiveName?: string;
@@ -50,27 +48,14 @@ interface PanelGroupProps {
 }
 
 export function PanelGroup({
-  active,
+  side,
   panel,
-  tabs,
-  activeIndex,
-  onSelectTab,
-  onDoubleClickTab,
-  onCloseTab,
-  onNewTab,
-  onReorderTabs,
-  filteredEntries,
-  editorFileSizeLimit,
-  onActivatePanel,
   onRememberExpectedTerminalCwd,
-  onViewFile,
-  onEditFile,
   onMoveToTrash,
   onPermanentDelete,
   onCopy,
   onMove,
   onRename,
-  onExecuteInTerminal,
   onPasteToCommandLine,
   selectionKey,
   requestedActiveName,
@@ -78,25 +63,82 @@ export function PanelGroup({
   initialPanelState,
   onStateChange,
 }: PanelGroupProps) {
+  const activePanel = useAtomValue(activePanelAtom);
+  const setActivePanel = useSetAtom(activePanelAtom);
+  const active = activePanel === side;
+
+  const [tabs, setTabs] = useAtom(side === "left" ? leftTabsAtom : rightTabsAtom);
+  const [activeTabId, setActiveTabId] = useAtom(side === "left" ? leftActiveTabIdAtom : rightActiveTabIdAtom);
+  const activeIndex = useAtomValue(side === "left" ? leftActiveIndexAtom : rightActiveIndexAtom);
   const activeTab = tabs[activeIndex];
 
-  const persistedFilelistIdx = useMemo(() => filelistPersistedTabIndex(tabs, activeIndex), [tabs, activeIndex]);
-  const initialTabPersisted =
-    persistedFilelistIdx >= 0 && initialPanelState?.tabs
-      ? initialPanelState.tabs[persistedFilelistIdx]
-      : undefined;
+  const initialTabPersisted = initialPanelState?.tabs?.[activeIndex];
+
+  const showHidden = useAtomValue(showHiddenAtom);
+  const filteredEntries = useMemo(() => (showHidden ? panel.entries : panel.entries.filter((e) => !e.meta.hidden)), [showHidden, panel.entries]);
+
+  const panelRef = useRef(panel);
+  panelRef.current = panel;
+
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const activeTabIdRef = useRef(activeTabId);
+  activeTabIdRef.current = activeTabId;
+
+  const onSelectTab = useCallback((id: string) => setActiveTabId(id), [setActiveTabId]);
+  const handlePinTab = useCallback((id: string) => {
+    setTabs((prev) => prev.map((t) => (t.id === id && t.type === "preview" && t.isTemp ? { ...t, isTemp: false } : t)));
+  }, []);
+  const onCloseTab = useCallback(async (id: string) => {
+    const currentTabs = tabsRef.current;
+    if (currentTabs.length > 1) {
+      const idx = currentTabs.findIndex((t) => t.id === id);
+      const next = currentTabs.filter((t) => t.id !== id);
+      if (activeTabIdRef.current === id) setActiveTabId(next[Math.min(idx, next.length - 1)]?.id ?? "");
+      setTabs(next);
+      return;
+    }
+    const home = await bridge.utils.getHomePath();
+    const newTab = createFilelistTab(home);
+    setTabs([newTab]);
+    setActiveTabId(newTab.id);
+    panelRef.current.navigateTo(home);
+  }, []);
+
+  const handleReorderTabs = useCallback((fromIndex: number, toIndex: number) => {
+    setTabs((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  }, []);
+
+  const handleNewTab = useCallback(() => {
+    const path = panelRef.current.currentPath;
+    const newTab = createFilelistTab(path);
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+    void panelRef.current.navigateTo(path);
+  }, [setTabs, setActiveTabId]);
+
+  useEffect(() => {
+    if (!active) return;
+    setActivePanelGroupHandlers({ newTab: handleNewTab, closeActiveTab: () => onCloseTab(activeTabIdRef.current) });
+    return () => setActivePanelGroupHandlers(null);
+  }, [active, handleNewTab, onCloseTab]);
 
   return (
-    <div className={`panel ${active ? "active" : ""}`} onClick={onActivatePanel}>
+    <div className={`panel ${active ? "active" : ""}`} onClick={() => setActivePanel(side)}>
       {panel.navigating && <div className="panel-progress" />}
       <PanelTabs
         tabs={tabs}
-        activeIndex={activeIndex}
+        activeTabId={activeTabId}
         onSelectTab={onSelectTab}
-        onDoubleClickTab={onDoubleClickTab}
+        onDoubleClickTab={handlePinTab}
         onCloseTab={onCloseTab}
-        onNewTab={onNewTab}
-        onReorderTabs={onReorderTabs}
+        onNewTab={handleNewTab}
+        onReorderTabs={handleReorderTabs}
       />
       <div className="panel-content">
         {activeTab?.type === "filelist" ? (
@@ -106,25 +148,21 @@ export function PanelGroup({
             parentNode={panel.parentNode}
             entries={filteredEntries}
             onNavigate={(path) => {
-              onActivatePanel();
+              setActivePanel(side);
               onRememberExpectedTerminalCwd(path);
               return panel.navigateTo(path);
             }}
-            onViewFile={onViewFile}
-            onEditFile={onEditFile}
             onMoveToTrash={onMoveToTrash}
             onPermanentDelete={onPermanentDelete}
             onCopy={onCopy}
             onMove={onMove}
             onRename={onRename}
-            onExecuteInTerminal={onExecuteInTerminal}
             onPasteToCommandLine={onPasteToCommandLine}
             selectionKey={selectionKey}
-            editorFileSizeLimit={editorFileSizeLimit}
             active={active}
             resolver={panel.resolver}
-            requestedActiveName={requestedActiveName ?? initialTabPersisted?.selectedName}
-            requestedTopmostName={requestedTopmostName ?? initialTabPersisted?.topmostName}
+            requestedActiveName={requestedActiveName ?? (initialTabPersisted?.type === "filelist" ? initialTabPersisted.selectedName : undefined)}
+            requestedTopmostName={requestedTopmostName ?? (initialTabPersisted?.type === "filelist" ? initialTabPersisted.topmostName : undefined)}
             onStateChange={onStateChange}
           />
         ) : activeTab?.type === "preview" ? (
@@ -141,7 +179,7 @@ export function PanelGroup({
                   fileName={tab.name}
                   fileSize={tab.size}
                   inline
-                  onClose={() => onCloseTab(activeIndex)}
+                  onClose={() => onCloseTab(tab.id)}
                 />
               );
             }

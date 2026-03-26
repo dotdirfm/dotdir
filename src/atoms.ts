@@ -2,6 +2,7 @@ import { atom } from "jotai";
 import type { LoadedExtension } from "./extensions";
 import type { TerminalProfile } from "./bridge";
 import type { ThemeKind } from "fss-lang";
+import type { PanelSide } from "./useFileOperations";
 
 export const showExtensionsAtom = atom(false);
 export const activeIconThemeAtom = atom<string | undefined>(undefined);
@@ -19,7 +20,12 @@ export const promptActiveAtom = atom(true);
 export const terminalFocusRequestKeyAtom = atom(0);
 export const requestedTerminalCwdAtom = atom<string | null>(null);
 
+export const activePanelAtom = atom<PanelSide>("left");
+export const showHiddenAtom = atom(false);
+export const commandPaletteOpenAtom = atom(false);
+export const viewerFileAtom = atom<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
+export const editorFileAtom = atom<{ path: string; name: string; size: number; langId: string } | null>(null);
+
 export const commandLineCwdAtom = atom("");
-export const commandLineVisibleAtom = atom((get) => get(panelsVisibleAtom) && get(promptActiveAtom));
 export const commandLineOnExecuteAtom = atom<((cmd: string) => void) | null>(null);
 export const commandLinePasteFnAtom = atom<((text: string) => void) | null>(null);

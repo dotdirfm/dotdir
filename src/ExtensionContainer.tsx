@@ -295,18 +295,16 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       registerCommand(
         commandId: string,
         handler: (...args: unknown[]) => void | Promise<void>,
-        options?: { title?: string; category?: string; icon?: string; when?: string },
+        options?: { title?: string; category?: string; icon?: string },
       ): () => void {
         const existing = commandRegistry.getCommand(commandId);
         const title = options?.title ?? existing?.title ?? commandId;
         const category = options?.category ?? existing?.category;
         const icon = options?.icon ?? existing?.icon;
-        const when = options?.when ?? existing?.when;
 
         const dispose = commandRegistry.registerCommand(commandId, title, handler, {
           category,
           icon,
-          when,
         });
         return dispose;
       },
@@ -466,7 +464,6 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         const title = options?.title ?? existing?.title ?? commandId;
         const category = options?.category ?? existing?.category;
         const icon = options?.icon ?? existing?.icon;
-        const when = options?.when ?? existing?.when;
 
         const dispose = commandRegistry.registerCommand(
           commandId,
@@ -478,7 +475,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
               iframeWin.postMessage({ type: "host:runCommand", handlerId, callId, args }, "*");
             });
           },
-          { category, icon, when },
+          { category, icon },
         );
         extensionCommandDisposers.set(handlerId, dispose);
         return;

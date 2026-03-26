@@ -13,22 +13,12 @@ export type PanelTab =
       sourcePanel?: "left" | "right";
     };
 
-/** Index in persisted `tabs[]` (filelist-only) for the tab at `activeIndex`, or -1 if not a filelist. */
-export function filelistPersistedTabIndex(tabs: PanelTab[], activeIndex: number): number {
-  let fl = 0;
-  for (let i = 0; i < tabs.length; i++) {
-    if (i === activeIndex) return tabs[i]?.type === "filelist" ? fl : -1;
-    if (tabs[i]?.type === "filelist") fl++;
-  }
-  return -1;
-}
-
 interface PanelTabsProps {
   tabs: PanelTab[];
-  activeIndex: number;
-  onSelectTab: (index: number) => void;
-  onDoubleClickTab: (index: number) => void;
-  onCloseTab?: (index: number) => void;
+  activeTabId: string;
+  onSelectTab: (id: string) => void;
+  onDoubleClickTab: (id: string) => void;
+  onCloseTab?: (id: string) => void;
   onNewTab: () => void;
   onReorderTabs?: (fromIndex: number, toIndex: number) => void;
 }
@@ -41,7 +31,7 @@ function tabLabel(tab: PanelTab): string {
   return tab.name;
 }
 
-export const PanelTabs = memo(function PanelTabs({ tabs, activeIndex, onSelectTab, onDoubleClickTab, onCloseTab, onNewTab, onReorderTabs }: PanelTabsProps) {
+export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTab, onDoubleClickTab, onCloseTab, onNewTab, onReorderTabs }: PanelTabsProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<(HTMLDivElement | null)[]>([]);
   const dragFromRef = useRef<number | null>(null);
@@ -138,7 +128,7 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeIndex, onSelectTa
         {tabs.flatMap((tab, i) => {
           const isPreview = tab.type === "preview";
           const isTemp = isPreview && tab.isTemp;
-          const isActive = i === activeIndex;
+          const isActive = tab.id === activeTabId;
           const showDropBefore = dropIndex === i;
           return [
             showDropBefore ? <div key={`drop-${i}`} className="panel-tab-drop-indicator" aria-hidden /> : null,
@@ -148,10 +138,10 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeIndex, onSelectTa
                 tabRefs.current[i] = el;
               }}
               className={"panel-tab" + (isActive ? " active" : "") + (isTemp ? " temp" : "")}
-              onClick={() => onSelectTab(i)}
+              onClick={() => onSelectTab(tab.id)}
               onDoubleClick={(e) => {
                 e.preventDefault();
-                onDoubleClickTab(i);
+                onDoubleClickTab(tab.id);
               }}
               title={tab.path}
               draggable
@@ -165,7 +155,7 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeIndex, onSelectTa
                   className="panel-tab-close"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onCloseTab(i);
+                    onCloseTab(tab.id);
                   }}
                   aria-label="Close tab"
                 >

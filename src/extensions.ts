@@ -726,14 +726,9 @@ export async function uninstallExtension(publisherUsername: string, extName: str
 
 // ── Settings ────────────────────────────────────────────────────────
 
-export interface PersistedTab {
-  type: "filelist";
-  path: string;
-  /** Cursor / active row for this tab. */
-  selectedName?: string;
-  /** Scroll position (top visible row) for this tab. */
-  topmostName?: string;
-}
+export type PersistedTab =
+  | { type: "filelist"; path: string; selectedName?: string; topmostName?: string }
+  | { type: "preview"; path: string; name: string; size: number };
 
 export interface PanelPersistedState {
   currentPath: string;

@@ -90,7 +90,7 @@ export interface HostApi {
   registerCommand?(
     commandId: string,
     handler: (...args: unknown[]) => void | Promise<void>,
-    options?: { title?: string; category?: string; icon?: string; when?: string },
+    options?: { title?: string; category?: string; icon?: string },
   ): () => void;
 
   /** Contribute a keybinding (extension layer). */
@@ -199,7 +199,7 @@ declare global {
         registerCommand: (
           commandId: string,
           handler: (...args: unknown[]) => void | Promise<void>,
-          options?: { title?: string; category?: string; icon?: string; when?: string },
+          options?: { title?: string; category?: string; icon?: string },
         ) => { dispose: () => void };
         registerKeybinding: (binding: { command: string; key: string; mac?: string; when?: string }) => {
           dispose: () => void;

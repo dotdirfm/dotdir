@@ -39,16 +39,10 @@ export function ActionBar() {
       });
 
       if (kb) {
-        // Check if the keybinding's when condition is satisfied
-        const whenSatisfied = commandRegistry.evaluateWhen(kb.when);
-        if (whenSatisfied) {
+        if (commandRegistry.evaluateWhen(kb.when)) {
           const cmd = commandRegistry.getCommand(kb.command);
-          // Also check command's when condition if it has one
-          const cmdWhenSatisfied = cmd ? commandRegistry.evaluateWhen(cmd.when) : true;
-          if (cmdWhenSatisfied) {
-            newItems.push({ fKey: i, command: cmd, keybinding: kb });
-            continue;
-          }
+          newItems.push({ fKey: i, command: cmd, keybinding: kb });
+          continue;
         }
       }
       newItems.push({ fKey: i });

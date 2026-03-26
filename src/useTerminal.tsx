@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef } from "react";
 import {
   commandLineCwdAtom,
   panelsVisibleAtom,
-  promptActiveAtom,
   requestedTerminalCwdAtom,
   resolvedProfilesAtom,
   terminalFocusRequestKeyAtom,
@@ -34,7 +33,6 @@ export function useTerminal({ activePanelCwd, onNavigatePanel }: UseTerminalOpti
 
   const panelsVisible = useAtomValue(panelsVisibleAtom);
   const setPanelsVisible = useSetAtom(panelsVisibleAtom);
-  const setPromptActive = useSetAtom(promptActiveAtom);
   const setTerminalFocusRequestKey = useSetAtom(terminalFocusRequestKeyAtom);
   const requestedTerminalCwd = useAtomValue(requestedTerminalCwdAtom);
   const setRequestedTerminalCwd = useSetAtom(requestedTerminalCwdAtom);
@@ -57,19 +55,9 @@ export function useTerminal({ activePanelCwd, onNavigatePanel }: UseTerminalOpti
         clearTimeout(promptHideTimerRef.current);
         promptHideTimerRef.current = null;
       }
-      if (active) {
-        setPromptActive(true);
-        if (hiddenForCommandRef.current) {
-          hiddenForCommandRef.current = false;
-          setPanelsVisible(true);
-        }
-      } else {
-        promptHideTimerRef.current = setTimeout(() => {
-          setPromptActive(false);
-        }, 60);
-      }
+      setPanelsVisible(active);
     },
-    [setPromptActive, setPanelsVisible],
+    [setPanelsVisible],
   );
 
   // Subscribe to active session command-start / command-finish events

@@ -20,7 +20,6 @@ export interface Command {
   title: string;
   category?: string;
   icon?: string;
-  when?: string;
   handler: (...args: unknown[]) => void | Promise<void>;
 }
 
@@ -90,13 +89,12 @@ class CommandRegistry {
     return this.contextValues[key];
   }
 
-  registerCommand(id: string, title: string, handler: CommandHandler, options?: { category?: string; icon?: string; when?: string }): () => void {
+  registerCommand(id: string, title: string, handler: CommandHandler, options?: { category?: string; icon?: string }): () => void {
     const command: Command = {
       id,
       title,
       category: options?.category,
       icon: options?.icon,
-      when: options?.when,
       handler,
     };
     this.commands.set(id, command);
@@ -154,27 +152,7 @@ class CommandRegistry {
   }
 
   getVisibleCommands(): Command[] {
-    return Array.from(this.commands.values()).filter((cmd) => this.evaluateWhen(cmd.when));
-  }
-
-  getVisibleCommandsForContext(contextOverride: string): Command[] {
-    return Array.from(this.commands.values()).filter((cmd) => this.evaluateWhenWithContext(cmd.when, contextOverride));
-  }
-
-  private evaluateWhenWithContext(when: string | undefined, focusOverride: string): boolean {
-    if (!when) return true;
-    const userContext = this.contextGetter();
-    const context: Record<string, unknown> = {
-      ...userContext,
-      ...this.contextValues,
-      focusPanel: focusOverride === "panel",
-      focusViewer: focusOverride === "viewer",
-      focusEditor: focusOverride === "editor",
-      focusTerminal: focusOverride === "terminal",
-      focusCommandPalette: focusOverride === "commandPalette",
-      focusModal: focusOverride === "modal",
-    };
-    return CommandRegistry.evalWhen(when, context);
+    return this.getAllCommands();
   }
 
   getKeybindings(): Keybinding[] {
