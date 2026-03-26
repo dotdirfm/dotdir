@@ -137,18 +137,8 @@ export class BrowserExtensionHost {
       registerCommand: (
         commandId: string,
         handler: (...args: unknown[]) => void | Promise<void>,
-        options?: { title?: string; category?: string; icon?: string },
       ): BrowserDisposable => {
-        const existing = commandRegistry.getCommand(commandId);
-        const title = options?.title ?? existing?.title ?? commandId;
-        const category = options?.category ?? existing?.category;
-        const icon = options?.icon ?? existing?.icon;
-
-        const disposeFn = commandRegistry.registerCommand(commandId, title, handler, {
-          category,
-          icon,
-        });
-        return { dispose: disposeFn };
+        return { dispose: commandRegistry.registerCommand(commandId, handler) };
       },
       registerKeybinding: (binding: BrowserExtensionKeybinding): BrowserDisposable => {
         const disposeFn = registerExtensionKeybinding(commandRegistry, { command: binding.command, key: binding.key, mac: binding.mac, when: binding.when });

@@ -2,6 +2,8 @@ import "./index.css";
 
 import { invoke, isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { initBridge } from "./bridge";
+import { builtInCommandContributions } from "./builtInCommandContributions";
+import { commandRegistry } from "./commands";
 import { createRoot } from "react-dom/client";
 import { createElement } from "react";
 import { App } from "./app";
@@ -74,6 +76,8 @@ new MutationObserver((mutations) => {
     }
   }
 }).observe(document.body, { childList: true, subtree: true });
+
+commandRegistry.registerContributions(builtInCommandContributions);
 
 try {
   await writeBootLog("main.tsx starting");

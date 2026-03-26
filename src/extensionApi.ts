@@ -87,11 +87,7 @@ export interface HostApi {
    * Commands API exposed to extensions running inside the iframe.
    * Implemented to mimic VS Code: `registerCommand(id, callback) -> Disposable`.
    */
-  registerCommand?(
-    commandId: string,
-    handler: (...args: unknown[]) => void | Promise<void>,
-    options?: { title?: string; category?: string; icon?: string },
-  ): () => void;
+  registerCommand?(commandId: string, handler: (...args: unknown[]) => void | Promise<void>): () => void;
 
   /** Contribute a keybinding (extension layer). */
   registerKeybinding?(binding: { command: string; key: string; mac?: string; when?: string }): () => void;

@@ -295,18 +295,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       registerCommand(
         commandId: string,
         handler: (...args: unknown[]) => void | Promise<void>,
-        options?: { title?: string; category?: string; icon?: string },
       ): () => void {
-        const existing = commandRegistry.getCommand(commandId);
-        const title = options?.title ?? existing?.title ?? commandId;
-        const category = options?.category ?? existing?.category;
-        const icon = options?.icon ?? existing?.icon;
-
-        const dispose = commandRegistry.registerCommand(commandId, title, handler, {
-          category,
-          icon,
-        });
-        return dispose;
+        return commandRegistry.registerCommand(commandId, handler);
       },
 
       registerKeybinding(binding: { command: string; key: string; mac?: string; when?: string }): () => void {
@@ -456,27 +446,16 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       if (data.type === "ext:registerCommand") {
         const handlerId = String(data.handlerId ?? "");
         const commandId = String(data.commandId ?? "");
-        const options = data.options ?? {};
         if (!handlerId || !commandId) return;
         if (extensionCommandDisposers.has(handlerId)) return;
 
-        const existing = commandRegistry.getCommand(commandId);
-        const title = options?.title ?? existing?.title ?? commandId;
-        const category = options?.category ?? existing?.category;
-        const icon = options?.icon ?? existing?.icon;
-
-        const dispose = commandRegistry.registerCommand(
-          commandId,
-          title,
-          async (...args: unknown[]) => {
-            const callId = nextCallId++;
-            await new Promise<void>((resolve, reject) => {
-              pendingCommandCalls.set(callId, { resolve, reject });
-              iframeWin.postMessage({ type: "host:runCommand", handlerId, callId, args }, "*");
-            });
-          },
-          { category, icon },
-        );
+        const dispose = commandRegistry.registerCommand(commandId, async (...args: unknown[]) => {
+          const callId = nextCallId++;
+          await new Promise<void>((resolve, reject) => {
+            pendingCommandCalls.set(callId, { resolve, reject });
+            iframeWin.postMessage({ type: "host:runCommand", handlerId, callId, args }, "*");
+          });
+        });
         extensionCommandDisposers.set(handlerId, dispose);
         return;
       }

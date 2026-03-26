@@ -169,15 +169,12 @@ export function useExtensionHost({ settingsLoaded, onRefreshPanels }: UseExtensi
 
       for (const ext of exts) {
         if (ext.commands) {
+          const disposeContributions = commandRegistry.registerContributions(ext.commands);
+          extensionContributionDisposersRef.current.push(disposeContributions);
           for (const cmd of ext.commands) {
-            const disposeCmd = commandRegistry.registerCommand(
-              cmd.command,
-              cmd.title,
-              async (...args: unknown[]) => {
-                await extensionHost.executeCommand(cmd.command, args);
-              },
-              { category: cmd.category, icon: cmd.icon },
-            );
+            const disposeCmd = commandRegistry.registerCommand(cmd.command, async (...args: unknown[]) => {
+              await extensionHost.executeCommand(cmd.command, args);
+            });
             extensionContributionDisposersRef.current.push(disposeCmd);
           }
         }

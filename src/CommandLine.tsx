@@ -67,245 +67,132 @@ export function CommandLine() {
   // Register all editing/navigation commands once; always read state via refs
   useEffect(() => {
     const d: Array<() => void> = [];
-    const options = { category: "Command Line", when: "focusPanel" };
-    const optionsWhenHasText = {
-      category: "Command Line",
-      when: "focusPanel && commandLineHasText",
-    };
 
     d.push(
-      commandRegistry.registerCommand(
-        "commandLine.execute",
-        "Execute Command Line",
-        () => {
-          const cmd = valueRef.current.trim();
-          if (!cmd) return;
-          onExecuteRef.current?.(cmd);
+      commandRegistry.registerCommand("commandLine.execute", () => {
+        const cmd = valueRef.current.trim();
+        if (!cmd) return;
+        onExecuteRef.current?.(cmd);
+        setValue("");
+        setCursor(0);
+        setAnchor(0);
+      }),
+    );
+
+    d.push(
+      commandRegistry.registerCommand("commandLine.clear", () => {
+        if (cursorRef.current !== anchorRef.current) {
+          setAnchor(cursorRef.current); // collapse selection first
+        } else {
           setValue("");
           setCursor(0);
           setAnchor(0);
-        },
-        optionsWhenHasText,
-      ),
+        }
+      }),
     );
 
     d.push(
-      commandRegistry.registerCommand(
-        "commandLine.clear",
-        "Clear Command Line",
-        () => {
-          if (cursorRef.current !== anchorRef.current) {
-            setAnchor(cursorRef.current); // collapse selection first
-          } else {
-            setValue("");
-            setCursor(0);
-            setAnchor(0);
-          }
-        },
-        optionsWhenHasText,
-      ),
+      commandRegistry.registerCommand("commandLine.deleteLeft", () => {
+        const pos = cursorRef.current;
+        const anch = anchorRef.current;
+        if (pos !== anch) {
+          deleteSelection();
+        } else if (pos > 0) {
+          setValue((v) => v.slice(0, pos - 1) + v.slice(pos));
+          setCursor(pos - 1);
+          setAnchor(pos - 1);
+        }
+      }),
     );
 
     d.push(
-      commandRegistry.registerCommand(
-        "commandLine.deleteLeft",
-        "Delete Left",
-        () => {
+      commandRegistry.registerCommand("commandLine.deleteRight", () => {
+        if (!deleteSelection()) {
           const pos = cursorRef.current;
-          const anch = anchorRef.current;
-          if (pos !== anch) {
-            deleteSelection();
-          } else if (pos > 0) {
-            setValue((v) => v.slice(0, pos - 1) + v.slice(pos));
-            setCursor(pos - 1);
-            setAnchor(pos - 1);
+          if (pos < valueRef.current.length) {
+            setValue((v) => v.slice(0, pos) + v.slice(pos + 1));
           }
-        },
-        optionsWhenHasText,
-      ),
+        }
+      }),
     );
 
     d.push(
-      commandRegistry.registerCommand(
-        "commandLine.deleteRight",
-        "Delete Right",
-        () => {
-          if (!deleteSelection()) {
-            const pos = cursorRef.current;
-            if (pos < valueRef.current.length) {
-              setValue((v) => v.slice(0, pos) + v.slice(pos + 1));
-            }
-          }
-        },
-        optionsWhenHasText,
-      ),
+      commandRegistry.registerCommand("commandLine.moveWordLeft", () => {
+        const v = valueRef.current;
+        let p = cursorRef.current;
+        while (p > 0 && v[p - 1] === " ") p--;
+        while (p > 0 && v[p - 1] !== " ") p--;
+        moveCursor(p, false);
+      }),
     );
 
     d.push(
-      commandRegistry.registerCommand(
-        "commandLine.moveWordLeft",
-        "Move Cursor Word Left",
-        () => {
-          const v = valueRef.current;
-          let p = cursorRef.current;
-          while (p > 0 && v[p - 1] === " ") p--;
-          while (p > 0 && v[p - 1] !== " ") p--;
-          moveCursor(p, false);
-        },
-        optionsWhenHasText,
-      ),
+      commandRegistry.registerCommand("commandLine.moveWordRight", () => {
+        const v = valueRef.current;
+        let p = cursorRef.current;
+        while (p < v.length && v[p] !== " ") p++;
+        while (p < v.length && v[p] === " ") p++;
+        moveCursor(p, false);
+      }),
     );
 
-    d.push(
-      commandRegistry.registerCommand(
-        "commandLine.moveWordRight",
-        "Move Cursor Word Right",
-        () => {
-          const v = valueRef.current;
-          let p = cursorRef.current;
-          while (p < v.length && v[p] !== " ") p++;
-          while (p < v.length && v[p] === " ") p++;
-          moveCursor(p, false);
-        },
-        optionsWhenHasText,
-      ),
-    );
+    d.push(commandRegistry.registerCommand("commandLine.home", () => moveCursor(0, false)));
+    d.push(commandRegistry.registerCommand("commandLine.end", () => moveCursor(valueRef.current.length, false)));
 
     d.push(
-      commandRegistry.registerCommand(
-        "commandLine.home",
-        "Move Cursor to Start",
-        () => {
-          moveCursor(0, false);
-        },
-        optionsWhenHasText,
-      ),
-    );
-
-    d.push(
-      commandRegistry.registerCommand(
-        "commandLine.end",
-        "Move Cursor to End",
-        () => {
-          moveCursor(valueRef.current.length, false);
-        },
-        optionsWhenHasText,
-      ),
-    );
-
-    d.push(
-      commandRegistry.registerCommand(
-        "commandLine.selectAll",
-        "Select All",
-        () => {
-          if (valueRef.current.length === 0) return;
-          setAnchor(0);
-          setCursor(valueRef.current.length);
-        },
-        optionsWhenHasText,
-      ),
+      commandRegistry.registerCommand("commandLine.selectAll", () => {
+        if (valueRef.current.length === 0) return;
+        setAnchor(0);
+        setCursor(valueRef.current.length);
+      }),
     );
 
     // Selection commands — registered without keybindings; user can bind manually
+    d.push(commandRegistry.registerCommand("commandLine.selectLeft", () => moveCursor(Math.max(0, cursorRef.current - 1), true)));
+    d.push(commandRegistry.registerCommand("commandLine.selectRight", () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), true)));
+    d.push(commandRegistry.registerCommand("commandLine.selectHome", () => moveCursor(0, true)));
+    d.push(commandRegistry.registerCommand("commandLine.selectEnd", () => moveCursor(valueRef.current.length, true)));
+
     d.push(
-      commandRegistry.registerCommand(
-        "commandLine.selectLeft",
-        "Extend Selection Left",
-        () => {
-          moveCursor(Math.max(0, cursorRef.current - 1), true);
-        },
-        optionsWhenHasText,
-      ),
+      commandRegistry.registerCommand("commandLine.copy", () => {
+        const pos = cursorRef.current;
+        const anch = anchorRef.current;
+        if (pos === anch) return;
+        const s = Math.min(pos, anch);
+        const e = Math.max(pos, anch);
+        navigator.clipboard.writeText(valueRef.current.slice(s, e)).catch(() => {});
+      }),
     );
 
     d.push(
-      commandRegistry.registerCommand(
-        "commandLine.selectRight",
-        "Extend Selection Right",
-        () => {
-          moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), true);
-        },
-        optionsWhenHasText,
-      ),
+      commandRegistry.registerCommand("commandLine.cut", () => {
+        const pos = cursorRef.current;
+        const anch = anchorRef.current;
+        if (pos === anch) return;
+        const s = Math.min(pos, anch);
+        const e = Math.max(pos, anch);
+        navigator.clipboard.writeText(valueRef.current.slice(s, e)).catch(() => {});
+        deleteSelection();
+      }),
     );
 
     d.push(
-      commandRegistry.registerCommand(
-        "commandLine.selectHome",
-        "Extend Selection to Start",
-        () => {
-          moveCursor(0, true);
-        },
-        optionsWhenHasText,
-      ),
-    );
-
-    d.push(
-      commandRegistry.registerCommand(
-        "commandLine.selectEnd",
-        "Extend Selection to End",
-        () => {
-          moveCursor(valueRef.current.length, true);
-        },
-        optionsWhenHasText,
-      ),
-    );
-
-    d.push(
-      commandRegistry.registerCommand(
-        "commandLine.copy",
-        "Copy Selection",
-        () => {
-          const pos = cursorRef.current;
-          const anch = anchorRef.current;
-          if (pos === anch) return;
-          const s = Math.min(pos, anch);
-          const e = Math.max(pos, anch);
-          navigator.clipboard.writeText(valueRef.current.slice(s, e)).catch(() => {});
-        },
-        optionsWhenHasText,
-      ),
-    );
-
-    d.push(
-      commandRegistry.registerCommand(
-        "commandLine.cut",
-        "Cut Selection",
-        () => {
-          const pos = cursorRef.current;
-          const anch = anchorRef.current;
-          if (pos === anch) return;
-          const s = Math.min(pos, anch);
-          const e = Math.max(pos, anch);
-          navigator.clipboard.writeText(valueRef.current.slice(s, e)).catch(() => {});
-          deleteSelection();
-        },
-        optionsWhenHasText,
-      ),
-    );
-
-    d.push(
-      commandRegistry.registerCommand(
-        "commandLine.paste",
-        "Paste from Clipboard",
-        () => {
-          navigator.clipboard
-            .readText()
-            .then((text) => {
-              if (!text) return;
-              const pos = cursorRef.current;
-              const anch = anchorRef.current;
-              const s = Math.min(pos, anch);
-              const e = Math.max(pos, anch);
-              const newPos = s + text.length;
-              setValue((v) => v.slice(0, s) + text + v.slice(e));
-              setCursor(newPos);
-              setAnchor(newPos);
-            })
-            .catch(() => {});
-        },
-        options,
-      ),
+      commandRegistry.registerCommand("commandLine.paste", () => {
+        navigator.clipboard
+          .readText()
+          .then((text) => {
+            if (!text) return;
+            const pos = cursorRef.current;
+            const anch = anchorRef.current;
+            const s = Math.min(pos, anch);
+            const e = Math.max(pos, anch);
+            const newPos = s + text.length;
+            setValue((v) => v.slice(0, s) + text + v.slice(e));
+            setCursor(newPos);
+            setAnchor(newPos);
+          })
+          .catch(() => {});
+      }),
     );
 
     return () => {

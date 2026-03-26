@@ -18,9 +18,9 @@ import { focusContext } from "./focusContext";
 export interface Command {
   id: string;
   title: string;
+  shortTitle?: string;
   category?: string;
   icon?: string;
-  handler: (...args: unknown[]) => void | Promise<void>;
 }
 
 export interface Keybinding {
@@ -33,6 +33,7 @@ export interface Keybinding {
 export interface CommandContribution {
   command: string;
   title: string;
+  shortTitle?: string;
   category?: string;
   icon?: string;
 }
@@ -50,7 +51,8 @@ type CommandHandler = (...args: unknown[]) => void | Promise<void>;
 type ContextGetter = () => Record<string, unknown>;
 
 class CommandRegistry {
-  private commands = new Map<string, Command>();
+  private contributions = new Map<string, CommandContribution>();
+  private handlers = new Map<string, CommandHandler>();
   private keybindingLayers: Record<KeybindingLayer, Keybinding[]> = {
     default: [],
     extension: [],
@@ -89,18 +91,24 @@ class CommandRegistry {
     return this.contextValues[key];
   }
 
-  registerCommand(id: string, title: string, handler: CommandHandler, options?: { category?: string; icon?: string }): () => void {
-    const command: Command = {
-      id,
-      title,
-      category: options?.category,
-      icon: options?.icon,
-      handler,
-    };
-    this.commands.set(id, command);
+  registerContributions(contributions: CommandContribution[]): () => void {
+    for (const c of contributions) {
+      this.contributions.set(c.command, c);
+    }
     this.notifyListeners();
     return () => {
-      this.commands.delete(id);
+      for (const c of contributions) {
+        this.contributions.delete(c.command);
+      }
+      this.notifyListeners();
+    };
+  }
+
+  registerCommand(id: string, handler: CommandHandler): () => void {
+    this.handlers.set(id, handler);
+    this.notifyListeners();
+    return () => {
+      this.handlers.delete(id);
       this.notifyListeners();
     };
   }
@@ -131,28 +139,32 @@ class CommandRegistry {
   }
 
   async executeCommand(id: string, ...args: unknown[]): Promise<void> {
-    const command = this.commands.get(id);
-    if (!command) {
+    const handler = this.handlers.get(id);
+    if (!handler) {
       console.warn(`Command not found: ${id}`);
       return;
     }
     try {
-      await command.handler(...args);
+      await handler(...args);
     } catch (err) {
       console.error(`Command ${id} failed:`, err);
     }
   }
 
   getCommand(id: string): Command | undefined {
-    return this.commands.get(id);
+    const c = this.contributions.get(id);
+    if (!c) return undefined;
+    return { id: c.command, title: c.title, shortTitle: c.shortTitle, category: c.category, icon: c.icon };
   }
 
   getAllCommands(): Command[] {
-    return Array.from(this.commands.values());
-  }
-
-  getVisibleCommands(): Command[] {
-    return this.getAllCommands();
+    return Array.from(this.contributions.values()).map((c) => ({
+      id: c.command,
+      title: c.title,
+      shortTitle: c.shortTitle,
+      category: c.category,
+      icon: c.icon,
+    }));
   }
 
   getKeybindings(): Keybinding[] {
