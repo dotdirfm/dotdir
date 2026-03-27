@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": ".dir",
+  "productName": "dotdir",
   "version": "0.1.0",
   "identifier": "dev.dotdir",
   "build": {
