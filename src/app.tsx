@@ -17,31 +17,30 @@ import {
   themesReadyAtom,
   viewerFileAtom,
 } from "./atoms";
-import { bridge } from "./bridge";
-import { isExistingDirectory, parseCdCommand, resolveCdPath } from "./commandLineCd";
+import { bridge } from "./shared/api/bridge";
+import { isExistingDirectory, parseCdCommand, resolveCdPath } from "./features/navigation/lib/commandLineCd";
 import { CommandPalette, useCommandPalette } from "./CommandPalette";
 import { commandRegistry } from "./commands";
 import { ActionBar } from "./components/ActionBar";
 import { CommandLine } from "./components/CommandLine";
-import type { PanelTab } from "./components/FileList/PanelTabs";
 import { CONTAINER_SEP } from "./containerPath";
 import { DialogHolder, useDialog } from "./dialogs/dialogContext";
 import { EditorContainer, ViewerContainer } from "./components/ExtensionContainer";
-import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type FaradayUiState, type PanelPersistedState, type PersistedTab } from "./extensions";
+import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type PanelPersistedState } from "./extensions";
 import { ExtensionsPanel } from "./components/ExtensionsPanel";
-import { setFileOperationHandlers } from "./fileOperationHandlers";
+import { setFileOperationHandlers } from "./features/file-ops/model/fileOperationHandlers";
 import { isMediaFile } from "./mediaFiles";
 import { ModalDialog } from "./dialogs/ModalDialog";
+import { OPPOSITE_PANEL } from "./entities/panel/model/panelSide";
 import { PanelGroup } from "./PanelGroup";
-import { OPPOSITE_PANEL, PANEL_SETTINGS_KEY, PANEL_SIDES } from "./panelSide";
 import { basename, normalizePath, resolveDotSegments } from "./path";
-import { createFilelistTab, createPreviewTab, genTabId, leftActiveTabIdAtom, leftTabsAtom, rightActiveTabIdAtom, rightTabsAtom } from "./tabsAtoms";
+import { createFilelistTab, createPreviewTab, leftActiveTabIdAtom, leftTabsAtom, rightActiveTabIdAtom, rightTabsAtom } from "./entities/tab/model/tabsAtoms";
+import { useWorkspacePersistenceProcess, useWorkspaceRestoreProcess } from "./processes/workspace-session/model/useWorkspaceSessionProcess";
 import { TerminalPanelBody, TerminalToolbar } from "./Terminal";
 import { normalizeTerminalPath } from "./terminal/path";
-import { flushUiState, initUiState, updateUiState } from "./uiState";
 import { useBuiltInCommands } from "./hooks/useBuiltInCommands";
 import { useExtensionHost } from "./hooks/useExtensionHost";
-import { useFileOperations, type PanelSide } from "./hooks/useFileOperations";
+import { useFileOperations } from "./features/file-ops/model/useFileOperations";
 import { findExistingParent, usePanel } from "./hooks/usePanel";
 import { initUserKeybindings } from "./userKeybindings";
 import { useTerminal } from "./hooks/useTerminal";
@@ -78,9 +77,6 @@ export function App() {
   const setActiveIconTheme = useSetAtom(activeIconThemeAtom);
   const setActiveColorTheme = useSetAtom(activeColorThemeAtom);
   const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
-  const [initialLeftPanel, setInitialLeftPanel] = useState<PanelPersistedState | undefined>(undefined);
-  const [initialRightPanel, setInitialRightPanel] = useState<PanelPersistedState | undefined>(undefined);
-  const [initialActivePanel, setInitialActivePanel] = useState<PanelSide | undefined>(undefined);
   const [leftTabs, setLeftTabs] = useAtom(leftTabsAtom);
   const [rightTabs, setRightTabs] = useAtom(rightTabsAtom);
   const [leftActiveTabId, setLeftActiveTabId] = useAtom(leftActiveTabIdAtom);
@@ -89,9 +85,8 @@ export function App() {
   const rightSelectedNameRef = useRef<string | undefined>(undefined);
   const leftTabSelectionRef = useRef<Record<string, { selectedName?: string; topmostName?: string }>>({});
   const rightTabSelectionRef = useRef<Record<string, { selectedName?: string; topmostName?: string }>>({});
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const uiStateRef = useRef<FaradayUiState>({});
-  const [uiStateLoaded, setUiStateLoaded] = useState(false);
+  const prevLeftActiveTabIdRef = useRef(leftActiveTabId);
+  const prevRightActiveTabIdRef = useRef(rightActiveTabId);
   const loadedExtensions = useAtomValue(loadedExtensionsAtom);
   const themesReady = useAtomValue(themesReadyAtom);
   const leftTabsRef = useRef(leftTabs);
@@ -118,67 +113,26 @@ export function App() {
     if (settings.showHidden !== undefined) setShowHidden(settings.showHidden);
   }, [settings, ready]);
 
-  useEffect(() => {
-    initUiState().then((state) => {
-      uiStateRef.current = state;
-      setUiStateLoaded(true);
-    });
-  }, []);
-
-  // One-time restoration: tabs, panel paths, active panel — runs once when both files are loaded
-  useEffect(() => {
-    if (!ready || !uiStateLoaded) return;
-
-    const ui = uiStateRef.current;
-
-    const restoreTabs = (panel: PanelPersistedState | undefined): PanelTab[] | null => {
-      if (panel?.tabs?.length) {
-        return panel.tabs.map((t) => {
-          if (t.type === "filelist") return createFilelistTab(t.path);
-          return { id: genTabId(), type: "preview" as const, path: t.path, name: t.name, size: t.size, isTemp: false };
-        });
-      }
-      if (panel?.currentPath) {
-        return [createFilelistTab(panel.currentPath)];
-      }
-      return null;
-    };
-
-    const seedTabSelections = (refs: typeof leftTabSelectionRef, restored: PanelTab[] | null, persisted: PanelPersistedState | undefined) => {
-      if (!restored?.length || !persisted?.tabs?.length) return;
-      for (let i = 0; i < restored.length && i < persisted.tabs.length; i++) {
-        const t = restored[i];
-        const p = persisted.tabs[i];
-        if (t.type === "filelist" && p.type === "filelist" && (p.selectedName != null || p.topmostName != null)) {
-          refs.current[t.id] = { selectedName: p.selectedName, topmostName: p.topmostName };
-        }
-      }
-    };
-
-    const restoredLeftTabs = restoreTabs(ui.leftPanel);
-    const restoredRightTabs = restoreTabs(ui.rightPanel);
-    if (restoredLeftTabs) seedTabSelections(leftTabSelectionRef, restoredLeftTabs, ui.leftPanel);
-    if (restoredRightTabs) seedTabSelections(rightTabSelectionRef, restoredRightTabs, ui.rightPanel);
-    const restoredLeftIndex = restoredLeftTabs ? Math.min(ui.leftPanel?.activeTabIndex ?? 0, restoredLeftTabs.length - 1) : 0;
-    const restoredRightIndex = restoredRightTabs ? Math.min(ui.rightPanel?.activeTabIndex ?? 0, restoredRightTabs.length - 1) : 0;
-    const restoredLeftActiveId = restoredLeftTabs?.[restoredLeftIndex]?.id;
-    const restoredRightActiveId = restoredRightTabs?.[restoredRightIndex]?.id;
-
-    if (restoredLeftActiveId) prevLeftActiveTabIdRef.current = restoredLeftActiveId;
-    if (restoredRightActiveId) prevRightActiveTabIdRef.current = restoredRightActiveId;
-
-    if (restoredLeftTabs) setLeftTabs(restoredLeftTabs);
-    if (restoredRightTabs) setRightTabs(restoredRightTabs);
-    if (restoredLeftActiveId) setLeftActiveTabId(restoredLeftActiveId);
-    if (restoredRightActiveId) setRightActiveTabId(restoredRightActiveId);
-
-    if (ui.leftPanel) setInitialLeftPanel(ui.leftPanel);
-    if (ui.rightPanel) setInitialRightPanel(ui.rightPanel);
-    if (ui.activePanel) setInitialActivePanel(ui.activePanel);
-    setSettingsLoaded(true);
-    initUserKeybindings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once when both files are loaded
-  }, [ready, uiStateLoaded]);
+  const {
+    settingsLoaded,
+    initialLeftPanel,
+    initialRightPanel,
+    initialActivePanel,
+    setInitialLeftPanel,
+    setInitialRightPanel,
+    setInitialActivePanel,
+  } = useWorkspaceRestoreProcess({
+    ready,
+    setLeftTabs,
+    setRightTabs,
+    setLeftActiveTabId,
+    setRightActiveTabId,
+    leftTabSelectionRef,
+    rightTabSelectionRef,
+    prevLeftActiveTabIdRef,
+    prevRightActiveTabIdRef,
+    onAfterRestore: initUserKeybindings,
+  });
 
   const activePanelRef = useRef(activePanel);
   activePanelRef.current = activePanel;
@@ -414,114 +368,24 @@ export function App() {
   const leftRequestedCursor = left.requestedCursor ?? (viewerFile?.panel === "left" ? viewerActiveName : undefined);
   const rightRequestedCursor = right.requestedCursor ?? (viewerFile?.panel === "right" ? viewerActiveName : undefined);
 
-  // Panel state persistence with long debounce (10s) to avoid excessive writes
-  const panelStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingPanelStateRef = useRef<Partial<FaradayUiState>>({});
-
-  const buildPersistedTabs = useCallback((side: PanelSide, tabs: PanelTab[], activeTabId: string): { tabs: PersistedTab[]; activeTabIndex: number } => {
-    const selectionRef = side === "left" ? leftTabSelectionRef : rightTabSelectionRef;
-    const persisted: PersistedTab[] = tabs.map((tab) => {
-      if (tab.type === "filelist") {
-        const sel = selectionRef.current[tab.id];
-        const pt: PersistedTab = { type: "filelist", path: tab.path };
-        if (sel?.selectedName != null) pt.selectedName = sel.selectedName;
-        if (sel?.topmostName != null) pt.topmostName = sel.topmostName;
-        return pt;
-      }
-      return { type: "preview", path: tab.path, name: tab.name, size: tab.size };
-    });
-    const activeTabIndex = Math.max(
-      0,
-      tabs.findIndex((t) => t.id === activeTabId),
-    );
-    return { tabs: persisted, activeTabIndex };
-  }, []);
-
-  const flushPanelState = useCallback(() => {
-    if (panelStateSaveTimerRef.current) {
-      clearTimeout(panelStateSaveTimerRef.current);
-      panelStateSaveTimerRef.current = null;
-    }
-    const pending = pendingPanelStateRef.current;
-    for (const side of PANEL_SIDES) {
-      const key = PANEL_SETTINGS_KEY[side];
-      if (!pending[key]) {
-        pending[key] = { currentPath: side === "left" ? left.currentPath : right.currentPath };
-      }
-      const tabsRef = side === "left" ? leftTabsRef : rightTabsRef;
-      const activeTabIdRef = side === "left" ? leftActiveTabIdRef : rightActiveTabIdRef;
-      Object.assign(pending[key]!, buildPersistedTabs(side, tabsRef.current, activeTabIdRef.current));
-    }
-    updateUiState(pending);
-    flushUiState();
-    pendingPanelStateRef.current = {};
-  }, [buildPersistedTabs, left.currentPath, right.currentPath]);
-
-  const savePanelStateDebounced = useCallback(() => {
-    if (panelStateSaveTimerRef.current) {
-      clearTimeout(panelStateSaveTimerRef.current);
-    }
-    panelStateSaveTimerRef.current = setTimeout(() => {
-      panelStateSaveTimerRef.current = null;
-      updateUiState(pendingPanelStateRef.current);
-      pendingPanelStateRef.current = {};
-    }, 10000); // 10 second debounce
-  }, []);
-
-  // Flush panel state on window close
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      flushPanelState();
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [flushPanelState]);
-
-  const handlePanelStateChange = useCallback(
-    (side: PanelSide, selectedName: string | undefined, topmostName: string | undefined) => {
-      const selfTabsRef = side === "left" ? leftTabsRef : rightTabsRef;
-      const selfActiveTabIdRef = side === "left" ? leftActiveTabIdRef : rightActiveTabIdRef;
-      const selfTabSelRef = side === "left" ? leftTabSelectionRef : rightTabSelectionRef;
-      const selfSelectedNameRef = side === "left" ? leftSelectedNameRef : rightSelectedNameRef;
-      const panel = side === "left" ? left : right;
-
-      const tab = selfTabsRef.current.find((t) => t.id === selfActiveTabIdRef.current);
-      if (tab?.type === "filelist") {
-        selfTabSelRef.current[tab.id] = { selectedName, topmostName };
-      }
-      selfSelectedNameRef.current = selectedName;
-      pendingPanelStateRef.current[PANEL_SETTINGS_KEY[side]] = {
-        currentPath: panel.currentPath,
-        ...buildPersistedTabs(side, selfTabsRef.current, selfActiveTabIdRef.current),
-      };
-      savePanelStateDebounced();
-
-      const opposite = OPPOSITE_PANEL[side];
-      const oppTabsRef = opposite === "left" ? leftTabsRef : rightTabsRef;
-      const setOppTabs = opposite === "right" ? setRightTabs : setLeftTabs;
-      const setOppActiveId = opposite === "right" ? setRightActiveTabId : setLeftActiveTabId;
-      const tabs = oppTabsRef.current;
-      const tempTab = tabs.find((t) => t.type === "preview" && t.isTemp && t.sourcePanel === side);
-      if (!tempTab || !selectedName) return;
-      const entry = panel.entries.find((e) => e.name === selectedName);
-      if (!entry || entry.type !== "file") return;
-      const path = entry.path as string;
-      const name = entry.name;
-      const size = Number(entry.meta.size);
-      if (tempTab.type === "preview" && tempTab.path === path && tempTab.name === name) return;
-      setOppTabs((prev) =>
-        prev.map((t) => (t.id === tempTab.id ? { id: t.id, type: "preview" as const, path, name, size, isTemp: true, sourcePanel: side } : t)),
-      );
-      setOppActiveId(tempTab.id);
-    },
-    [left, right, buildPersistedTabs, savePanelStateDebounced],
-  );
-
-  // Save active panel when it changes (only after settings loaded to avoid overwriting on mount)
-  useEffect(() => {
-    if (!settingsLoaded) return;
-    updateUiState({ activePanel });
-  }, [activePanel, settingsLoaded]);
+  const { handlePanelStateChange } = useWorkspacePersistenceProcess({
+    activePanel,
+    settingsLoaded,
+    left,
+    right,
+    leftTabsRef,
+    rightTabsRef,
+    leftActiveTabIdRef,
+    rightActiveTabIdRef,
+    leftTabSelectionRef,
+    rightTabSelectionRef,
+    leftSelectedNameRef,
+    rightSelectedNameRef,
+    setLeftTabs,
+    setRightTabs,
+    setLeftActiveTabId,
+    setRightActiveTabId,
+  });
 
   const handleOpenCurrentFolderInOppositeCurrentTab = useCallback(() => {
     const side = activePanelRef.current;
@@ -625,8 +489,6 @@ export function App() {
   // Sync panel path with active filelist tab.
   // Only navigate when the user *switches* tabs (activeTabId changes). Do NOT depend on leftTabs/rightTabs
   // or we get a loop: panel path change → we update tab path → this effect runs with stale tab.path → navigates back.
-  const prevLeftActiveTabIdRef = useRef(leftActiveTabId);
-  const prevRightActiveTabIdRef = useRef(rightActiveTabId);
   useEffect(() => {
     if (prevLeftActiveTabIdRef.current === leftActiveTabId) return;
     prevLeftActiveTabIdRef.current = leftActiveTabId;

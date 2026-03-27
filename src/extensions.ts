@@ -1,4 +1,4 @@
-import { bridge, type CwdEscapeMode, type DeleteProgressEvent } from "./bridge";
+import { bridge, type CwdEscapeMode, type DeleteProgressEvent } from "./shared/api/bridge";
 import { readFileBuffer, readFileText } from "./fs";
 import { dirname, join, normalizePath } from "./path";
 

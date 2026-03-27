@@ -6,6 +6,7 @@ import { FileList } from "./components/FileList";
 import { PanelTabs } from "./components/FileList/PanelTabs";
 import { activePanelAtom, showHiddenAtom } from "./atoms";
 import { bridge } from "./bridge";
+import type { PanelSide } from "./entities/panel/model/types";
 import type { PanelPersistedState } from "./extensions";
 import {
   createFilelistTab,
@@ -15,11 +16,9 @@ import {
   rightActiveIndexAtom,
   rightActiveTabIdAtom,
   rightTabsAtom,
-} from "./tabsAtoms";
+} from "./entities/tab/model/tabsAtoms";
 import { setActivePanelGroupHandlers } from "./panelGroupHandlers";
 import { viewerRegistry } from "./viewerEditorRegistry";
-
-type PanelSide = "left" | "right";
 
 interface PanelModel {
   currentPath: string;

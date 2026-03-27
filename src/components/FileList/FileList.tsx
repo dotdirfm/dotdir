@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { actionQueue } from "../../actionQueue";
 import { commandRegistry } from "../../commands";
 import { setActiveFileListHandlers } from "../../fileListHandlers";
-import { getFileOperationHandlers } from "../../fileOperationHandlers";
+import { getFileOperationHandlers } from "../../features/file-ops/model/fileOperationHandlers";
 import { viewerRegistry, editorRegistry } from "../../viewerEditorRegistry";
 import { resolveEntryStyle } from "../../fss";
 import type { ResolvedEntryStyle } from "../../types";

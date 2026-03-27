@@ -1,7 +1,7 @@
 import "./index.css";
 
 import { invoke, isTauri as isTauriApp } from "@tauri-apps/api/core";
-import { initBridge } from "./bridge";
+import { initBridge } from "./shared/api/bridge";
 import { builtInCommandContributions } from "./builtInCommandContributions";
 import { commandRegistry } from "./commands";
 import { createRoot } from "react-dom/client";
