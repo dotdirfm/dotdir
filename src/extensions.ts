@@ -747,6 +747,10 @@ export interface FaradaySettings {
   showHidden?: boolean;
   /** Command-line folder aliases: `cd:name` navigates to the absolute path. Set with `cd::name`. */
   pathAliases?: Record<string, string>;
+}
+
+/** UI state persisted across launches (tabs, active panel). Not watched — read once on startup. */
+export interface FaradayUiState {
   leftPanel?: PanelPersistedState;
   rightPanel?: PanelPersistedState;
   activePanel?: "left" | "right";

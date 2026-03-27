@@ -26,7 +26,7 @@ import { commandRegistry } from "./commands";
 import { CONTAINER_SEP } from "./containerPath";
 import { DialogHolder, useDialog } from "./dialogContext";
 import { EditorContainer, ViewerContainer } from "./ExtensionContainer";
-import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type PanelPersistedState, type PersistedTab } from "./extensions";
+import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type FaradayUiState, type PanelPersistedState, type PersistedTab } from "./extensions";
 import { ExtensionsPanel } from "./ExtensionsPanel";
 import type { PanelTab } from "./FileList/PanelTabs";
 import { isMediaFile } from "./mediaFiles";
@@ -45,6 +45,7 @@ import { findExistingParent, usePanel } from "./usePanel";
 import { initUserKeybindings } from "./userKeybindings";
 import { useTerminal } from "./useTerminal";
 import { useUserSettings } from "./useUserSettings";
+import { initUiState, updateUiState, flushUiState } from "./uiState";
 import { editorRegistry, fsProviderRegistry, viewerRegistry } from "./viewerEditorRegistry";
 
 export function App() {
@@ -89,6 +90,8 @@ export function App() {
   const leftTabSelectionRef = useRef<Record<string, { selectedName?: string; topmostName?: string }>>({});
   const rightTabSelectionRef = useRef<Record<string, { selectedName?: string; topmostName?: string }>>({});
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const uiStateRef = useRef<FaradayUiState>({});
+  const [uiStateLoaded, setUiStateLoaded] = useState(false);
   const loadedExtensions = useAtomValue(loadedExtensionsAtom);
   const themesReady = useAtomValue(themesReadyAtom);
   const leftTabsRef = useRef(leftTabs);
@@ -115,11 +118,18 @@ export function App() {
     if (settings.showHidden !== undefined) setShowHidden(settings.showHidden);
   }, [settings, ready]);
 
-  // One-time restoration: tabs, panel paths, active panel — runs once when settings first load
   useEffect(() => {
-    if (!ready) return;
+    initUiState().then((state) => {
+      uiStateRef.current = state;
+      setUiStateLoaded(true);
+    });
+  }, []);
 
-    const s = settingsRef.current;
+  // One-time restoration: tabs, panel paths, active panel — runs once when both files are loaded
+  useEffect(() => {
+    if (!ready || !uiStateLoaded) return;
+
+    const ui = uiStateRef.current;
 
     const restoreTabs = (panel: PanelPersistedState | undefined): PanelTab[] | null => {
       if (panel?.tabs?.length) {
@@ -145,12 +155,12 @@ export function App() {
       }
     };
 
-    const restoredLeftTabs = restoreTabs(s.leftPanel);
-    const restoredRightTabs = restoreTabs(s.rightPanel);
-    if (restoredLeftTabs) seedTabSelections(leftTabSelectionRef, restoredLeftTabs, s.leftPanel);
-    if (restoredRightTabs) seedTabSelections(rightTabSelectionRef, restoredRightTabs, s.rightPanel);
-    const restoredLeftIndex = restoredLeftTabs ? Math.min(s.leftPanel?.activeTabIndex ?? 0, restoredLeftTabs.length - 1) : 0;
-    const restoredRightIndex = restoredRightTabs ? Math.min(s.rightPanel?.activeTabIndex ?? 0, restoredRightTabs.length - 1) : 0;
+    const restoredLeftTabs = restoreTabs(ui.leftPanel);
+    const restoredRightTabs = restoreTabs(ui.rightPanel);
+    if (restoredLeftTabs) seedTabSelections(leftTabSelectionRef, restoredLeftTabs, ui.leftPanel);
+    if (restoredRightTabs) seedTabSelections(rightTabSelectionRef, restoredRightTabs, ui.rightPanel);
+    const restoredLeftIndex = restoredLeftTabs ? Math.min(ui.leftPanel?.activeTabIndex ?? 0, restoredLeftTabs.length - 1) : 0;
+    const restoredRightIndex = restoredRightTabs ? Math.min(ui.rightPanel?.activeTabIndex ?? 0, restoredRightTabs.length - 1) : 0;
     const restoredLeftActiveId = restoredLeftTabs?.[restoredLeftIndex]?.id;
     const restoredRightActiveId = restoredRightTabs?.[restoredRightIndex]?.id;
 
@@ -162,13 +172,13 @@ export function App() {
     if (restoredLeftActiveId) setLeftActiveTabId(restoredLeftActiveId);
     if (restoredRightActiveId) setRightActiveTabId(restoredRightActiveId);
 
-    if (s.leftPanel) setInitialLeftPanel(s.leftPanel);
-    if (s.rightPanel) setInitialRightPanel(s.rightPanel);
-    if (s.activePanel) setInitialActivePanel(s.activePanel);
+    if (ui.leftPanel) setInitialLeftPanel(ui.leftPanel);
+    if (ui.rightPanel) setInitialRightPanel(ui.rightPanel);
+    if (ui.activePanel) setInitialActivePanel(ui.activePanel);
     setSettingsLoaded(true);
     initUserKeybindings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once when ready
-  }, [ready]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once when both files are loaded
+  }, [ready, uiStateLoaded]);
 
   const activePanelRef = useRef(activePanel);
   activePanelRef.current = activePanel;
@@ -406,10 +416,7 @@ export function App() {
 
   // Panel state persistence with long debounce (10s) to avoid excessive writes
   const panelStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingPanelStateRef = useRef<{
-    leftPanel?: PanelPersistedState;
-    rightPanel?: PanelPersistedState;
-  }>({});
+  const pendingPanelStateRef = useRef<Partial<FaradayUiState>>({});
 
   const buildPersistedTabs = useCallback((side: PanelSide, tabs: PanelTab[], activeTabId: string): { tabs: PersistedTab[]; activeTabIndex: number } => {
     const selectionRef = side === "left" ? leftTabSelectionRef : rightTabSelectionRef;
@@ -445,7 +452,8 @@ export function App() {
       const activeTabIdRef = side === "left" ? leftActiveTabIdRef : rightActiveTabIdRef;
       Object.assign(pending[key]!, buildPersistedTabs(side, tabsRef.current, activeTabIdRef.current));
     }
-    updateSettings(pending);
+    updateUiState(pending);
+    flushUiState();
     pendingPanelStateRef.current = {};
   }, [buildPersistedTabs, left.currentPath, right.currentPath]);
 
@@ -455,7 +463,7 @@ export function App() {
     }
     panelStateSaveTimerRef.current = setTimeout(() => {
       panelStateSaveTimerRef.current = null;
-      updateSettings(pendingPanelStateRef.current);
+      updateUiState(pendingPanelStateRef.current);
       pendingPanelStateRef.current = {};
     }, 10000); // 10 second debounce
   }, []);
@@ -512,7 +520,7 @@ export function App() {
   // Save active panel when it changes (only after settings loaded to avoid overwriting on mount)
   useEffect(() => {
     if (!settingsLoaded) return;
-    updateSettings({ activePanel });
+    updateUiState({ activePanel });
   }, [activePanel, settingsLoaded]);
 
   const handleOpenCurrentFolderInOppositeCurrentTab = useCallback(() => {
