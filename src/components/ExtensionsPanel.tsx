@@ -34,7 +34,7 @@ function errMsg(err: unknown): string {
 }
 
 type Tab = "marketplace" | "installed";
-type MarketplaceSource = "faraday" | "vscode";
+type MarketplaceSource = "dotdir" | "vscode";
 
 export function ExtensionsPanel() {
   const setShowExtensions = useSetAtom(showExtensionsAtom);
@@ -79,7 +79,7 @@ export function ExtensionsPanel() {
         setVscodeResults([]);
       }
     } catch {
-      setError(`Could not reach ${source === "vscode" ? "VS Code" : "Faraday"} marketplace`);
+      setError(`Could not reach ${source === "vscode" ? "VS Code" : ".dir"} marketplace`);
     }
     setLoading(false);
   }, []);
@@ -215,13 +215,13 @@ export function ExtensionsPanel() {
               VS Code
             </button>
             <button
-              className={`ext-source-btn ${marketplaceSource === "faraday" ? "active" : ""}`}
+              className={`ext-source-btn ${marketplaceSource === "dotdir" ? "active" : ""}`}
               onClick={() => {
-                setMarketplaceSource("faraday");
+                setMarketplaceSource("dotdir");
                 setQuery("");
               }}
             >
-              Faraday
+              .dir
             </button>
           </div>
           <input
@@ -239,7 +239,7 @@ export function ExtensionsPanel() {
 
       <div className="ext-list">
         {tab === "marketplace" &&
-          marketplaceSource === "faraday" &&
+          marketplaceSource === "dotdir" &&
           (loading ? (
             <div className="ext-empty">Searching...</div>
           ) : results.length === 0 ? (

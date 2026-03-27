@@ -2,7 +2,7 @@
 ///
 /// Elevation on Windows would require named pipes + UAC; not yet implemented.
 /// All operations return an error indicating elevation is unsupported.
-use faraday_core::error::FsError;
+use dotdir_core::error::FsError;
 use std::sync::Arc;
 
 pub type WatchCallback = Arc<dyn Fn(&str, &str, Option<&str>) + Send + Sync>;
@@ -14,11 +14,11 @@ impl FsProxy {
         false
     }
 
-    pub fn entries(&self, _dir_path: &str) -> Result<Vec<faraday_core::ops::EntryInfo>, FsError> {
+    pub fn entries(&self, _dir_path: &str) -> Result<Vec<dotdir_core::ops::EntryInfo>, FsError> {
         Err(unsupported())
     }
 
-    pub fn stat(&self, _file_path: &str) -> Result<faraday_core::ops::StatResult, FsError> {
+    pub fn stat(&self, _file_path: &str) -> Result<dotdir_core::ops::StatResult, FsError> {
         Err(unsupported())
     }
 

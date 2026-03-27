@@ -98,7 +98,7 @@ export interface HostApi {
   getExtensionResourceUrl?(relativePath: string): Promise<string>;
 }
 
-// ── Extension APIs (extension exposes to host via __faradayHostReady) ─
+// ── Extension APIs (extension exposes to host via __dotdirHostReady) ─
 
 export interface ViewerExtensionApi {
   /** Render viewer UI into the provided root. */
@@ -126,7 +126,7 @@ export interface FsProviderEntry {
 }
 
 /**
- * Host API available to fsProvider extensions (injected as `window.__faradayProviderHostApi`
+ * Host API available to fsProvider extensions (injected as `window.__dotdirProviderHostApi`
  * before the provider bundle is evaluated).
  */
 export interface FsProviderHostApi {
@@ -139,13 +139,13 @@ export interface FsProviderHostApi {
 /**
  * API that an fsProvider extension bundle must expose.
  *
- * Protocol: the bundle assigns a factory to `window.__faradayProviderReady`.
- * The host evaluates the bundle, then calls `window.__faradayProviderReady(hostApi)`
+ * Protocol: the bundle assigns a factory to `window.__dotdirProviderReady`.
+ * The host evaluates the bundle, then calls `window.__dotdirProviderReady(hostApi)`
  * and stores the returned object.
  *
  * Example bundle (CommonJS):
  * ```js
- * window.__faradayProviderReady = function(hostApi) {
+ * window.__dotdirProviderReady = function(hostApi) {
  *   return {
  *     async listEntries(containerPath, innerPath) {
  *       const bytes = await hostApi.readFile(containerPath);
@@ -171,26 +171,26 @@ export interface FsProviderExtensionApi {
 }
 
 /** Extension calls this when loaded; host sets it before injecting the script. */
-export type FaradayHostReadyCallback = (api: ViewerExtensionApi | EditorExtensionApi) => void;
+export type DotDirHostReadyCallback = (api: ViewerExtensionApi | EditorExtensionApi) => void;
 
 /** Factory signature for fsProvider bundles. */
 export type FsProviderFactory = (hostApi: FsProviderHostApi) => FsProviderExtensionApi;
 
 declare global {
   interface Window {
-    __faradayHostReady?: FaradayHostReadyCallback;
+    __dotdirHostReady?: DotDirHostReadyCallback;
     /**
      * Set by the fsProvider bundle. The host calls it after the bundle loads,
      * passing the HostApi, and stores the returned FsProviderExtensionApi.
      */
-    __faradayProviderReady?: FsProviderFactory;
+    __dotdirProviderReady?: FsProviderFactory;
     /**
      * Host API exposed to isolated extensions (iframe) as a global.
-     * Extensions can call `window.frdy.readFile(...)`, etc.
+     * Extensions can call `window.dotdir.readFile(...)`, etc.
      *
-     * We'll later publish these typings via an npm package (`frdy`).
+     * We'll later publish these typings via an npm package (`dotdir`).
      */
-    frdy?: HostApi & {
+    dotdir?: HostApi & {
       commands?: {
         registerCommand: (
           commandId: string,

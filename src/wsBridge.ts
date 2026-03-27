@@ -1,4 +1,4 @@
-/// Browser-side bridge over WebSocket - connects to the faraday-server headless backend.
+/// Browser-side bridge over WebSocket - connects to the dotdir-server headless backend.
 ///
 /// Implements the same Bridge interface as tauriBridge.ts, using JSON-RPC 2.0
 /// over WebSocket. Binary frames are used for fs.read responses.

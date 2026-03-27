@@ -1,4 +1,4 @@
-# Copilot Instructions for Faraday
+# Copilot Instructions for .dir
 
 ## Build & Run Commands
 
@@ -21,7 +21,7 @@ No test suite or linter is configured.
 
 ## Architecture
 
-Faraday is a dual-pane desktop file manager with three runtime modes:
+.dir is a dual-pane desktop file manager with three runtime modes:
 
 1. **Desktop (Tauri)** — React UI communicates with Rust backend via Tauri IPC
 2. **Headless server** — Axum HTTP/WebSocket server with JSON-RPC 2.0 for browser access
@@ -36,9 +36,9 @@ The frontend uses a single `Bridge` interface (`bridge.ts`) with two implementat
 
 The bridge is selected at boot in `main.tsx` based on whether Tauri APIs are available. All UI code calls the bridge interface, never a specific implementation.
 
-### faraday-core
+### dotdir-core
 
-`src-tauri/faraday-core/` is a pure Rust library (no Tauri dependency) containing filesystem operations, file watching, error types, and the binary protocol for the elevated helper. It is shared by the Tauri app, the headless server, and the elevated helper.
+`src-tauri/dotdir-core/` is a pure Rust library (no Tauri dependency) containing filesystem operations, file watching, error types, and the binary protocol for the elevated helper. It is shared by the Tauri app, the headless server, and the elevated helper.
 
 ### Rust entry point modes
 
@@ -50,7 +50,7 @@ The bridge is selected at boot in `main.tsx` based on whether Tauri APIs are ava
 
 ### FSS (Filesystem Stylesheets)
 
-A custom CSS-like system (`fss-lang` crate + `fss.ts`) that styles file entries based on name, type, and metadata. Stylesheets are loaded from `.faraday/fs.css` files in ancestor directories and layered with specificity rules. Cache is invalidated via filesystem watch events.
+A custom CSS-like system (`fss-lang` crate + `fss.ts`) that styles file entries based on name, type, and metadata. Stylesheets are loaded from `.dotdir/fs.css` files in ancestor directories and layered with specificity rules. Cache is invalidated via filesystem watch events.
 
 ## Key Conventions
 

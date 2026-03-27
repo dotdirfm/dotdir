@@ -7,15 +7,15 @@ fn main() {
         .init();
 
     std::panic::set_hook(Box::new(|info| {
-        faraday_tauri_lib::write_debug_log(&format!("panic: {info}"));
+        dotdir_tauri_lib::write_debug_log(&format!("panic: {info}"));
     }));
 
     let args: Vec<String> = std::env::args().collect();
-    faraday_tauri_lib::write_debug_log(&format!("main entered with args: {:?}", args));
+    dotdir_tauri_lib::write_debug_log(&format!("main entered with args: {:?}", args));
 
     match args.get(1).map(|s| s.as_str()) {
-        Some("serve") => faraday_tauri_lib::serve::run(&args[2..]),
-        Some("rpc") => faraday_tauri_lib::rpc::run(&args[2..]),
-        _ => faraday_tauri_lib::run(),
+        Some("serve") => dotdir_tauri_lib::serve::run(&args[2..]),
+        Some("rpc") => dotdir_tauri_lib::rpc::run(&args[2..]),
+        _ => dotdir_tauri_lib::run(),
     }
 }

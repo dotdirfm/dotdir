@@ -158,7 +158,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     if (iframe) {
       const emptyProps = kind === "viewer" ? { filePath: "", fileName: "", fileSize: 0 } : { filePath: "", fileName: "", langId: "plaintext" };
       try {
-        iframe.contentWindow?.postMessage({ type: "faraday:update", props: emptyProps }, "*");
+        iframe.contentWindow?.postMessage({ type: "dotdir:update", props: emptyProps }, "*");
       } catch {
         // ignore
       }
@@ -496,16 +496,16 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         return;
       }
 
-      if (data.type === "faraday:bootstrap-ready") {
+      if (data.type === "dotdir:bootstrap-ready") {
         init();
-      } else if (data.type === "faraday:ready") {
+      } else if (data.type === "dotdir:ready") {
         if (!cancelled) setLoading(false);
-      } else if (data.type === "faraday:error") {
+      } else if (data.type === "dotdir:error") {
         if (!cancelled) {
           setError(String(data.message ?? "Extension error"));
           setLoading(false);
         }
-      } else if (data.type === "faraday:iframeKeyDown") {
+      } else if (data.type === "dotdir:iframeKeyDown") {
         try {
           const key = String(data.key ?? "").toLowerCase();
           // Inline/preview viewer tab switching:
@@ -550,7 +550,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     // Keep iframe theme vars in sync with host theme changes.
     const pushThemeVars = () => {
       try {
-        iframe.contentWindow?.postMessage({ type: "faraday:themeVars", themeVars: getThemeVars() }, "*");
+        iframe.contentWindow?.postMessage({ type: "dotdir:themeVars", themeVars: getThemeVars() }, "*");
       } catch {
         // ignore
       }
@@ -592,7 +592,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
 
       iframe.contentWindow?.postMessage(
         {
-          type: "faraday:init",
+          type: "dotdir:init",
           kind,
           entryUrl,
           entryScript,
@@ -605,11 +605,11 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     };
 
     // Deterministic handshake:
-    // - iframe bootstrap posts `faraday:bootstrap-ready` when its listener is installed
-    // - we respond with `faraday:init` exactly once via `postMessage` (no MessagePort)
+    // - iframe bootstrap posts `dotdir:bootstrap-ready` when its listener is installed
+    // - we respond with `dotdir:init` exactly once via `postMessage` (no MessagePort)
     const onLoad = () => {
       // If the bootstrap-ready message gets lost for any reason, reloading iframe should re-send it.
-      // Keep a small fallback: if we never receive bootstrap-ready, surface an error.
+      // Keep a small fallback: if we never receive dotdir:bootstrap-ready, surface an error.
       setTimeout(() => {
         if (!cancelled && !initSent) {
           setError("Extension bootstrap did not respond");
@@ -625,7 +625,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       iframe.removeEventListener("load", onLoad);
       stopTheme();
       try {
-        iframe.contentWindow?.postMessage({ type: "faraday:dispose" }, "*");
+        iframe.contentWindow?.postMessage({ type: "dotdir:dispose" }, "*");
       } catch {
         // ignore
       }
@@ -686,7 +686,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       currentFilePathRef.current = (props as EditorProps).filePath;
     }
     try {
-      iframe.contentWindow?.postMessage({ type: "faraday:update", props }, "*");
+      iframe.contentWindow?.postMessage({ type: "dotdir:update", props }, "*");
     } catch {
       // ignore
     }
@@ -817,7 +817,7 @@ export function ViewerContainer({
   }, []);
 
   // Keep props identity stable across app rerenders (e.g. opening command palette),
-  // so the iframe doesn't get a `faraday:update` and remount/reload the extension.
+  // so the iframe doesn't get a `dotdir:update` and remount/reload the extension.
   const viewerProps: ViewerProps = useMemo(() => ({ filePath, fileName, fileSize, inline }), [filePath, fileName, fileSize, inline]);
 
   const toolbarHeight = 38;
@@ -956,7 +956,7 @@ export function EditorContainer({
     };
   }, []);
 
-  // Keep props identity stable to avoid unnecessary `faraday:update`.
+  // Keep props identity stable to avoid unnecessary `dotdir:update`.
   const editorProps: EditorProps = useMemo(
     () => ({
       filePath,

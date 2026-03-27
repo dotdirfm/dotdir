@@ -1,4 +1,4 @@
-// Faraday extension bootstrap (iframe) using explicit postMessage RPC.
+// .dir extension bootstrap (iframe) using explicit postMessage RPC.
 //
 // Host ↔ iframe protocol:
 // - iframe -> host: `ext:call`, `ext:subscribe`, `ext:unsubscribe`
@@ -30,16 +30,16 @@ function detectModuleFormat(url) {
 function loadExtensionApiIife(scriptUrl) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error("Extension ready timed out (10s)")), 10000);
-    window.__faradayHostReady = (api) => {
+    window.__dotdirHostReady = (api) => {
       clearTimeout(timeout);
-      delete window.__faradayHostReady;
+      delete window.__dotdirHostReady;
       resolve(api);
     };
     const script = document.createElement("script");
     script.src = scriptUrl;
     script.onerror = () => {
       clearTimeout(timeout);
-      delete window.__faradayHostReady;
+      delete window.__dotdirHostReady;
       reject(new Error("Failed to load extension script"));
     };
     document.head.appendChild(script);
@@ -161,7 +161,7 @@ function cleanupIFrameState() {
   extApi = null;
   iframeKind = null;
   try {
-    delete globalThis.frdy;
+    delete globalThis.dotdir;
   } catch {}
 }
 
@@ -170,7 +170,7 @@ async function mountWithProps(props) {
   await extApi.mount(root, props);
 }
 
-function createFrdyApi() {
+function createDotdirApi() {
   return {
     // File ops
     readFile: (path) => rpcCall("readFile", [path]),
@@ -283,20 +283,20 @@ window.addEventListener("message", async (e) => {
       return;
     }
 
-    if (data.type === "faraday:themeVars") {
+    if (data.type === "dotdir:themeVars") {
       applyThemeVars(data.themeVars);
       return;
     }
 
-    if (data.type === "faraday:init") {
+    if (data.type === "dotdir:init") {
       lifecycleChain = lifecycleChain.then(async () => {
         iframeKind = data.kind ?? null;
         applyThemeVars(data.themeVars);
 
-        // Global API for extensions: `frdy.*`
+        // Global API for extensions: `dotdir.*`
         cachedColorTheme = data.colorTheme ?? null;
-        hostApi = createFrdyApi();
-        globalThis.frdy = hostApi;
+        hostApi = createDotdirApi();
+        globalThis.dotdir = hostApi;
 
         extApi = await loadExtensionApi(data.entryUrl, data.entryScript);
 
@@ -310,7 +310,7 @@ window.addEventListener("message", async (e) => {
           keyDownListener = (ev) => {
             try {
               postToHost({
-                type: "faraday:iframeKeyDown",
+                type: "dotdir:iframeKeyDown",
                 kind: iframeKind,
                 key: ev.key,
                 ctrlKey: !!ev.ctrlKey,
@@ -325,13 +325,13 @@ window.addEventListener("message", async (e) => {
         }
 
         await mountWithProps(data.props);
-        postToHost({ type: "faraday:ready" });
+        postToHost({ type: "dotdir:ready" });
       });
       await lifecycleChain;
       return;
     }
 
-    if (data.type === "faraday:update") {
+    if (data.type === "dotdir:update") {
       lifecycleChain = lifecycleChain.then(async () => {
         if (!extApi || !data.props || typeof data.props !== "object") return;
 
@@ -373,18 +373,18 @@ window.addEventListener("message", async (e) => {
       return;
     }
 
-    if (data.type === "faraday:dispose") {
+    if (data.type === "dotdir:dispose") {
       if (extApi?.unmount) await extApi.unmount();
       cleanupIFrameState();
       return;
     }
   } catch (err) {
-    postToHost({ type: "faraday:error", message: serializeErr(err) });
+    postToHost({ type: "dotdir:error", message: serializeErr(err) });
   }
 });
 
-// Tell the host we are ready to receive `faraday:init`.
-postToHost({ type: "faraday:bootstrap-ready" });
+// Tell the host we are ready to receive `dotdir:init`.
+postToHost({ type: "dotdir:bootstrap-ready" });
 
 window.addEventListener("beforeunload", () => {
   try {

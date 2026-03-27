@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Faraday",
+  "productName": ".dir",
   "version": "0.1.0",
-  "identifier": "pro.frdy",
+  "identifier": "dev.dotdir",
   "build": {
     "beforeDevCommand": "pnpm build && pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,13 +12,13 @@
   "app": {
     "windows": [
       {
-        "title": "Faraday",
+        "title": ".dir",
         "width": 1200,
         "height": 700
       }
     ],
     "security": {
-      "csp": "default-src 'self'; frame-src 'self' vfs: blob: data: http://vfs.localhost https://vfs.localhost; connect-src 'self' https://frdy.pro https://mkt.frdy.pro https://marketplace.visualstudio.com https://*.gallerycdn.vsassets.io https://*.vo.msecnd.net blob: data: http://vfs.localhost https://vfs.localhost; img-src 'self' data: blob: https://frdy.pro https://mkt.frdy.pro https://*.gallerycdn.vsassets.io http://vfs.localhost https://vfs.localhost; media-src 'self' blob: http://vfs.localhost https://vfs.localhost; font-src 'self' data: http://vfs.localhost https://vfs.localhost; style-src 'self' 'unsafe-inline' http://vfs.localhost https://vfs.localhost; script-src 'self' vfs: blob: 'unsafe-inline' 'unsafe-eval' http://vfs.localhost https://vfs.localhost; worker-src 'self' blob: http://vfs.localhost https://vfs.localhost"
+      "csp": "default-src 'self'; frame-src 'self' vfs: blob: data: http://vfs.localhost https://vfs.localhost; connect-src 'self' https://dotdir.dev https://mkt.dotdir.dev https://marketplace.visualstudio.com https://*.gallerycdn.vsassets.io https://*.vo.msecnd.net blob: data: http://vfs.localhost https://vfs.localhost; img-src 'self' data: blob: https://dotdir.dev https://mkt.dotdir.dev https://*.gallerycdn.vsassets.io http://vfs.localhost https://vfs.localhost; media-src 'self' blob: http://vfs.localhost https://vfs.localhost; font-src 'self' data: http://vfs.localhost https://vfs.localhost; style-src 'self' 'unsafe-inline' http://vfs.localhost https://vfs.localhost; script-src 'self' vfs: blob: 'unsafe-inline' 'unsafe-eval' http://vfs.localhost https://vfs.localhost; worker-src 'self' blob: http://vfs.localhost https://vfs.localhost"
     }
   },
   "bundle": {

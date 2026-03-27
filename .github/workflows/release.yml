@@ -45,7 +45,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Faraday ${{ github.ref_name }}"
+          releaseName: ".dir ${{ github.ref_name }}"
           releaseBody: ""
           releaseDraft: true
           prerelease: false

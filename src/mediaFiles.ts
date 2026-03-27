@@ -1,6 +1,6 @@
 /**
  * Helpers for detecting image/video files (used for viewer gallery and focus).
- * Viewer implementations live in extensions (e.g. faraday-image-viewer).
+ * Viewer implementations live in extensions (e.g. dotdir-image-viewer).
  */
 
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "bmp", "webp", "ico", "svg", "avif", "tiff", "tif"]);

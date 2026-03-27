@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PanelSide } from "../../../entities/panel/model/types";
 import { PANEL_SETTINGS_KEY, PANEL_SIDES, OPPOSITE_PANEL } from "../../../entities/panel/model/panelSide";
 import { createFilelistTab, genTabId } from "../../../entities/tab/model/tabsAtoms";
-import type { FaradayUiState, PanelPersistedState, PersistedTab } from "../../../extensions";
+import type { DotDirUiState, PanelPersistedState, PersistedTab } from "../../../extensions";
 import { flushUiState, initUiState, updateUiState } from "../../../uiState";
 import type { PanelTab } from "../../../components/FileList/PanelTabs";
 
@@ -44,7 +44,7 @@ export function useWorkspaceRestoreProcess({
   onAfterRestore,
 }: RestoreParams) {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const uiStateRef = useRef<FaradayUiState>({});
+  const uiStateRef = useRef<DotDirUiState>({});
   const [uiStateLoaded, setUiStateLoaded] = useState(false);
   const [initialLeftPanel, setInitialLeftPanel] = useState<PanelPersistedState | undefined>(undefined);
   const [initialRightPanel, setInitialRightPanel] = useState<PanelPersistedState | undefined>(undefined);
@@ -160,7 +160,7 @@ export function useWorkspacePersistenceProcess({
   setRightActiveTabId,
 }: PersistParams) {
   const panelStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingPanelStateRef = useRef<Partial<FaradayUiState>>({});
+  const pendingPanelStateRef = useRef<Partial<DotDirUiState>>({});
 
   const buildPersistedTabs = useCallback((side: PanelSide, tabs: PanelTab[], activeTabId: string): { tabs: PersistedTab[]; activeTabIndex: number } => {
     const selectionRef = side === "left" ? leftTabSelectionRef : rightTabSelectionRef;

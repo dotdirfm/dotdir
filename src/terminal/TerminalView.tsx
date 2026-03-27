@@ -98,9 +98,9 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
         session.notifyOsc7FromXterm(cwd);
         return true;
       }),
-      // Faraday private OSC: prompt ready / command finished (shell integration scripts).
+      // .dir private OSC: prompt ready / command finished (shell integration scripts).
       term.parser.registerOscHandler(779, (data) => {
-        session.notifyFaradayPromptOsc(data);
+        session.notifyDotDirPromptOsc(data);
         return true;
       }),
     ];

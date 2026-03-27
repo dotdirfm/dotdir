@@ -1,9 +1,9 @@
-use faraday_core::copy::{self, CancelToken, ConflictResolution, CopyEvent, CopyOptions};
-use faraday_core::delete::{self, DeleteEvent};
-use faraday_core::move_op::{self, MoveOptions};
-use faraday_core::error::FsError;
-use faraday_core::ops::{self, EntryInfo, FdTable, StatResult};
-use faraday_core::watch::{EventCallback, FsWatcher};
+use dotdir_core::copy::{self, CancelToken, ConflictResolution, CopyEvent, CopyOptions};
+use dotdir_core::delete::{self, DeleteEvent};
+use dotdir_core::move_op::{self, MoveOptions};
+use dotdir_core::error::FsError;
+use dotdir_core::ops::{self, EntryInfo, FdTable, StatResult};
+use dotdir_core::watch::{EventCallback, FsWatcher};
 use log::debug;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -119,7 +119,7 @@ fn debug_log_path() -> PathBuf {
     let base = dirs::data_local_dir()
         .or_else(dirs::data_dir)
         .unwrap_or_else(std::env::temp_dir);
-    base.join("Faraday").join("startup.log")
+    base.join(".dir").join("startup.log")
 }
 
 pub fn write_debug_log(message: &str) {
@@ -900,10 +900,10 @@ fn vfs_virtual_response(path: &str) -> Option<tauri::http::Response<Vec<u8>>> {
   </head>
   <body>
     <div id="root"></div>
-    <script type="module">__FARADAY_BOOTSTRAP_INLINE__</script>
+    <script type="module">__DOTDIR_BOOTSTRAP_INLINE__</script>
   </body>
 </html>"#;
-        let html = html.replace("__FARADAY_BOOTSTRAP_INLINE__", bootstrap_js);
+        let html = html.replace("__DOTDIR_BOOTSTRAP_INLINE__", bootstrap_js);
         return Some(
             tauri::http::Response::builder()
                 .status(HttpStatusCode::OK)
@@ -949,7 +949,7 @@ fn fsp_read_file_range(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    write_debug_log("faraday_tauri_lib::run entered");
+    write_debug_log("dotdir_tauri_lib::run entered");
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())

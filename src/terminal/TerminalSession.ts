@@ -36,7 +36,7 @@ export class TerminalSession {
       cwd: normalizedInitialCwd,
       profileId: profile.id,
       hasOsc7Cwd: false,
-      hasFaradayOsc: false,
+      hasDotDirOsc: false,
       promptReady: false,
       commandRunning: false,
       lastCommand: null,
@@ -77,17 +77,17 @@ export class TerminalSession {
   }
 
   /**
-   * Faraday OSC 779 — shell integration emits this on preexec (S) and command finish (F).
+   * .dir OSC 779 — shell integration emits this on preexec (S) and command finish (F).
    * Payload `S` = command starting (preexec); `F` = command finished (postexec / precmd).
    */
-  notifyFaradayPromptOsc(payload: string): void {
+  notifyDotDirPromptOsc(payload: string): void {
     if (this.oscHooksSuppressed) return;
     const body = payload.replace(/^;/, "").trimStart();
     if (body.startsWith("S")) {
       // preexec: a user command is about to run (not fired for hidden cd — suppress flag is set)
       if (!this.suppressNextCommandFinish) {
-        if (!this.capabilities.hasFaradayOsc) {
-          this.capabilities = { ...this.capabilities, hasFaradayOsc: true };
+        if (!this.capabilities.hasDotDirOsc) {
+          this.capabilities = { ...this.capabilities, hasDotDirOsc: true };
         }
         if (!this.capabilities.commandRunning) {
           this.capabilities = { ...this.capabilities, commandRunning: true, promptReady: false };
@@ -97,8 +97,8 @@ export class TerminalSession {
       return;
     }
     if (!body.startsWith("F")) return;
-    if (!this.capabilities.hasFaradayOsc) {
-      this.capabilities = { ...this.capabilities, hasFaradayOsc: true };
+    if (!this.capabilities.hasDotDirOsc) {
+      this.capabilities = { ...this.capabilities, hasDotDirOsc: true };
       this.emitCapabilities();
     }
     this.finishCommand();

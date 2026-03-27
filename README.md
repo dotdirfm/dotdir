@@ -1,4 +1,4 @@
-# Faraday
+# .dir
 
 Dual-pane file manager built with Tauri + React + Rust.
 
@@ -8,7 +8,7 @@ Dual-pane file manager built with Tauri + React + Rust.
 - **Editor**: CodeMirror 6 — syntax highlighting for JS, TS, Python, Rust, SQL, JSON, HTML, CSS, YAML, XML, Markdown
 - **Terminal**: xterm.js 6 — integrated PTY shell with cwd tracking
 - **Desktop**: Tauri 2
-- **Native layer**: Rust — `faraday-core` for FS ops, elevated helper for privileged operations
+- **Native layer**: Rust — `dotdir-core` for FS ops, elevated helper for privileged operations
 - **Headless**: Standalone Rust server (axum) — HTTP + WebSocket, no GUI
 - **Styling**: FSS (filesystem stylesheets) via `fss-lang` — custom CSS-like language for styling file listings
 - **Build**: pnpm, Cargo
@@ -31,7 +31,7 @@ src/
   tauriBridge.ts       # Tauri IPC bridge (invoke/listen)
   wsBridge.ts          # WebSocket bridge (headless/browser mode)
   fs.ts                # File System Access API shim
-  fss.ts               # FSS resolver (layered .faraday/fs.css)
+  fss.ts               # FSS resolver (layered .dotdir/fs.css)
   types.ts             # Shared types (FsRawEntry, FsChangeEvent)
   iconCache.ts         # SVG icon loading and LRU cache
   langDetect.ts        # File language detection for syntax highlighting
@@ -44,7 +44,7 @@ src/
   Terminal.tsx         # Integrated terminal (xterm.js + PTY)
   ModalDialog.tsx      # Error/confirmation dialogs
 src-tauri/
-  Cargo.toml           # Workspace manifest (faraday + faraday-core)
+  Cargo.toml           # Workspace manifest (dotdir + dotdir-core)
   tauri.conf.json      # Tauri app config
   src/
     main.rs            # Entry point — desktop / serve / rpc modes
@@ -54,18 +54,18 @@ src-tauri/
     pty.rs             # PTY spawn/write/resize/close (Unix)
     serve.rs           # Headless HTTP + WebSocket server (axum, JSON-RPC 2.0)
     rpc.rs             # JSON-RPC 2.0 command dispatcher
-  faraday-core/        # Pure Rust core: ops, watch, error, proto
+  dotdir-core/        # Pure Rust core: ops, watch, error, proto
 ```
 
 ## Architecture
 
 ### Filesystem Access Layers
 
-The app accesses the filesystem through multiple backends, all using `faraday-core`:
+The app accesses the filesystem through multiple backends, all using `dotdir-core`:
 
 1. **Tauri (desktop)** — Rust commands called via Tauri IPC. Primary backend.
-2. **Elevated helper** — Spawned with admin privileges on EACCES. Communicates over a Unix socket using a custom binary protocol (`faraday-core/src/proto.rs`).
-3. **Headless server** — `faraday serve`. HTTP for static files + WebSocket for FS operations via JSON-RPC 2.0. Used for browser-only or remote access.
+2. **Elevated helper** — Spawned with admin privileges on EACCES. Communicates over a Unix socket using a custom binary protocol (`dotdir-core/src/proto.rs`).
+3. **Headless server** — `dotdir serve`. HTTP for static files + WebSocket for FS operations via JSON-RPC 2.0. Used for browser-only or remote access.
 
 ### Bridge System
 
@@ -78,7 +78,7 @@ Detection: `'__TAURI_INTERNALS__' in window` — if true, loads Tauri bridge; ot
 
 ### FSS (Filesystem Stylesheets)
 
-Files are styled using `fss-lang` — a CSS-like language that matches filesystem entries by name, type, and metadata. Stylesheets cascade from `.faraday/fs.css` files found in ancestor directories. The built-in base layer (`material-icons.fs.css`) provides Material Icons mappings.
+Files are styled using `fss-lang` — a CSS-like language that matches filesystem entries by name, type, and metadata. Stylesheets cascade from `.dotdir/fs.css` files found in ancestor directories. The built-in base layer (`material-icons.fs.css`) provides Material Icons mappings.
 
 ## Commands
 
@@ -107,7 +107,7 @@ pnpm build:rust:dev   # Build Rust binary (debug)
   --static-dir dist-web
 ```
 
-The server auto-detects `dist-web/` relative to CWD. Port and host can also be set via `FARADAY_PORT` and `FARADAY_HOST` environment variables.
+The server auto-detects `dist-web/` relative to CWD. Port and host can also be set via `DOTDIR_PORT` and `DOTDIR_HOST` environment variables.
 
 ### Development (headless with HMR)
 
@@ -118,8 +118,8 @@ pnpm dev:web          # Vite dev server at http://localhost:5173 (proxies /ws �
 
 ## Key Conventions
 
-- `faraday-core` is a pure Rust library shared by the Tauri app, the headless server, and the elevated helper
+- `dotdir-core` is a pure Rust library shared by the Tauri app, the headless server, and the elevated helper
 - File watcher events are delivered via `notify` crate callbacks routed by watch ID
 - The renderer uses virtual scrolling for file lists
-- FSS cache is invalidated when `.faraday/fs.css` changes are detected via watch events
+- FSS cache is invalidated when `.dotdir/fs.css` changes are detected via watch events
 - Elevated file descriptors are negated (`fd < 0`) to distinguish proxy vs local handles

@@ -10,7 +10,7 @@ export type { ManagedTerminalSession };
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
-const TERMINAL_STATE_STORAGE_KEY = "faraday.terminalSessions";
+const TERMINAL_STATE_STORAGE_KEY = "dotdir.terminalSessions";
 
 interface StoredTerminalSession {
   profileId: string;

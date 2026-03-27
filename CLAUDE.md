@@ -38,7 +38,7 @@ No test suite or linter is configured.
 
 ## Architecture
 
-Faraday is a dual-pane file manager with three runtime modes:
+.dir is a dual-pane file manager with three runtime modes:
 
 1. **Desktop (Tauri)** — React UI ↔ Tauri IPC ↔ Rust backend
 2. **Headless server** — React UI ↔ WebSocket (JSON-RPC 2.0) ↔ axum server
@@ -53,9 +53,9 @@ The frontend depends on a single `Bridge` interface (`bridge.ts`) with two imple
 
 Detection at boot (`main.tsx`): `'__TAURI_INTERNALS__' in window` selects Tauri or WebSocket. All UI code calls the bridge interface, never a specific implementation.
 
-### faraday-core
+### dotdir-core
 
-`src-tauri/faraday-core/` is a pure Rust library (no Tauri dependency) containing filesystem operations, file watching, error types, and the binary protocol for the elevated helper. Shared by all three runtime modes.
+`src-tauri/dotdir-core/` is a pure Rust library (no Tauri dependency) containing filesystem operations, file watching, error types, and the binary protocol for the elevated helper. Shared by all three runtime modes.
 
 ### Rust Entry Points
 
@@ -63,7 +63,7 @@ Detection at boot (`main.tsx`): `'__TAURI_INTERNALS__' in window` selects Tauri 
 
 ### Cargo Workspace
 
-`src-tauri/Cargo.toml` is the workspace root with members: the Tauri app crate and `faraday-core`.
+`src-tauri/Cargo.toml` is the workspace root with members: the Tauri app crate and `dotdir-core`.
 
 ## Key Conventions
 
@@ -76,7 +76,7 @@ Detection at boot (`main.tsx`): `'__TAURI_INTERNALS__' in window` selects Tauri 
 
 ## FSS (Filesystem Stylesheets)
 
-A custom CSS-like system (`fss-lang` crate + `fss.ts`) that styles file entries. Stylesheets cascade from `.faraday/fs.css` files in ancestor directories. Built-in base layer: `material-icons.fs.css`. Cache invalidated via filesystem watch events.
+A custom CSS-like system (`fss-lang` crate + `fss.ts`) that styles file entries. Stylesheets cascade from `.dotdir/fs.css` files in ancestor directories. Built-in base layer: `material-icons.fs.css`. Cache invalidated via filesystem watch events.
 
 ## Terminal Integration
 

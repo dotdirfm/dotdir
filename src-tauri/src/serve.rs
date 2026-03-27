@@ -1,7 +1,7 @@
-/// `faraday serve` — headless HTTP + WebSocket server.
+/// `dotdir serve` — headless HTTP + WebSocket server.
 ///
 /// Serves static web UI files and exposes filesystem operations via
-/// JSON-RPC 2.0 over WebSocket. Uses faraday-core for all FS ops.
+/// JSON-RPC 2.0 over WebSocket. Uses dotdir-core for all FS ops.
 
 use axum::{
     body::Body,
@@ -15,7 +15,7 @@ use axum::{
     Router,
 };
 use crate::pty;
-use faraday_core::{
+use dotdir_core::{
     copy::{self, CancelToken, ConflictResolution, CopyEvent, CopyOptions},
     delete::{self, DeleteEvent},
     move_op::{self, MoveOptions},
@@ -864,10 +864,10 @@ async fn vfs_handler(Path(path): Path<String>) -> Response {
   </head>
   <body>
     <div id="root"></div>
-    <script type="module">__FARADAY_BOOTSTRAP_INLINE__</script>
+    <script type="module">__DOTDIR_BOOTSTRAP_INLINE__</script>
   </body>
 </html>"#;
-        let html = html.replace("__FARADAY_BOOTSTRAP_INLINE__", bootstrap_js);
+        let html = html.replace("__DOTDIR_BOOTSTRAP_INLINE__", bootstrap_js);
 
         if wants_index {
             return Response::builder()
@@ -980,11 +980,11 @@ struct Config {
 }
 
 fn parse_config(args: &[String]) -> Config {
-    let mut port: u16 = std::env::var("FARADAY_PORT")
+    let mut port: u16 = std::env::var("DOTDIR_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(3001);
-    let mut host = std::env::var("FARADAY_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let mut host = std::env::var("DOTDIR_HOST").unwrap_or_else(|_| "127.0.0.1".into());
 
     let mut i = 0;
     while i < args.len() {
@@ -1037,7 +1037,7 @@ pub fn run(args: &[String]) {
             }
         };
 
-        eprintln!("Faraday server listening on http://{addr}");
+        eprintln!(".dir server listening on http://{addr}");
         eprintln!("WebSocket endpoint: ws://{addr}/ws");
 
         axum::serve(listener, app).await.unwrap();

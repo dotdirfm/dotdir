@@ -13,7 +13,7 @@
       "identifier": "http:default",
       "allow": [
         {
-          "url": "https://mkt.frdy.pro/**"
+          "url": "https://mkt.dotdir.dev/**"
         },
         {
           "url": "https://marketplace.visualstudio.com/**"

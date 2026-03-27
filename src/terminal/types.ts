@@ -25,8 +25,8 @@ export interface TerminalCapabilities {
   cwd: string;
   profileId: string | null;
   hasOsc7Cwd: boolean;
-  /** Faraday OSC 779 (prompt / command finished) seen at least once. */
-  hasFaradayOsc: boolean;
+  /** .dir OSC 779 (prompt / command finished) seen at least once. */
+  hasDotDirOsc: boolean;
   promptReady: boolean;
   commandRunning: boolean;
   lastCommand: string | null;

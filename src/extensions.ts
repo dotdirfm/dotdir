@@ -2,9 +2,9 @@ import { bridge, type CwdEscapeMode, type DeleteProgressEvent } from "./shared/a
 import { readFileBuffer, readFileText } from "./fs";
 import { dirname, join, normalizePath } from "./path";
 
-export const MARKETPLACE_URL = "https://mkt.frdy.pro";
+export const MARKETPLACE_URL = "https://mkt.dotdir.dev";
 
-// FSS-based icon theme (Faraday format)
+// FSS-based icon theme (.dir format)
 export interface ExtensionIconThemeFss {
   id: string;
   label: string;
@@ -101,7 +101,7 @@ export interface ExtensionColorTheme {
 }
 
 /**
- * A shellIntegration contribution declares a shell that Faraday can spawn:
+ * A shellIntegration contribution declares a shell that .dir can spawn:
  * how to find its executable and what init script to inject.
  *
  * The `shell` value matches the executable basename (without .exe on Windows),
@@ -171,7 +171,7 @@ export interface ExtensionRef {
   publisher: string;
   name: string;
   version: string;
-  /** Optional absolute path for development; when set, load extension from this dir instead of ~/.faraday/extensions/<publisher>-<name>-<version>. */
+  /** Optional absolute path for development; when set, load extension from this dir instead of ~/.dotdir/extensions/<publisher>-<name>-<version>. */
   path?: string;
 }
 
@@ -264,7 +264,7 @@ function extensionDirName(ref: ExtensionRef): string {
 
 async function getExtensionsDir(): Promise<string> {
   const homePath = await bridge.utils.getHomePath();
-  return join(homePath, ".faraday", "extensions");
+  return join(homePath, ".dotdir", "extensions");
 }
 
 async function readRefs(): Promise<ExtensionRef[]> {
@@ -299,7 +299,7 @@ export async function loadExtensions(): Promise<LoadedExtension[]> {
       let vscodeIconThemePath: string | undefined;
       let vscodeIconThemeId: string | undefined;
 
-      // Check for FSS-based icon theme (Faraday format)
+      // Check for FSS-based icon theme (.dir format)
       if (manifest.contributes?.iconTheme?.path) {
         const themePath = join(extDir, manifest.contributes.iconTheme.path);
         // Detect if it's FSS or JSON based on extension
@@ -736,7 +736,7 @@ export interface PanelPersistedState {
   activeTabIndex?: number;
 }
 
-export interface FaradaySettings {
+export interface DotDirSettings {
   iconTheme?: string; // "publisher.name" of the active icon theme
   colorTheme?: string; // "publisher.name:themeId" of the active color theme
   /**
@@ -750,7 +750,7 @@ export interface FaradaySettings {
 }
 
 /** UI state persisted across launches (tabs, active panel). Not watched — read once on startup. */
-export interface FaradayUiState {
+export interface DotDirUiState {
   leftPanel?: PanelPersistedState;
   rightPanel?: PanelPersistedState;
   activePanel?: "left" | "right";
@@ -761,10 +761,10 @@ export const DEFAULT_EDITOR_FILE_SIZE_LIMIT = 0;
 
 async function getSettingsPath(): Promise<string> {
   const homePath = await bridge.utils.getHomePath();
-  return join(homePath, ".faraday", "settings.json");
+  return join(homePath, ".dotdir", "settings.json");
 }
 
-export async function readSettings(): Promise<FaradaySettings> {
+export async function readSettings(): Promise<DotDirSettings> {
   try {
     const text = await readFileText(await getSettingsPath());
     return JSON.parse(text);
@@ -773,7 +773,7 @@ export async function readSettings(): Promise<FaradaySettings> {
   }
 }
 
-export async function writeSettings(settings: FaradaySettings): Promise<void> {
+export async function writeSettings(settings: DotDirSettings): Promise<void> {
   await bridge.fs.writeFile(await getSettingsPath(), JSON.stringify(settings, null, 2));
 }
 

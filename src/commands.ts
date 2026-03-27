@@ -8,9 +8,9 @@
  * - Command palette integration
  *
  * Keybinding layers (later layers override earlier ones):
- * 1. Default (Faraday built-in)
+ * 1. Default (.dir built-in)
  * 2. Extensions
- * 3. User (from ~/.faraday/keybindings.json)
+ * 3. User (from ~/.dotdir/keybindings.json)
  */
 
 import { focusContext } from "./focusContext";

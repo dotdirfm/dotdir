@@ -2,37 +2,37 @@ import type { CommandContribution } from "./commands";
 
 export const builtInCommandContributions: CommandContribution[] = [
   // ── View ──────────────────────────────────────────────────────────────────
-  { command: "faraday.toggleHiddenFiles", title: "Toggle Hidden Files", category: "View" },
-  { command: "faraday.togglePanels", title: "Toggle Panels", category: "View" },
-  { command: "faraday.showExtensions", title: "Show Extensions", shortTitle: "Plugins", category: "View" },
-  { command: "faraday.showCommandPalette", title: "Show All Commands", category: "View" },
-  { command: "faraday.closeViewer", title: "Close Viewer", category: "View" },
-  { command: "faraday.closeEditor", title: "Close Editor", category: "View" },
+  { command: "dotdir.toggleHiddenFiles", title: "Toggle Hidden Files", category: "View" },
+  { command: "dotdir.togglePanels", title: "Toggle Panels", category: "View" },
+  { command: "dotdir.showExtensions", title: "Show Extensions", shortTitle: "Plugins", category: "View" },
+  { command: "dotdir.showCommandPalette", title: "Show All Commands", category: "View" },
+  { command: "dotdir.closeViewer", title: "Close Viewer", category: "View" },
+  { command: "dotdir.closeEditor", title: "Close Editor", category: "View" },
 
   // ── Navigation ────────────────────────────────────────────────────────────
-  { command: "faraday.switchPanel", title: "Switch Panel", category: "Navigation" },
-  { command: "faraday.focusLeftPanel", title: "Focus Left Panel", category: "Navigation" },
-  { command: "faraday.focusRightPanel", title: "Focus Right Panel", category: "Navigation" },
-  { command: "faraday.cancelNavigation", title: "Cancel Navigation", category: "Navigation" },
-  { command: "faraday.goToParent", title: "Go to Parent Directory", category: "Navigation" },
-  { command: "faraday.goHome", title: "Go to Home Directory", category: "Navigation" },
+  { command: "dotdir.switchPanel", title: "Switch Panel", category: "Navigation" },
+  { command: "dotdir.focusLeftPanel", title: "Focus Left Panel", category: "Navigation" },
+  { command: "dotdir.focusRightPanel", title: "Focus Right Panel", category: "Navigation" },
+  { command: "dotdir.cancelNavigation", title: "Cancel Navigation", category: "Navigation" },
+  { command: "dotdir.goToParent", title: "Go to Parent Directory", category: "Navigation" },
+  { command: "dotdir.goHome", title: "Go to Home Directory", category: "Navigation" },
 
   // ── File ──────────────────────────────────────────────────────────────────
-  { command: "faraday.refresh", title: "Refresh", category: "File" },
-  { command: "faraday.newTab", title: "New Tab", category: "File" },
-  { command: "faraday.closeTab", title: "Close Tab", category: "File" },
-  { command: "faraday.previewInOppositePanel", title: "Show Preview in Opposite Panel", category: "File" },
-  { command: "faraday.openCurrentFolderInOppositePanelCurrentTab", title: "Open Current Folder in Opposite Panel (Current Tab)", category: "File" },
-  { command: "faraday.openCurrentFolderInOppositePanelNewTab", title: "Open Current Folder in Opposite Panel (New Tab)", category: "File" },
-  { command: "faraday.openSelectedFolderInOppositePanelCurrentTab", title: "Open Selected Folder in Opposite Panel (Current Tab)", category: "File" },
-  { command: "faraday.openSelectedFolderInOppositePanelNewTab", title: "Open Selected Folder in Opposite Panel (New Tab)", category: "File" },
-  { command: "faraday.openCreateFile", title: "Open / Create File", shortTitle: "New File", category: "File" },
-  { command: "faraday.makeFolder", title: "Make Folder", shortTitle: "MkDir", category: "File" },
-  { command: "faraday.viewFile", title: "View File", shortTitle: "View", category: "File" },
-  { command: "faraday.editFile", title: "Edit File", shortTitle: "Edit", category: "File" },
+  { command: "dotdir.refresh", title: "Refresh", category: "File" },
+  { command: "dotdir.newTab", title: "New Tab", category: "File" },
+  { command: "dotdir.closeTab", title: "Close Tab", category: "File" },
+  { command: "dotdir.previewInOppositePanel", title: "Show Preview in Opposite Panel", category: "File" },
+  { command: "dotdir.openCurrentFolderInOppositePanelCurrentTab", title: "Open Current Folder in Opposite Panel (Current Tab)", category: "File" },
+  { command: "dotdir.openCurrentFolderInOppositePanelNewTab", title: "Open Current Folder in Opposite Panel (New Tab)", category: "File" },
+  { command: "dotdir.openSelectedFolderInOppositePanelCurrentTab", title: "Open Selected Folder in Opposite Panel (Current Tab)", category: "File" },
+  { command: "dotdir.openSelectedFolderInOppositePanelNewTab", title: "Open Selected Folder in Opposite Panel (New Tab)", category: "File" },
+  { command: "dotdir.openCreateFile", title: "Open / Create File", shortTitle: "New File", category: "File" },
+  { command: "dotdir.makeFolder", title: "Make Folder", shortTitle: "MkDir", category: "File" },
+  { command: "dotdir.viewFile", title: "View File", shortTitle: "View", category: "File" },
+  { command: "dotdir.editFile", title: "Edit File", shortTitle: "Edit", category: "File" },
 
   // ── Application ───────────────────────────────────────────────────────────
-  { command: "faraday.exit", title: "Exit", shortTitle: "Quit", category: "Application" },
+  { command: "dotdir.exit", title: "Exit", shortTitle: "Quit", category: "Application" },
 
   // ── Terminal ──────────────────────────────────────────────────────────────
   { command: "terminal.execute", title: "Execute in Terminal", category: "Terminal" },

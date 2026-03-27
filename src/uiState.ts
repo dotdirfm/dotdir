@@ -1,35 +1,35 @@
 /**
  * UI State persistence
  *
- * Stores UI state (open tabs, active panel) in ~/.faraday/ui-state.json.
+ * Stores UI state (open tabs, active panel) in ~/.dotdir/ui-state.json.
  * Read once on startup; written with a short debounce. Not watched for
  * external changes.
  */
 
 import { bridge } from "./bridge";
 import { readFileText } from "./fs";
-import type { FaradayUiState } from "./extensions";
+import type { DotDirUiState } from "./extensions";
 import { join } from "./path";
 
-let currentState: FaradayUiState = {};
+let currentState: DotDirUiState = {};
 let statePath: string | null = null;
 let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function getStatePath(): Promise<string> {
   if (!statePath) {
     const home = await bridge.utils.getHomePath();
-    statePath = join(home, ".faraday", "ui-state.json");
+    statePath = join(home, ".dotdir", "ui-state.json");
   }
   return statePath;
 }
 
-export async function initUiState(): Promise<FaradayUiState> {
+export async function initUiState(): Promise<DotDirUiState> {
   try {
     const path = await getStatePath();
     const text = await readFileText(path);
     const parsed = JSON.parse(text);
     if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      currentState = parsed as FaradayUiState;
+      currentState = parsed as DotDirUiState;
     }
   } catch {
     // File missing or parse error — start with empty state
@@ -37,7 +37,7 @@ export async function initUiState(): Promise<FaradayUiState> {
   return currentState;
 }
 
-export function updateUiState(partial: Partial<FaradayUiState>): void {
+export function updateUiState(partial: Partial<DotDirUiState>): void {
   currentState = { ...currentState, ...partial };
   if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
   saveDebounceTimer = setTimeout(() => {
@@ -54,7 +54,7 @@ export function flushUiState(): void {
   void saveUiStateToDisk(currentState);
 }
 
-async function saveUiStateToDisk(state: FaradayUiState): Promise<void> {
+async function saveUiStateToDisk(state: DotDirUiState): Promise<void> {
   try {
     const path = await getStatePath();
     await bridge.fs.writeFile(path, JSON.stringify(state, null, 2));

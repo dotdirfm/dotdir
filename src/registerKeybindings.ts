@@ -12,35 +12,35 @@ function registerKeybindings(registry: CommandRegistryLike, bindings: Keybinding
 
 const appBuiltInKeybindings: Keybinding[] = [
   // View commands
-  { command: "faraday.toggleHiddenFiles", key: "ctrl+.", mac: "cmd+." },
-  { command: "faraday.togglePanels", key: "ctrl+o", mac: "cmd+o", when: "!terminalCommandRunning" },
-  { command: "faraday.showExtensions", key: "f11" },
+  { command: "dotdir.toggleHiddenFiles", key: "ctrl+.", mac: "cmd+." },
+  { command: "dotdir.togglePanels", key: "ctrl+o", mac: "cmd+o", when: "!terminalCommandRunning" },
+  { command: "dotdir.showExtensions", key: "f11" },
 
   // Navigation commands
-  { command: "faraday.switchPanel", key: "tab", when: "focusPanel && !dialogOpen" },
-  { command: "faraday.cancelNavigation", key: "escape", when: "focusPanel" },
-  { command: "faraday.goToParent", key: "alt+pageup", when: "focusPanel" },
-  { command: "faraday.goHome", key: "ctrl+home", mac: "cmd+home" },
+  { command: "dotdir.switchPanel", key: "tab", when: "focusPanel && !dialogOpen" },
+  { command: "dotdir.cancelNavigation", key: "escape", when: "focusPanel" },
+  { command: "dotdir.goToParent", key: "alt+pageup", when: "focusPanel" },
+  { command: "dotdir.goHome", key: "ctrl+home", mac: "cmd+home" },
 
   // File commands
-  { command: "faraday.newTab", key: "ctrl+t", mac: "cmd+t", when: "focusPanel" },
-  { command: "faraday.closeTab", key: "ctrl+w", mac: "cmd+w", when: "focusPanel" },
-  { command: "faraday.previewInOppositePanel", key: "ctrl+shift+o", mac: "cmd+shift+o", when: "focusPanel && listItemIsFile" },
-  { command: "faraday.refresh", key: "ctrl+r", mac: "cmd+r", when: "focusPanel" },
-  { command: "faraday.openCreateFile", key: "shift+f4", when: "focusPanel" },
-  { command: "faraday.makeFolder", key: "f7", when: "focusPanel" },
+  { command: "dotdir.newTab", key: "ctrl+t", mac: "cmd+t", when: "focusPanel" },
+  { command: "dotdir.closeTab", key: "ctrl+w", mac: "cmd+w", when: "focusPanel" },
+  { command: "dotdir.previewInOppositePanel", key: "ctrl+shift+o", mac: "cmd+shift+o", when: "focusPanel && listItemIsFile" },
+  { command: "dotdir.refresh", key: "ctrl+r", mac: "cmd+r", when: "focusPanel" },
+  { command: "dotdir.openCreateFile", key: "shift+f4", when: "focusPanel" },
+  { command: "dotdir.makeFolder", key: "f7", when: "focusPanel" },
 
   // Command palette
-  { command: "faraday.showCommandPalette", key: "cmd+shift+p" },
-  { command: "faraday.showCommandPalette", key: "cmd+p" },
+  { command: "dotdir.showCommandPalette", key: "cmd+shift+p" },
+  { command: "dotdir.showCommandPalette", key: "cmd+p" },
 
   // Close viewer/editor commands
-  { command: "faraday.closeViewer", key: "escape", when: "focusViewer" },
-  { command: "faraday.closeEditor", key: "escape", when: "focusEditor" },
+  { command: "dotdir.closeViewer", key: "escape", when: "focusViewer" },
+  { command: "dotdir.closeEditor", key: "escape", when: "focusEditor" },
 
   // Exit command
-  { command: "faraday.exit", key: "f10" },
-  { command: "faraday.exit", key: "cmd+q", mac: "cmd+q" },
+  { command: "dotdir.exit", key: "f10" },
+  { command: "dotdir.exit", key: "cmd+q", mac: "cmd+q" },
 ];
 
 const commandLineKeybindings: Keybinding[] = [

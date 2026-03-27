@@ -1,6 +1,6 @@
 # Terminal Roadmap
 
-This document tracks the plan for evolving Faraday's terminal toward a VS Code-style architecture.
+This document tracks the plan for evolving .dir's terminal toward a VS Code-style architecture.
 
 ## Goals
 
@@ -11,7 +11,7 @@ This document tracks the plan for evolving Faraday's terminal toward a VS Code-s
 
 ## Current State
 
-- Terminal UI, xterm wiring, PTY lifecycle, cwd sync, and OSC parsing are mixed together in [src/Terminal.tsx](/D:/Projects/Faraday/faraday-tauri/src/Terminal.tsx).
+- Terminal UI, xterm wiring, PTY lifecycle, cwd sync, and OSC parsing are mixed together in [src/Terminal.tsx](/D:/Projects/dotdir/dotdir-tauri/src/Terminal.tsx).
 - The bridge exposes low-level PTY operations only: spawn, write, resize, close, data, exit.
 - The Rust PTY backend is now portable, but the frontend still treats it like a raw byte pipe.
 

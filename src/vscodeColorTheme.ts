@@ -2,7 +2,7 @@
  * VS Code Color Theme Support
  *
  * Loads VS Code color theme JSON files and maps their colors
- * to Faraday's CSS custom properties.
+ * to .dir's CSS custom properties.
  */
 
 import { parse as parseJsonc } from "jsonc-parser";

@@ -76,7 +76,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // ── View ──────────────────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand("faraday.toggleHiddenFiles", () =>
+      commandRegistry.registerCommand("dotdir.toggleHiddenFiles", () =>
         setShowHidden((h) => {
           const next = !h;
           updateSettings({ showHidden: next });
@@ -86,7 +86,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     );
 
     disposables.push(
-      commandRegistry.registerCommand("faraday.togglePanels", () =>
+      commandRegistry.registerCommand("dotdir.togglePanels", () =>
         setPanelsVisible((v) => {
           const next = !v;
           if (next) focusContext.set("panel");
@@ -95,26 +95,26 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       ),
     );
 
-    disposables.push(commandRegistry.registerCommand("faraday.showExtensions", () => setShowExtensions(true)));
-    disposables.push(commandRegistry.registerCommand("faraday.showCommandPalette", () => setCommandPaletteOpen((o) => !o)));
-    disposables.push(commandRegistry.registerCommand("faraday.closeViewer", () => setViewerFile(null)));
-    disposables.push(commandRegistry.registerCommand("faraday.closeEditor", () => setEditorFile(null)));
+    disposables.push(commandRegistry.registerCommand("dotdir.showExtensions", () => setShowExtensions(true)));
+    disposables.push(commandRegistry.registerCommand("dotdir.showCommandPalette", () => setCommandPaletteOpen((o) => !o)));
+    disposables.push(commandRegistry.registerCommand("dotdir.closeViewer", () => setViewerFile(null)));
+    disposables.push(commandRegistry.registerCommand("dotdir.closeEditor", () => setEditorFile(null)));
 
     // ── Navigation ────────────────────────────────────────────────────────────
 
-    disposables.push(commandRegistry.registerCommand("faraday.switchPanel", () => setActivePanel((s) => (s === "left" ? "right" : "left"))));
-    disposables.push(commandRegistry.registerCommand("faraday.focusLeftPanel", () => setActivePanel("left")));
-    disposables.push(commandRegistry.registerCommand("faraday.focusRightPanel", () => setActivePanel("right")));
+    disposables.push(commandRegistry.registerCommand("dotdir.switchPanel", () => setActivePanel((s) => (s === "left" ? "right" : "left"))));
+    disposables.push(commandRegistry.registerCommand("dotdir.focusLeftPanel", () => setActivePanel("left")));
+    disposables.push(commandRegistry.registerCommand("dotdir.focusRightPanel", () => setActivePanel("right")));
 
     disposables.push(
-      commandRegistry.registerCommand("faraday.cancelNavigation", () => {
+      commandRegistry.registerCommand("dotdir.cancelNavigation", () => {
         depsRef.current.leftRef.current.cancelNavigation();
         depsRef.current.rightRef.current.cancelNavigation();
       }),
     );
 
     disposables.push(
-      commandRegistry.registerCommand("faraday.goToParent", () => {
+      commandRegistry.registerCommand("dotdir.goToParent", () => {
         const { leftRef, rightRef } = depsRef.current;
         const panel = activePanelRef.current === "left" ? leftRef.current : rightRef.current;
         const currentPath = panel.currentPath;
@@ -131,7 +131,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     );
 
     disposables.push(
-      commandRegistry.registerCommand("faraday.goHome", async () => {
+      commandRegistry.registerCommand("dotdir.goHome", async () => {
         const { leftRef, rightRef } = depsRef.current;
         const home = await bridge.utils.getHomePath();
         const panel = activePanelRef.current === "left" ? leftRef.current : rightRef.current;
@@ -142,31 +142,31 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // ── File ──────────────────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand("faraday.refresh", () => {
+      commandRegistry.registerCommand("dotdir.refresh", () => {
         const { leftRef, rightRef } = depsRef.current;
         const panel = activePanelRef.current === "left" ? leftRef.current : rightRef.current;
         void panel.navigateTo(panel.currentPath);
       }),
     );
 
-    disposables.push(commandRegistry.registerCommand("faraday.newTab", () => void getActivePanelGroupHandlers()?.newTab()));
-    disposables.push(commandRegistry.registerCommand("faraday.closeTab", () => void getActivePanelGroupHandlers()?.closeActiveTab()));
-    disposables.push(commandRegistry.registerCommand("faraday.previewInOppositePanel", () => depsRef.current.onPreviewInOppositePanel()));
+    disposables.push(commandRegistry.registerCommand("dotdir.newTab", () => void getActivePanelGroupHandlers()?.newTab()));
+    disposables.push(commandRegistry.registerCommand("dotdir.closeTab", () => void getActivePanelGroupHandlers()?.closeActiveTab()));
+    disposables.push(commandRegistry.registerCommand("dotdir.previewInOppositePanel", () => depsRef.current.onPreviewInOppositePanel()));
     disposables.push(
-      commandRegistry.registerCommand("faraday.openCurrentFolderInOppositePanelCurrentTab", () => depsRef.current.onOpenCurrentFolderInOppositeCurrentTab()),
+      commandRegistry.registerCommand("dotdir.openCurrentFolderInOppositePanelCurrentTab", () => depsRef.current.onOpenCurrentFolderInOppositeCurrentTab()),
     );
     disposables.push(
-      commandRegistry.registerCommand("faraday.openCurrentFolderInOppositePanelNewTab", () => depsRef.current.onOpenCurrentFolderInOppositeNewTab()),
+      commandRegistry.registerCommand("dotdir.openCurrentFolderInOppositePanelNewTab", () => depsRef.current.onOpenCurrentFolderInOppositeNewTab()),
     );
     disposables.push(
-      commandRegistry.registerCommand("faraday.openSelectedFolderInOppositePanelCurrentTab", () => depsRef.current.onOpenSelectedFolderInOppositeCurrentTab()),
+      commandRegistry.registerCommand("dotdir.openSelectedFolderInOppositePanelCurrentTab", () => depsRef.current.onOpenSelectedFolderInOppositeCurrentTab()),
     );
     disposables.push(
-      commandRegistry.registerCommand("faraday.openSelectedFolderInOppositePanelNewTab", () => depsRef.current.onOpenSelectedFolderInOppositeNewTab()),
+      commandRegistry.registerCommand("dotdir.openSelectedFolderInOppositePanelNewTab", () => depsRef.current.onOpenSelectedFolderInOppositeNewTab()),
     );
 
     disposables.push(
-      commandRegistry.registerCommand("faraday.openCreateFile", () => {
+      commandRegistry.registerCommand("dotdir.openCreateFile", () => {
         const { leftRef, rightRef, showDialog, onOpenCreateFileConfirm } = depsRef.current;
         const panel = activePanelRef.current === "left" ? leftRef.current : rightRef.current;
         const currentPath = panel.currentPath;
@@ -190,7 +190,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     );
 
     disposables.push(
-      commandRegistry.registerCommand("faraday.makeFolder", () => {
+      commandRegistry.registerCommand("dotdir.makeFolder", () => {
         const { leftRef, rightRef, showDialog } = depsRef.current;
         const panel = activePanelRef.current === "left" ? leftRef.current : rightRef.current;
         const currentPath = panel.currentPath;
@@ -219,7 +219,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // ── Application ───────────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand("faraday.exit", async () => {
+      commandRegistry.registerCommand("dotdir.exit", async () => {
         if (isTauriApp()) {
           await getCurrentWindow().close();
         } else {
@@ -241,13 +241,13 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // ── Viewer / Editor ───────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand("faraday.viewFile", (path: unknown, name: unknown, size: unknown) => {
+      commandRegistry.registerCommand("dotdir.viewFile", (path: unknown, name: unknown, size: unknown) => {
         depsRef.current.onViewFile(path as string, name as string, size as number);
       }),
     );
 
     disposables.push(
-      commandRegistry.registerCommand("faraday.editFile", (path: unknown, name: unknown, size: unknown, langId: unknown) => {
+      commandRegistry.registerCommand("dotdir.editFile", (path: unknown, name: unknown, size: unknown, langId: unknown) => {
         const limit = depsRef.current.editorFileSizeLimit;
         if (limit > 0 && (size as number) > limit) return;
         depsRef.current.onEditFile(path as string, name as string, size as number, langId as string);

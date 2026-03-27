@@ -1,8 +1,8 @@
-/// Elevation proxy — spawns frdye with admin privileges and communicates
+/// Elevation proxy — spawns dotdire with admin privileges and communicates
 /// over a Unix domain socket using the binary protocol.
-use faraday_core::error::FsError;
-use faraday_core::ops::EntryInfo;
-use faraday_core::proto::{Method, MsgReader, MsgType, Reader, Writer};
+use dotdir_core::error::FsError;
+use dotdir_core::ops::EntryInfo;
+use dotdir_core::proto::{Method, MsgReader, MsgType, Reader, Writer};
 use std::collections::HashMap;
 use std::io::{Read, Write as IoWrite};
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -58,7 +58,7 @@ impl FsProxy {
         let mut r = Reader::new(&payload);
         let count = r.u32().map_err(|_| FsError::InvalidInput)? as usize;
 
-        use faraday_core::ops::EntryKind;
+        use dotdir_core::ops::EntryKind;
         let mut entries = Vec::with_capacity(count);
         for _ in 0..count {
             let name = r.str().map_err(|_| FsError::InvalidInput)?.to_string();
@@ -89,12 +89,12 @@ impl FsProxy {
         Ok(entries)
     }
 
-    pub fn stat(&self, file_path: &str) -> Result<faraday_core::ops::StatResult, FsError> {
+    pub fn stat(&self, file_path: &str) -> Result<dotdir_core::ops::StatResult, FsError> {
         let mut w = Writer::new();
         w.str(file_path);
         let payload = self.send_request(Method::Stat, w.as_slice())?;
         let mut r = Reader::new(&payload);
-        Ok(faraday_core::ops::StatResult {
+        Ok(dotdir_core::ops::StatResult {
             size: r.f64().map_err(|_| FsError::InvalidInput)?,
             mtime_ms: r.f64().map_err(|_| FsError::InvalidInput)?,
         })
@@ -173,7 +173,7 @@ impl Drop for FsProxy {
 fn socket_path() -> String {
     let pid = std::process::id();
     let tmp = std::env::temp_dir();
-    tmp.join(format!("faraday-fs-{pid}.sock"))
+    tmp.join(format!("dotdir-fs-{pid}.sock"))
         .to_string_lossy()
         .into_owned()
 }
@@ -183,7 +183,7 @@ fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
-/// The helper is ourselves — `faraday rpc`.
+/// The helper is ourselves — `dotdir rpc`.
 fn helper_path() -> String {
     std::env::current_exe()
         .expect("cannot determine current exe path")

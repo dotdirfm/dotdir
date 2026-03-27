@@ -1,31 +1,31 @@
 /**
  * User Settings Watcher
  *
- * Watches ~/.faraday/settings.json for changes and notifies listeners.
+ * Watches ~/.dotdir/settings.json for changes and notifies listeners.
  */
 
 import { bridge } from "./bridge";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "./jsoncFileWatcher";
 import { join } from "./path";
-import type { FaradaySettings } from "./extensions";
+import type { DotDirSettings } from "./extensions";
 
-let watcher: JsoncFileWatcher<FaradaySettings> | null = null;
+let watcher: JsoncFileWatcher<DotDirSettings> | null = null;
 let settingsPath: string | null = null;
 let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-function validateSettings(parsed: unknown): FaradaySettings | null {
+function validateSettings(parsed: unknown): DotDirSettings | null {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     console.error("[userSettings] settings.json must be an object");
     return null;
   }
-  return parsed as FaradaySettings;
+  return parsed as DotDirSettings;
 }
 
-export function getSettings(): FaradaySettings {
+export function getSettings(): DotDirSettings {
   return watcher?.getValue() ?? {};
 }
 
-export function updateSettings(partial: Partial<FaradaySettings>): void {
+export function updateSettings(partial: Partial<DotDirSettings>): void {
   if (!watcher) return;
   const current = watcher.getValue();
   const updated = { ...current, ...partial };
@@ -39,11 +39,11 @@ export function updateSettings(partial: Partial<FaradaySettings>): void {
   }, 500);
 }
 
-async function saveSettingsToDisk(settings: FaradaySettings): Promise<void> {
+async function saveSettingsToDisk(settings: DotDirSettings): Promise<void> {
   try {
     if (!settingsPath) {
       const homePath = await bridge.utils.getHomePath();
-      settingsPath = join(homePath, ".faraday", "settings.json");
+      settingsPath = join(homePath, ".dotdir", "settings.json");
     }
     await bridge.fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
   } catch (err) {
@@ -51,16 +51,16 @@ async function saveSettingsToDisk(settings: FaradaySettings): Promise<void> {
   }
 }
 
-export function onSettingsChange(callback: (settings: FaradaySettings) => void): () => void {
+export function onSettingsChange(callback: (settings: DotDirSettings) => void): () => void {
   return watcher?.onChange(callback) ?? (() => {});
 }
 
-export async function initUserSettings(): Promise<FaradaySettings> {
-  watcher = await createJsoncFileWatcher<FaradaySettings>({
+export async function initUserSettings(): Promise<DotDirSettings> {
+  watcher = await createJsoncFileWatcher<DotDirSettings>({
     name: "userSettings",
     getPath: async () => {
       const homePath = await bridge.utils.getHomePath();
-      return join(homePath, ".faraday", "settings.json");
+      return join(homePath, ".dotdir", "settings.json");
     },
     validate: validateSettings,
     defaultValue: {},

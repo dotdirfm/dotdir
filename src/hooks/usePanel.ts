@@ -153,7 +153,7 @@ export function usePanel(showError: (message: string) => void) {
     const paths: string[] = [];
     for (const ancestor of ancestors) {
       paths.push(ancestor);
-      paths.push(join(ancestor, ".faraday"));
+      paths.push(join(ancestor, ".dotdir"));
     }
     observer.sync(paths);
   }, []);
@@ -296,14 +296,14 @@ export function usePanel(showError: (message: string) => void) {
           } else {
             needsRefresh = true;
           }
-        } else if (rootPath.endsWith("/.faraday")) {
+        } else if (rootPath.endsWith("/.dotdir")) {
           if (changedName === "fs.css") {
             const parentDir = dirname(rootPath);
             invalidateFssCache(parentDir);
             needsFssRefresh = true;
           }
         } else if (curPath.startsWith(rootPath + "/") || curPath === rootPath) {
-          if (changedName === ".faraday") {
+          if (changedName === ".dotdir") {
             invalidateFssCache(rootPath);
             needsFssRefresh = true;
           } else if (changedName) {

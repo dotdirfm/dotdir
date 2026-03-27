@@ -1,7 +1,7 @@
 /**
  * User Keybindings
  *
- * Loads and watches user-defined keybindings from ~/.faraday/keybindings.json
+ * Loads and watches user-defined keybindings from ~/.dotdir/keybindings.json
  */
 
 import { bridge } from "./bridge";
@@ -36,7 +36,7 @@ export async function initUserKeybindings(): Promise<void> {
     name: "userKeybindings",
     getPath: async () => {
       const homePath = await bridge.utils.getHomePath();
-      return join(homePath, ".faraday", "keybindings.json");
+      return join(homePath, ".dotdir", "keybindings.json");
     },
     validate: validateKeybindings,
     defaultValue: [],

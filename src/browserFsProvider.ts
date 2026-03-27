@@ -3,10 +3,10 @@
  *
  * Protocol:
  *   1. The host reads the CJS bundle from disk and creates a blob URL.
- *   2. It injects `window.__faradayProviderHostApi` with HostApi methods before
+ *   2. It injects `window.__dotdirProviderHostApi` with HostApi methods before
  *      the script runs.  (The bundle may call hostApi.readFile() etc. during init
  *      or during listEntries().)
- *   3. The bundle assigns a factory to `window.__faradayProviderReady`.
+ *   3. The bundle assigns a factory to `window.__dotdirProviderReady`.
  *   4. After the script's `onload`, the host calls the factory with the hostApi
  *      and stores the returned FsProviderExtensionApi.
  *
@@ -54,7 +54,7 @@ export function loadFsProvider(extensionDirPath: string, entry: string): Promise
         reject(new Error(`fsProvider "${entry}" did not register within 5 s`));
       }, 5000);
 
-      // Inject the blob script; the bundle must assign window.__faradayProviderReady.
+      // Inject the blob script; the bundle must assign window.__dotdirProviderReady.
       const blob = new Blob([code], { type: "application/javascript" });
       const url = URL.createObjectURL(blob);
       const script = document.createElement("script");
@@ -69,13 +69,13 @@ export function loadFsProvider(extensionDirPath: string, entry: string): Promise
       script.onload = () => {
         URL.revokeObjectURL(url);
         clearTimeout(timeout);
-        const factory = window.__faradayProviderReady;
+        const factory = window.__dotdirProviderReady;
         if (typeof factory !== "function") {
-          reject(new Error(`fsProvider "${entry}" did not set window.__faradayProviderReady`));
+          reject(new Error(`fsProvider "${entry}" did not set window.__dotdirProviderReady`));
           return;
         }
         // Clear global so the next provider load gets a clean slate.
-        window.__faradayProviderReady = undefined;
+        window.__dotdirProviderReady = undefined;
         try {
           const api = factory(hostApi);
           resolve(api);

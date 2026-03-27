@@ -1,13 +1,13 @@
 import { atom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect } from "react";
-import type { FaradaySettings } from "../extensions";
+import type { DotDirSettings } from "../extensions";
 import { initUserSettings, onSettingsChange, updateSettings as persistSettings } from "../userSettings";
 
-const settingsAtom = atom<FaradaySettings>({});
+const settingsAtom = atom<DotDirSettings>({});
 const settingsReadyAtom = atom(false);
 
 // Ensures initUserSettings() is called at most once across all hook instances
-let initPromise: Promise<FaradaySettings> | null = null;
+let initPromise: Promise<DotDirSettings> | null = null;
 
 export function useUserSettings() {
   const settings = useAtomValue(settingsAtom);
@@ -25,7 +25,7 @@ export function useUserSettings() {
   }, [setSettings, setReady]);
 
   const updateSettings = useCallback(
-    (partial: Partial<FaradaySettings>) => {
+    (partial: Partial<DotDirSettings>) => {
       setSettings((prev) => ({ ...prev, ...partial }));
       persistSettings(partial);
     },

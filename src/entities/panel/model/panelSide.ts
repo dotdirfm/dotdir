@@ -6,7 +6,7 @@ export const OPPOSITE_PANEL: Record<PanelSide, PanelSide> = {
   right: "left",
 };
 
-/** Keys under `FaradayUiState` for each pane. */
+/** Keys under `DotDirUiState` for each pane. */
 export const PANEL_SETTINGS_KEY = {
   left: "leftPanel",
   right: "rightPanel",

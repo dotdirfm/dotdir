@@ -1,7 +1,7 @@
 # Frontend FSD Migration
 
 This file tracks the incremental migration from the current flat `src` layout
-to a feature-sliced structure adapted to Faraday's architecture.
+to a feature-sliced structure adapted to .dir's architecture.
 
 ## Target layers
 

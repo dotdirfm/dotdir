@@ -1,17 +1,17 @@
-/// `faraday rpc` — elevated filesystem helper.
+/// `dotdir rpc` — elevated filesystem helper.
 ///
 /// Speaks a length-prefixed binary protocol over a Unix domain socket (macOS/Linux)
 /// or a named pipe (Windows). Used internally when the main app needs elevated
 /// filesystem access.
 
 #[cfg(unix)]
-use faraday_core::error::FsError;
+use dotdir_core::error::FsError;
 #[cfg(unix)]
-use faraday_core::ops::{self, FdTable};
+use dotdir_core::ops::{self, FdTable};
 #[cfg(unix)]
-use faraday_core::proto::{self, EventType, Method, MsgReader, MsgType, Reader, Writer};
+use dotdir_core::proto::{self, EventType, Method, MsgReader, MsgType, Reader, Writer};
 #[cfg(unix)]
-use faraday_core::watch::{EventKind, FsWatcher};
+use dotdir_core::watch::{EventKind, FsWatcher};
 #[cfg(unix)]
 use std::io::{Read, Write as IoWrite};
 #[cfg(unix)]
@@ -210,7 +210,7 @@ pub fn run(args: &[String]) {
     let parsed = match parse_args(args) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("Usage: faraday rpc --socket <path> --token <hex>\n{e}");
+            eprintln!("Usage: dotdir rpc --socket <path> --token <hex>\n{e}");
             std::process::exit(1);
         }
     };
@@ -293,6 +293,6 @@ pub fn run(args: &[String]) {
 
 #[cfg(not(unix))]
 pub fn run(_args: &[String]) {
-    eprintln!("faraday rpc: Windows named pipe support not yet implemented");
+    eprintln!("dotdir rpc: Windows named pipe support not yet implemented");
     std::process::exit(1);
 }

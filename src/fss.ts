@@ -19,8 +19,8 @@ let extensionLayers: StyleLayer[] = [];
 
 /**
  * Resolve relative url() paths in FSS source against a base directory.
- * `url(./icons/file.svg)` with basePath `/home/user/.faraday/ext` becomes
- * `url(/home/user/.faraday/ext/icons/file.svg)`.
+ * `url(./icons/file.svg)` with basePath `/home/user/.dotdir/ext` becomes
+ * `url(/home/user/.dotdir/ext/icons/file.svg)`.
  * Already-absolute paths are left unchanged.
  */
 function resolveIconUrls(source: string, basePath: string): string {
@@ -71,9 +71,9 @@ export async function syncLayers(resolver: LayeredResolver, dirPath: string): Pr
   }
 
   for (const p of ancestors) {
-    if (basename(p) === ".faraday") continue;
+    if (basename(p) === ".dotdir") continue;
     if (!fssSourceCache.has(p)) {
-      const dir = join(p, ".faraday");
+      const dir = join(p, ".dotdir");
       try {
         fssSourceCache.set(p, await readFileText(join(dir, "fs.css")));
       } catch {
@@ -87,7 +87,7 @@ export async function syncLayers(resolver: LayeredResolver, dirPath: string): Pr
     const source = fssSourceCache.get(p);
     if (source != null) {
       const depth = p === "/" ? 0 : p.split("/").filter(Boolean).length;
-      const fssDir = join(p, ".faraday");
+      const fssDir = join(p, ".dotdir");
       layers.push(createLayer(resolveIconUrls(source, fssDir), p, LayerPriority.nestedPriority(depth)));
     }
   }

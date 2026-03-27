@@ -19,7 +19,7 @@ export interface BrowserExtensionContributions {
 
 export interface BrowserExtensionContext {
   subscriptions: BrowserDisposable[];
-  frdy: {
+  dotdir: {
     commands: {
       registerCommand: (
         commandId: string,
@@ -62,18 +62,18 @@ async function loadBrowserModule(scriptUrl: string): Promise<BrowserExtensionMod
   } catch {
     // Fallback: classic script injection. Non-ESM scripts must attach exports via globals.
     return await new Promise<BrowserExtensionModule>((resolve, reject) => {
-      const prevReady = (globalThis as any).__faradayBrowserExtensionReady as undefined | ((m: any) => void);
-      const prevExports = (globalThis as any).__faradayBrowserExtensionExports;
+      const prevReady = (globalThis as any).__dotdirBrowserExtensionReady as undefined | ((m: any) => void);
+      const prevExports = (globalThis as any).__dotdirBrowserExtensionExports;
       const timeoutMs = 10000;
       let done = false;
 
       const cleanup = () => {
-        delete (globalThis as any).__faradayBrowserExtensionReady;
-        (globalThis as any).__faradayBrowserExtensionExports = prevExports;
-        if (prevReady) (globalThis as any).__faradayBrowserExtensionReady = prevReady;
+        delete (globalThis as any).__dotdirBrowserExtensionReady;
+        (globalThis as any).__dotdirBrowserExtensionExports = prevExports;
+        if (prevReady) (globalThis as any).__dotdirBrowserExtensionReady = prevReady;
       };
 
-      (globalThis as any).__faradayBrowserExtensionReady = (m: any) => {
+      (globalThis as any).__dotdirBrowserExtensionReady = (m: any) => {
         if (done) return;
         done = true;
         cleanup();
@@ -83,7 +83,7 @@ async function loadBrowserModule(scriptUrl: string): Promise<BrowserExtensionMod
       const timer = setTimeout(() => {
         if (done) return;
         done = true;
-        const exports = (globalThis as any).__faradayBrowserExtensionExports ?? (globalThis as any).__faradayBrowserExports ?? {};
+        const exports = (globalThis as any).__dotdirBrowserExtensionExports ?? (globalThis as any).__dotdirBrowserExports ?? {};
         cleanup();
         resolve(exports as BrowserExtensionModule);
       }, timeoutMs);
@@ -100,7 +100,7 @@ async function loadBrowserModule(scriptUrl: string): Promise<BrowserExtensionMod
       script.onload = () => {
         if (done) return;
         clearTimeout(timer);
-        const exports = (globalThis as any).__faradayBrowserExtensionExports ?? (globalThis as any).__faradayBrowserExports ?? null;
+        const exports = (globalThis as any).__dotdirBrowserExtensionExports ?? (globalThis as any).__dotdirBrowserExports ?? null;
         if (exports) {
           done = true;
           cleanup();
@@ -132,7 +132,7 @@ export class BrowserExtensionHost {
   private active = new Map<string, ActiveActivation>();
   private queue: Promise<void> = Promise.resolve();
 
-  private frdy = {
+  private dotdir = {
     commands: {
       registerCommand: (
         commandId: string,
@@ -188,10 +188,10 @@ export class BrowserExtensionHost {
       return;
     }
 
-    const ctx: BrowserExtensionContext = { subscriptions: [], frdy: this.frdy as any };
+    const ctx: BrowserExtensionContext = { subscriptions: [], dotdir: this.dotdir as any };
 
     // Also expose a VS Code-like global (some extensions may rely on it).
-    (globalThis as any).frdy = this.frdy;
+    (globalThis as any).dotdir = this.dotdir;
 
     const activationResult = await activateFn(ctx);
 
@@ -199,7 +199,7 @@ export class BrowserExtensionHost {
 
     if (contributes?.keybindings?.length) {
       for (const kb of contributes.keybindings) {
-        const disposable = this.frdy.commands.registerKeybinding(kb);
+        const disposable = this.dotdir.commands.registerKeybinding(kb);
         ctx.subscriptions.push(disposable);
       }
     }

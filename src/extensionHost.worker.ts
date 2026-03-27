@@ -211,7 +211,7 @@ type BrowserDisposable = { dispose: () => void };
 
 interface BrowserExtensionContext {
   subscriptions: BrowserDisposable[];
-  frdy: {
+  dotdir: {
     commands: {
       registerCommand: (commandId: string, handler: (...args: unknown[]) => void | Promise<void>) => BrowserDisposable;
       registerKeybinding: (binding: { command: string; key: string; mac?: string; when?: string }) => BrowserDisposable;
@@ -278,7 +278,7 @@ async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
   }
 
   const localDisposables: BrowserDisposable[] = [];
-  const frdy = {
+  const dotdir = {
     commands: {
       registerCommand: (commandId: string, handler: (...args: unknown[]) => void | Promise<void>): BrowserDisposable => {
         commandHandlers.set(commandId, handler);
@@ -302,10 +302,10 @@ async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
 
   const ctx: BrowserExtensionContext = {
     subscriptions: localDisposables,
-    frdy,
+    dotdir,
   };
 
-  (self as unknown as { frdy?: unknown }).frdy = frdy;
+  (self as unknown as { dotdir?: unknown }).dotdir = dotdir;
   await activate(ctx);
   activeExtensions.set(key, { subscriptions: localDisposables, deactivate });
 }
@@ -434,8 +434,8 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
 async function loadExtensions(homePath: string): Promise<WorkerLoadedExtension[]> {
   const loaded: WorkerLoadedExtension[] = [];
 
-  // Load user extensions from ~/.faraday/extensions/
-  const extensionsDir = join(homePath, ".faraday", "extensions");
+  // Load user extensions from ~/.dotdir/extensions/
+  const extensionsDir = join(homePath, ".dotdir", "extensions");
   let refs: ExtensionRef[];
   try {
     const text = await readTextFile(join(extensionsDir, "extensions.json"));
