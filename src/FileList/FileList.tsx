@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { actionQueue } from "../actionQueue";
 import { commandRegistry } from "../commands";
 import { setActiveFileListHandlers } from "../fileListHandlers";
+import { getFileOperationHandlers } from "../fileOperationHandlers";
 import { viewerRegistry, editorRegistry } from "../viewerEditorRegistry";
 import { resolveEntryStyle } from "../fss";
 import type { ResolvedEntryStyle } from "../types";
@@ -20,18 +21,6 @@ interface FileListProps {
   parentNode?: FsNode;
   entries: FsNode[];
   onNavigate: (path: string) => Promise<void>;
-  /** Move selected items to trash. Receives (sourcePaths, refresh). */
-  onMoveToTrash?: (sourcePaths: string[], refresh: () => void) => void;
-  /** Permanently delete selected items. Receives (sourcePaths, refresh). */
-  onPermanentDelete?: (sourcePaths: string[], refresh: () => void) => void;
-  /** Copy selected items. Receives (sourcePaths, refresh). */
-  onCopy?: (sourcePaths: string[], refresh: () => void) => void;
-  /** Move selected items. Receives (sourcePaths, refresh). */
-  onMove?: (sourcePaths: string[], refresh: () => void) => void;
-  /** Rename item under cursor. Receives (sourcePath, currentName, refresh). */
-  onRename?: (sourcePath: string, currentName: string, refresh: () => void) => void;
-  /** Paste filename or path into the command line. */
-  onPasteToCommandLine?: (text: string) => void;
   selectionKey?: number;
   active: boolean;
   resolver: LayeredResolver;
@@ -87,12 +76,6 @@ export const FileList = memo(function FileList({
   parentNode,
   entries,
   onNavigate,
-  onMoveToTrash,
-  onPermanentDelete,
-  onCopy,
-  onMove,
-  onRename,
-  onPasteToCommandLine,
   selectionKey,
   active,
   resolver,
@@ -125,18 +108,6 @@ export const FileList = memo(function FileList({
   currentPathRef.current = currentPath;
   const onNavigateRef = useRef(onNavigate);
   onNavigateRef.current = onNavigate;
-  const onPasteToCommandLineRef = useRef(onPasteToCommandLine);
-  onPasteToCommandLineRef.current = onPasteToCommandLine;
-  const onMoveToTrashRef = useRef(onMoveToTrash);
-  onMoveToTrashRef.current = onMoveToTrash;
-  const onPermanentDeleteRef = useRef(onPermanentDelete);
-  onPermanentDeleteRef.current = onPermanentDelete;
-  const onCopyRef = useRef(onCopy);
-  onCopyRef.current = onCopy;
-  const onMoveRef = useRef(onMove);
-  onMoveRef.current = onMove;
-  const onRenameRef = useRef(onRename);
-  onRenameRef.current = onRename;
 
   const markKeyboardNav = useCallback(() => {
     if (!keyboardNavModeRef.current) setKeyboardNavMode(true);
@@ -480,8 +451,8 @@ export const FileList = memo(function FileList({
         }
       }),
       moveToTrash: () => actionQueue.enqueue(() => {
-        const onTrash = onMoveToTrashRef.current;
-        if (!onTrash) return;
+        const ops = getFileOperationHandlers();
+        if (!ops) return;
         const selected = selectedNamesRef.current;
         const all = displayEntriesRef.current;
         const refresh = () => onNavigateRef.current(currentPathRef.current);
@@ -489,11 +460,11 @@ export const FileList = memo(function FileList({
           ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
           : (() => { const item = all[activeIndexRef.current]; return item ? [item.entry.path as string] : []; })();
         if (sourcePaths.length === 0) return;
-        onTrash(sourcePaths, refresh);
+        ops.moveToTrash(sourcePaths, refresh);
       }),
       permanentDelete: () => actionQueue.enqueue(() => {
-        const onDelete = onPermanentDeleteRef.current;
-        if (!onDelete) return;
+        const ops = getFileOperationHandlers();
+        if (!ops) return;
         const selected = selectedNamesRef.current;
         const all = displayEntriesRef.current;
         const refresh = () => onNavigateRef.current(currentPathRef.current);
@@ -501,11 +472,11 @@ export const FileList = memo(function FileList({
           ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
           : (() => { const item = all[activeIndexRef.current]; return item ? [item.entry.path as string] : []; })();
         if (sourcePaths.length === 0) return;
-        onDelete(sourcePaths, refresh);
+        ops.permanentDelete(sourcePaths, refresh);
       }),
       copy: () => actionQueue.enqueue(() => {
-        const onCopyCb = onCopyRef.current;
-        if (!onCopyCb) return;
+        const ops = getFileOperationHandlers();
+        if (!ops) return;
         const selected = selectedNamesRef.current;
         const all = displayEntriesRef.current;
         const refresh = () => onNavigateRef.current(currentPathRef.current);
@@ -513,11 +484,11 @@ export const FileList = memo(function FileList({
           ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
           : (() => { const item = all[activeIndexRef.current]; return item ? [item.entry.path as string] : []; })();
         if (sourcePaths.length === 0) return;
-        onCopyCb(sourcePaths, refresh);
+        ops.copy(sourcePaths, refresh);
       }),
       move: () => actionQueue.enqueue(() => {
-        const onMoveCb = onMoveRef.current;
-        if (!onMoveCb) return;
+        const ops = getFileOperationHandlers();
+        if (!ops) return;
         const selected = selectedNamesRef.current;
         const all = displayEntriesRef.current;
         const refresh = () => onNavigateRef.current(currentPathRef.current);
@@ -525,31 +496,33 @@ export const FileList = memo(function FileList({
           ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
           : (() => { const item = all[activeIndexRef.current]; return item ? [item.entry.path as string] : []; })();
         if (sourcePaths.length === 0) return;
-        onMoveCb(sourcePaths, refresh);
+        ops.move(sourcePaths, refresh);
       }),
       rename: () => actionQueue.enqueue(() => {
-        const onRenameCb = onRenameRef.current;
-        if (!onRenameCb) return;
+        const ops = getFileOperationHandlers();
+        if (!ops) return;
         const item = displayEntriesRef.current[activeIndexRef.current];
         if (!item) return;
         const refresh = () => onNavigateRef.current(currentPathRef.current);
-        onRenameCb(item.entry.path as string, item.entry.name, refresh);
+        ops.rename(item.entry.path as string, item.entry.name, refresh);
       }),
       pasteFilename: () => actionQueue.enqueue(() => {
         const item = displayEntriesRef.current[activeIndexRef.current];
-        const paste = onPasteToCommandLineRef.current;
-        if (!item || !paste) return;
+        if (!item) return;
+        const ops = getFileOperationHandlers();
+        if (!ops) return;
         const name = item.entry.name;
         const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? name : JSON.stringify(name);
-        paste(arg);
+        ops.pasteToCommandLine(arg);
       }),
       pastePath: () => actionQueue.enqueue(() => {
         const item = displayEntriesRef.current[activeIndexRef.current];
-        const paste = onPasteToCommandLineRef.current;
-        if (!item || !paste) return;
+        if (!item) return;
+        const ops = getFileOperationHandlers();
+        if (!ops) return;
         const path = ((item.entry.path as string) ?? "").split("\0")[0];
         const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
-        paste(arg);
+        ops.pasteToCommandLine(arg);
       }),
     });
     return () => setActiveFileListHandlers(null);

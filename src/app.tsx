@@ -39,6 +39,7 @@ import { TerminalPanelBody, TerminalToolbar } from "./Terminal";
 import { normalizeTerminalPath } from "./terminal/path";
 import { useBuiltInCommands } from "./useBuiltInCommands";
 import { useExtensionHost } from "./useExtensionHost";
+import { setFileOperationHandlers } from "./fileOperationHandlers";
 import { useFileOperations, type PanelSide } from "./useFileOperations";
 import { findExistingParent, usePanel } from "./usePanel";
 import { initUserKeybindings } from "./userKeybindings";
@@ -262,6 +263,17 @@ export function App() {
     rightRef,
     setSelectionKey,
   );
+
+  useEffect(() => {
+    setFileOperationHandlers({
+      moveToTrash: handleMoveToTrash,
+      permanentDelete: handlePermanentDelete,
+      copy: handleCopy,
+      move: handleMove,
+      rename: handleRename,
+      pasteToCommandLine: (text) => commandLinePasteRef.current(text),
+    });
+  }, [handleMoveToTrash, handlePermanentDelete, handleCopy, handleMove, handleRename]);
 
   // Set context for which panel is active
   useEffect(() => {
@@ -785,12 +797,6 @@ export function App() {
               side="left"
               panel={left}
               onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
-              onMoveToTrash={(sourcePaths, refresh) => handleMoveToTrash(sourcePaths, refresh)}
-              onPermanentDelete={(sourcePaths, refresh) => handlePermanentDelete(sourcePaths, refresh)}
-              onCopy={(sourcePaths, refresh) => handleCopy(sourcePaths, refresh)}
-              onMove={(sourcePaths, refresh) => handleMove(sourcePaths, refresh)}
-              onRename={(sourcePath, currentName, refresh) => handleRename(sourcePath, currentName, refresh)}
-              onPasteToCommandLine={(text) => commandLinePasteRef.current(text)}
               selectionKey={selectionKey}
               requestedActiveName={leftRequestedCursor}
               initialPanelState={initialLeftPanel}
@@ -800,12 +806,6 @@ export function App() {
               side="right"
               panel={right}
               onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
-              onMoveToTrash={(sourcePaths, refresh) => handleMoveToTrash(sourcePaths, refresh)}
-              onPermanentDelete={(sourcePaths, refresh) => handlePermanentDelete(sourcePaths, refresh)}
-              onCopy={(sourcePaths, refresh) => handleCopy(sourcePaths, refresh)}
-              onMove={(sourcePaths, refresh) => handleMove(sourcePaths, refresh)}
-              onRename={(sourcePath, currentName, refresh) => handleRename(sourcePath, currentName, refresh)}
-              onPasteToCommandLine={(text) => commandLinePasteRef.current(text)}
               selectionKey={selectionKey}
               requestedActiveName={rightRequestedCursor}
               initialPanelState={initialRightPanel}

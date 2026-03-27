@@ -34,12 +34,6 @@ interface PanelGroupProps {
   side: PanelSide;
   panel: PanelModel;
   onRememberExpectedTerminalCwd: (path: string) => void;
-  onMoveToTrash: (sourcePaths: string[], refresh: () => void) => void;
-  onPermanentDelete: (sourcePaths: string[], refresh: () => void) => void;
-  onCopy?: (sourcePaths: string[], refresh: () => void) => void;
-  onMove?: (sourcePaths: string[], refresh: () => void) => void;
-  onRename?: (sourcePath: string, currentName: string, refresh: () => void) => void;
-  onPasteToCommandLine?: (text: string) => void;
   selectionKey?: number;
   requestedActiveName?: string;
   requestedTopmostName?: string;
@@ -51,12 +45,6 @@ export function PanelGroup({
   side,
   panel,
   onRememberExpectedTerminalCwd,
-  onMoveToTrash,
-  onPermanentDelete,
-  onCopy,
-  onMove,
-  onRename,
-  onPasteToCommandLine,
   selectionKey,
   requestedActiveName,
   requestedTopmostName,
@@ -85,11 +73,11 @@ export function PanelGroup({
   const activeTabIdRef = useRef(activeTabId);
   activeTabIdRef.current = activeTabId;
 
-  const onSelectTab = useCallback((id: string) => setActiveTabId(id), [setActiveTabId]);
+  const handleSelectTab = useCallback((id: string) => setActiveTabId(id), [setActiveTabId]);
   const handlePinTab = useCallback((id: string) => {
     setTabs((prev) => prev.map((t) => (t.id === id && t.type === "preview" && t.isTemp ? { ...t, isTemp: false } : t)));
   }, []);
-  const onCloseTab = useCallback(async (id: string) => {
+  const handleCloseTab = useCallback(async (id: string) => {
     const currentTabs = tabsRef.current;
     if (currentTabs.length > 1) {
       const idx = currentTabs.findIndex((t) => t.id === id);
@@ -124,9 +112,9 @@ export function PanelGroup({
 
   useEffect(() => {
     if (!active) return;
-    setActivePanelGroupHandlers({ newTab: handleNewTab, closeActiveTab: () => onCloseTab(activeTabIdRef.current) });
+    setActivePanelGroupHandlers({ newTab: handleNewTab, closeActiveTab: () => handleCloseTab(activeTabIdRef.current) });
     return () => setActivePanelGroupHandlers(null);
-  }, [active, handleNewTab, onCloseTab]);
+  }, [active, handleNewTab, handleCloseTab]);
 
   return (
     <div className={`panel ${active ? "active" : ""}`} onClick={() => setActivePanel(side)}>
@@ -134,9 +122,9 @@ export function PanelGroup({
       <PanelTabs
         tabs={tabs}
         activeTabId={activeTabId}
-        onSelectTab={onSelectTab}
+        onSelectTab={handleSelectTab}
         onDoubleClickTab={handlePinTab}
-        onCloseTab={onCloseTab}
+        onCloseTab={handleCloseTab}
         onNewTab={handleNewTab}
         onReorderTabs={handleReorderTabs}
       />
@@ -152,12 +140,6 @@ export function PanelGroup({
               onRememberExpectedTerminalCwd(path);
               return panel.navigateTo(path);
             }}
-            onMoveToTrash={onMoveToTrash}
-            onPermanentDelete={onPermanentDelete}
-            onCopy={onCopy}
-            onMove={onMove}
-            onRename={onRename}
-            onPasteToCommandLine={onPasteToCommandLine}
             selectionKey={selectionKey}
             active={active}
             resolver={panel.resolver}
@@ -179,7 +161,7 @@ export function PanelGroup({
                   fileName={tab.name}
                   fileSize={tab.size}
                   inline
-                  onClose={() => onCloseTab(tab.id)}
+                  onClose={() => handleCloseTab(tab.id)}
                 />
               );
             }
