@@ -2,7 +2,7 @@ import { atom } from "jotai";
 import type { LoadedExtension } from "./extensions";
 import type { TerminalProfile } from "./bridge";
 import type { ThemeKind } from "fss-lang";
-import type { PanelSide } from "./useFileOperations";
+import type { PanelSide } from "./hooks/useFileOperations";
 
 export const showExtensionsAtom = atom(false);
 export const activeIconThemeAtom = atom<string | undefined>(undefined);

@@ -8,14 +8,14 @@
 
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef } from "react";
-import type { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "./bridge";
-import { bridge } from "./bridge";
-import { loadFsProvider } from "./browserFsProvider";
-import { isContainerPath, parseContainerPath } from "./containerPath";
-import { useDialog } from "./dialogContext";
-import type { FsProviderExtensionApi } from "./extensionApi";
-import { basename, dirname, join } from "./path";
-import { fsProviderRegistry } from "./viewerEditorRegistry";
+import type { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "../bridge";
+import { bridge } from "../bridge";
+import { loadFsProvider } from "../browserFsProvider";
+import { isContainerPath, parseContainerPath } from "../containerPath";
+import { useDialog } from "../dialogs/dialogContext";
+import type { FsProviderExtensionApi } from "../extensionApi";
+import { basename, dirname, join } from "../path";
+import { fsProviderRegistry } from "../viewerEditorRegistry";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

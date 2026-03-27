@@ -1,7 +1,7 @@
 import { atom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect } from "react";
-import type { FaradaySettings } from "./extensions";
-import { initUserSettings, onSettingsChange, updateSettings as persistSettings } from "./userSettings";
+import type { FaradaySettings } from "../extensions";
+import { initUserSettings, onSettingsChange, updateSettings as persistSettings } from "../userSettings";
 
 const settingsAtom = atom<FaradaySettings>({});
 const settingsReadyAtom = atom(false);

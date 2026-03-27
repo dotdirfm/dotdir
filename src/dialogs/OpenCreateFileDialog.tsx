@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { focusContext } from "./focusContext";
-import { languageRegistry } from "./languageRegistry";
+import { focusContext } from "../focusContext";
+import { languageRegistry } from "../languageRegistry";
 import { SmartLabel } from "./dialogHotkeys";
-import { INPUT_NO_ASSIST } from "./inputNoAssist";
+import { INPUT_NO_ASSIST } from "../inputNoAssist";
 
 export interface LanguageOption {
   id: string;

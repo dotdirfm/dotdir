@@ -7,8 +7,8 @@ import { commandRegistry } from "./commands";
 import { createRoot } from "react-dom/client";
 import { createElement } from "react";
 import { App } from "./app";
-import { DialogProvider } from "./dialogContext";
-import { ErrorBoundary } from "./ErrorBoundary";
+import { DialogProvider } from "./dialogs/dialogContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 declare global {
   interface Window {

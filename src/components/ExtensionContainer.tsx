@@ -5,18 +5,18 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { bridge } from "./bridge";
-import { commandRegistry } from "./commands";
-import { registerExtensionKeybinding } from "./registerKeybindings";
-import { readFileText as readFileTextFromFs } from "./fs";
-import { basename, dirname, join, normalizePath } from "./path";
-import { vfsUrl } from "./vfs";
-import type { HostApi, ColorThemeData, ViewerProps, EditorProps } from "./extensionApi";
-import { getActiveColorThemeData, onColorThemeChange } from "./vscodeColorTheme";
-import { focusContext } from "./focusContext";
-import { isContainerPath, parseContainerPath } from "./containerPath";
-import { fsProviderRegistry } from "./viewerEditorRegistry";
-import { loadFsProvider } from "./browserFsProvider";
+import { bridge } from "../bridge";
+import { commandRegistry } from "../commands";
+import { registerExtensionKeybinding } from "../registerKeybindings";
+import { readFileText as readFileTextFromFs } from "../fs";
+import { basename, dirname, join, normalizePath } from "../path";
+import { vfsUrl } from "../vfs";
+import type { HostApi, ColorThemeData, ViewerProps, EditorProps } from "../extensionApi";
+import { getActiveColorThemeData, onColorThemeChange } from "../vscodeColorTheme";
+import { focusContext } from "../focusContext";
+import { isContainerPath, parseContainerPath } from "../containerPath";
+import { fsProviderRegistry } from "../viewerEditorRegistry";
+import { loadFsProvider } from "../browserFsProvider";
 
 // ── Container props ─────────────────────────────────────────────────────
 
@@ -292,10 +292,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         return handler(command, args) as Promise<T>;
       },
 
-      registerCommand(
-        commandId: string,
-        handler: (...args: unknown[]) => void | Promise<void>,
-      ): () => void {
+      registerCommand(commandId: string, handler: (...args: unknown[]) => void | Promise<void>): () => void {
         return commandRegistry.registerCommand(commandId, handler);
       },
 

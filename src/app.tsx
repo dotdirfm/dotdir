@@ -2,7 +2,6 @@ import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import type { ThemeKind } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActionBar } from "./ActionBar";
 import {
   activeColorThemeAtom,
   activeIconThemeAtom,
@@ -19,33 +18,34 @@ import {
   viewerFileAtom,
 } from "./atoms";
 import { bridge } from "./bridge";
-import { CommandLine } from "./CommandLine";
 import { isExistingDirectory, parseCdCommand, resolveCdPath } from "./commandLineCd";
 import { CommandPalette, useCommandPalette } from "./CommandPalette";
 import { commandRegistry } from "./commands";
+import { ActionBar } from "./components/ActionBar";
+import { CommandLine } from "./components/CommandLine";
+import type { PanelTab } from "./components/FileList/PanelTabs";
 import { CONTAINER_SEP } from "./containerPath";
-import { DialogHolder, useDialog } from "./dialogContext";
-import { EditorContainer, ViewerContainer } from "./ExtensionContainer";
+import { DialogHolder, useDialog } from "./dialogs/dialogContext";
+import { EditorContainer, ViewerContainer } from "./components/ExtensionContainer";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT, type FaradayUiState, type PanelPersistedState, type PersistedTab } from "./extensions";
-import { ExtensionsPanel } from "./ExtensionsPanel";
-import type { PanelTab } from "./FileList/PanelTabs";
+import { ExtensionsPanel } from "./components/ExtensionsPanel";
+import { setFileOperationHandlers } from "./fileOperationHandlers";
 import { isMediaFile } from "./mediaFiles";
-import { ModalDialog } from "./ModalDialog";
+import { ModalDialog } from "./dialogs/ModalDialog";
 import { PanelGroup } from "./PanelGroup";
 import { OPPOSITE_PANEL, PANEL_SETTINGS_KEY, PANEL_SIDES } from "./panelSide";
 import { basename, normalizePath, resolveDotSegments } from "./path";
 import { createFilelistTab, createPreviewTab, genTabId, leftActiveTabIdAtom, leftTabsAtom, rightActiveTabIdAtom, rightTabsAtom } from "./tabsAtoms";
 import { TerminalPanelBody, TerminalToolbar } from "./Terminal";
 import { normalizeTerminalPath } from "./terminal/path";
-import { useBuiltInCommands } from "./useBuiltInCommands";
-import { useExtensionHost } from "./useExtensionHost";
-import { setFileOperationHandlers } from "./fileOperationHandlers";
-import { useFileOperations, type PanelSide } from "./useFileOperations";
-import { findExistingParent, usePanel } from "./usePanel";
+import { flushUiState, initUiState, updateUiState } from "./uiState";
+import { useBuiltInCommands } from "./hooks/useBuiltInCommands";
+import { useExtensionHost } from "./hooks/useExtensionHost";
+import { useFileOperations, type PanelSide } from "./hooks/useFileOperations";
+import { findExistingParent, usePanel } from "./hooks/usePanel";
 import { initUserKeybindings } from "./userKeybindings";
-import { useTerminal } from "./useTerminal";
-import { useUserSettings } from "./useUserSettings";
-import { initUiState, updateUiState, flushUiState } from "./uiState";
+import { useTerminal } from "./hooks/useTerminal";
+import { useUserSettings } from "./hooks/useUserSettings";
 import { editorRegistry, fsProviderRegistry, viewerRegistry } from "./viewerEditorRegistry";
 
 export function App() {

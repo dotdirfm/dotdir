@@ -1,8 +1,8 @@
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { showExtensionsAtom, activeIconThemeAtom, activeColorThemeAtom, loadedExtensionsAtom } from "./atoms";
-import { focusContext } from "./focusContext";
-import { extensionHost } from "./extensionHostClient";
+import { showExtensionsAtom, activeIconThemeAtom, activeColorThemeAtom, loadedExtensionsAtom } from "../atoms";
+import { focusContext } from "../focusContext";
+import { extensionHost } from "../extensionHostClient";
 import {
   type ExtensionRef,
   type MarketplaceExtension,
@@ -15,7 +15,7 @@ import {
   colorThemeKey,
   readSettings,
   writeSettings,
-} from "./extensions";
+} from "../extensions";
 import {
   searchVSCodeMarketplace,
   type VSCodeExtension,
@@ -23,8 +23,8 @@ import {
   getVSCodeLatestVersion,
   getVSCodeDownloadUrl,
   getVSCodeIconUrl,
-} from "./vscodeMarketplace";
-import { INPUT_NO_ASSIST } from "./inputNoAssist";
+} from "../vscodeMarketplace";
+import { INPUT_NO_ASSIST } from "../inputNoAssist";
 
 /** Extract a message from Tauri invoke errors (plain {errno,message} objects) or Error instances. */
 function errMsg(err: unknown): string {

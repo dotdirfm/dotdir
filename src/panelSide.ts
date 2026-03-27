@@ -1,4 +1,4 @@
-import type { PanelSide } from "./useFileOperations";
+import type { PanelSide } from "./hooks/useFileOperations";
 
 /** The other file-manager pane. */
 export const OPPOSITE_PANEL: Record<PanelSide, PanelSide> = {

@@ -11,17 +11,17 @@ import {
   showExtensionsAtom,
   showHiddenAtom,
   viewerFileAtom,
-} from "./atoms";
-import { bridge } from "./bridge";
-import { commandRegistry } from "./commands";
-import { isContainerPath, parseContainerPath } from "./containerPath";
-import type { DialogSpec } from "./dialogContext";
-import { focusContext } from "./focusContext";
-import { getActiveFileListHandlers } from "./fileListHandlers";
-import { getActivePanelGroupHandlers } from "./panelGroupHandlers";
-import type { LanguageOption } from "./OpenCreateFileDialog";
-import { basename, dirname } from "./path";
-import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "./registerKeybindings";
+} from "../atoms";
+import { bridge } from "../bridge";
+import { commandRegistry } from "../commands";
+import { isContainerPath, parseContainerPath } from "../containerPath";
+import type { DialogSpec } from "../dialogs/dialogContext";
+import { focusContext } from "../focusContext";
+import { getActiveFileListHandlers } from "../fileListHandlers";
+import { getActivePanelGroupHandlers } from "../panelGroupHandlers";
+import type { LanguageOption } from "../dialogs/OpenCreateFileDialog";
+import { basename, dirname } from "../path";
+import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "../registerKeybindings";
 import { useUserSettings } from "./useUserSettings";
 
 interface PanelHandle {
@@ -152,10 +152,18 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     disposables.push(commandRegistry.registerCommand("faraday.newTab", () => void getActivePanelGroupHandlers()?.newTab()));
     disposables.push(commandRegistry.registerCommand("faraday.closeTab", () => void getActivePanelGroupHandlers()?.closeActiveTab()));
     disposables.push(commandRegistry.registerCommand("faraday.previewInOppositePanel", () => depsRef.current.onPreviewInOppositePanel()));
-    disposables.push(commandRegistry.registerCommand("faraday.openCurrentFolderInOppositePanelCurrentTab", () => depsRef.current.onOpenCurrentFolderInOppositeCurrentTab()));
-    disposables.push(commandRegistry.registerCommand("faraday.openCurrentFolderInOppositePanelNewTab", () => depsRef.current.onOpenCurrentFolderInOppositeNewTab()));
-    disposables.push(commandRegistry.registerCommand("faraday.openSelectedFolderInOppositePanelCurrentTab", () => depsRef.current.onOpenSelectedFolderInOppositeCurrentTab()));
-    disposables.push(commandRegistry.registerCommand("faraday.openSelectedFolderInOppositePanelNewTab", () => depsRef.current.onOpenSelectedFolderInOppositeNewTab()));
+    disposables.push(
+      commandRegistry.registerCommand("faraday.openCurrentFolderInOppositePanelCurrentTab", () => depsRef.current.onOpenCurrentFolderInOppositeCurrentTab()),
+    );
+    disposables.push(
+      commandRegistry.registerCommand("faraday.openCurrentFolderInOppositePanelNewTab", () => depsRef.current.onOpenCurrentFolderInOppositeNewTab()),
+    );
+    disposables.push(
+      commandRegistry.registerCommand("faraday.openSelectedFolderInOppositePanelCurrentTab", () => depsRef.current.onOpenSelectedFolderInOppositeCurrentTab()),
+    );
+    disposables.push(
+      commandRegistry.registerCommand("faraday.openSelectedFolderInOppositePanelNewTab", () => depsRef.current.onOpenSelectedFolderInOppositeNewTab()),
+    );
 
     disposables.push(
       commandRegistry.registerCommand("faraday.openCreateFile", () => {

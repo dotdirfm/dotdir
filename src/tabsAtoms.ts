@@ -1,7 +1,7 @@
 import { atom } from "jotai";
 import { activePanelAtom } from "./atoms";
-import type { PanelTab } from "./FileList/PanelTabs";
-import type { PanelSide } from "./useFileOperations";
+import type { PanelTab } from "./components/FileList/PanelTabs";
+import type { PanelSide } from "./hooks/useFileOperations";
 
 let nextTabId = 0;
 export function genTabId(): string {
@@ -25,12 +25,8 @@ export const leftActiveTabIdAtom = atom<string>(defaultLeftTab.id);
 export const rightActiveTabIdAtom = atom<string>(defaultRightTab.id);
 
 // Derived: active tab index per panel
-export const leftActiveIndexAtom = atom((get) =>
-  get(leftTabsAtom).findIndex((t) => t.id === get(leftActiveTabIdAtom)),
-);
-export const rightActiveIndexAtom = atom((get) =>
-  get(rightTabsAtom).findIndex((t) => t.id === get(rightActiveTabIdAtom)),
-);
+export const leftActiveIndexAtom = atom((get) => get(leftTabsAtom).findIndex((t) => t.id === get(leftActiveTabIdAtom)));
+export const rightActiveIndexAtom = atom((get) => get(rightTabsAtom).findIndex((t) => t.id === get(rightActiveTabIdAtom)));
 
 // Derived: active tab object per panel
 export const leftActiveTabAtom = atom((get) => {
@@ -43,15 +39,7 @@ export const rightActiveTabAtom = atom((get) => {
 });
 
 // Derived: active-panel variants (whichever panel is currently focused)
-export const activeTabsAtom = atom((get) =>
-  get(activePanelAtom) === "left" ? get(leftTabsAtom) : get(rightTabsAtom),
-);
-export const activeTabIdAtom = atom((get) =>
-  get(activePanelAtom) === "left" ? get(leftActiveTabIdAtom) : get(rightActiveTabIdAtom),
-);
-export const activeTabIndexAtom = atom((get) =>
-  get(activePanelAtom) === "left" ? get(leftActiveIndexAtom) : get(rightActiveIndexAtom),
-);
-export const activeTabAtom = atom((get) =>
-  get(activePanelAtom) === "left" ? get(leftActiveTabAtom) : get(rightActiveTabAtom),
-);
+export const activeTabsAtom = atom((get) => (get(activePanelAtom) === "left" ? get(leftTabsAtom) : get(rightTabsAtom)));
+export const activeTabIdAtom = atom((get) => (get(activePanelAtom) === "left" ? get(leftActiveTabIdAtom) : get(rightActiveTabIdAtom)));
+export const activeTabIndexAtom = atom((get) => (get(activePanelAtom) === "left" ? get(leftActiveIndexAtom) : get(rightActiveIndexAtom)));
+export const activeTabAtom = atom((get) => (get(activePanelAtom) === "left" ? get(leftActiveTabAtom) : get(rightActiveTabAtom)));

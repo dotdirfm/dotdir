@@ -1,20 +1,28 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
-import { bridge } from "./bridge";
-import { commandRegistry } from "./commands";
-import { extensionHost } from "./extensionHostClient";
-import { type LoadedExtension, findColorTheme } from "./extensions";
-import { readFileText } from "./fs";
-import { setExtensionLayers } from "./fss";
-import { setIconTheme, setIconThemeKind } from "./iconResolver";
-import { languageRegistry } from "./languageRegistry";
-import { dirname, join } from "./path";
-import { registerExtensionKeybindings } from "./registerKeybindings";
-import { resolveShellProfiles } from "./terminal/shellProfiles";
-import { clearFsProviderCache } from "./browserFsProvider";
-import { populateRegistries } from "./viewerEditorRegistry";
-import { loadAndApplyColorTheme, clearColorTheme, uiThemeToKind } from "./vscodeColorTheme";
-import { activeIconThemeAtom, activeColorThemeAtom, osThemeAtom, loadedExtensionsAtom, themesReadyAtom, resolvedProfilesAtom, terminalProfilesLoadedAtom } from "./atoms";
+import { bridge } from "../bridge";
+import { commandRegistry } from "../commands";
+import { extensionHost } from "../extensionHostClient";
+import { type LoadedExtension, findColorTheme } from "../extensions";
+import { readFileText } from "../fs";
+import { setExtensionLayers } from "../fss";
+import { setIconTheme, setIconThemeKind } from "../iconResolver";
+import { languageRegistry } from "../languageRegistry";
+import { dirname, join } from "../path";
+import { registerExtensionKeybindings } from "../registerKeybindings";
+import { resolveShellProfiles } from "../terminal/shellProfiles";
+import { clearFsProviderCache } from "../browserFsProvider";
+import { populateRegistries } from "../viewerEditorRegistry";
+import { loadAndApplyColorTheme, clearColorTheme, uiThemeToKind } from "../vscodeColorTheme";
+import {
+  activeIconThemeAtom,
+  activeColorThemeAtom,
+  osThemeAtom,
+  loadedExtensionsAtom,
+  themesReadyAtom,
+  resolvedProfilesAtom,
+  terminalProfilesLoadedAtom,
+} from "../atoms";
 
 interface UseExtensionHostOptions {
   settingsLoaded: boolean;

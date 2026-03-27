@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { focusContext } from "./focusContext";
-import { useDialogButtonNav } from "./useDialogButtonNav";
-import type { ConflictPolicy, MoveOptions } from "./bridge";
+import { focusContext } from "../focusContext";
+import { useDialogButtonNav } from "../hooks/useDialogButtonNav";
+import type { ConflictPolicy, MoveOptions } from "../bridge";
 import { SmartLabel } from "./dialogHotkeys";
-import { INPUT_NO_ASSIST } from "./inputNoAssist";
+import { INPUT_NO_ASSIST } from "../inputNoAssist";
 
 export interface MoveConfigDialogProps {
   itemCount: number;

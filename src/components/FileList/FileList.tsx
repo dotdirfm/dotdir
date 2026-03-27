@@ -1,16 +1,16 @@
 import { FsNode } from "fss-lang";
 import type { LayeredResolver } from "fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { actionQueue } from "../actionQueue";
-import { commandRegistry } from "../commands";
-import { setActiveFileListHandlers } from "../fileListHandlers";
-import { getFileOperationHandlers } from "../fileOperationHandlers";
-import { viewerRegistry, editorRegistry } from "../viewerEditorRegistry";
-import { resolveEntryStyle } from "../fss";
-import type { ResolvedEntryStyle } from "../types";
-import { resolveIcon, loadIconsForPaths, getCachedIcon, onIconThemeChange } from "../iconResolver";
-import { dirname, join } from "../path";
-import { useMediaQuery } from "../hooks/useMediaQuery";
+import { actionQueue } from "../../actionQueue";
+import { commandRegistry } from "../../commands";
+import { setActiveFileListHandlers } from "../../fileListHandlers";
+import { getFileOperationHandlers } from "../../fileOperationHandlers";
+import { viewerRegistry, editorRegistry } from "../../viewerEditorRegistry";
+import { resolveEntryStyle } from "../../fss";
+import type { ResolvedEntryStyle } from "../../types";
+import { resolveIcon, loadIconsForPaths, getCachedIcon, onIconThemeChange } from "../../iconResolver";
+import { dirname, join } from "../../path";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
 
@@ -384,146 +384,219 @@ export const FileList = memo(function FileList({
   useEffect(() => {
     if (!active) return;
     setActiveFileListHandlers({
-      cursorUp: () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.max(0, i - 1)); }),
-      cursorDown: () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + 1)); }),
-      cursorLeft: () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.max(0, i - maxItemsPerColumnRef.current)); }),
-      cursorRight: () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + maxItemsPerColumnRef.current)); }),
-      cursorHome: () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex(0); }),
-      cursorEnd: () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex(displayEntriesRef.current.length - 1); }),
-      cursorPageUp: () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.max(0, i - displayedItemsRef.current + 1)); }),
-      cursorPageDown: () => actionQueue.enqueue(() => { markKeyboardNav(); setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + displayedItemsRef.current - 1)); }),
-      selectUp: () => actionQueue.enqueue(() => {
-        markKeyboardNav();
-        const cur = activeIndexRef.current;
-        const target = Math.max(0, cur - 1);
-        applySelection(cur, target, cur === 0 ? "include-active" : "exclude-active");
-      }),
-      selectDown: () => actionQueue.enqueue(() => {
-        markKeyboardNav();
-        const cur = activeIndexRef.current;
-        const last = displayEntriesRef.current.length - 1;
-        const target = Math.min(last, cur + 1);
-        applySelection(cur, target, cur === last ? "include-active" : "exclude-active");
-      }),
-      selectLeft: () => actionQueue.enqueue(() => {
-        markKeyboardNav();
-        const cur = activeIndexRef.current;
-        applySelection(cur, Math.max(0, cur - maxItemsPerColumnRef.current), "include-active");
-      }),
-      selectRight: () => actionQueue.enqueue(() => {
-        markKeyboardNav();
-        const cur = activeIndexRef.current;
-        applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + maxItemsPerColumnRef.current), "include-active");
-      }),
-      selectHome: () => actionQueue.enqueue(() => { markKeyboardNav(); applySelection(activeIndexRef.current, 0, "include-active"); }),
-      selectEnd: () => actionQueue.enqueue(() => { markKeyboardNav(); applySelection(activeIndexRef.current, displayEntriesRef.current.length - 1, "include-active"); }),
-      selectPageUp: () => actionQueue.enqueue(() => {
-        markKeyboardNav();
-        const cur = activeIndexRef.current;
-        applySelection(cur, Math.max(0, cur - displayedItemsRef.current + 1), "include-active");
-      }),
-      selectPageDown: () => actionQueue.enqueue(() => {
-        markKeyboardNav();
-        const cur = activeIndexRef.current;
-        applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + displayedItemsRef.current - 1), "include-active");
-      }),
-      execute: () => actionQueue.enqueue(async () => {
-        const item = displayEntriesRef.current[activeIndexRef.current];
-        if (!item || item.entry.type !== "file") return;
-        if (!(item.entry.meta as { executable?: boolean }).executable) return;
-        void commandRegistry.executeCommand("terminal.execute", item.entry.path as string);
-      }),
-      open: () => actionQueue.enqueue(async () => {
-        const item = displayEntriesRef.current[activeIndexRef.current];
-        if (item) await navigateToEntry(item.entry);
-      }),
-      viewFile: () => actionQueue.enqueue(() => {
-        const item = displayEntriesRef.current[activeIndexRef.current];
-        if (item && item.entry.type === "file") {
-          void commandRegistry.executeCommand("faraday.viewFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
-        }
-      }),
-      editFile: () => actionQueue.enqueue(() => {
-        const item = displayEntriesRef.current[activeIndexRef.current];
-        if (item && item.entry.type === "file") {
-          const langId = typeof item.entry.lang === "string" && item.entry.lang ? item.entry.lang : "plaintext";
-          void commandRegistry.executeCommand("faraday.editFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size), langId);
-        }
-      }),
-      moveToTrash: () => actionQueue.enqueue(() => {
-        const ops = getFileOperationHandlers();
-        if (!ops) return;
-        const selected = selectedNamesRef.current;
-        const all = displayEntriesRef.current;
-        const refresh = () => onNavigateRef.current(currentPathRef.current);
-        const sourcePaths = selected.size > 0
-          ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
-          : (() => { const item = all[activeIndexRef.current]; return item ? [item.entry.path as string] : []; })();
-        if (sourcePaths.length === 0) return;
-        ops.moveToTrash(sourcePaths, refresh);
-      }),
-      permanentDelete: () => actionQueue.enqueue(() => {
-        const ops = getFileOperationHandlers();
-        if (!ops) return;
-        const selected = selectedNamesRef.current;
-        const all = displayEntriesRef.current;
-        const refresh = () => onNavigateRef.current(currentPathRef.current);
-        const sourcePaths = selected.size > 0
-          ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
-          : (() => { const item = all[activeIndexRef.current]; return item ? [item.entry.path as string] : []; })();
-        if (sourcePaths.length === 0) return;
-        ops.permanentDelete(sourcePaths, refresh);
-      }),
-      copy: () => actionQueue.enqueue(() => {
-        const ops = getFileOperationHandlers();
-        if (!ops) return;
-        const selected = selectedNamesRef.current;
-        const all = displayEntriesRef.current;
-        const refresh = () => onNavigateRef.current(currentPathRef.current);
-        const sourcePaths = selected.size > 0
-          ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
-          : (() => { const item = all[activeIndexRef.current]; return item ? [item.entry.path as string] : []; })();
-        if (sourcePaths.length === 0) return;
-        ops.copy(sourcePaths, refresh);
-      }),
-      move: () => actionQueue.enqueue(() => {
-        const ops = getFileOperationHandlers();
-        if (!ops) return;
-        const selected = selectedNamesRef.current;
-        const all = displayEntriesRef.current;
-        const refresh = () => onNavigateRef.current(currentPathRef.current);
-        const sourcePaths = selected.size > 0
-          ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
-          : (() => { const item = all[activeIndexRef.current]; return item ? [item.entry.path as string] : []; })();
-        if (sourcePaths.length === 0) return;
-        ops.move(sourcePaths, refresh);
-      }),
-      rename: () => actionQueue.enqueue(() => {
-        const ops = getFileOperationHandlers();
-        if (!ops) return;
-        const item = displayEntriesRef.current[activeIndexRef.current];
-        if (!item) return;
-        const refresh = () => onNavigateRef.current(currentPathRef.current);
-        ops.rename(item.entry.path as string, item.entry.name, refresh);
-      }),
-      pasteFilename: () => actionQueue.enqueue(() => {
-        const item = displayEntriesRef.current[activeIndexRef.current];
-        if (!item) return;
-        const ops = getFileOperationHandlers();
-        if (!ops) return;
-        const name = item.entry.name;
-        const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? name : JSON.stringify(name);
-        ops.pasteToCommandLine(arg);
-      }),
-      pastePath: () => actionQueue.enqueue(() => {
-        const item = displayEntriesRef.current[activeIndexRef.current];
-        if (!item) return;
-        const ops = getFileOperationHandlers();
-        if (!ops) return;
-        const path = ((item.entry.path as string) ?? "").split("\0")[0];
-        const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
-        ops.pasteToCommandLine(arg);
-      }),
+      cursorUp: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          setActiveIndex((i) => Math.max(0, i - 1));
+        }),
+      cursorDown: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + 1));
+        }),
+      cursorLeft: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          setActiveIndex((i) => Math.max(0, i - maxItemsPerColumnRef.current));
+        }),
+      cursorRight: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + maxItemsPerColumnRef.current));
+        }),
+      cursorHome: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          setActiveIndex(0);
+        }),
+      cursorEnd: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          setActiveIndex(displayEntriesRef.current.length - 1);
+        }),
+      cursorPageUp: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          setActiveIndex((i) => Math.max(0, i - displayedItemsRef.current + 1));
+        }),
+      cursorPageDown: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + displayedItemsRef.current - 1));
+        }),
+      selectUp: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          const cur = activeIndexRef.current;
+          const target = Math.max(0, cur - 1);
+          applySelection(cur, target, cur === 0 ? "include-active" : "exclude-active");
+        }),
+      selectDown: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          const cur = activeIndexRef.current;
+          const last = displayEntriesRef.current.length - 1;
+          const target = Math.min(last, cur + 1);
+          applySelection(cur, target, cur === last ? "include-active" : "exclude-active");
+        }),
+      selectLeft: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          const cur = activeIndexRef.current;
+          applySelection(cur, Math.max(0, cur - maxItemsPerColumnRef.current), "include-active");
+        }),
+      selectRight: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          const cur = activeIndexRef.current;
+          applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + maxItemsPerColumnRef.current), "include-active");
+        }),
+      selectHome: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          applySelection(activeIndexRef.current, 0, "include-active");
+        }),
+      selectEnd: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          applySelection(activeIndexRef.current, displayEntriesRef.current.length - 1, "include-active");
+        }),
+      selectPageUp: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          const cur = activeIndexRef.current;
+          applySelection(cur, Math.max(0, cur - displayedItemsRef.current + 1), "include-active");
+        }),
+      selectPageDown: () =>
+        actionQueue.enqueue(() => {
+          markKeyboardNav();
+          const cur = activeIndexRef.current;
+          applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + displayedItemsRef.current - 1), "include-active");
+        }),
+      execute: () =>
+        actionQueue.enqueue(async () => {
+          const item = displayEntriesRef.current[activeIndexRef.current];
+          if (!item || item.entry.type !== "file") return;
+          if (!(item.entry.meta as { executable?: boolean }).executable) return;
+          void commandRegistry.executeCommand("terminal.execute", item.entry.path as string);
+        }),
+      open: () =>
+        actionQueue.enqueue(async () => {
+          const item = displayEntriesRef.current[activeIndexRef.current];
+          if (item) await navigateToEntry(item.entry);
+        }),
+      viewFile: () =>
+        actionQueue.enqueue(() => {
+          const item = displayEntriesRef.current[activeIndexRef.current];
+          if (item && item.entry.type === "file") {
+            void commandRegistry.executeCommand("faraday.viewFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
+          }
+        }),
+      editFile: () =>
+        actionQueue.enqueue(() => {
+          const item = displayEntriesRef.current[activeIndexRef.current];
+          if (item && item.entry.type === "file") {
+            const langId = typeof item.entry.lang === "string" && item.entry.lang ? item.entry.lang : "plaintext";
+            void commandRegistry.executeCommand("faraday.editFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size), langId);
+          }
+        }),
+      moveToTrash: () =>
+        actionQueue.enqueue(() => {
+          const ops = getFileOperationHandlers();
+          if (!ops) return;
+          const selected = selectedNamesRef.current;
+          const all = displayEntriesRef.current;
+          const refresh = () => onNavigateRef.current(currentPathRef.current);
+          const sourcePaths =
+            selected.size > 0
+              ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
+              : (() => {
+                  const item = all[activeIndexRef.current];
+                  return item ? [item.entry.path as string] : [];
+                })();
+          if (sourcePaths.length === 0) return;
+          ops.moveToTrash(sourcePaths, refresh);
+        }),
+      permanentDelete: () =>
+        actionQueue.enqueue(() => {
+          const ops = getFileOperationHandlers();
+          if (!ops) return;
+          const selected = selectedNamesRef.current;
+          const all = displayEntriesRef.current;
+          const refresh = () => onNavigateRef.current(currentPathRef.current);
+          const sourcePaths =
+            selected.size > 0
+              ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
+              : (() => {
+                  const item = all[activeIndexRef.current];
+                  return item ? [item.entry.path as string] : [];
+                })();
+          if (sourcePaths.length === 0) return;
+          ops.permanentDelete(sourcePaths, refresh);
+        }),
+      copy: () =>
+        actionQueue.enqueue(() => {
+          const ops = getFileOperationHandlers();
+          if (!ops) return;
+          const selected = selectedNamesRef.current;
+          const all = displayEntriesRef.current;
+          const refresh = () => onNavigateRef.current(currentPathRef.current);
+          const sourcePaths =
+            selected.size > 0
+              ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
+              : (() => {
+                  const item = all[activeIndexRef.current];
+                  return item ? [item.entry.path as string] : [];
+                })();
+          if (sourcePaths.length === 0) return;
+          ops.copy(sourcePaths, refresh);
+        }),
+      move: () =>
+        actionQueue.enqueue(() => {
+          const ops = getFileOperationHandlers();
+          if (!ops) return;
+          const selected = selectedNamesRef.current;
+          const all = displayEntriesRef.current;
+          const refresh = () => onNavigateRef.current(currentPathRef.current);
+          const sourcePaths =
+            selected.size > 0
+              ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
+              : (() => {
+                  const item = all[activeIndexRef.current];
+                  return item ? [item.entry.path as string] : [];
+                })();
+          if (sourcePaths.length === 0) return;
+          ops.move(sourcePaths, refresh);
+        }),
+      rename: () =>
+        actionQueue.enqueue(() => {
+          const ops = getFileOperationHandlers();
+          if (!ops) return;
+          const item = displayEntriesRef.current[activeIndexRef.current];
+          if (!item) return;
+          const refresh = () => onNavigateRef.current(currentPathRef.current);
+          ops.rename(item.entry.path as string, item.entry.name, refresh);
+        }),
+      pasteFilename: () =>
+        actionQueue.enqueue(() => {
+          const item = displayEntriesRef.current[activeIndexRef.current];
+          if (!item) return;
+          const ops = getFileOperationHandlers();
+          if (!ops) return;
+          const name = item.entry.name;
+          const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? name : JSON.stringify(name);
+          ops.pasteToCommandLine(arg);
+        }),
+      pastePath: () =>
+        actionQueue.enqueue(() => {
+          const item = displayEntriesRef.current[activeIndexRef.current];
+          if (!item) return;
+          const ops = getFileOperationHandlers();
+          if (!ops) return;
+          const path = ((item.entry.path as string) ?? "").split("\0")[0];
+          const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
+          ops.pasteToCommandLine(arg);
+        }),
     });
     return () => setActiveFileListHandlers(null);
   }, [active, markKeyboardNav, navigateToEntry, applySelection]);

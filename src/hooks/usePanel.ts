@@ -11,17 +11,17 @@ import { FsNode } from "fss-lang";
 import type { LayeredResolver } from "fss-lang";
 import { createFsNode } from "fss-lang/helpers";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { osThemeAtom } from "./atoms";
-import type { FsChangeType } from "./types";
-import { bridge } from "./bridge";
-import { fsProviderRegistry } from "./viewerEditorRegistry";
-import { isContainerPath, parseContainerPath, buildContainerPath } from "./containerPath";
-import { loadFsProvider } from "./browserFsProvider";
-import { createPanelResolver, invalidateFssCache, syncLayers } from "./fss";
-import { FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from "./fs";
-import { basename, dirname, isFileExecutable, isRootPath, join } from "./path";
-import { languageRegistry } from "./languageRegistry";
-import type { FsRawEntry } from "./types";
+import { osThemeAtom } from "../atoms";
+import type { FsChangeType } from "../types";
+import { bridge } from "../bridge";
+import { fsProviderRegistry } from "../viewerEditorRegistry";
+import { isContainerPath, parseContainerPath, buildContainerPath } from "../containerPath";
+import { loadFsProvider } from "../browserFsProvider";
+import { createPanelResolver, invalidateFssCache, syncLayers } from "../fss";
+import { FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from "../fs";
+import { basename, dirname, isFileExecutable, isRootPath, join } from "../path";
+import { languageRegistry } from "../languageRegistry";
+import type { FsRawEntry } from "../types";
 
 // ── Helper functions ──────────────────────────────────────────────────────────
 
@@ -180,7 +180,7 @@ export function usePanel(showError: (message: string) => void) {
             if (!providerMatch) {
               throw new Error(`No fsProvider registered for "${basename(hostFile)}"`);
             }
-            let entries: import("./extensionApi").FsProviderEntry[];
+            let entries: import("../extensionApi").FsProviderEntry[];
             if (providerMatch.contribution.runtime === "backend" && bridge.fsProvider) {
               const wasmPath = join(providerMatch.extensionDirPath, providerMatch.contribution.entry);
               const raw = await bridge.fsProvider.listEntries(wasmPath, hostFile, innerPath);

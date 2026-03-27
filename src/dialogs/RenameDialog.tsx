@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { focusContext } from "./focusContext";
+import { focusContext } from "../focusContext";
 import { SmartLabel } from "./dialogHotkeys";
-import { INPUT_NO_ASSIST } from "./inputNoAssist";
+import { INPUT_NO_ASSIST } from "../inputNoAssist";
 
 export interface RenameDialogProps {
   currentName: string;

@@ -7,13 +7,13 @@ import {
   resolvedProfilesAtom,
   terminalFocusRequestKeyAtom,
   terminalProfilesLoadedAtom,
-} from "./atoms";
-import { bridge } from "./bridge";
-import { commandRegistry } from "./commands";
-import { focusContext } from "./focusContext";
-import { normalizePath } from "./path";
-import { normalizeTerminalPath } from "./terminal/path";
-import { useTerminalState } from "./terminal/useTerminalState";
+} from "../atoms";
+import { bridge } from "../bridge";
+import { commandRegistry } from "../commands";
+import { focusContext } from "../focusContext";
+import { normalizePath } from "../path";
+import { normalizeTerminalPath } from "../terminal/path";
+import { useTerminalState } from "../terminal/useTerminalState";
 
 interface UseTerminalOptions {
   activePanelCwd: string;

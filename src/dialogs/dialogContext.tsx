@@ -10,7 +10,7 @@ import { ConflictDialog } from "./ConflictDialog";
 import { MoveConfigDialog } from "./MoveConfigDialog";
 import { RenameDialog } from "./RenameDialog";
 import type { LanguageOption } from "./OpenCreateFileDialog";
-import type { CopyOptions, MoveOptions, ConflictResolution } from "./bridge";
+import type { CopyOptions, MoveOptions, ConflictResolution } from "../bridge";
 
 export interface MessageDialogButton {
   label: string;

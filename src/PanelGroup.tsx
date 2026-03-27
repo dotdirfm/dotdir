@@ -1,9 +1,9 @@
 import type { FsNode, LayeredResolver } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { ViewerContainer } from "./ExtensionContainer";
-import { FileList } from "./FileList";
-import { PanelTabs } from "./FileList/PanelTabs";
+import { ViewerContainer } from "./components/ExtensionContainer";
+import { FileList } from "./components/FileList";
+import { PanelTabs } from "./components/FileList/PanelTabs";
 import { activePanelAtom, showHiddenAtom } from "./atoms";
 import { bridge } from "./bridge";
 import type { PanelPersistedState } from "./extensions";
