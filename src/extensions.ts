@@ -2,7 +2,7 @@ import { bridge, type CwdEscapeMode, type DeleteProgressEvent } from "./shared/a
 import { readFileBuffer, readFileText } from "./fs";
 import { dirname, join, normalizePath } from "./path";
 
-export const MARKETPLACE_URL = "https://mkt.dotdir.dev";
+export const MARKETPLACE_URL = "https://dotdir.dev";
 
 // FSS-based icon theme (.dir format)
 export interface ExtensionIconThemeFss {
