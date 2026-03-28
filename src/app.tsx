@@ -45,9 +45,12 @@ import { findExistingParent, usePanel } from "./hooks/usePanel";
 import { initUserKeybindings } from "./userKeybindings";
 import { useTerminal } from "./hooks/useTerminal";
 import { useUserSettings } from "./hooks/useUserSettings";
+import { useAuth } from "./hooks/useAuth";
+import { AccountWidget } from "./components/AccountWidget";
 import { editorRegistry, fsProviderRegistry, viewerRegistry } from "./viewerEditorRegistry";
 
 export function App() {
+  useAuth();
   const { settings, ready, updateSettings } = useUserSettings();
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -686,7 +689,10 @@ export function App() {
         <CommandLine />
         <TerminalToolbar />
       </>
-      <ActionBar />
+      <div className="status-bar">
+        <ActionBar />
+        <AccountWidget />
+      </div>
       {viewerFile && !viewerResolved && (
         <ModalDialog
           title="No viewer"

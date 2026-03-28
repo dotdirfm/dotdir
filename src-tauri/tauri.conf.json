@@ -21,6 +21,13 @@
       "csp": "default-src 'self'; frame-src 'self' vfs: blob: data: http://vfs.localhost https://vfs.localhost; connect-src 'self' https://dotdir.dev https://mkt.dotdir.dev https://marketplace.visualstudio.com https://*.gallerycdn.vsassets.io https://*.vo.msecnd.net blob: data: http://vfs.localhost https://vfs.localhost; img-src 'self' data: blob: https://dotdir.dev https://mkt.dotdir.dev https://*.gallerycdn.vsassets.io http://vfs.localhost https://vfs.localhost; media-src 'self' blob: http://vfs.localhost https://vfs.localhost; font-src 'self' data: http://vfs.localhost https://vfs.localhost; style-src 'self' 'unsafe-inline' http://vfs.localhost https://vfs.localhost; script-src 'self' vfs: blob: 'unsafe-inline' 'unsafe-eval' http://vfs.localhost https://vfs.localhost; worker-src 'self' blob: http://vfs.localhost https://vfs.localhost"
     }
   },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["dotdir"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

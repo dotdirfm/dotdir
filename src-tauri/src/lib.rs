@@ -5,7 +5,8 @@ use dotdir_core::error::FsError;
 use dotdir_core::ops::{self, EntryInfo, FdTable, StatResult};
 use dotdir_core::watch::{EventCallback, FsWatcher};
 use log::debug;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use tauri_plugin_deep_link::DeepLinkExt;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -760,6 +761,53 @@ fn rename_item(source: String, new_name: String) -> CmdResult<()> {
     Ok(())
 }
 
+// ── Auth token storage ───────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthTokens {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub expires_at: i64,
+    pub user_sub: String,
+    pub user_name: Option<String>,
+    pub user_email: Option<String>,
+}
+
+fn auth_tokens_path(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
+    app_handle
+        .path()
+        .app_config_dir()
+        .ok()
+        .map(|p| p.join("auth.json"))
+}
+
+#[tauri::command]
+fn auth_store_tokens(tokens: AuthTokens, app_handle: tauri::AppHandle) {
+    if let Some(path) = auth_tokens_path(&app_handle) {
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if let Ok(json) = serde_json::to_string_pretty(&tokens) {
+            let _ = fs::write(&path, json);
+        }
+    }
+}
+
+#[tauri::command]
+fn auth_load_tokens(app_handle: tauri::AppHandle) -> Option<AuthTokens> {
+    let path = auth_tokens_path(&app_handle)?;
+    let bytes = fs::read(&path).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+#[tauri::command]
+fn auth_clear_tokens(app_handle: tauri::AppHandle) {
+    if let Some(path) = auth_tokens_path(&app_handle) {
+        let _ = fs::remove_file(path);
+    }
+}
+
 // ── VFS protocol handler ─────────────────────────────────────────────
 
 #[cfg(unix)]
@@ -953,6 +1001,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_deep_link::init())
         .register_uri_scheme_protocol("vfs", |_app, request| {
             // macOS/Linux: typically `vfs://vfs/<abs path>`.
             // Windows: WebView2 maps custom schemes to http(s) hosts like
@@ -1057,6 +1106,20 @@ pub fn run() {
                 fsp_manager: fsprovider::FsProviderManager::new(),
             };
             app.manage(state);
+
+            // Forward deep-link callbacks (e.g. dotdir://auth/callback?code=…)
+            // to the frontend as an "auth:callback" event.
+            let deep_link_handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                let h = deep_link_handle.clone();
+                let urls: Vec<String> = event.urls().iter().map(|u| u.to_string()).collect();
+                std::thread::spawn(move || {
+                    for url in urls {
+                        let _ = h.emit("auth:callback", url);
+                    }
+                });
+            });
+
             write_debug_log("tauri setup completed");
             Ok(())
         })
@@ -1095,6 +1158,9 @@ pub fn run() {
             fsp_load,
             fsp_list_entries,
             fsp_read_file_range,
+            auth_store_tokens,
+            auth_load_tokens,
+            auth_clear_tokens,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

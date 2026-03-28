@@ -1,0 +1,123 @@
+/* Account widget — compact sign-in/user indicator in the status bar */
+
+.account-widget {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  position: relative;
+  border-left: 1px solid var(--border);
+}
+
+.account-widget--loading .account-widget-label {
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
+.account-widget-btn {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  color: var(--fg-secondary);
+  font-size: 11px;
+  border-radius: 3px;
+  padding: 1px 4px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.account-widget-btn:hover {
+  background: var(--entry-hover);
+  color: var(--fg);
+}
+
+.account-widget-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 9px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.account-widget-label {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-widget-error {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  height: 18px;
+  border-radius: 3px;
+  background: var(--error-bg);
+  color: var(--error-fg);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: default;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sign-out dropdown */
+
+.account-widget-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+
+.account-widget-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  z-index: 101;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px;
+  min-width: 160px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.account-widget-menu-email {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  color: var(--fg-muted);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-widget-menu-item {
+  all: unset;
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--fg-secondary);
+  transition: background 0.1s, color 0.1s;
+  box-sizing: border-box;
+}
+
+.account-widget-menu-item:hover {
+  background: var(--entry-hover);
+  color: var(--fg);
+}

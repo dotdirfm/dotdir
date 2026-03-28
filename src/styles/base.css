@@ -64,3 +64,13 @@ body {
   height: 100%;
   overflow: hidden;
 }
+
+.status-bar {
+  display: flex;
+  align-items: stretch;
+}
+
+.status-bar .action-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+}

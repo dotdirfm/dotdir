@@ -4,6 +4,12 @@ import type { TerminalProfile } from "./bridge";
 import type { ThemeKind } from "fss-lang";
 import type { PanelSide } from "./entities/panel/model/types";
 
+export interface AuthUser {
+  sub: string;
+  name?: string;
+  email?: string;
+}
+
 export const showExtensionsAtom = atom(false);
 export const activeIconThemeAtom = atom<string | undefined>(undefined);
 export const activeColorThemeAtom = atom<string | undefined>(undefined);
@@ -29,3 +35,6 @@ export const editorFileAtom = atom<{ path: string; name: string; size: number; l
 export const commandLineCwdAtom = atom("");
 export const commandLineOnExecuteAtom = atom<((cmd: string) => void) | null>(null);
 export const commandLinePasteFnAtom = atom<((text: string) => void) | null>(null);
+
+export const authUserAtom = atom<AuthUser | null>(null);
+export const authSigningInAtom = atom(false);
