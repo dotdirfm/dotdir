@@ -97,11 +97,11 @@ pnpm build:rust       # Build Rust binary (release)
 pnpm build:rust:dev   # Build Rust binary (debug)
 
 # Run headless
-./src-tauri/target/release/faraday serve
+./src-tauri/target/release/dotdir serve
 # → http://127.0.0.1:3001
 
 # With options
-./src-tauri/target/release/faraday serve \
+./src-tauri/target/release/dotdir serve \
   --port 8080 \
   --host 0.0.0.0 \
   --static-dir dist-web
@@ -112,7 +112,7 @@ The server auto-detects `dist-web/` relative to CWD. Port and host can also be s
 ### Development (headless with HMR)
 
 ```bash
-pnpm build:rust:dev && ./src-tauri/target/debug/faraday serve &
+pnpm build:rust:dev && ./src-tauri/target/debug/dotdir serve &
 pnpm dev:web          # Vite dev server at http://localhost:5173 (proxies /ws → :3001)
 ```
 
