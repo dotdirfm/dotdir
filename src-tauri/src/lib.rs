@@ -4,6 +4,7 @@ use dotdir_core::move_op::{self, MoveOptions};
 use dotdir_core::error::FsError;
 use dotdir_core::ops::{self, EntryInfo, FdTable, StatResult};
 use dotdir_core::watch::{EventCallback, FsWatcher};
+use extensions_install::{ExtensionInstallEvent, ExtensionInstallRequest};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -24,6 +25,7 @@ mod elevate;
 mod elevate;
 
 mod fsprovider;
+mod extensions_install;
 mod pty;
 pub mod rpc;
 pub mod serve;
@@ -154,6 +156,10 @@ struct DeleteJobHandle {
     cancel_token: CancelToken,
 }
 
+struct ExtensionInstallJobHandle {
+    cancel_token: CancelToken,
+}
+
 // ── Managed state ────────────────────────────────────────────────────
 
 pub struct AppState {
@@ -169,6 +175,8 @@ pub struct AppState {
     pub(crate) next_move_id: AtomicU32,
     pub(crate) delete_jobs: std::sync::Mutex<HashMap<u32, DeleteJobHandle>>,
     pub(crate) next_delete_id: AtomicU32,
+    pub(crate) extension_install_jobs: std::sync::Mutex<HashMap<u32, ExtensionInstallJobHandle>>,
+    pub(crate) next_extension_install_id: AtomicU32,
     pub fsp_manager: fsprovider::FsProviderManager,
 }
 
@@ -711,6 +719,13 @@ struct DeleteProgressEvent {
     event: DeleteEvent,
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ExtensionInstallProgressEvent {
+    install_id: u32,
+    event: ExtensionInstallEvent,
+}
+
 #[tauri::command]
 fn delete_start(
     paths: Vec<String>,
@@ -750,6 +765,62 @@ fn delete_start(
 #[tauri::command]
 fn delete_cancel(delete_id: u32, state: State<'_, AppState>) {
     if let Some(job) = state.delete_jobs.lock().unwrap().get(&delete_id) {
+        job.cancel_token.cancel();
+    }
+}
+
+#[tauri::command]
+fn extensions_install_start(
+    request: ExtensionInstallRequest,
+    state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> CmdResult<u32> {
+    let install_id = state
+        .next_extension_install_id
+        .fetch_add(1, Ordering::Relaxed);
+    let cancel_token = CancelToken::new();
+
+    state.extension_install_jobs.lock().unwrap().insert(
+        install_id,
+        ExtensionInstallJobHandle {
+            cancel_token: cancel_token.clone(),
+        },
+    );
+
+    std::thread::spawn(move || {
+        let handle = app_handle.clone();
+        let emit_progress = move |event: ExtensionInstallEvent| {
+            let _ = handle.emit(
+                "extensions:install:progress",
+                ExtensionInstallProgressEvent { install_id, event },
+            );
+        };
+
+        let result = extensions_install::install_extension(request, cancel_token, emit_progress);
+        if let Err(message) = result {
+            let _ = app_handle.emit(
+                "extensions:install:progress",
+                ExtensionInstallProgressEvent {
+                    install_id,
+                    event: ExtensionInstallEvent::Error { message },
+                },
+            );
+        }
+
+        if let Some(app) = tauri::Manager::try_state::<AppState>(&app_handle) {
+            app.extension_install_jobs
+                .lock()
+                .unwrap()
+                .remove(&install_id);
+        }
+    });
+
+    Ok(install_id)
+}
+
+#[tauri::command]
+fn extensions_install_cancel(install_id: u32, state: State<'_, AppState>) {
+    if let Some(job) = state.extension_install_jobs.lock().unwrap().get(&install_id) {
         job.cancel_token.cancel();
     }
 }
@@ -1103,6 +1174,8 @@ pub fn run() {
                 next_move_id: AtomicU32::new(0),
                 delete_jobs: std::sync::Mutex::new(HashMap::new()),
                 next_delete_id: AtomicU32::new(0),
+                extension_install_jobs: std::sync::Mutex::new(HashMap::new()),
+                next_extension_install_id: AtomicU32::new(0),
                 fsp_manager: fsprovider::FsProviderManager::new(),
             };
             app.manage(state);
@@ -1154,6 +1227,8 @@ pub fn run() {
             move_resolve_conflict,
             delete_start,
             delete_cancel,
+            extensions_install_start,
+            extensions_install_cancel,
             rename_item,
             fsp_load,
             fsp_list_entries,

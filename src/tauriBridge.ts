@@ -9,6 +9,8 @@ import type {
   CopyOptions,
   ConflictResolution,
   CopyProgressEvent,
+  ExtensionInstallProgressEvent,
+  ExtensionInstallRequest,
   MoveOptions,
   MoveProgressEvent,
   DeleteProgressEvent,
@@ -333,6 +335,27 @@ export const tauriBridge: Bridge = {
         callback(e.matches ? "dark" : "light");
       mq.addEventListener("change", handler);
       return () => mq.removeEventListener("change", handler);
+    },
+  },
+  extensions: {
+    install: {
+      async start(request: ExtensionInstallRequest): Promise<number> {
+        return invoke<number>("extensions_install_start", { request });
+      },
+      async cancel(installId: number): Promise<void> {
+        return invoke<void>("extensions_install_cancel", { installId });
+      },
+      onProgress(callback: (event: ExtensionInstallProgressEvent) => void): () => void {
+        let unlisten: UnlistenFn | null = null;
+        listen<ExtensionInstallProgressEvent>("extensions:install:progress", (event) => {
+          callback(event.payload);
+        }).then((fn) => {
+          unlisten = fn;
+        });
+        return () => {
+          unlisten?.();
+        };
+      },
     },
   },
   fsProvider: {

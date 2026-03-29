@@ -23,6 +23,8 @@ export type {
   CopyOptions,
   CopyProgressEvent,
   DeleteProgressEvent,
+  ExtensionInstallProgressEvent,
+  ExtensionInstallRequest,
   FsChangeEvent,
   FsChangeType,
   FspEntry,

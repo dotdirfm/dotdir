@@ -239,6 +239,9 @@
 }
 
 .ext-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 3px 12px;
   border: 1px solid var(--border-active);
   border-radius: 3px;
@@ -256,6 +259,15 @@
 .ext-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.ext-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: ext-spin 0.8s linear infinite;
 }
 
 .ext-btn.install {
@@ -309,4 +321,10 @@
 .ext-color-theme-indicator[data-ui-theme="vs"],
 .ext-color-theme-indicator[data-ui-theme="hc-light"] {
   background: #f5f5f5;
+}
+
+@keyframes ext-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

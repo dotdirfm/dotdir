@@ -15,6 +15,7 @@ use axum::{
     Router,
 };
 use crate::pty;
+use crate::extensions_install::{self, ExtensionInstallEvent, ExtensionInstallRequest};
 use dotdir_core::{
     copy::{self, CancelToken, ConflictResolution, CopyEvent, CopyOptions},
     delete::{self, DeleteEvent},
@@ -60,6 +61,10 @@ struct DeleteJobHandle {
     cancel_token: CancelToken,
 }
 
+struct ExtensionInstallJobHandle {
+    cancel_token: CancelToken,
+}
+
 struct Session {
     fdt: FdTable,
     watcher: FsWatcher,
@@ -71,6 +76,8 @@ struct Session {
     next_move_id: AtomicU32,
     delete_jobs: std::sync::Mutex<HashMap<u32, DeleteJobHandle>>,
     next_delete_id: AtomicU32,
+    extension_install_jobs: std::sync::Mutex<HashMap<u32, ExtensionInstallJobHandle>>,
+    next_extension_install_id: AtomicU32,
     fsp_manager: crate::fsprovider::FsProviderManager,
 }
 
@@ -112,6 +119,8 @@ async fn handle_socket(socket: WebSocket) {
         next_move_id: AtomicU32::new(0),
         delete_jobs: std::sync::Mutex::new(HashMap::new()),
         next_delete_id: AtomicU32::new(0),
+        extension_install_jobs: std::sync::Mutex::new(HashMap::new()),
+        next_extension_install_id: AtomicU32::new(0),
         fsp_manager: crate::fsprovider::FsProviderManager::new(),
     });
 
@@ -154,6 +163,66 @@ async fn process_message(
     let id = msg.get("id")?.clone();
     let method = msg["method"].as_str()?.to_string();
     let params = msg["params"].clone();
+
+    if method == "extensions.install.start" {
+        let request: ExtensionInstallRequest =
+            serde_json::from_value(params["request"].clone()).ok()?;
+        let install_id = session
+            .next_extension_install_id
+            .fetch_add(1, Ordering::Relaxed);
+        let cancel_token = CancelToken::new();
+
+        session.extension_install_jobs.lock().unwrap().insert(
+            install_id,
+            ExtensionInstallJobHandle {
+                cancel_token: cancel_token.clone(),
+            },
+        );
+
+        let tx_install = tx.clone();
+        let session_ref = session.clone();
+        std::thread::spawn(move || {
+            let tx_progress = tx_install.clone();
+            let emit_progress = move |event: ExtensionInstallEvent| {
+                let payload = json!({
+                    "jsonrpc": "2.0",
+                    "method": "extensions.install.progress",
+                    "params": { "installId": install_id, "event": event }
+                });
+                let _ = tx_progress.send(Message::Text(payload.to_string()));
+            };
+
+            let result = extensions_install::install_extension(request, cancel_token, emit_progress);
+            if let Err(message) = result {
+                let payload = json!({
+                    "jsonrpc": "2.0",
+                    "method": "extensions.install.progress",
+                    "params": { "installId": install_id, "event": { "kind": "error", "message": message } }
+                });
+                let _ = tx_install.send(Message::Text(payload.to_string()));
+            }
+
+            session_ref
+                .extension_install_jobs
+                .lock()
+                .unwrap()
+                .remove(&install_id);
+        });
+
+        return Some(Message::Text(
+            json!({ "jsonrpc": "2.0", "id": id, "result": install_id }).to_string(),
+        ));
+    }
+
+    if method == "extensions.install.cancel" {
+        let install_id = params["installId"].as_u64()? as u32;
+        if let Some(job) = session.extension_install_jobs.lock().unwrap().get(&install_id) {
+            job.cancel_token.cancel();
+        }
+        return Some(Message::Text(
+            json!({ "jsonrpc": "2.0", "id": id, "result": Value::Null }).to_string(),
+        ));
+    }
 
     if method == "fs.read" {
         let fd = params["handle"].as_i64()? as i32;

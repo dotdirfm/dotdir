@@ -117,6 +117,43 @@ export type DeleteProgressEvent = {
   event: { kind: "progress"; filesDone: number; currentFile: string } | { kind: "done"; filesDone: number } | { kind: "error"; message: string };
 };
 
+export type ExtensionInstallRequest =
+  | {
+      source: "dotdir-marketplace";
+      publisher: string;
+      name: string;
+      version: string;
+    }
+  | {
+      source: "vscode-marketplace";
+      publisher: string;
+      name: string;
+      downloadUrl: string;
+    };
+
+export type ExtensionInstallProgressEvent = {
+  installId: number;
+  event:
+    | {
+        kind: "progress";
+        phase: "download" | "extract" | "write" | "finalize";
+        currentFile?: string;
+        filesDone?: number;
+        filesTotal?: number;
+        bytesDone?: number;
+        bytesTotal?: number;
+      }
+    | {
+        kind: "done";
+        ref: {
+          publisher: string;
+          name: string;
+          version: string;
+        };
+      }
+    | { kind: "error"; message: string };
+};
+
 export interface PtyLaunchInfo {
   ptyId: number;
   cwd: string;
@@ -195,6 +232,13 @@ export interface Bridge {
   theme: {
     get(): Promise<string>;
     onChange(callback: (theme: string) => void): () => void;
+  };
+  extensions: {
+    install: {
+      start(request: ExtensionInstallRequest): Promise<number>;
+      cancel?(installId: number): Promise<void>;
+      onProgress(callback: (event: ExtensionInstallProgressEvent) => void): () => void;
+    };
   };
   onReconnect?(callback: () => void): () => void;
   fsProvider?: {

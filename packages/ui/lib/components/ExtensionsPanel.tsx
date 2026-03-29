@@ -1,4 +1,5 @@
 import { activeColorThemeAtom, activeIconThemeAtom, loadedExtensionsAtom, showExtensionsAtom } from "@/atoms";
+import type { ExtensionInstallProgressEvent } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import {
@@ -7,8 +8,6 @@ import {
   type MarketplaceExtension,
   colorThemeKey,
   extensionIconThemeId,
-  installExtension,
-  installVSCodeExtension,
   searchMarketplace,
   uninstallExtension,
 } from "@/features/extensions/extensions";
@@ -38,6 +37,7 @@ function errMsg(err: unknown): string {
 
 type Tab = "marketplace" | "installed";
 type MarketplaceSource = "dotdir" | "vscode";
+type InstallPhase = "download" | "extract" | "write" | "finalize";
 
 export function ExtensionsPanel() {
   const bridge = useBridge();
@@ -54,7 +54,9 @@ export function ExtensionsPanel() {
   const [vscodeResults, setVscodeResults] = useState<VSCodeExtension[]>([]);
   const [loading, setLoading] = useState(false);
   const [installing, setInstalling] = useState<string | null>(null);
+  const [installPhase, setInstallPhase] = useState<InstallPhase | null>(null);
   const [error, setError] = useState("");
+  const installProgressUnsubRef = useRef<(() => void) | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const{settings,updateSettings} = useUserSettings();
 
@@ -88,6 +90,54 @@ export function ExtensionsPanel() {
     doSearch("", marketplaceSource);
   }, [doSearch, marketplaceSource]);
 
+  useEffect(() => {
+    return () => {
+      installProgressUnsubRef.current?.();
+      installProgressUnsubRef.current = null;
+    };
+  }, []);
+
+  const runBridgeInstall = useCallback(
+    async (
+      key: string,
+      request:
+        | { source: "dotdir-marketplace"; publisher: string; name: string; version: string }
+        | { source: "vscode-marketplace"; publisher: string; name: string; downloadUrl: string },
+    ) => {
+      const installApi = bridge.extensions.install;
+
+      installProgressUnsubRef.current?.();
+      installProgressUnsubRef.current = installApi.onProgress((payload: ExtensionInstallProgressEvent) => {
+        if (payload.event.kind === "error") {
+          setError(`Install failed: ${payload.event.message}`);
+          setInstalling(null);
+          setInstallPhase(null);
+          installProgressUnsubRef.current?.();
+          installProgressUnsubRef.current = null;
+        } else if (payload.event.kind === "done") {
+          installProgressUnsubRef.current?.();
+          installProgressUnsubRef.current = null;
+          void (async () => {
+            try {
+              await extensionHost.restart();
+            } finally {
+              setInstalling(null);
+              setInstallPhase(null);
+            }
+          })();
+        } else {
+          setInstalling(key);
+          setInstallPhase(payload.event.phase);
+        }
+      });
+
+      setInstalling(key);
+      setInstallPhase("download");
+      await installApi.start(request);
+    },
+    [bridge, extensionHost],
+  );
+
   const handleSearchInput = (value: string) => {
     setQuery(value);
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -101,12 +151,18 @@ export function ExtensionsPanel() {
     setInstalling(key);
     setError("");
     try {
-      await installVSCodeExtension(bridge, ext.publisher.publisherName, ext.extensionName, downloadUrl);
-      void extensionHost.restart();
+      await runBridgeInstall(key, {
+        source: "vscode-marketplace",
+        publisher: ext.publisher.publisherName,
+        name: ext.extensionName,
+        downloadUrl,
+      });
+      return;
     } catch (err) {
       setError(`Install failed: ${errMsg(err)}`);
+      setInstalling(null);
+      setInstallPhase(null);
     }
-    setInstalling(null);
   };
 
   const installedSet = new Set(installed.map((e) => `${e.ref.publisher}.${e.ref.name}`));
@@ -117,12 +173,18 @@ export function ExtensionsPanel() {
     setInstalling(key);
     setError("");
     try {
-      await installExtension(bridge, ext.publisher.username, ext.name, ext.latest_version.version);
-      void extensionHost.restart();
+      await runBridgeInstall(key, {
+        source: "dotdir-marketplace",
+        publisher: ext.publisher.username,
+        name: ext.name,
+        version: ext.latest_version.version,
+      });
+      return;
     } catch (err) {
       setError(`Install failed: ${errMsg(err)}`);
+      setInstalling(null);
+      setInstallPhase(null);
     }
-    setInstalling(null);
   };
 
   const handleUninstall = async (ref: ExtensionRef) => {
@@ -148,7 +210,10 @@ export function ExtensionsPanel() {
       setError(`Uninstall failed: ${errMsg(err)}`);
     }
     setInstalling(null);
+    setInstallPhase(null);
   };
+
+  const installLabel = installPhase === "finalize" ? "Finalizing..." : "Installing...";
 
   const handleSetIconTheme = async (ext: LoadedExtension) => {
     const themeId = extensionIconThemeId(ext);
@@ -268,7 +333,7 @@ export function ExtensionsPanel() {
                       </button>
                     ) : (
                       <button className={cx(styles, "ext-btn", "install")} disabled={isBusy || !ext.latest_version} onClick={() => handleInstall(ext)}>
-                        {isBusy ? "Installing..." : "Install"}
+                        {isBusy ? <><span className={styles["ext-spinner"]} aria-hidden="true" />{installLabel}</> : "Install"}
                       </button>
                     )}
                   </div>
@@ -310,7 +375,7 @@ export function ExtensionsPanel() {
                       </button>
                     ) : (
                       <button className={cx(styles, "ext-btn", "install")} disabled={isBusy || !version} onClick={() => handleVSCodeInstall(ext)}>
-                        {isBusy ? "Installing..." : "Install"}
+                        {isBusy ? <><span className={styles["ext-spinner"]} aria-hidden="true" />{installLabel}</> : "Install"}
                       </button>
                     )}
                   </div>

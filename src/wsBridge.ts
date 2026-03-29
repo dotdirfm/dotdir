@@ -10,6 +10,8 @@ import {
   CopyOptions,
   CopyProgressEvent,
   DeleteProgressEvent,
+  ExtensionInstallProgressEvent,
+  ExtensionInstallRequest,
   FsChangeEvent,
   FsChangeType,
   FspEntry,
@@ -40,6 +42,9 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
   const moveProgressListeners = new Set<(event: MoveProgressEvent) => void>();
   const deleteProgressListeners = new Set<
     (event: DeleteProgressEvent) => void
+  >();
+  const extensionInstallProgressListeners = new Set<
+    (event: ExtensionInstallProgressEvent) => void
   >();
   const reconnectCallbacks = new Set<() => void>();
 
@@ -92,6 +97,12 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
           event: msg.params.event,
         };
         for (const cb of deleteProgressListeners) cb(event);
+      } else if (msg.method === "extensions.install.progress") {
+        const event: ExtensionInstallProgressEvent = {
+          installId: msg.params.installId,
+          event: msg.params.event,
+        };
+        for (const cb of extensionInstallProgressListeners) cb(event);
       }
       return;
     }
@@ -420,6 +431,20 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
           callback(e.matches ? "dark" : "light");
         mq.addEventListener("change", handler);
         return () => mq.removeEventListener("change", handler);
+      },
+    },
+    extensions: {
+      install: {
+        start: (request: ExtensionInstallRequest) =>
+          rpc("extensions.install.start", { request }) as Promise<number>,
+        cancel: (installId: number) =>
+          rpc("extensions.install.cancel", { installId }) as Promise<void>,
+        onProgress(callback: (event: ExtensionInstallProgressEvent) => void): () => void {
+          extensionInstallProgressListeners.add(callback);
+          return () => {
+            extensionInstallProgressListeners.delete(callback);
+          };
+        },
       },
     },
     onReconnect(callback: () => void): () => void {

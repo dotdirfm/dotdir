@@ -219,12 +219,23 @@ export function CommandLine() {
   useEffect(() => {
     if (!visible) return;
 
+    const isEditableElement = (element: HTMLElement | null) => {
+      if (!element) return false;
+      const tag = element.tagName?.toLowerCase();
+      return tag === "input" || tag === "textarea" || tag === "select" || element.isContentEditable;
+    };
+
+    const shouldIgnoreTyping = (element: HTMLElement | null) => {
+      if (!element) return false;
+      if (element.closest?.(`.${styles["terminal-container"]}`)) return true;
+      if (element.closest?.('[role="dialog"], [aria-modal="true"], dialog')) return true;
+      return isEditableElement(element);
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (!target) return;
-      if (target.closest?.(`.${styles["terminal-container"]}`)) return;
-      // Let native <dialog> modals (Make Folder, etc.) receive typing — not the prompt.
-      if (target.closest?.("dialog")) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (shouldIgnoreTyping(target) || shouldIgnoreTyping(active)) return;
       const ctrl = e.ctrlKey || e.metaKey;
       if (!ctrl && !e.altKey && !e.metaKey && e.key.length === 1) {
         e.preventDefault();

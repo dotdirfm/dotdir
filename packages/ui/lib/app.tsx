@@ -627,10 +627,17 @@ export function App({ widget }: { widget: React.ReactNode }) {
       return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
     };
 
+    const isDialogTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      return Boolean(el?.closest?.('[role="dialog"], [aria-modal="true"], dialog'));
+    };
+
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as Node | null;
       if (!root || !target || !root.contains(target)) return;
-      if (isEditableTarget(target)) return;
+      const active = document.activeElement;
+      if (isEditableTarget(target) || isEditableTarget(active)) return;
+      if (isDialogTarget(target) || isDialogTarget(active)) return;
 
       const layer = focusContext.current;
       if (layer !== "panel" && layer !== "viewer" && layer !== "editor") return;
