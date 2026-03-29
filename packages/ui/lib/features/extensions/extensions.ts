@@ -450,27 +450,62 @@ async function deleteFilesystemPathRecursive(bridge: Bridge, absPath: string): P
   if (!(await bridge.fs.exists(absPath))) return;
   await new Promise<void>((resolve, reject) => {
     let activeDeleteId: number | null = null;
+    let finished = false;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      if (finished) return;
+      finished = true;
+      if (pollTimer) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+      unsub();
+    };
+
+    const resolveDone = () => {
+      cleanup();
+      resolve();
+    };
+
+    const rejectWith = (error: unknown) => {
+      cleanup();
+      reject(error instanceof Error ? error : new Error(String(error)));
+    };
+
     const unsub = bridge.fs.delete.onProgress((payload: DeleteProgressEvent) => {
+      if (finished) return;
       if (activeDeleteId == null) return;
       if (payload.deleteId !== activeDeleteId) return;
       const ev = payload.event;
       if (ev.kind === "done") {
-        unsub();
-        resolve();
+        resolveDone();
       } else if (ev.kind === "error") {
-        unsub();
-        reject(new Error(ev.message));
+        rejectWith(new Error(ev.message));
       }
     });
+
+    const pollUntilGone = () => {
+      if (finished) return;
+      void bridge.fs
+        .exists(absPath)
+        .then((exists) => {
+          if (!exists) {
+            resolveDone();
+            return;
+          }
+          pollTimer = setTimeout(pollUntilGone, 50);
+        })
+        .catch(rejectWith);
+    };
+
     void bridge.fs.delete
       .start([absPath])
       .then((deleteId) => {
         activeDeleteId = deleteId;
+        pollUntilGone();
       })
-      .catch((error) => {
-        unsub();
-        reject(error instanceof Error ? error : new Error(String(error)));
-      });
+      .catch(rejectWith);
   });
 }
 

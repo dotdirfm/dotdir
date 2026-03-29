@@ -225,7 +225,7 @@ export function ExtensionsPanel() {
         settingsChanged = true;
       }
       if (settingsChanged) updateSettings(settings);
-      void extensionHost.restart();
+      await extensionHost.restart();
     } catch (err) {
       setError(`Uninstall failed: ${errMsg(err)}`);
     }
