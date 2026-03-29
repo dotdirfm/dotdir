@@ -7,6 +7,7 @@
 
 import { Bridge } from "@/features/bridge";
 import { readFileText } from "@/fs";
+import { getStyleHostElement } from "@/styleHost";
 import { dirname, join } from "@/utils/path";
 import { parse as parseJsonc } from "jsonc-parser";
 
@@ -107,7 +108,7 @@ function notifyColorThemeListeners(): void {
 
 export function applyColorTheme(colors: Record<string, string>): void {
   clearColorTheme();
-  const style = document.documentElement.style;
+  const style = getStyleHostElement().style;
 
   for (const mapping of COLOR_MAPPING) {
     for (const key of mapping.keys) {
@@ -123,7 +124,7 @@ export function applyColorTheme(colors: Record<string, string>): void {
 
 export function clearColorTheme(): void {
   loadGeneration++;
-  const style = document.documentElement.style;
+  const style = getStyleHostElement().style;
   for (const cssVar of appliedVars) {
     style.removeProperty(cssVar);
   }
@@ -133,7 +134,7 @@ export function clearColorTheme(): void {
   if (hadTheme) {
     // Notify listeners that theme was cleared — they should revert to OS theme
     for (const listener of themeChangeListeners) {
-      listener({ kind: document.documentElement.dataset.theme === "light" ? "light" : "dark" });
+      listener({ kind: getStyleHostElement().dataset.theme === "light" ? "light" : "dark" });
     }
   }
 }

@@ -57,8 +57,3 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-:global(body.terminal-resizing) {
-  cursor: row-resize;
-  user-select: none;
-}

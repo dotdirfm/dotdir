@@ -12,6 +12,7 @@ import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/featur
 import { focusContext } from "@/focusContext";
 import { readFileText as readFileTextFromFs } from "@/fs";
 import { registerExtensionKeybinding } from "@/registerKeybindings";
+import { getStyleHostElement } from "@/styleHost";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
 import { vfsUrl } from "@/utils/vfs";
@@ -319,7 +320,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     // Copy all CSS custom properties from the host document into the iframe.
     // This keeps extensions compatible with existing `var(--bg)` styling.
     try {
-      const cs = getComputedStyle(document.documentElement);
+      const cs = getComputedStyle(getStyleHostElement());
       for (let i = 0; i < cs.length; i++) {
         const name = cs[i];
         if (!name || !name.startsWith("--")) continue;

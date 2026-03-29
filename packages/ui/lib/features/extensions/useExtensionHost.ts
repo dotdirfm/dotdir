@@ -8,6 +8,7 @@ import { readFileText } from "@/fs";
 import { setExtensionLayers } from "@/fss";
 import { languageRegistry } from "@/languageRegistry";
 import { registerExtensionKeybindings } from "@/registerKeybindings";
+import { getStyleHostElement } from "@/styleHost";
 import { resolveShellProfiles } from "@/terminal/shellProfiles";
 import { dirname, join } from "@/utils/path";
 import { populateRegistries } from "@/viewerEditorRegistry";
@@ -72,7 +73,7 @@ export function useExtensionHost({
       : osTheme === "light" || osTheme === "high-contrast-light"
         ? "light"
         : "dark";
-    document.documentElement.dataset.theme = effectiveKind;
+    getStyleHostElement().dataset.theme = effectiveKind;
     setIconThemeKind(effectiveKind);
   }, [osTheme, activeColorTheme]);
 
@@ -191,7 +192,7 @@ export function useExtensionHost({
       const match = findColorTheme(exts, themeKey);
       if (match) {
         const kind = uiThemeToKind(match.theme.uiTheme);
-        document.documentElement.dataset.theme = kind;
+        getStyleHostElement().dataset.theme = kind;
         setIconThemeKind(kind);
         try {
           await loadAndApplyColorTheme(

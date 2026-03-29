@@ -1,6 +1,16 @@
 {
   "name": "@dotdirfm/ui",
-  "version": "0.0.1",
+  "version": "0.1.1",
+  "description": "Reusable DotDir file manager UI component for React apps.",
+  "main": "./dist/dotdir.js",
+  "module": "./dist/dotdir.mjs",
+  "types": "./dist/lib/DotDir.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
   "exports": {
     ".": {
       "import": "./dist/dotdir.mjs",
@@ -15,11 +25,32 @@
     "dev": "vite",
     "watch": "vite build --watch",
     "build": "tsc && vite build",
+    "prepublishOnly": "pnpm build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "dotdir",
+    "file-manager",
+    "react",
+    "ui",
+    "terminal"
+  ],
   "author": "Mikhail Isupov",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dotdirfm/dotdir.git"
+  },
+  "homepage": "https://github.com/dotdirfm/dotdir#readme",
+  "bugs": {
+    "url": "https://github.com/dotdirfm/dotdir/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
@@ -27,8 +58,7 @@
     "fss-lang": "^0.0.5",
     "jotai": "^2.19.0",
     "jsonc-parser": "^3.3.1",
-    "marked": "^17.0.5",
-    "react": "^19.2.4"
+    "marked": "^17.0.5"
   },
   "devDependencies": {
     "vite": "^8.0.0",

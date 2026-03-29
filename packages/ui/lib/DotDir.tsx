@@ -5,8 +5,10 @@ import { BridgeProvider } from "@/features/bridge/useBridge";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { commandRegistry } from "@/features/commands/commands";
 import { Provider as JotaiProvider } from "jotai";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { App } from "./app";
+import baseStyles from "./styles/base.module.css";
+import { setStyleHostElement } from "./styleHost";
 
 export type {
   Bridge,
@@ -30,19 +32,34 @@ export type DotDirProps = {
 };
 
 export function DotDir({ bridge, widget }: DotDirProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     commandRegistry.registerContributions(builtInCommandContributions);
   }, []);
 
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    setStyleHostElement(root);
+    return () => {
+      if (rootRef.current === root) {
+        setStyleHostElement(null);
+      }
+    };
+  }, []);
+
   return (
-    <JotaiProvider>
-      <BridgeProvider bridge={bridge}>
-        <ErrorBoundary>
-          <DialogProvider>
-            <App widget={widget} />
-          </DialogProvider>
-        </ErrorBoundary>
-      </BridgeProvider>
-    </JotaiProvider>
+    <div ref={rootRef} className={baseStyles["dotdir-root"]}>
+      <JotaiProvider>
+        <BridgeProvider bridge={bridge}>
+          <ErrorBoundary>
+            <DialogProvider>
+              <App widget={widget} />
+            </DialogProvider>
+          </ErrorBoundary>
+        </BridgeProvider>
+      </JotaiProvider>
+    </div>
   );
 }

@@ -1,10 +1,11 @@
-:global(*) {
+.dotdir-root,
+.dotdir-root * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-:global(:root) {
+.dotdir-root {
   --bg: #1e1e2e;
   --fg: #cdd6f4;
   --bg-secondary: #181825;
@@ -20,9 +21,19 @@
   --error-fg: #f38ba8;
   --accent: #89b4fa;
   --accent-fg: #1e1e2e;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--fg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
-:global([data-theme="light"]) {
+.dotdir-root[data-theme="light"] {
   --bg: #eff1f5;
   --fg: #4c4f69;
   --bg-secondary: #e6e9ef;
@@ -40,29 +51,12 @@
   --accent-fg: #ffffff;
 }
 
-:global(body) {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 13px;
-  background: var(--bg);
-  color: var(--fg);
-  overflow: hidden;
-  height: 100vh;
-  height: 100dvh;
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
-:global(#app) {
-  height: 100vh;
-  height: 100dvh;
-  display: flex;
-  flex-direction: column;
-}
-
 .app {
   display: grid;
   grid-template-rows: 1fr auto auto auto;
   height: 100%;
   overflow: hidden;
+  min-height: 0;
 }
 
 .status-bar {
