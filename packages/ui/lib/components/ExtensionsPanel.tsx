@@ -38,6 +38,9 @@ function errMsg(err: unknown): string {
 type Tab = "marketplace" | "installed";
 type MarketplaceSource = "dotdir" | "vscode";
 type InstallPhase = "download" | "extract" | "write" | "finalize";
+type BusyState =
+  | { kind: "install"; phase: InstallPhase }
+  | { kind: "uninstall" };
 
 export function ExtensionsPanel() {
   const bridge = useBridge();
@@ -48,15 +51,14 @@ export function ExtensionsPanel() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const extensionHost = useExtensionHostClient();
   const [tab, setTab] = useState<Tab>("marketplace");
-  const [marketplaceSource, setMarketplaceSource] = useState<MarketplaceSource>("vscode");
+  const [marketplaceSource, setMarketplaceSource] = useState<MarketplaceSource>("dotdir");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MarketplaceExtension[]>([]);
   const [vscodeResults, setVscodeResults] = useState<VSCodeExtension[]>([]);
   const [loading, setLoading] = useState(false);
-  const [installing, setInstalling] = useState<string | null>(null);
-  const [installPhase, setInstallPhase] = useState<InstallPhase | null>(null);
+  const [busyByKey, setBusyByKey] = useState<Record<string, BusyState>>({});
   const [error, setError] = useState("");
-  const installProgressUnsubRef = useRef<(() => void) | null>(null);
+  const installIdToKeyRef = useRef(new Map<number, string>());
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const{settings,updateSettings} = useUserSettings();
 
@@ -91,11 +93,46 @@ export function ExtensionsPanel() {
   }, [doSearch, marketplaceSource]);
 
   useEffect(() => {
-    return () => {
-      installProgressUnsubRef.current?.();
-      installProgressUnsubRef.current = null;
-    };
-  }, []);
+    return bridge.extensions.install.onProgress((payload: ExtensionInstallProgressEvent) => {
+      const key = installIdToKeyRef.current.get(payload.installId);
+      if (!key) return;
+      const event = payload.event;
+
+      if (event.kind === "error") {
+        installIdToKeyRef.current.delete(payload.installId);
+        setError(`Install failed: ${event.message}`);
+        setBusyByKey((current) => {
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
+        return;
+      }
+
+      if (event.kind === "done") {
+        installIdToKeyRef.current.delete(payload.installId);
+        void (async () => {
+          try {
+            await extensionHost.restart();
+          } finally {
+            setBusyByKey((current) => {
+              const next = { ...current };
+              delete next[key];
+              return next;
+            });
+          }
+        })();
+        return;
+      }
+
+      if (event.kind !== "progress") return;
+
+      setBusyByKey((current) => ({
+        ...current,
+        [key]: { kind: "install", phase: event.phase },
+      }));
+    });
+  }, [bridge, extensionHost]);
 
   const runBridgeInstall = useCallback(
     async (
@@ -104,38 +141,14 @@ export function ExtensionsPanel() {
         | { source: "dotdir-marketplace"; publisher: string; name: string; version: string }
         | { source: "vscode-marketplace"; publisher: string; name: string; downloadUrl: string },
     ) => {
-      const installApi = bridge.extensions.install;
-
-      installProgressUnsubRef.current?.();
-      installProgressUnsubRef.current = installApi.onProgress((payload: ExtensionInstallProgressEvent) => {
-        if (payload.event.kind === "error") {
-          setError(`Install failed: ${payload.event.message}`);
-          setInstalling(null);
-          setInstallPhase(null);
-          installProgressUnsubRef.current?.();
-          installProgressUnsubRef.current = null;
-        } else if (payload.event.kind === "done") {
-          installProgressUnsubRef.current?.();
-          installProgressUnsubRef.current = null;
-          void (async () => {
-            try {
-              await extensionHost.restart();
-            } finally {
-              setInstalling(null);
-              setInstallPhase(null);
-            }
-          })();
-        } else {
-          setInstalling(key);
-          setInstallPhase(payload.event.phase);
-        }
-      });
-
-      setInstalling(key);
-      setInstallPhase("download");
-      await installApi.start(request);
+      setBusyByKey((current) => ({
+        ...current,
+        [key]: { kind: "install", phase: "download" },
+      }));
+      const installId = await bridge.extensions.install.start(request);
+      installIdToKeyRef.current.set(installId, key);
     },
-    [bridge, extensionHost],
+    [bridge],
   );
 
   const handleSearchInput = (value: string) => {
@@ -148,7 +161,6 @@ export function ExtensionsPanel() {
     const downloadUrl = getVSCodeDownloadUrl(ext);
     if (!downloadUrl) return;
     const key = `${ext.publisher.publisherName}.${ext.extensionName}`;
-    setInstalling(key);
     setError("");
     try {
       await runBridgeInstall(key, {
@@ -160,8 +172,11 @@ export function ExtensionsPanel() {
       return;
     } catch (err) {
       setError(`Install failed: ${errMsg(err)}`);
-      setInstalling(null);
-      setInstallPhase(null);
+      setBusyByKey((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
     }
   };
 
@@ -170,7 +185,6 @@ export function ExtensionsPanel() {
   const handleInstall = async (ext: MarketplaceExtension) => {
     if (!ext.latest_version) return;
     const key = `${ext.publisher.username}.${ext.name}`;
-    setInstalling(key);
     setError("");
     try {
       await runBridgeInstall(key, {
@@ -182,14 +196,20 @@ export function ExtensionsPanel() {
       return;
     } catch (err) {
       setError(`Install failed: ${errMsg(err)}`);
-      setInstalling(null);
-      setInstallPhase(null);
+      setBusyByKey((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
     }
   };
 
   const handleUninstall = async (ref: ExtensionRef) => {
     const key = `${ref.publisher}.${ref.name}`;
-    setInstalling(key);
+    setBusyByKey((current) => ({
+      ...current,
+      [key]: { kind: "uninstall" },
+    }));
     setError("");
     try {
       await uninstallExtension(bridge, ref.publisher, ref.name);
@@ -209,11 +229,12 @@ export function ExtensionsPanel() {
     } catch (err) {
       setError(`Uninstall failed: ${errMsg(err)}`);
     }
-    setInstalling(null);
-    setInstallPhase(null);
+    setBusyByKey((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
   };
-
-  const installLabel = installPhase === "finalize" ? "Finalizing..." : "Installing...";
 
   const handleSetIconTheme = async (ext: LoadedExtension) => {
     const themeId = extensionIconThemeId(ext);
@@ -268,15 +289,6 @@ export function ExtensionsPanel() {
         <div className={styles["ext-search"]}>
           <div className={styles["ext-source-selector"]}>
             <button
-              className={cx(styles, "ext-source-btn", marketplaceSource === "vscode" && "active")}
-              onClick={() => {
-                setMarketplaceSource("vscode");
-                setQuery("");
-              }}
-            >
-              VS Code
-            </button>
-            <button
               className={cx(styles, "ext-source-btn", marketplaceSource === "dotdir" && "active")}
               onClick={() => {
                 setMarketplaceSource("dotdir");
@@ -284,6 +296,15 @@ export function ExtensionsPanel() {
               }}
             >
               .dir
+            </button>
+            <button
+              className={cx(styles, "ext-source-btn", marketplaceSource === "vscode" && "active")}
+              onClick={() => {
+                setMarketplaceSource("vscode");
+                setQuery("");
+              }}
+            >
+              VS Code
             </button>
           </div>
           <input
@@ -310,7 +331,9 @@ export function ExtensionsPanel() {
             results.map((ext) => {
               const key = `${ext.publisher.username}.${ext.name}`;
               const isInstalled = installedSet.has(key);
-              const isBusy = installing === key;
+              const busy = busyByKey[key];
+              const isBusy = busy?.kind === "install";
+              const installLabel = busy?.kind === "install" && busy.phase === "finalize" ? "Finalizing..." : "Installing...";
               return (
                 <div key={ext.id} className={styles["ext-item"]}>
                   <div className={styles["ext-icon"]}>
@@ -352,7 +375,9 @@ export function ExtensionsPanel() {
             vscodeResults.map((ext) => {
               const key = `${ext.publisher.publisherName}.${ext.extensionName}`;
               const isInstalled = installedSet.has(key);
-              const isBusy = installing === key;
+              const busy = busyByKey[key];
+              const isBusy = busy?.kind === "install";
+              const installLabel = busy?.kind === "install" && busy.phase === "finalize" ? "Finalizing..." : "Installing...";
               const version = getVSCodeLatestVersion(ext);
               const iconUrl = getVSCodeIconUrl(ext);
               const installs = getVSCodeInstallCount(ext);
@@ -390,7 +415,8 @@ export function ExtensionsPanel() {
           ) : (
             installed.map((ext) => {
               const key = `${ext.ref.publisher}.${ext.ref.name}`;
-              const isBusy = installing === key;
+              const busy = busyByKey[key];
+              const isBusy = busy?.kind === "uninstall";
               const iconThemeId = extensionIconThemeId(ext);
               const isActiveIconTheme = iconThemeId != null && iconThemeId === activeIconTheme;
               const hasColorThemes = ext.colorThemes && ext.colorThemes.length > 0;

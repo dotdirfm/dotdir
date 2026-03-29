@@ -448,10 +448,11 @@ export async function searchMarketplace(query = "", page = 1): Promise<{ extensi
  */
 async function deleteFilesystemPathRecursive(bridge: Bridge, absPath: string): Promise<void> {
   if (!(await bridge.fs.exists(absPath))) return;
-  const deleteId = await bridge.fs.delete.start([absPath]);
   await new Promise<void>((resolve, reject) => {
+    let activeDeleteId: number | null = null;
     const unsub = bridge.fs.delete.onProgress((payload: DeleteProgressEvent) => {
-      if (payload.deleteId !== deleteId) return;
+      if (activeDeleteId == null) return;
+      if (payload.deleteId !== activeDeleteId) return;
       const ev = payload.event;
       if (ev.kind === "done") {
         unsub();
@@ -461,6 +462,15 @@ async function deleteFilesystemPathRecursive(bridge: Bridge, absPath: string): P
         reject(new Error(ev.message));
       }
     });
+    void bridge.fs.delete
+      .start([absPath])
+      .then((deleteId) => {
+        activeDeleteId = deleteId;
+      })
+      .catch((error) => {
+        unsub();
+        reject(error instanceof Error ? error : new Error(String(error)));
+      });
   });
 }
 
