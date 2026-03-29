@@ -44,19 +44,18 @@ export interface ColorThemeData {
 export interface HostApi {
   readFile(path: string): Promise<ArrayBuffer>;
   readFileText(path: string): Promise<string>;
-  readFileRange?(path: string, offset: number, length: number): Promise<ArrayBuffer>;
-  statFile?(path: string): Promise<{ size: number; mtimeMs: number }>;
-  onFileChange?(callback: () => void): () => void;
+  readFileRange(path: string, offset: number, length: number): Promise<ArrayBuffer>;
+  statFile(path: string): Promise<{ size: number; mtimeMs: number }>;
+  onFileChange(callback: () => void): () => void;
   writeFile(path: string, content: string): Promise<void>;
   getTheme(): Promise<string>;
-  getColorTheme?(): ColorThemeData | null;
-  onThemeChange?(callback: (theme: ColorThemeData) => void): () => void;
+  getColorTheme(): ColorThemeData | null;
+  onThemeChange(callback: (theme: ColorThemeData) => void): () => void;
   onClose(): void;
-  executeCommand?<T = unknown>(command: string, args?: unknown): Promise<T>;
-  registerCommand?(commandId: string, handler: (...args: unknown[]) => void | Promise<void>): () => void;
-  registerKeybinding?(binding: { command: string; key: string; mac?: string; when?: string }): () => void;
-  getOnigurumaWasm?(): Promise<ArrayBuffer>;
-  getExtensionResourceUrl?(relativePath: string): Promise<string>;
+  executeCommand<T = unknown>(command: string, args?: unknown): Promise<T>;
+  registerCommand(commandId: string, handler: (...args: unknown[]) => void | Promise<void>): () => void;
+  registerKeybinding(binding: { command: string; key: string; mac?: string; when?: string }): () => void;
+  getExtensionResourceUrl(relativePath: string): Promise<string>;
 }
 
 export interface ViewerExtensionApi {
@@ -115,5 +114,3 @@ declare global {
 
   var dotdir: DotDirGlobalApi;
 }
-
-export {};

@@ -695,15 +695,14 @@ export function App({ widget }: { widget: React.ReactNode }) {
           onClose={() => setViewerFile(null)}
         />
       )}
-      {viewerExt && (
+      {viewerExt && viewerFile && viewerResolved && (
         <ViewerContainer
           key={`viewer:${viewerExt.dirPath}:${viewerExt.entry}`}
           extensionDirPath={viewerExt.dirPath}
           entry={viewerExt.entry}
-          filePath={viewerFile?.path ?? ""}
-          fileName={viewerFile?.name ?? ""}
-          fileSize={viewerFile?.size ?? 0}
-          visible={viewerFile != null && viewerResolved != null}
+          filePath={viewerFile.path}
+          fileName={viewerFile.name}
+          fileSize={viewerFile.size}
           onClose={() => setViewerFile(null)}
           onExecuteCommand={handleExecuteCommand}
         />
@@ -715,7 +714,7 @@ export function App({ widget }: { widget: React.ReactNode }) {
           onClose={() => setEditorFile(null)}
         />
       )}
-      {editorExt &&
+      {editorExt && editorFile && editorResolved &&
         (() => {
           const allLanguages = loadedExtensions.flatMap((e) => e.languages ?? []);
           const allGrammarRefs = loadedExtensions.flatMap((e) => e.grammarRefs ?? []);
@@ -728,10 +727,9 @@ export function App({ widget }: { widget: React.ReactNode }) {
               key={`editor:${editorExt.dirPath}:${editorExt.entry}`}
               extensionDirPath={editorExt.dirPath}
               entry={editorExt.entry}
-              filePath={editorFile?.path ?? ""}
-              fileName={editorFile?.name ?? ""}
-              langId={editorFile?.langId ?? "plaintext"}
-              visible={editorFile != null && editorResolved != null}
+              filePath={editorFile.path}
+              fileName={editorFile.name}
+              langId={editorFile.langId}
               onClose={() => setEditorFile(null)}
               languages={allLanguages}
               grammars={grammars}

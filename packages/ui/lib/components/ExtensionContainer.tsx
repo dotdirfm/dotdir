@@ -9,6 +9,7 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { commandRegistry } from "@/features/commands/commands";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
+import { getActiveFileListHandlers } from "@/fileListHandlers";
 import { focusContext } from "@/focusContext";
 import { readFileText as readFileTextFromFs } from "@/fs";
 import { registerExtensionKeybinding } from "@/registerKeybindings";
@@ -18,7 +19,6 @@ import { basename, dirname, join, normalizePath } from "@/utils/path";
 import { vfsUrl } from "@/utils/vfs";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import { getActiveColorThemeData, onColorThemeChange } from "@/vscodeColorTheme";
-import { getActiveFileListHandlers } from "@/fileListHandlers";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "../styles/viewers.module.css";
 
@@ -72,7 +72,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const isInlineViewer = kind === "viewer" && !!(props as ViewerProps).inline;
-  const shouldAutoFocusIframe = kind === "editor" || (kind === "viewer" && !isInlineViewer);
+  const shouldAutoFocusIframe = kind === "viewer" && !isInlineViewer;
   const panelFocusElRef = useRef<HTMLElement | null>(null);
   const inlineIframeFocusedRef = useRef(false);
   const autoFocusOnceRef = useRef(false);
@@ -785,11 +785,35 @@ export function ViewerContainer({
   onExecuteCommand,
 }: ViewerContainerWrapperProps) {
   const focusPushedRef = useRef(false);
+  const restoreFocusElRef = useRef<HTMLElement | null>(null);
   const isVisible = visible ?? true;
   const restorePanelFocus = useCallback(() => {
-    requestAnimationFrame(() => {
-      getActiveFileListHandlers()?.focus();
-    });
+    focusContext.set("panel");
+    const attemptFocus = (attempt = 0) => {
+      const restoreEl = restoreFocusElRef.current;
+      if (restoreEl && restoreEl.isConnected) {
+        try {
+          restoreEl.focus({ preventScroll: true });
+          return;
+        } catch {
+          try {
+            restoreEl.focus();
+            return;
+          } catch {
+            // ignore and fall through
+          }
+        }
+      }
+      const handlers = getActiveFileListHandlers();
+      if (handlers) {
+        handlers.focus();
+        return;
+      }
+      if (attempt < 2) {
+        requestAnimationFrame(() => attemptFocus(attempt + 1));
+      }
+    };
+    requestAnimationFrame(() => attemptFocus());
   }, []);
   const handleClose = useCallback(() => {
     onClose();
@@ -801,6 +825,7 @@ export function ViewerContainer({
     if (inline) return;
     if (isVisible) {
       if (!focusPushedRef.current) {
+        restoreFocusElRef.current = document.activeElement as HTMLElement | null;
         focusContext.push("viewer");
         focusPushedRef.current = true;
       }
@@ -929,11 +954,35 @@ export function EditorContainer({
 }: EditorContainerWrapperProps) {
   const [currentLangId, setCurrentLangId] = useState(langId);
   const focusPushedRef = useRef(false);
+  const restoreFocusElRef = useRef<HTMLElement | null>(null);
   const isVisible = visible ?? true;
   const restorePanelFocus = useCallback(() => {
-    requestAnimationFrame(() => {
-      getActiveFileListHandlers()?.focus();
-    });
+    focusContext.set("panel");
+    const attemptFocus = (attempt = 0) => {
+      const restoreEl = restoreFocusElRef.current;
+      if (restoreEl && restoreEl.isConnected) {
+        try {
+          restoreEl.focus({ preventScroll: true });
+          return;
+        } catch {
+          try {
+            restoreEl.focus();
+            return;
+          } catch {
+            // ignore and fall through
+          }
+        }
+      }
+      const handlers = getActiveFileListHandlers();
+      if (handlers) {
+        handlers.focus();
+        return;
+      }
+      if (attempt < 2) {
+        requestAnimationFrame(() => attemptFocus(attempt + 1));
+      }
+    };
+    requestAnimationFrame(() => attemptFocus());
   }, []);
   const handleClose = useCallback(() => {
     onClose();
@@ -948,6 +997,7 @@ export function EditorContainer({
   useEffect(() => {
     if (isVisible) {
       if (!focusPushedRef.current) {
+        restoreFocusElRef.current = document.activeElement as HTMLElement | null;
         focusContext.push("editor");
         focusPushedRef.current = true;
       }

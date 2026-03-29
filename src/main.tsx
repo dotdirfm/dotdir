@@ -67,8 +67,12 @@ window.addEventListener("unhandledrejection", (event) => {
 // Disable native tab navigation — .dir uses its own key handling engine.
 const FOCUSABLE =
   'a[href],button,input,select,textarea,dialog,iframe,[tabindex]:not([tabindex="-1"])';
+function isInsideDotDir(node: Node | null): boolean {
+  return node instanceof Element && !!node.closest(".dotdir-root");
+}
 function defocusAll(root: ParentNode) {
   for (const el of root.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+    if (isInsideDotDir(el)) continue;
     el.tabIndex = -1;
   }
 }
@@ -78,6 +82,7 @@ new MutationObserver((mutations) => {
     for (const node of m.addedNodes) {
       if (node.nodeType !== 1) continue;
       const el = node as HTMLElement;
+      if (isInsideDotDir(el)) continue;
       if (el.matches?.(FOCUSABLE)) el.tabIndex = -1;
       defocusAll(el);
     }
