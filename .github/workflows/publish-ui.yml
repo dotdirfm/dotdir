@@ -72,7 +72,6 @@ jobs:
         working-directory: packages/extension-api
         env:
           NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish-ui:
     runs-on: self-hosted
@@ -134,4 +133,3 @@ jobs:
         working-directory: packages/ui
         env:
           NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
