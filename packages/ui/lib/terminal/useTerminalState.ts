@@ -1,5 +1,5 @@
-import { useBridge } from "@/hooks/useBridge";
-import { TerminalProfile } from "@/shared/api/bridge";
+import { TerminalProfile } from "@/features/bridge";
+import { useBridge } from "@/features/bridge/useBridge";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useRef } from "react";
 import { formatHiddenCd, normalizeTerminalPath } from "./path";

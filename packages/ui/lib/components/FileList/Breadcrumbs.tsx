@@ -1,4 +1,4 @@
-import { getBreadcrumbSegments } from "@/path";
+import { getBreadcrumbSegments } from "@/utils/path";
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 interface BreadcrumbsProps {

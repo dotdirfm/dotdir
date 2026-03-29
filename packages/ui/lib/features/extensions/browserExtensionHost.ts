@@ -1,8 +1,8 @@
 import { commandRegistry } from "@/features/commands/commands";
 import type { LoadedExtension } from "@/features/extensions/extensions";
-import { join, normalizePath } from "@/path";
 import { registerExtensionKeybinding } from "@/registerKeybindings";
-import { vfsUrl } from "@/vfs";
+import { join, normalizePath } from "@/utils/path";
+import { vfsUrl } from "@/utils/vfs";
 
 export type BrowserDisposable = { dispose: () => void };
 

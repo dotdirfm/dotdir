@@ -6,14 +6,14 @@ import {
   terminalFocusRequestKeyAtom,
   terminalProfilesLoadedAtom,
 } from "@/atoms";
+import { useBridge } from "@/features/bridge/useBridge";
 import { commandRegistry } from "@/features/commands/commands";
 import { focusContext } from "@/focusContext";
-import { normalizePath } from "@/path";
 import { normalizeTerminalPath } from "@/terminal/path";
 import { useTerminalState } from "@/terminal/useTerminalState";
+import { normalizePath } from "@/utils/path";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
-import { useBridge } from "./useBridge";
 
 interface UseTerminalOptions {
   activePanelCwd: string;

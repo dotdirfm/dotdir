@@ -5,9 +5,9 @@
  * to .dir's CSS custom properties.
  */
 
+import { Bridge } from "@/features/bridge";
 import { readFileText } from "@/fs";
-import { dirname, join } from "@/path";
-import { Bridge } from "@/shared/api/bridge";
+import { dirname, join } from "@/utils/path";
 import { parse as parseJsonc } from "jsonc-parser";
 
 export interface VSCodeColorThemeJson {

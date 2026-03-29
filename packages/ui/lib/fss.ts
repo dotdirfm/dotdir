@@ -1,8 +1,8 @@
+import { Bridge } from "@/features/bridge";
 import type { LoadedExtension } from "@/features/extensions/extensions";
 import { readFileText } from "@/fs";
-import { basename, dirname, join, normalizePath } from "@/path";
-import { Bridge } from "@/shared/api/bridge";
 import type { ResolvedEntryStyle } from "@/types";
+import { basename, dirname, join, normalizePath } from "@/utils/path";
 import { createLayer, FsNode, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from "fss-lang";
 
 const defaultFss = `

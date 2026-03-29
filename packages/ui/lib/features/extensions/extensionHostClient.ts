@@ -6,10 +6,10 @@
  * and notifies listeners when extensions finish loading.
  */
 
+import { Bridge } from "@/features/bridge";
+import { bridgeAtom } from "@/features/bridge/useBridge";
 import { readFileText } from "@/fs";
-import { bridgeAtom } from "@/hooks/useBridge";
-import { normalizePath } from "@/path";
-import { Bridge } from "@/shared/api/bridge";
+import { normalizePath } from "@/utils/path";
 import { atom, useAtomValue } from "jotai";
 import worker2 from "./extensionHost.worker.ts?worker&inline";
 import type { LoadedExtension } from "./extensions";

@@ -1,9 +1,9 @@
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DialogProvider } from "@/dialogs/dialogContext";
+import { Bridge } from "@/features/bridge";
+import { BridgeProvider } from "@/features/bridge/useBridge";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { commandRegistry } from "@/features/commands/commands";
-import { BridgeProvider } from "@/hooks/useBridge";
-import { Bridge } from "@/shared/api/bridge";
 import { Provider as JotaiProvider } from "jotai";
 import { useEffect } from "react";
 import { App } from "./app";
@@ -14,19 +14,23 @@ export type {
   ConflictResolution,
   CopyOptions,
   CopyProgressEvent,
-  DeleteProgressEvent, FsChangeEvent, FsChangeType, FspEntry, FsRawEntry, MoveOptions,
+  DeleteProgressEvent,
+  FsChangeEvent,
+  FsChangeType,
+  FspEntry,
+  FsRawEntry,
+  MoveOptions,
   MoveProgressEvent,
   PtyLaunchInfo
-} from "@/shared/api/bridge";
-export { basename, dirname, join, normalizePath } from "./path";
+} from "@/features/bridge";
+export { basename, dirname, join, normalizePath } from "./utils/path";
 
-export function DotDir({
-  bridge,
-  widget,
-}: {
+export type DotDirProps = {
   bridge: Bridge;
   widget: React.ReactNode;
-}) {
+};
+
+export function DotDir({ bridge, widget }: DotDirProps) {
   useEffect(() => {
     commandRegistry.registerContributions(builtInCommandContributions);
   }, []);

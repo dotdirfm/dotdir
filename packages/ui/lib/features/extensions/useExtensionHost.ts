@@ -1,15 +1,15 @@
-import { clearFsProviderCache } from "@/browserFsProvider";
+import { useBridge } from "@/features/bridge/useBridge";
 import { commandRegistry } from "@/features/commands/commands";
+import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { type LoadedExtension, findColorTheme } from "@/features/extensions/extensions";
 import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
 import { readFileText } from "@/fs";
 import { setExtensionLayers } from "@/fss";
-import { useBridge } from "@/hooks/useBridge";
 import { languageRegistry } from "@/languageRegistry";
-import { dirname, join } from "@/path";
 import { registerExtensionKeybindings } from "@/registerKeybindings";
 import { resolveShellProfiles } from "@/terminal/shellProfiles";
+import { dirname, join } from "@/utils/path";
 import { populateRegistries } from "@/viewerEditorRegistry";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
@@ -21,12 +21,12 @@ import {
   resolvedProfilesAtom,
   terminalProfilesLoadedAtom,
   themesReadyAtom,
-} from "../atoms";
+} from "../../atoms";
 import {
   clearColorTheme,
   loadAndApplyColorTheme,
   uiThemeToKind,
-} from "../vscodeColorTheme";
+} from "../../vscodeColorTheme";
 
 interface UseExtensionHostOptions {
   settingsLoaded: boolean;

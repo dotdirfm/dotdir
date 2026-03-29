@@ -6,7 +6,7 @@
  * Syntax highlighting and tokenization are handled inside editor extensions (e.g. Monaco).
  */
 
-import { detectLang as detectLangFallback } from "./langDetect";
+import { detectLang as detectLangFallback } from "./utils/langDetect";
 
 export interface LanguageContribution {
   id: string;

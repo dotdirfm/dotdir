@@ -4,10 +4,10 @@
  * Loads and watches user-defined keybindings from ~/.dotdir/keybindings.json
  */
 
+import { Bridge } from "@/features/bridge";
 import { commandRegistry, type Keybinding } from "@/features/commands/commands";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/jsoncFileWatcher";
-import { join } from "@/path";
-import { Bridge } from "@/shared/api/bridge";
+import { join } from "@/utils/path";
 
 let watcher: JsoncFileWatcher<Keybinding[]> | null = null;
 

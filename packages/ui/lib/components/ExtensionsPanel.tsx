@@ -1,4 +1,5 @@
 import { activeColorThemeAtom, activeIconThemeAtom, loadedExtensionsAtom, showExtensionsAtom } from "@/atoms";
+import { useBridge } from "@/features/bridge/useBridge";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import {
   type ExtensionRef,
@@ -11,10 +12,6 @@ import {
   searchMarketplace,
   uninstallExtension,
 } from "@/features/extensions/extensions";
-import { useUserSettings } from "@/features/settings/useUserSettings";
-import { focusContext } from "@/focusContext";
-import { useBridge } from "@/hooks/useBridge";
-import { INPUT_NO_ASSIST } from "@/inputNoAssist";
 import {
   type VSCodeExtension,
   getVSCodeDownloadUrl,
@@ -22,7 +19,10 @@ import {
   getVSCodeInstallCount,
   getVSCodeLatestVersion,
   searchVSCodeMarketplace,
-} from "@/vscodeMarketplace";
+} from "@/features/marketplace/vscodeMarketplace";
+import { useUserSettings } from "@/features/settings/useUserSettings";
+import { focusContext } from "@/focusContext";
+import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 

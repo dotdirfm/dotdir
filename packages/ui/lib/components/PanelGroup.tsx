@@ -12,8 +12,8 @@ import {
   rightActiveTabIdAtom,
   rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
+import { useBridge } from "@/features/bridge/useBridge";
 import type { PanelPersistedState } from "@/features/ui-state/types";
-import { useBridge } from "@/hooks/useBridge";
 import { setActivePanelGroupHandlers } from "@/panelGroupHandlers";
 import { viewerRegistry } from "@/viewerEditorRegistry";
 import type { FsNode, LayeredResolver } from "fss-lang";

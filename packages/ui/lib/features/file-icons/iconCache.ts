@@ -1,6 +1,6 @@
+import { Bridge } from "@/features/bridge";
 import { readFileText } from "@/fs";
-import { normalizePath } from "@/path";
-import { Bridge } from "@/shared/api/bridge";
+import { normalizePath } from "@/utils/path";
 
 const MAX_SIZE = 200;
 

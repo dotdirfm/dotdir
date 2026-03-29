@@ -4,17 +4,17 @@
  * Loads viewer/editor extensions inside an iframe (VFS origin) and bridges HostApi via postMessage RPC.
  */
 
-import { loadFsProvider } from "@/browserFsProvider";
-import { isContainerPath, parseContainerPath } from "@/containerPath";
+import { Bridge } from "@/features/bridge";
+import { useBridge } from "@/features/bridge/useBridge";
 import { commandRegistry } from "@/features/commands/commands";
+import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
 import { focusContext } from "@/focusContext";
 import { readFileText as readFileTextFromFs } from "@/fs";
-import { useBridge } from "@/hooks/useBridge";
-import { basename, dirname, join, normalizePath } from "@/path";
 import { registerExtensionKeybinding } from "@/registerKeybindings";
-import { Bridge } from "@/shared/api/bridge";
-import { vfsUrl } from "@/vfs";
+import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
+import { basename, dirname, join, normalizePath } from "@/utils/path";
+import { vfsUrl } from "@/utils/vfs";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import { getActiveColorThemeData, onColorThemeChange } from "@/vscodeColorTheme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

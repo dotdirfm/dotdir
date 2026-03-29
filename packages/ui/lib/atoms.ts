@@ -1,6 +1,6 @@
 import type { PanelSide } from "@/entities/panel/model/types";
+import { TerminalProfile } from "@/features/bridge";
 import type { LoadedExtension } from "@/features/extensions/extensions";
-import { TerminalProfile } from "@/shared/api/bridge";
 import type { ThemeKind } from "fss-lang";
 import { atom } from "jotai";
 

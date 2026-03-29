@@ -9,9 +9,9 @@ import {
   createFilelistTab,
   genTabId,
 } from "@/entities/tab/model/tabsAtoms";
+import { useBridge } from "@/features/bridge/useBridge";
 import { DotDirUiState, PanelPersistedState, PersistedTab } from "@/features/ui-state/types";
 import { flushUiState, initUiState, updateUiState } from "@/features/ui-state/uiState";
-import { useBridge } from "@/hooks/useBridge";
 import type { FsNode } from "fss-lang";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";

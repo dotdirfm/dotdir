@@ -1,7 +1,7 @@
+import { ConflictPolicy, CopyOptions, SymlinkMode } from "@/features/bridge";
 import { focusContext } from "@/focusContext";
 import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
-import { INPUT_NO_ASSIST } from "@/inputNoAssist";
-import { ConflictPolicy, CopyOptions, SymlinkMode } from "@/shared/api/bridge";
+import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useEffect, useRef, useState } from "react";
 import { SmartLabel } from "./dialogHotkeys";
 

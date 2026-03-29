@@ -4,9 +4,9 @@
  * Watches ~/.dotdir/settings.json for changes and notifies listeners.
  */
 
+import { Bridge } from "@/features/bridge";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/jsoncFileWatcher";
-import { join } from "@/path";
-import { Bridge } from "@/shared/api/bridge";
+import { join } from "@/utils/path";
 import type { DotDirSettings } from "./types";
 
 let watcher: JsoncFileWatcher<DotDirSettings> | null = null;

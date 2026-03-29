@@ -1,5 +1,5 @@
+import { Bridge, PtyLaunchInfo, TerminalProfile } from "@/features/bridge";
 import { focusContext } from "@/focusContext";
-import { Bridge, PtyLaunchInfo, TerminalProfile } from "@/shared/api/bridge";
 import { formatHiddenCd, normalizeTerminalPath } from "./path";
 import type { TerminalCapabilities, TerminalSessionEvent, TerminalSessionStatus } from "./types";
 

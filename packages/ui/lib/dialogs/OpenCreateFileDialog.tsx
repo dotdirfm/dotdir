@@ -1,6 +1,6 @@
 import { focusContext } from "@/focusContext";
-import { INPUT_NO_ASSIST } from "@/inputNoAssist";
 import { languageRegistry } from "@/languageRegistry";
+import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useEffect, useRef, useState } from "react";
 import { SmartLabel } from "./dialogHotkeys";
 

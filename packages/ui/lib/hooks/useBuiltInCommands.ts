@@ -8,21 +8,21 @@ import {
   showHiddenAtom,
   viewerFileAtom,
 } from "@/atoms";
-import { isContainerPath, parseContainerPath } from "@/containerPath";
 import type { DialogSpec } from "@/dialogs/dialogContext";
 import type { LanguageOption } from "@/dialogs/OpenCreateFileDialog";
+import { useBridge } from "@/features/bridge/useBridge";
 import { commandRegistry } from "@/features/commands/commands";
+import { useUserSettings } from "@/features/settings/useUserSettings";
 import { getActiveFileListHandlers } from "@/fileListHandlers";
 import { focusContext } from "@/focusContext";
-import { useBridge } from "@/hooks/useBridge";
 import { getActivePanelGroupHandlers } from "@/panelGroupHandlers";
-import { basename, dirname } from "@/path";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/registerKeybindings";
+import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
+import { basename, dirname } from "@/utils/path";
 import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { RefObject, useEffect, useRef } from "react";
-import { useUserSettings } from "../features/settings/useUserSettings";
 
 interface PanelHandle {
   currentPath: string;

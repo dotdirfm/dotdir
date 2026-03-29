@@ -4,10 +4,10 @@
  * Parses VS Code icon theme JSON format and provides icon resolution.
  */
 
+import { Bridge } from "@/features/bridge";
+import { bridgeAtom } from "@/features/bridge/useBridge";
 import { readFileBuffer, readFileText } from "@/fs";
-import { bridgeAtom } from "@/hooks/useBridge";
-import { dirname, join } from "@/path";
-import { Bridge } from "@/shared/api/bridge";
+import { dirname, join } from "@/utils/path";
 import { atom, useAtomValue } from "jotai";
 
 export interface VSCodeIconDefinition {

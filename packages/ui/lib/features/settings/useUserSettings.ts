@@ -1,8 +1,8 @@
+import { useBridge } from "@/features/bridge/useBridge";
 import { DotDirSettings } from "@/features/settings/types";
 import { initUserSettings, onSettingsChange, updateSettings as updateUserSettings } from "@/features/settings/userSettings";
 import { atom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect } from "react";
-import { useBridge } from "../../hooks/useBridge";
 
 const settingsAtom = atom<DotDirSettings>({});
 const settingsReadyAtom = atom(false);

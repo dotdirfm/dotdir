@@ -6,14 +6,14 @@
  * goes through the shared DialogContext (useDialog()).
  */
 
-import { loadFsProvider } from "@/browserFsProvider";
-import { isContainerPath, parseContainerPath } from "@/containerPath";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
+import { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "@/features/bridge";
+import { useBridge } from "@/features/bridge/useBridge";
+import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { FsProviderExtensionApi } from "@/features/extensions/extensionApi";
-import { useBridge } from "@/hooks/useBridge";
-import { basename, dirname, join } from "@/path";
-import { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "@/shared/api/bridge";
+import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
+import { basename, dirname, join } from "@/utils/path";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef } from "react";

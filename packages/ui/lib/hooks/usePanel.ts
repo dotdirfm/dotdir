@@ -7,14 +7,14 @@
  */
 
 import { osThemeAtom } from "@/atoms";
-import { loadFsProvider } from "@/browserFsProvider";
-import { buildContainerPath, isContainerPath, parseContainerPath } from "@/containerPath";
+import { Bridge, FsChangeType, FsRawEntry } from "@/features/bridge";
+import { useBridge } from "@/features/bridge/useBridge";
+import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import { FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from "@/fs";
 import { createPanelResolver, invalidateFssCache, syncLayers } from "@/fss";
-import { useBridge } from "@/hooks/useBridge";
 import { languageRegistry } from "@/languageRegistry";
-import { basename, dirname, isFileExecutable, isRootPath, join } from "@/path";
-import { Bridge, FsChangeType, FsRawEntry } from "@/shared/api/bridge";
+import { buildContainerPath, isContainerPath, parseContainerPath } from "@/utils/containerPath";
+import { basename, dirname, isFileExecutable, isRootPath, join } from "@/utils/path";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import type { LayeredResolver } from "fss-lang";
 import { FsNode } from "fss-lang";

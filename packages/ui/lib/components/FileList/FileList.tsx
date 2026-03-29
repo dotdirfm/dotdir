@@ -5,8 +5,8 @@ import { getFileOperationHandlers } from "@/features/file-ops/model/fileOperatio
 import { setActiveFileListHandlers } from "@/fileListHandlers";
 import { resolveEntryStyle } from "@/fss";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { dirname, join } from "@/path";
 import type { ResolvedEntryStyle } from "@/types";
+import { dirname, join } from "@/utils/path";
 import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
 import type { LayeredResolver } from "fss-lang";
 import { FsNode } from "fss-lang";

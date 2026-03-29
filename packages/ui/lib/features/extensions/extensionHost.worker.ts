@@ -14,7 +14,7 @@
  *     { type: 'error', message }                     — fatal loading error
  */
 
-import { dirname, join, normalizePath } from "../../path";
+import { dirname, join, normalizePath } from "../../utils/path";
 
 // ── Types (duplicated subset to avoid importing DOM-dependent modules) ──
 

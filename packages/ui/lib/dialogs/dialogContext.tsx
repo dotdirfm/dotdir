@@ -1,4 +1,4 @@
-import type { ConflictResolution, CopyOptions, MoveOptions } from "@/shared/api/bridge";
+import type { ConflictResolution, CopyOptions, MoveOptions } from "@/features/bridge";
 import React, { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { ConflictDialog } from "./ConflictDialog";
 import { CopyConfigDialog } from "./CopyConfigDialog";

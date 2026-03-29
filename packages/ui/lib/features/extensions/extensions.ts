@@ -1,6 +1,6 @@
+import { Bridge, type CwdEscapeMode, type DeleteProgressEvent } from "@/features/bridge";
 import { readFileBuffer, readFileText } from "@/fs";
-import { dirname, join, normalizePath } from "@/path";
-import { Bridge, type CwdEscapeMode, type DeleteProgressEvent } from "@/shared/api/bridge";
+import { dirname, join, normalizePath } from "@/utils/path";
 
 export const MARKETPLACE_URL = "https://dotdir.dev";
 
