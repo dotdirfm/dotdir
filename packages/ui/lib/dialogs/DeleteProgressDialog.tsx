@@ -1,8 +1,9 @@
 import { focusContext } from "@/focusContext";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
+import { OverlayDialog } from "./OverlayDialog";
 
 export interface DeleteProgressDialogProps {
   filesDone: number;
@@ -11,12 +12,7 @@ export interface DeleteProgressDialogProps {
 }
 
 export function DeleteProgressDialog({ filesDone, currentFile, onCancel }: DeleteProgressDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
     focusContext.push("modal");
     return () => {
       focusContext.pop("modal");
@@ -24,7 +20,7 @@ export function DeleteProgressDialog({ filesDone, currentFile, onCancel }: Delet
   }, []);
 
   return (
-    <dialog ref={dialogRef} className={cx(styles, "modal-dialog", "delete-progress-dialog")}>
+    <OverlayDialog className={cx(styles, "modal-dialog", "delete-progress-dialog")} onClose={onCancel}>
       <div className={styles["modal-dialog-header"]}>Permanently deleting</div>
       <div className={styles["modal-dialog-body"]}>
         <div className={styles["delete-progress-text"]}>{filesDone.toLocaleString()} items deleted</div>
@@ -38,6 +34,6 @@ export function DeleteProgressDialog({ filesDone, currentFile, onCancel }: Delet
           <SmartLabel>Cancel</SmartLabel>
         </button>
       </div>
-    </dialog>
+    </OverlayDialog>
   );
 }

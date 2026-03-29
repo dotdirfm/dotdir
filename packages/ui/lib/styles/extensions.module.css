@@ -1,8 +1,8 @@
 .ext-panel {
   width: 560px;
-  height: 80vh;
-  max-width: 90vw;
-  max-height: 90vh;
+  height: min(80vh, calc(100% - 32px));
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 32px);
   margin: auto;
   background: var(--bg);
   color: var(--fg);
@@ -12,10 +12,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.ext-panel::backdrop {
-  background: rgba(0, 0, 0, 0.5);
 }
 
 .ext-panel-header {

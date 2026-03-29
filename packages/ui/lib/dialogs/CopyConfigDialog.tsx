@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
+import { OverlayDialog } from "./OverlayDialog";
 
 export interface CopyConfigDialogProps {
   itemCount: number;
@@ -15,7 +16,6 @@ export interface CopyConfigDialogProps {
 }
 
 export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: CopyConfigDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const buttonsRef = useRef<HTMLDivElement>(null);
   const [destValue, setDestValue] = useState(destPath);
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("ask");
@@ -28,9 +28,6 @@ export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: C
   const { onKeyDown } = useDialogButtonNav(buttonsRef, { defaultIndex: 1 });
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
     focusContext.push("modal");
     return () => {
       focusContext.pop("modal");
@@ -56,15 +53,7 @@ export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: C
   };
 
   return (
-    <dialog
-      ref={dialogRef}
-      className={cx(styles, "modal-dialog", "copy-config-dialog")}
-      onCancel={(e) => {
-        e.preventDefault();
-        onCancel();
-      }}
-      onKeyDown={onKeyDown}
-    >
+    <OverlayDialog className={cx(styles, "modal-dialog", "copy-config-dialog")} onClose={onCancel} onKeyDown={onKeyDown}>
       <div className={styles["modal-dialog-header"]}>
         Copy {itemCount} item{itemCount !== 1 ? "s" : ""}
       </div>
@@ -131,6 +120,6 @@ export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: C
           </button>
         </div>
       </form>
-    </dialog>
+    </OverlayDialog>
   );
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { commandPaletteOpenAtom } from "../atoms";
 import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from "../features/commands/commands";
 import { focusContext } from "../focusContext";
+import { OverlayDialog } from "../dialogs/OverlayDialog";
 import paletteStyles from "../styles/command-palette.module.css";
 import terminalStyles from "../styles/terminal.module.css";
 import { INPUT_NO_ASSIST } from "../utils/inputNoAssist";
@@ -20,21 +21,10 @@ interface CommandItem {
 }
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [commands, setCommands] = useState<CommandType[]>([]);
   const [keybindings, setKeybindings] = useState<Keybinding[]>([]);
-  // Show/hide dialog
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) {
-      dialog.showModal();
-    } else if (!open && dialog.open) {
-      dialog.close();
-    }
-  }, [open]);
 
   // Focus search input when palette opens
   useEffect(() => {
@@ -100,14 +90,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     e.stopPropagation();
   }, []);
 
+  if (!open) return null;
+
   return (
-    <dialog
-      ref={dialogRef}
+    <OverlayDialog
       className={paletteStyles["command-palette-dialog"]}
-      onClick={(e) => {
-        if (e.target === dialogRef.current) onOpenChange(false);
-      }}
       onClose={() => onOpenChange(false)}
+      initialFocusRef={inputRef}
+      placement="top"
     >
       <Command className={paletteStyles["command-palette"]} onKeyDown={handleKeyDown} shouldFilter={true}>
         <Command.Input ref={inputRef} value={search} onValueChange={setSearch} placeholder="Type a command or search..." {...INPUT_NO_ASSIST} />
@@ -125,7 +115,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           ))}
         </Command.List>
       </Command>
-    </dialog>
+    </OverlayDialog>
   );
 }
 

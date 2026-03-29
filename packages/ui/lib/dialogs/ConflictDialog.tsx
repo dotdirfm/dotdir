@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
+import { OverlayDialog } from "./OverlayDialog";
 
 export interface ConflictDialogProps {
   src: string;
@@ -38,18 +39,15 @@ function basename(path: string): string {
 }
 
 export function ConflictDialog({ src, dest, srcSize, srcMtimeMs, destSize, destMtimeMs, onResolve }: ConflictDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const buttonsRef = useRef<HTMLDivElement>(null);
   const renameButtonsRef = useRef<HTMLDivElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState(basename(dest));
   const { onKeyDown: mainKeyDown } = useDialogButtonNav(buttonsRef, { defaultIndex: 0 });
   const { onKeyDown: renameKeyDown } = useDialogButtonNav(renameButtonsRef, { defaultIndex: 1 });
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
     focusContext.push("modal");
     return () => {
       focusContext.pop("modal");
@@ -58,14 +56,11 @@ export function ConflictDialog({ src, dest, srcSize, srcMtimeMs, destSize, destM
 
   if (renaming) {
     return (
-      <dialog
-        ref={dialogRef}
+      <OverlayDialog
         className={cx(styles, "modal-dialog", "conflict-dialog")}
-        onCancel={(e) => {
-          e.preventDefault();
-          onResolve({ type: "cancel" });
-        }}
+        onClose={() => onResolve({ type: "cancel" })}
         onKeyDown={renameKeyDown}
+        initialFocusRef={renameInputRef}
       >
         <div className={styles["modal-dialog-header"]}>Rename</div>
         <div className={styles["modal-dialog-body"]}>
@@ -74,6 +69,7 @@ export function ConflictDialog({ src, dest, srcSize, srcMtimeMs, destSize, destM
               <SmartLabel>New name</SmartLabel>
             </label>
             <input
+              ref={renameInputRef}
               id="conflict-rename-input"
               type="text"
               value={newName}
@@ -96,18 +92,14 @@ export function ConflictDialog({ src, dest, srcSize, srcMtimeMs, destSize, destM
             <SmartLabel>OK</SmartLabel>
           </button>
         </div>
-      </dialog>
+      </OverlayDialog>
     );
   }
 
   return (
-    <dialog
-      ref={dialogRef}
+    <OverlayDialog
       className={cx(styles, "modal-dialog", "conflict-dialog")}
-      onCancel={(e) => {
-        e.preventDefault();
-        onResolve({ type: "cancel" });
-      }}
+      onClose={() => onResolve({ type: "cancel" })}
       onKeyDown={mainKeyDown}
     >
       <div className={styles["modal-dialog-header"]}>File already exists</div>
@@ -151,6 +143,6 @@ export function ConflictDialog({ src, dest, srcSize, srcMtimeMs, destSize, destM
           <SmartLabel>Cancel</SmartLabel>
         </button>
       </div>
-    </dialog>
+    </OverlayDialog>
   );
 }

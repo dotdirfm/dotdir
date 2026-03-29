@@ -27,6 +27,7 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "../styles/extensions.module.css";
 import { cx } from "../utils/cssModules";
+import { OverlayDialog } from "../dialogs/OverlayDialog";
 
 /** Extract a message from Tauri invoke errors (plain {errno,message} objects) or Error instances. */
 function errMsg(err: unknown): string {
@@ -44,7 +45,7 @@ export function ExtensionsPanel() {
   const [activeIconTheme, setActiveIconTheme] = useAtom(activeIconThemeAtom);
   const [activeColorTheme, setActiveColorTheme] = useAtom(activeColorThemeAtom);
   const installed = useAtomValue(loadedExtensionsAtom);
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const extensionHost = useExtensionHostClient();
   const [tab, setTab] = useState<Tab>("marketplace");
   const [marketplaceSource, setMarketplaceSource] = useState<MarketplaceSource>("vscode");
@@ -58,14 +59,8 @@ export function ExtensionsPanel() {
   const{settings,updateSettings} = useUserSettings();
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
     focusContext.push("modal");
-    const handleClose = () => setShowExtensions(false);
-    dialog.addEventListener("close", handleClose);
     return () => {
-      dialog.removeEventListener("close", handleClose);
       focusContext.pop("modal");
     };
   }, [setShowExtensions]);
@@ -187,10 +182,10 @@ export function ExtensionsPanel() {
   };
 
   return (
-    <dialog ref={dialogRef} className={styles["ext-panel"]}>
+    <OverlayDialog className={styles["ext-panel"]} onClose={() => setShowExtensions(false)} initialFocusRef={searchInputRef}>
       <div className={styles["ext-panel-header"]}>
         <span className={styles["ext-panel-title"]}>Extensions</span>
-        <button className={styles["ext-panel-close"]} onClick={() => dialogRef.current?.close()}>
+        <button className={styles["ext-panel-close"]} onClick={() => setShowExtensions(false)}>
           ✕
         </button>
       </div>
@@ -227,11 +222,11 @@ export function ExtensionsPanel() {
             </button>
           </div>
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Search extensions..."
             value={query}
             onChange={(e) => handleSearchInput(e.target.value)}
-            autoFocus
             {...INPUT_NO_ASSIST}
           />
         </div>
@@ -404,6 +399,6 @@ export function ExtensionsPanel() {
             })
           ))}
       </div>
-    </dialog>
+    </OverlayDialog>
   );
 }

@@ -1,8 +1,9 @@
 import { focusContext } from "@/focusContext";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
+import { OverlayDialog } from "./OverlayDialog";
 
 export interface CopyProgressDialogProps {
   bytesCopied: number;
@@ -22,12 +23,7 @@ function formatSize(bytes: number): string {
 }
 
 export function CopyProgressDialog({ bytesCopied, bytesTotal, filesDone, filesTotal, currentFile, onCancel }: CopyProgressDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
     focusContext.push("modal");
     return () => {
       focusContext.pop("modal");
@@ -37,14 +33,7 @@ export function CopyProgressDialog({ bytesCopied, bytesTotal, filesDone, filesTo
   const pct = bytesTotal > 0 ? Math.min(100, (bytesCopied / bytesTotal) * 100) : 0;
 
   return (
-    <dialog
-      ref={dialogRef}
-      className={cx(styles, "modal-dialog", "copy-progress-dialog")}
-      onCancel={(e) => {
-        e.preventDefault();
-        onCancel();
-      }}
-    >
+    <OverlayDialog className={cx(styles, "modal-dialog", "copy-progress-dialog")} onClose={onCancel}>
       <div className={styles["modal-dialog-header"]}>Copying</div>
       <div className={styles["modal-dialog-body"]}>
         <div className={styles["copy-progress-bar-container"]}>
@@ -67,6 +56,6 @@ export function CopyProgressDialog({ bytesCopied, bytesTotal, filesDone, filesTo
           <SmartLabel>Cancel</SmartLabel>
         </button>
       </div>
-    </dialog>
+    </OverlayDialog>
   );
 }

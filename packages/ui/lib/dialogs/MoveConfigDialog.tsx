@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
+import { OverlayDialog } from "./OverlayDialog";
 
 export interface MoveConfigDialogProps {
   itemCount: number;
@@ -15,16 +16,12 @@ export interface MoveConfigDialogProps {
 }
 
 export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: MoveConfigDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const buttonsRef = useRef<HTMLDivElement>(null);
   const [destValue, setDestValue] = useState(destPath);
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("ask");
   const { onKeyDown } = useDialogButtonNav(buttonsRef, { defaultIndex: 1 });
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
     focusContext.push("modal");
     return () => {
       focusContext.pop("modal");
@@ -39,15 +36,7 @@ export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: M
   };
 
   return (
-    <dialog
-      ref={dialogRef}
-      className={cx(styles, "modal-dialog", "move-config-dialog")}
-      onCancel={(e) => {
-        e.preventDefault();
-        onCancel();
-      }}
-      onKeyDown={onKeyDown}
-    >
+    <OverlayDialog className={cx(styles, "modal-dialog", "move-config-dialog")} onClose={onCancel} onKeyDown={onKeyDown}>
       <div className={styles["modal-dialog-header"]}>
         Move {itemCount} item{itemCount !== 1 ? "s" : ""}
       </div>
@@ -82,6 +71,6 @@ export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: M
           </button>
         </div>
       </form>
-    </dialog>
+    </OverlayDialog>
   );
 }

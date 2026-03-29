@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
+import { OverlayDialog } from "./OverlayDialog";
 
 export interface LanguageOption {
   id: string;
@@ -19,7 +20,6 @@ export interface OpenCreateFileDialogProps {
 }
 
 export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCancel }: OpenCreateFileDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [filename, setFilename] = useState("");
   const [langId, setLangId] = useState("plaintext");
@@ -33,35 +33,22 @@ export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCanc
   }, [filename, userTouchedLanguage]);
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
     focusContext.push("modal");
-    inputRef.current?.focus();
-    const handleClose = () => onCancel();
-    dialog.addEventListener("close", handleClose);
     return () => {
-      dialog.removeEventListener("close", handleClose);
       focusContext.pop("modal");
     };
-  }, [onCancel]);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const name = filename.trim();
     if (!name) return;
     const path = currentPath ? `${currentPath.replace(/\/?$/, "")}/${name}` : name;
-    dialogRef.current?.close();
     onConfirm(path, name, langId);
   };
 
-  const handleCancel = () => {
-    dialogRef.current?.close();
-    onCancel();
-  };
-
   return (
-    <dialog ref={dialogRef} className={cx(styles, "modal-dialog", "open-create-file-dialog")} onCancel={handleCancel}>
+    <OverlayDialog className={cx(styles, "modal-dialog", "open-create-file-dialog")} onClose={onCancel} initialFocusRef={inputRef}>
       <div className={styles["modal-dialog-header"]}>Open / Create File</div>
       <form className={styles["open-create-file-form"]} onSubmit={handleSubmit}>
         <div className={styles["modal-dialog-body"]}>
@@ -105,7 +92,7 @@ export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCanc
           </div>
         </div>
         <div className={styles["modal-dialog-buttons"]}>
-          <button type="button" onClick={handleCancel}>
+          <button type="button" onClick={onCancel}>
             <SmartLabel>Cancel</SmartLabel>
           </button>
           <button type="submit" disabled={!filename.trim()}>
@@ -113,6 +100,6 @@ export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCanc
           </button>
         </div>
       </form>
-    </dialog>
+    </OverlayDialog>
   );
 }

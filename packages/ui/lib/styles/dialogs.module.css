@@ -3,6 +3,21 @@
   text-underline-offset: 2px;
 }
 
+.overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.overlay-backdrop-top {
+  align-items: flex-start;
+  padding-top: 15vh;
+}
+
 .modal-dialog {
   width: 400px;
   max-width: 90vw;
@@ -13,10 +28,9 @@
   border-radius: 4px;
   padding: 0;
   overflow: hidden;
-}
-
-.modal-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.5);
+  max-height: min(90vh, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-dialog-header {

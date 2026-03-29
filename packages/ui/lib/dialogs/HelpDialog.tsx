@@ -2,6 +2,7 @@ import { focusContext } from "@/focusContext";
 import { marked } from "marked";
 import { useEffect, useRef } from "react";
 import styles from "../styles/help-dialog.module.css";
+import { OverlayDialog } from "./OverlayDialog";
 
 interface HelpDialogProps {
   content: string;
@@ -9,15 +10,10 @@ interface HelpDialogProps {
 }
 
 export function HelpDialog({ content, onClose }: HelpDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
     // Focus the body so arrow/page keys scroll immediately.
-    bodyRef.current?.focus();
     focusContext.push("modal");
     return () => {
       focusContext.pop("modal");
@@ -39,14 +35,7 @@ export function HelpDialog({ content, onClose }: HelpDialogProps) {
   const html = marked.parse(content) as string;
 
   return (
-    <dialog
-      ref={dialogRef}
-      className={styles["help-dialog"]}
-      onCancel={(e) => {
-        e.preventDefault();
-        onClose();
-      }}
-    >
+    <OverlayDialog className={styles["help-dialog"]} onClose={onClose} initialFocusRef={bodyRef}>
       <div className={styles["help-dialog-header"]}>Help</div>
       <div
         ref={bodyRef}
@@ -60,6 +49,6 @@ export function HelpDialog({ content, onClose }: HelpDialogProps) {
       <div className={styles["help-dialog-buttons"]}>
         <button onClick={onClose}>Close</button>
       </div>
-    </dialog>
+    </OverlayDialog>
   );
 }

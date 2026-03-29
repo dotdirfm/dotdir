@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
+import { OverlayDialog } from "./OverlayDialog";
 
 export interface RenameDialogProps {
   currentName: string;
@@ -12,14 +13,10 @@ export interface RenameDialogProps {
 }
 
 export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogProps) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [newName, setNewName] = useState(currentName);
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
     focusContext.push("modal");
     // Select the filename without extension
     const input = inputRef.current;
@@ -32,29 +29,20 @@ export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogP
         input.select();
       }
     }
-    const handleClose = () => onCancel();
-    dialog.addEventListener("close", handleClose);
     return () => {
-      dialog.removeEventListener("close", handleClose);
       focusContext.pop("modal");
     };
-  }, [onCancel, currentName]);
+  }, [currentName]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = newName.trim();
     if (!trimmed || trimmed === currentName) return;
-    dialogRef.current?.close();
     onConfirm(trimmed);
   };
 
-  const handleCancel = () => {
-    dialogRef.current?.close();
-    onCancel();
-  };
-
   return (
-    <dialog ref={dialogRef} className={cx(styles, "modal-dialog", "rename-dialog")} onCancel={handleCancel}>
+    <OverlayDialog className={cx(styles, "modal-dialog", "rename-dialog")} onClose={onCancel} initialFocusRef={inputRef}>
       <div className={styles["modal-dialog-header"]}>Rename</div>
       <form onSubmit={handleSubmit}>
         <div className={styles["modal-dialog-body"]}>
@@ -66,7 +54,7 @@ export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogP
           </div>
         </div>
         <div className={styles["modal-dialog-buttons"]}>
-          <button type="button" onClick={handleCancel}>
+          <button type="button" onClick={onCancel}>
             <SmartLabel>Cancel</SmartLabel>
           </button>
           <button type="submit" disabled={!newName.trim() || newName.trim() === currentName}>
@@ -74,6 +62,6 @@ export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogP
           </button>
         </div>
       </form>
-    </dialog>
+    </OverlayDialog>
   );
 }

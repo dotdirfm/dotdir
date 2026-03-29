@@ -1,19 +1,8 @@
 .command-palette-dialog {
-  position: fixed;
-  top: 15vh;
-  left: 50%;
-  transform: translateX(-50%);
-  border: none;
-  padding: 0;
-  background: transparent;
   width: 800px;
-  max-width: 90vw;
+  max-width: calc(100% - 32px);
   max-height: none;
   overflow: visible;
-}
-
-.command-palette-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.5);
 }
 
 .command-palette {
