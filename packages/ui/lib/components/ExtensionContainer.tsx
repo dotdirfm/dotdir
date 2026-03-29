@@ -720,7 +720,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const entryPathForIframe = join(extensionDirPath, entryRelForIframe);
   const entryDirForIframe = dirname(entryPathForIframe);
   // Must keep `_ext/` and the Windows drive root separate: `/_ext` + `C:/...` → `_extC:` (broken).
-  const iframeSrc = vfsUrl(`/_ext/${entryDirForIframe.replace(/^\//, "")}/`);
+  const iframeSrc = vfsUrl(`/_ext/${entryDirForIframe.replace(/^\//, "")}`);
 
   return (
     <div className={className} style={{ ...style, position: "relative" }}>
