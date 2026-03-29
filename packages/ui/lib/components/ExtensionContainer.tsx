@@ -350,7 +350,6 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     const entryRel = normalizePath(entry.replace(/^\.\//, "")) || "index.js";
     const entryPath = join(extensionDirPath, entryRel);
     const entryUrl = resolveVfsUrl(entryPath);
-    const isEsm = /\.mjs(?:\?|$)/i.test(entryRel);
 
     // postMessage RPC state
     let nextCallId = 1;
@@ -574,26 +573,23 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         currentFilePathRef.current = (props as EditorProps).filePath;
       }
 
-      // ESM: the sandboxed iframe (no allow-same-origin) can't import() cross-origin
-      // URLs, so we read the script content and send it via postMessage. The bootstrap
-      // creates a local blob URL and import()s it.
+      // The sandboxed iframe (no allow-same-origin) is fragile around loading script
+      // URLs directly, so send the entry source through postMessage for all JS formats.
       let entryScript: string | undefined;
-      if (isEsm) {
-        try {
-          entryScript = await readFileTextFromFs(bridge, entryPath);
-        } catch (err) {
-          if (!cancelled) {
-            const msg =
-              err instanceof Error
-                ? err.message
-                : err && typeof err === "object" && "message" in err
-                  ? String((err as { message: unknown }).message)
-                  : String(err);
-            setError(`Failed to read ESM entry: ${msg}`);
-            setLoading(false);
-          }
-          return;
+      try {
+        entryScript = await readFileTextFromFs(bridge, entryPath);
+      } catch (err) {
+        if (!cancelled) {
+          const msg =
+            err instanceof Error
+              ? err.message
+              : err && typeof err === "object" && "message" in err
+                ? String((err as { message: unknown }).message)
+                : String(err);
+          setError(`Failed to read extension entry: ${msg}`);
+          setLoading(false);
         }
+        return;
       }
 
       iframe.contentWindow?.postMessage(
