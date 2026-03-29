@@ -20,7 +20,10 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    "paths": { "@/*": ["./lib/*"] },
+    "paths": {
+      "@/*": ["./lib/*"],
+      "@dotdirfm/extension-api": ["../extension-api/dist/index.d.ts"]
+    },
   },
   "include": ["lib"],
   "references": [{ "path": "./tsconfig.node.json" }],

@@ -1,10 +1,11 @@
-name: Publish UI
+name: Publish Packages
 
 on:
   push:
     branches: [main]
     paths:
       - "packages/ui/**"
+      - "packages/extension-api/**"
       - "pnpm-lock.yaml"
       - ".github/workflows/publish-ui.yml"
 
@@ -12,8 +13,70 @@ permissions:
   contents: read
 
 jobs:
-  publish:
+  publish-extension-api:
     runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+        env:
+          NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
+
+      - run: pnpm install --frozen-lockfile
+        env:
+          NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
+
+      - name: Build extension-api package
+        run: pnpm --filter @dotdirfm/extension-api build
+
+      - name: Pack extension-api package
+        run: npm pack --dry-run
+        working-directory: packages/extension-api
+        env:
+          NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
+
+      - name: Check npm version
+        id: version_check
+        shell: bash
+        env:
+          NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
+        run: |
+          PACKAGE_NAME=$(node -p "require('./packages/extension-api/package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./packages/extension-api/package.json').version")
+          PUBLISHED_VERSION=$(npm view "$PACKAGE_NAME" version 2>/dev/null || true)
+
+          echo "package_name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+
+          if [ "$PUBLISHED_VERSION" = "$PACKAGE_VERSION" ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "Version $PACKAGE_VERSION is already published for $PACKAGE_NAME."
+          else
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            if [ -n "$PUBLISHED_VERSION" ]; then
+              echo "Publishing $PACKAGE_NAME@$PACKAGE_VERSION over current npm version $PUBLISHED_VERSION."
+            else
+              echo "Publishing first npm release for $PACKAGE_NAME@$PACKAGE_VERSION."
+            fi
+          fi
+
+      - name: Publish extension-api package
+        if: steps.version_check.outputs.should_publish == 'true'
+        run: pnpm publish --access public --no-git-checks
+        working-directory: packages/extension-api
+        env:
+          NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-ui:
+    runs-on: self-hosted
+    needs: publish-extension-api
     steps:
       - uses: actions/checkout@v4
 

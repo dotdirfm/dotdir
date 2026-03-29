@@ -1,6 +1,6 @@
 {
   "name": "@dotdirfm/ui",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Reusable DotDir file manager UI component for React apps.",
   "main": "./dist/dotdir.js",
   "module": "./dist/dotdir.mjs",
@@ -24,7 +24,7 @@
   "scripts": {
     "dev": "vite",
     "watch": "vite build --watch",
-    "build": "tsc && vite build",
+    "build": "pnpm --filter @dotdirfm/extension-api build && tsc && vite build",
     "prepublishOnly": "pnpm build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -52,6 +52,7 @@
     "react": "^19.0.0"
   },
   "dependencies": {
+    "@dotdirfm/extension-api": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "cmdk": "^1.1.1",
