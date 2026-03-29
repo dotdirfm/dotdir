@@ -1,6 +1,5 @@
 import { join, normalizePath } from "@/path";
-import { Bridge } from "@/shared/api/bridge";
-import type { EntryKind, FsChangeEvent, FsChangeType } from "@/types";
+import { Bridge, EntryKind, FsChangeEvent, FsChangeType } from "@/shared/api/bridge";
 
 export interface HandleMeta {
   size: number;

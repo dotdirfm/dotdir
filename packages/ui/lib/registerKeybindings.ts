@@ -1,4 +1,4 @@
-import type { Keybinding, KeybindingLayer } from "./features/commands/commands";
+import type { Keybinding, KeybindingLayer } from "@/features/commands/commands";
 
 export type Disposable = () => void;
 

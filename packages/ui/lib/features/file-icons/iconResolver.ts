@@ -5,7 +5,7 @@
  * supporting both FSS-based and VS Code icon themes.
  */
 
-import { useBridge } from "./hooks/useBridge";
+import { useBridge } from "@/hooks/useBridge";
 import { getCachedIconUrl, loadIcons } from "./iconCache";
 import { useVscodeIconTheme } from "./vscodeIconTheme";
 

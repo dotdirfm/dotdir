@@ -1,10 +1,10 @@
 import { actionQueue } from "@/actionQueue";
 import { commandRegistry } from "@/features/commands/commands";
+import { onIconThemeChange, useGetCachedIcon, useLoadIconsForPaths, useResolveIcon } from "@/features/file-icons/iconResolver";
 import { getFileOperationHandlers } from "@/features/file-ops/model/fileOperationHandlers";
 import { setActiveFileListHandlers } from "@/fileListHandlers";
 import { resolveEntryStyle } from "@/fss";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { onIconThemeChange, useGetCachedIcon, useLoadIconsForPaths, useResolveIcon } from "@/iconResolver";
 import { dirname, join } from "@/path";
 import type { ResolvedEntryStyle } from "@/types";
 import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";

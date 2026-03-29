@@ -1,9 +1,9 @@
+import type { LoadedExtension } from "@/features/extensions/extensions";
+import { readFileText } from "@/fs";
+import { basename, dirname, join, normalizePath } from "@/path";
 import { Bridge } from "@/shared/api/bridge";
+import type { ResolvedEntryStyle } from "@/types";
 import { createLayer, FsNode, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from "fss-lang";
-import type { LoadedExtension } from "./features/extensions/extensions";
-import { readFileText } from "./fs";
-import { basename, dirname, join, normalizePath } from "./path";
-import type { ResolvedEntryStyle } from "./types";
 
 const defaultFss = `
 folder { font-weight: bold; }
