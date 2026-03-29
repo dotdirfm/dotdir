@@ -1,7 +1,7 @@
+import { focusContext } from "@/focusContext";
+import { INPUT_NO_ASSIST } from "@/inputNoAssist";
 import { useEffect, useRef, useState } from "react";
-import { focusContext } from "../focusContext";
 import { SmartLabel } from "./dialogHotkeys";
-import { INPUT_NO_ASSIST } from "../inputNoAssist";
 
 export type MakeFolderResult = { mode: "single"; name: string } | { mode: "multiple"; names: string[] };
 

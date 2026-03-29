@@ -1,7 +1,3 @@
-import { isTauri as isTauriApp } from "@tauri-apps/api/core";
-import type { ThemeKind } from "fss-lang";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useRef, useState } from "react";
 import {
   activeColorThemeAtom,
   activeIconThemeAtom,
@@ -16,60 +12,40 @@ import {
   showHiddenAtom,
   themesReadyAtom,
   viewerFileAtom,
-} from "./atoms";
-import {
-  isExistingDirectory,
-  parseCdCommand,
-  resolveCdPath,
-} from "./features/navigation/lib/commandLineCd";
-import { CommandPalette, useCommandPalette } from "./CommandPalette";
-import { commandRegistry } from "./commands";
-import { ActionBar } from "./components/ActionBar";
-import { CommandLine } from "./components/CommandLine";
-import { CONTAINER_SEP } from "./containerPath";
-import { DialogHolder, useDialog } from "./dialogs/dialogContext";
-import {
-  EditorContainer,
-  ViewerContainer,
-} from "./components/ExtensionContainer";
-import {
-  DEFAULT_EDITOR_FILE_SIZE_LIMIT,
-  type PanelPersistedState,
-} from "./extensions";
-import { ExtensionsPanel } from "./components/ExtensionsPanel";
-import { setFileOperationHandlers } from "./features/file-ops/model/fileOperationHandlers";
-import { isMediaFile } from "./mediaFiles";
-import { ModalDialog } from "./dialogs/ModalDialog";
-import { OPPOSITE_PANEL } from "./entities/panel/model/panelSide";
-import { PanelGroup } from "./PanelGroup";
-import { basename, normalizePath, resolveDotSegments } from "./path";
-import {
-  createFilelistTab,
-  createPreviewTab,
-  leftActiveTabIdAtom,
-  leftTabsAtom,
-  rightActiveTabIdAtom,
-  rightTabsAtom,
-} from "./entities/tab/model/tabsAtoms";
-import {
-  useWorkspacePersistenceProcess,
-  useWorkspaceRestoreProcess,
-} from "./processes/workspace-session/model/useWorkspaceSessionProcess";
-import { TerminalPanelBody, TerminalToolbar } from "./Terminal";
-import { normalizeTerminalPath } from "./terminal/path";
-import { useBuiltInCommands } from "./hooks/useBuiltInCommands";
-import { useExtensionHost } from "./hooks/useExtensionHost";
-import { useFileOperations } from "./features/file-ops/model/useFileOperations";
-import { findExistingParent, usePanel } from "./hooks/usePanel";
-import { initUserKeybindings } from "./userKeybindings";
-import { useTerminal } from "./hooks/useTerminal";
-import { useUserSettings } from "./hooks/useUserSettings";
-import {
-  editorRegistry,
-  fsProviderRegistry,
-  viewerRegistry,
-} from "./viewerEditorRegistry";
-import { useBridge } from "./hooks/useBridge";
+} from "@/atoms";
+import { CommandPalette, useCommandPalette } from "@/CommandPalette";
+import { ActionBar } from "@/components/ActionBar";
+import { CommandLine } from "@/components/CommandLine";
+import { EditorContainer, ViewerContainer } from "@/components/ExtensionContainer";
+import { ExtensionsPanel } from "@/components/ExtensionsPanel";
+import { CONTAINER_SEP } from "@/containerPath";
+import { DialogHolder, useDialog } from "@/dialogs/dialogContext";
+import { ModalDialog } from "@/dialogs/ModalDialog";
+import { OPPOSITE_PANEL } from "@/entities/panel/model/panelSide";
+import { createFilelistTab, createPreviewTab, leftActiveTabIdAtom, leftTabsAtom, rightActiveTabIdAtom, rightTabsAtom } from "@/entities/tab/model/tabsAtoms";
+import { commandRegistry } from "@/features/commands/commands";
+import { setFileOperationHandlers } from "@/features/file-ops/model/fileOperationHandlers";
+import { useFileOperations } from "@/features/file-ops/model/useFileOperations";
+import { isExistingDirectory, parseCdCommand, resolveCdPath } from "@/features/navigation/lib/commandLineCd";
+import { useUserSettings } from "@/features/settings/useUserSettings";
+import { useBridge } from "@/hooks/useBridge";
+import { useBuiltInCommands } from "@/hooks/useBuiltInCommands";
+import { useExtensionHost } from "@/hooks/useExtensionHost";
+import { findExistingParent, usePanel } from "@/hooks/usePanel";
+import { useTerminal } from "@/hooks/useTerminal";
+import { isMediaFile } from "@/mediaFiles";
+import { PanelGroup } from "@/PanelGroup";
+import { basename, normalizePath, resolveDotSegments } from "@/path";
+import { useWorkspacePersistenceProcess, useWorkspaceRestoreProcess } from "@/processes/workspace-session/model/useWorkspaceSessionProcess";
+import { TerminalPanelBody, TerminalToolbar } from "@/Terminal";
+import { normalizeTerminalPath } from "@/terminal/path";
+import { initUserKeybindings } from "@/userKeybindings";
+import { editorRegistry, fsProviderRegistry, viewerRegistry } from "@/viewerEditorRegistry";
+import type { ThemeKind } from "fss-lang";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "./features/settings/userSettings";
+import { PanelPersistedState } from "./features/ui-state/types";
 
 export function App({ widget }: { widget: React.ReactNode }) {
   const bridge = useBridge();
@@ -107,21 +83,15 @@ export function App({ widget }: { widget: React.ReactNode }) {
   const showExtensions = useAtomValue(showExtensionsAtom);
   const setActiveIconTheme = useSetAtom(activeIconThemeAtom);
   const setActiveColorTheme = useSetAtom(activeColorThemeAtom);
-  const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(
-    DEFAULT_EDITOR_FILE_SIZE_LIMIT,
-  );
+  const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
   const [leftTabs, setLeftTabs] = useAtom(leftTabsAtom);
   const [rightTabs, setRightTabs] = useAtom(rightTabsAtom);
   const [leftActiveTabId, setLeftActiveTabId] = useAtom(leftActiveTabIdAtom);
   const [rightActiveTabId, setRightActiveTabId] = useAtom(rightActiveTabIdAtom);
   const leftSelectedNameRef = useRef<string | undefined>(undefined);
   const rightSelectedNameRef = useRef<string | undefined>(undefined);
-  const leftTabSelectionRef = useRef<
-    Record<string, { selectedName?: string; topmostName?: string }>
-  >({});
-  const rightTabSelectionRef = useRef<
-    Record<string, { selectedName?: string; topmostName?: string }>
-  >({});
+  const leftTabSelectionRef = useRef<Record<string, { selectedName?: string; topmostName?: string }>>({});
+  const rightTabSelectionRef = useRef<Record<string, { selectedName?: string; topmostName?: string }>>({});
   const prevLeftActiveTabIdRef = useRef(leftActiveTabId);
   const prevRightActiveTabIdRef = useRef(rightActiveTabId);
   const loadedExtensions = useAtomValue(loadedExtensionsAtom);
@@ -139,17 +109,14 @@ export function App({ widget }: { widget: React.ReactNode }) {
   const setCommandLineOnExecute = useSetAtom(commandLineOnExecuteAtom);
   const commandLinePasteFnAtomValue = useAtomValue(commandLinePasteFnAtom);
   const commandLinePasteRef = useRef<(text: string) => void>(() => {});
-  if (commandLinePasteFnAtomValue)
-    commandLinePasteRef.current = commandLinePasteFnAtomValue;
+  if (commandLinePasteFnAtomValue) commandLinePasteRef.current = commandLinePasteFnAtomValue;
 
   // Apply non-structural settings reactively (initial load + external file changes)
   useEffect(() => {
     if (!ready) return;
     if (settings.iconTheme) setActiveIconTheme(settings.iconTheme);
-    if (settings.colorTheme !== undefined)
-      setActiveColorTheme(settings.colorTheme || undefined);
-    if (settings.editorFileSizeLimit !== undefined)
-      setEditorFileSizeLimit(settings.editorFileSizeLimit);
+    if (settings.colorTheme !== undefined) setActiveColorTheme(settings.colorTheme || undefined);
+    if (settings.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(settings.editorFileSizeLimit);
     if (settings.showHidden !== undefined) setShowHidden(settings.showHidden);
   }, [settings, ready]);
 
@@ -157,33 +124,25 @@ export function App({ widget }: { widget: React.ReactNode }) {
     initUserKeybindings(bridge);
   }, [bridge]);
 
-  const {
-    settingsLoaded,
-    initialLeftPanel,
-    initialRightPanel,
-    initialActivePanel,
-    setInitialLeftPanel,
-    setInitialRightPanel,
-    setInitialActivePanel,
-  } = useWorkspaceRestoreProcess({
-    ready,
-    setLeftTabs,
-    setRightTabs,
-    setLeftActiveTabId,
-    setRightActiveTabId,
-    leftTabSelectionRef,
-    rightTabSelectionRef,
-    prevLeftActiveTabIdRef,
-    prevRightActiveTabIdRef,
-    onAfterRestore,
-  });
+  const { settingsLoaded, initialLeftPanel, initialRightPanel, initialActivePanel, setInitialLeftPanel, setInitialRightPanel, setInitialActivePanel } =
+    useWorkspaceRestoreProcess({
+      ready,
+      setLeftTabs,
+      setRightTabs,
+      setLeftActiveTabId,
+      setRightActiveTabId,
+      leftTabSelectionRef,
+      rightTabSelectionRef,
+      prevLeftActiveTabIdRef,
+      prevRightActiveTabIdRef,
+      onAfterRestore,
+    });
 
   const activePanelRef = useRef(activePanel);
   activePanelRef.current = activePanel;
   // Points to the active panel's navigateTo so handleViewFile can enter containers.
   const activePanelNavigateRef = useRef(left.navigateTo);
-  activePanelNavigateRef.current =
-    activePanel === "left" ? left.navigateTo : right.navigateTo;
+  activePanelNavigateRef.current = activePanel === "left" ? left.navigateTo : right.navigateTo;
 
   const leftRef = useRef(left);
   leftRef.current = left;
@@ -208,8 +167,7 @@ export function App({ widget }: { widget: React.ReactNode }) {
         });
         return;
       }
-      const panel =
-        activePanelRef.current === "left" ? leftRef.current : rightRef.current;
+      const panel = activePanelRef.current === "left" ? leftRef.current : rightRef.current;
       const cwd = panel.currentPath;
 
       if (parsed.kind === "setAlias") {
@@ -232,9 +190,7 @@ export function App({ widget }: { widget: React.ReactNode }) {
           });
           return;
         }
-        const path = normalizeTerminalPath(
-          resolveDotSegments(normalizePath(raw)),
-        );
+        const path = normalizeTerminalPath(resolveDotSegments(normalizePath(raw)));
         if (!(await isExistingDirectory(bridge, path))) {
           showDialog({
             type: "message",
@@ -269,13 +225,12 @@ export function App({ widget }: { widget: React.ReactNode }) {
     setCommandLineOnExecute(() => handleCommandLineExecute);
   }, [handleCommandLineExecute, setCommandLineOnExecute]);
 
-  const {
-    handleCopy,
-    handleMove,
-    handleMoveToTrash,
-    handlePermanentDelete,
-    handleRename,
-  } = useFileOperations(activePanelRef, leftRef, rightRef, setSelectionKey);
+  const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } = useFileOperations(
+    activePanelRef,
+    leftRef,
+    rightRef,
+    setSelectionKey,
+  );
 
   useEffect(() => {
     setFileOperationHandlers({
@@ -286,13 +241,7 @@ export function App({ widget }: { widget: React.ReactNode }) {
       rename: handleRename,
       pasteToCommandLine: (text) => commandLinePasteRef.current(text),
     });
-  }, [
-    handleMoveToTrash,
-    handlePermanentDelete,
-    handleCopy,
-    handleMove,
-    handleRename,
-  ]);
+  }, [handleMoveToTrash, handlePermanentDelete, handleCopy, handleMove, handleRename]);
 
   // Set context for which panel is active
   useEffect(() => {
@@ -305,69 +254,51 @@ export function App({ widget }: { widget: React.ReactNode }) {
     commandRegistry.setContext("dialogOpen", dialog !== null);
   }, [dialog]);
 
-  const handleViewFile = useCallback(
-    (filePath: string, fileName: string, fileSize: number) => {
-      // If an fsProvider is registered for this file type, enter it like a directory.
-      if (fsProviderRegistry.resolve(basename(filePath))) {
-        void activePanelNavigateRef.current(filePath + CONTAINER_SEP);
-        return;
-      }
-      setViewerFile({
-        path: filePath,
-        name: fileName,
-        size: fileSize,
-        panel: activePanelRef.current,
-      });
-    },
-    [],
-  );
+  const handleViewFile = useCallback((filePath: string, fileName: string, fileSize: number) => {
+    // If an fsProvider is registered for this file type, enter it like a directory.
+    if (fsProviderRegistry.resolve(basename(filePath))) {
+      void activePanelNavigateRef.current(filePath + CONTAINER_SEP);
+      return;
+    }
+    setViewerFile({
+      path: filePath,
+      name: fileName,
+      size: fileSize,
+      panel: activePanelRef.current,
+    });
+  }, []);
 
-  const handleEditFile = useCallback(
-    (filePath: string, fileName: string, fileSize: number, langId: string) => {
-      setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
-    },
-    [],
-  );
+  const handleEditFile = useCallback((filePath: string, fileName: string, fileSize: number, langId: string) => {
+    setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
+  }, []);
 
-  const handleOpenCreateFileConfirm = useCallback(
-    async (filePath: string, fileName: string, langId: string) => {
-      const exists = await bridge.fs.exists(filePath);
-      if (!exists) {
-        await bridge.fs.writeFile(filePath, "");
-      }
-      const size = exists ? (await bridge.fs.stat(filePath)).size : 0;
-      setEditorFile({ path: filePath, name: fileName, size, langId });
-    },
-    [],
-  );
+  const handleOpenCreateFileConfirm = useCallback(async (filePath: string, fileName: string, langId: string) => {
+    const exists = await bridge.fs.exists(filePath);
+    if (!exists) {
+      await bridge.fs.writeFile(filePath, "");
+    }
+    const size = exists ? (await bridge.fs.stat(filePath)).size : 0;
+    setEditorFile({ path: filePath, name: fileName, size, langId });
+  }, []);
 
-  const viewerPanelEntries = viewerFile
-    ? viewerFile.panel === "left"
-      ? left.entries
-      : right.entries
-    : [];
+  const viewerPanelEntries = viewerFile ? (viewerFile.panel === "left" ? left.entries : right.entries) : [];
 
   // Helper: match a filename against simple glob patterns like "*.png"
-  const matchesPatterns = useCallback(
-    (name: string, patterns: string[]): boolean => {
-      return patterns.some((p) => {
-        if (p.startsWith("*.")) {
-          const ext = p.slice(1).toLowerCase();
-          return name.toLowerCase().endsWith(ext);
-        }
-        return name.toLowerCase() === p.toLowerCase();
-      });
-    },
-    [],
-  );
+  const matchesPatterns = useCallback((name: string, patterns: string[]): boolean => {
+    return patterns.some((p) => {
+      if (p.startsWith("*.")) {
+        const ext = p.slice(1).toLowerCase();
+        return name.toLowerCase().endsWith(ext);
+      }
+      return name.toLowerCase() === p.toLowerCase();
+    });
+  }, []);
 
   // Compute filtered & sorted file list matching given patterns from the viewer's panel
   const getMatchingFiles = useCallback(
     (patterns: string[]) => {
       if (!viewerFile) return [];
-      const entries = showHidden
-        ? viewerPanelEntries
-        : viewerPanelEntries.filter((e) => !e.meta.hidden);
+      const entries = showHidden ? viewerPanelEntries : viewerPanelEntries.filter((e) => !e.meta.hidden);
       return entries
         .filter((e) => e.type === "file" && matchesPatterns(e.name, patterns))
         .map((e) => ({
@@ -391,18 +322,14 @@ export function App({ widget }: { widget: React.ReactNode }) {
       if (command === "navigatePrev") {
         if (idx > 0) {
           const file = files[idx - 1]!;
-          setViewerFile((prev) =>
-            prev ? { ...file, panel: prev.panel } : null,
-          );
+          setViewerFile((prev) => (prev ? { ...file, panel: prev.panel } : null));
         }
         return undefined;
       }
       if (command === "navigateNext") {
         if (idx >= 0 && idx < files.length - 1) {
           const file = files[idx + 1]!;
-          setViewerFile((prev) =>
-            prev ? { ...file, panel: prev.panel } : null,
-          );
+          setViewerFile((prev) => (prev ? { ...file, panel: prev.panel } : null));
         }
         return undefined;
       }
@@ -416,21 +343,13 @@ export function App({ widget }: { widget: React.ReactNode }) {
 
   // Resolve extension for current viewer/editor file. Cache the identity so the
   // overlay + iframe persist after the file is closed, enabling iframe reuse.
-  const viewerResolved = viewerFile
-    ? viewerRegistry.resolve(viewerFile.name)
-    : null;
-  const editorResolved = editorFile
-    ? editorRegistry.resolve(editorFile.name)
-    : null;
+  const viewerResolved = viewerFile ? viewerRegistry.resolve(viewerFile.name) : null;
+  const editorResolved = editorFile ? editorRegistry.resolve(editorFile.name) : null;
 
   useEffect(() => {
     if (!viewerResolved) return;
     setViewerExt((prev) => {
-      if (
-        prev?.dirPath === viewerResolved.extensionDirPath &&
-        prev?.entry === viewerResolved.contribution.entry
-      )
-        return prev;
+      if (prev?.dirPath === viewerResolved.extensionDirPath && prev?.entry === viewerResolved.contribution.entry) return prev;
       return {
         dirPath: viewerResolved.extensionDirPath,
         entry: viewerResolved.contribution.entry,
@@ -441,11 +360,7 @@ export function App({ widget }: { widget: React.ReactNode }) {
   useEffect(() => {
     if (!editorResolved) return;
     setEditorExt((prev) => {
-      if (
-        prev?.dirPath === editorResolved.extensionDirPath &&
-        prev?.entry === editorResolved.contribution.entry
-      )
-        return prev;
+      if (prev?.dirPath === editorResolved.extensionDirPath && prev?.entry === editorResolved.contribution.entry) return prev;
       return {
         dirPath: editorResolved.extensionDirPath,
         entry: editorResolved.contribution.entry,
@@ -453,14 +368,9 @@ export function App({ widget }: { widget: React.ReactNode }) {
     });
   }, [editorResolved?.extensionDirPath, editorResolved?.contribution.entry]);
 
-  const viewerActiveName =
-    viewerFile && isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
-  const leftRequestedCursor =
-    left.requestedCursor ??
-    (viewerFile?.panel === "left" ? viewerActiveName : undefined);
-  const rightRequestedCursor =
-    right.requestedCursor ??
-    (viewerFile?.panel === "right" ? viewerActiveName : undefined);
+  const viewerActiveName = viewerFile && isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
+  const leftRequestedCursor = left.requestedCursor ?? (viewerFile?.panel === "left" ? viewerActiveName : undefined);
+  const rightRequestedCursor = right.requestedCursor ?? (viewerFile?.panel === "right" ? viewerActiveName : undefined);
 
   const { handlePanelStateChange } = useWorkspacePersistenceProcess({
     activePanel,
@@ -485,16 +395,10 @@ export function App({ widget }: { widget: React.ReactNode }) {
     const side = activePanelRef.current;
     const opposite = OPPOSITE_PANEL[side];
     const path = side === "left" ? left.currentPath : right.currentPath;
-    const activeTabId = (
-      opposite === "left" ? leftActiveTabIdRef : rightActiveTabIdRef
-    ).current;
+    const activeTabId = (opposite === "left" ? leftActiveTabIdRef : rightActiveTabIdRef).current;
     const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
     const panel = opposite === "left" ? left : right;
-    setTabs((prev) =>
-      prev.map((t) =>
-        t.id === activeTabId && t.type === "filelist" ? { ...t, path } : t,
-      ),
-    );
+    setTabs((prev) => prev.map((t) => (t.id === activeTabId && t.type === "filelist" ? { ...t, path } : t)));
     panel.navigateTo(path);
     setActivePanel(opposite);
   }, [left.currentPath, right.currentPath, left, right]);
@@ -505,8 +409,7 @@ export function App({ widget }: { widget: React.ReactNode }) {
     const path = side === "left" ? left.currentPath : right.currentPath;
     const newTab = createFilelistTab(path);
     const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
-    const setActiveId =
-      opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
+    const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
     const panel = opposite === "left" ? left : right;
     setTabs((prev) => [...prev, newTab]);
     setActiveId(newTab.id);
@@ -517,26 +420,15 @@ export function App({ widget }: { widget: React.ReactNode }) {
   const handleOpenSelectedFolderInOppositeCurrentTab = useCallback(() => {
     const side = activePanelRef.current;
     const entries = side === "left" ? left.entries : right.entries;
-    const selectedName =
-      side === "left"
-        ? leftSelectedNameRef.current
-        : rightSelectedNameRef.current;
-    const entry = selectedName
-      ? entries.find((e) => e.name === selectedName)
-      : undefined;
+    const selectedName = side === "left" ? leftSelectedNameRef.current : rightSelectedNameRef.current;
+    const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
     if (!entry || entry.type !== "folder") return;
     const path = entry.path as string;
     const opposite = OPPOSITE_PANEL[side];
-    const activeTabId = (
-      opposite === "left" ? leftActiveTabIdRef : rightActiveTabIdRef
-    ).current;
+    const activeTabId = (opposite === "left" ? leftActiveTabIdRef : rightActiveTabIdRef).current;
     const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
     const panel = opposite === "left" ? left : right;
-    setTabs((prev) =>
-      prev.map((t) =>
-        t.id === activeTabId && t.type === "filelist" ? { ...t, path } : t,
-      ),
-    );
+    setTabs((prev) => prev.map((t) => (t.id === activeTabId && t.type === "filelist" ? { ...t, path } : t)));
     panel.navigateTo(path);
     setActivePanel(opposite);
   }, [left.entries, right.entries, left, right]);
@@ -544,20 +436,14 @@ export function App({ widget }: { widget: React.ReactNode }) {
   const handleOpenSelectedFolderInOppositeNewTab = useCallback(() => {
     const side = activePanelRef.current;
     const entries = side === "left" ? left.entries : right.entries;
-    const selectedName =
-      side === "left"
-        ? leftSelectedNameRef.current
-        : rightSelectedNameRef.current;
-    const entry = selectedName
-      ? entries.find((e) => e.name === selectedName)
-      : undefined;
+    const selectedName = side === "left" ? leftSelectedNameRef.current : rightSelectedNameRef.current;
+    const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
     if (!entry || entry.type !== "folder") return;
     const path = entry.path as string;
     const opposite = OPPOSITE_PANEL[side];
     const newTab = createFilelistTab(path);
     const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
-    const setActiveId =
-      opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
+    const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
     const panel = opposite === "left" ? left : right;
     setTabs((prev) => [...prev, newTab]);
     setActiveId(newTab.id);
@@ -568,13 +454,8 @@ export function App({ widget }: { widget: React.ReactNode }) {
   const handlePreviewInOppositePanel = useCallback(() => {
     const side = activePanelRef.current;
     const entries = side === "left" ? left.entries : right.entries;
-    const selectedName =
-      side === "left"
-        ? leftSelectedNameRef.current
-        : rightSelectedNameRef.current;
-    const entry = selectedName
-      ? entries.find((e) => e.name === selectedName)
-      : undefined;
+    const selectedName = side === "left" ? leftSelectedNameRef.current : rightSelectedNameRef.current;
+    const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
     if (!entry || entry.type !== "file") return;
     const path = entry.path as string;
     const name = entry.name;
@@ -583,16 +464,11 @@ export function App({ widget }: { widget: React.ReactNode }) {
     const opposite = OPPOSITE_PANEL[side];
     const tabs = (opposite === "left" ? leftTabsRef : rightTabsRef).current;
     const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
-    const setActiveId =
-      opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
+    const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
 
     const tempTab = tabs.find((t) => t.type === "preview" && t.isTemp);
     if (tempTab && tempTab.type === "preview") {
-      setTabs((prev) =>
-        prev.map((t) =>
-          t.id === tempTab.id ? { ...t, path, name, size, sourcePanel } : t,
-        ),
-      );
+      setTabs((prev) => prev.map((t) => (t.id === tempTab.id ? { ...t, path, name, size, sourcePanel } : t)));
       setActiveId(tempTab.id);
     } else {
       const newTab = createPreviewTab(path, name, size, sourcePanel);
@@ -606,8 +482,6 @@ export function App({ widget }: { widget: React.ReactNode }) {
     bridge.theme.get().then((t) => setTheme(t as ThemeKind));
     return bridge.theme.onChange((t) => setTheme(t as ThemeKind));
   }, []);
-
-  const isBrowser = !isTauriApp();
 
   const leftPathRef = useRef(left.currentPath);
   leftPathRef.current = left.currentPath;
@@ -645,8 +519,7 @@ export function App({ widget }: { widget: React.ReactNode }) {
       const idx = prev.findIndex((t) => t.id === leftActiveTabId);
       if (idx < 0) return prev;
       const tab = prev[idx];
-      if (tab?.type !== "filelist" || tab.path === left.currentPath)
-        return prev;
+      if (tab?.type !== "filelist" || tab.path === left.currentPath) return prev;
       const next = [...prev];
       next[idx] = { ...tab, path: left.currentPath };
       return next;
@@ -659,8 +532,7 @@ export function App({ widget }: { widget: React.ReactNode }) {
       const idx = prev.findIndex((t) => t.id === rightActiveTabId);
       if (idx < 0) return prev;
       const tab = prev[idx];
-      if (tab?.type !== "filelist" || tab.path === right.currentPath)
-        return prev;
+      if (tab?.type !== "filelist" || tab.path === right.currentPath) return prev;
       const next = [...prev];
       next[idx] = { ...tab, path: right.currentPath };
       return next;
@@ -671,22 +543,7 @@ export function App({ widget }: { widget: React.ReactNode }) {
   useEffect(() => {
     if (!settingsLoaded) return;
 
-    const browserPath = (() => {
-      if (!isBrowser) return "";
-      const url = new URL(window.location.href);
-      const queryPath = url.searchParams.get("path");
-      if (queryPath) return queryPath;
-      const pathName = decodeURIComponent(url.pathname);
-      return pathName.length > 1 ? pathName : "";
-    })();
-
-    const hasUrlPath = browserPath.length > 0;
-
-    const navigatePanel = async (
-      panel: typeof left,
-      persistedState: PanelPersistedState | undefined,
-      fallbackPath?: string,
-    ) => {
+    const navigatePanel = async (panel: typeof left, persistedState: PanelPersistedState | undefined, fallbackPath?: string) => {
       let targetPath = persistedState?.currentPath ?? fallbackPath;
 
       if (targetPath) {
@@ -703,23 +560,10 @@ export function App({ widget }: { widget: React.ReactNode }) {
       await panel.navigateTo(targetPath);
     };
 
-    if (hasUrlPath) {
-      bridge.fs.exists(browserPath).then(async (exists) => {
-        if (exists) {
-          left.navigateTo(browserPath);
-        } else {
-          const parent = await findExistingParent(bridge, browserPath);
-          left.navigateTo(parent);
-          showError(`Directory not found: ${browserPath}`);
-        }
-      });
-      navigatePanel(right, initialRightPanel);
-    } else {
-      navigatePanel(left, initialLeftPanel);
-      navigatePanel(right, initialRightPanel);
-      if (initialActivePanel) {
-        setActivePanel(initialActivePanel);
-      }
+    navigatePanel(left, initialLeftPanel);
+    navigatePanel(right, initialRightPanel);
+    if (initialActivePanel) {
+      setActivePanel(initialActivePanel);
     }
 
     // Clear initial state after first navigation to prevent cursor jumping
@@ -741,15 +585,11 @@ export function App({ widget }: { widget: React.ReactNode }) {
   });
 
   const onNavigatePanel = useCallback((path: string) => {
-    (activePanelRef.current === "left"
-      ? leftRef.current
-      : rightRef.current
-    ).navigateTo(path);
+    (activePanelRef.current === "left" ? leftRef.current : rightRef.current).navigateTo(path);
   }, []);
 
   const terminal = useTerminal({
-    activePanelCwd:
-      activePanel === "left" ? left.currentPath : right.currentPath,
+    activePanelCwd: activePanel === "left" ? left.currentPath : right.currentPath,
     onNavigatePanel,
   });
   activeCwdForExecuteRef.current = terminal.activeCwd;
@@ -758,14 +598,10 @@ export function App({ widget }: { widget: React.ReactNode }) {
     leftRef,
     rightRef,
     onPreviewInOppositePanel: handlePreviewInOppositePanel,
-    onOpenCurrentFolderInOppositeCurrentTab:
-      handleOpenCurrentFolderInOppositeCurrentTab,
-    onOpenCurrentFolderInOppositeNewTab:
-      handleOpenCurrentFolderInOppositeNewTab,
-    onOpenSelectedFolderInOppositeCurrentTab:
-      handleOpenSelectedFolderInOppositeCurrentTab,
-    onOpenSelectedFolderInOppositeNewTab:
-      handleOpenSelectedFolderInOppositeNewTab,
+    onOpenCurrentFolderInOppositeCurrentTab: handleOpenCurrentFolderInOppositeCurrentTab,
+    onOpenCurrentFolderInOppositeNewTab: handleOpenCurrentFolderInOppositeNewTab,
+    onOpenSelectedFolderInOppositeCurrentTab: handleOpenSelectedFolderInOppositeCurrentTab,
+    onOpenSelectedFolderInOppositeNewTab: handleOpenSelectedFolderInOppositeNewTab,
     onOpenCreateFileConfirm: handleOpenCreateFileConfirm,
     showDialog,
     onViewFile: handleViewFile,
@@ -773,17 +609,6 @@ export function App({ widget }: { widget: React.ReactNode }) {
     onExecuteInTerminal: (cmd) => terminal.writeToTerminal(cmd),
     editorFileSizeLimit,
   });
-
-  const activePath =
-    activePanel === "left" ? left.currentPath : right.currentPath;
-  useEffect(() => {
-    if (isBrowser && activePath) {
-      const url = new URL(window.location.href);
-      url.pathname = "/";
-      url.search = `?path=${encodeURIComponent(activePath)}`;
-      history.replaceState(null, "", url.toString());
-    }
-  }, [activePath]);
 
   useEffect(() => {
     if (bridge.onReconnect) {
@@ -802,37 +627,27 @@ export function App({ widget }: { widget: React.ReactNode }) {
     <div className="app">
       <>
         <div className="terminal-and-panels">
-          <div
-            className={`terminal-background${panelsVisible ? "" : " expanded"}`}
-          >
+          <div className={`terminal-background${panelsVisible ? "" : " expanded"}`}>
             <TerminalPanelBody />
           </div>
           <div className={`panels-overlay${panelsVisible ? "" : " hidden"}`}>
             <PanelGroup
               side="left"
               panel={left}
-              onRememberExpectedTerminalCwd={
-                terminal.rememberExpectedTerminalCwd
-              }
+              onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
               selectionKey={selectionKey}
               requestedActiveName={leftRequestedCursor}
               initialPanelState={initialLeftPanel}
-              onStateChange={(sel, top) =>
-                handlePanelStateChange("left", sel, top)
-              }
+              onStateChange={(sel, top) => handlePanelStateChange("left", sel, top)}
             />
             <PanelGroup
               side="right"
               panel={right}
-              onRememberExpectedTerminalCwd={
-                terminal.rememberExpectedTerminalCwd
-              }
+              onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
               selectionKey={selectionKey}
               requestedActiveName={rightRequestedCursor}
               initialPanelState={initialRightPanel}
-              onStateChange={(sel, top) =>
-                handlePanelStateChange("right", sel, top)
-              }
+              onStateChange={(sel, top) => handlePanelStateChange("right", sel, top)}
             />
           </div>
         </div>
@@ -872,12 +687,8 @@ export function App({ widget }: { widget: React.ReactNode }) {
       )}
       {editorExt &&
         (() => {
-          const allLanguages = loadedExtensions.flatMap(
-            (e) => e.languages ?? [],
-          );
-          const allGrammarRefs = loadedExtensions.flatMap(
-            (e) => e.grammarRefs ?? [],
-          );
+          const allLanguages = loadedExtensions.flatMap((e) => e.languages ?? []);
+          const allGrammarRefs = loadedExtensions.flatMap((e) => e.grammarRefs ?? []);
           const grammars = allGrammarRefs.map((gr) => ({
             contribution: gr.contribution,
             path: gr.path,
@@ -899,10 +710,7 @@ export function App({ widget }: { widget: React.ReactNode }) {
         })()}
       {showExtensions && <ExtensionsPanel />}
       <DialogHolder />
-      <CommandPalette
-        open={commandPalette.open}
-        onOpenChange={commandPalette.setOpen}
-      />
+      <CommandPalette open={commandPalette.open} onOpenChange={commandPalette.setOpen} />
     </div>
   );
 }

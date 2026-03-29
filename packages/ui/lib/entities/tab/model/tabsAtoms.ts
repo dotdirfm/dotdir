@@ -1,7 +1,7 @@
+import { activePanelAtom } from "@/atoms";
+import type { PanelTab } from "@/components/FileList/PanelTabs";
+import type { PanelSide } from "@/entities/panel/model/types";
 import { atom } from "jotai";
-import { activePanelAtom } from "../../../atoms";
-import type { PanelTab } from "../../../components/FileList/PanelTabs";
-import type { PanelSide } from "../../panel/model/types";
 
 let nextTabId = 0;
 export function genTabId(): string {

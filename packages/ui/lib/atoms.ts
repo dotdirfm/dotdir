@@ -1,8 +1,8 @@
-import { atom } from "jotai";
-import type { LoadedExtension } from "./extensions";
+import type { PanelSide } from "@/entities/panel/model/types";
+import type { LoadedExtension } from "@/features/extensions/extensions";
+import { TerminalProfile } from "@/shared/api/bridge";
 import type { ThemeKind } from "fss-lang";
-import type { PanelSide } from "./entities/panel/model/types";
-import { TerminalProfile } from "./shared/api/bridge";
+import { atom } from "jotai";
 
 export const showExtensionsAtom = atom(false);
 export const activeIconThemeAtom = atom<string | undefined>(undefined);

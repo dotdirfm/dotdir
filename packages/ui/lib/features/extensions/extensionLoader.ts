@@ -4,9 +4,9 @@
  * the extension renders into a provided mount root.
  */
 
+import { readFileText } from "@/fs";
+import { join, normalizePath } from "@/path";
 import { Bridge } from "@/shared/api/bridge";
-import { readFileText } from "./fs";
-import { join, normalizePath } from "./path";
 
 /** Normalize entry to a relative path (e.g. "./viewer.js" -> "viewer.js"). */
 function normalizeEntryPath(entry: string): string {

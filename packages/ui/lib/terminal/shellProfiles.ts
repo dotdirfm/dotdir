@@ -1,5 +1,5 @@
-import type { LoadedExtension } from "../extensions";
-import { Bridge, CwdEscapeMode, TerminalProfile } from "../shared/api/bridge";
+import type { LoadedExtension } from "@/features/extensions/extensions";
+import { Bridge, CwdEscapeMode, TerminalProfile } from "@/shared/api/bridge";
 
 export interface ShellProfilesResult {
   profiles: TerminalProfile[];

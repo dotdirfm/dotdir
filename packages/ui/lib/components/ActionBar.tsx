@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
-import { commandRegistry, type Command, type Keybinding } from "../commands";
+import { commandRegistry, type Command, type Keybinding } from "@/features/commands/commands";
+import { useCallback, useEffect, useState } from "react";
 
 interface ActionBarItem {
   fKey: number;

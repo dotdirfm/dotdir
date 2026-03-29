@@ -1,21 +1,16 @@
-import { FsNode } from "fss-lang";
+import { actionQueue } from "@/actionQueue";
+import { commandRegistry } from "@/features/commands/commands";
+import { getFileOperationHandlers } from "@/features/file-ops/model/fileOperationHandlers";
+import { setActiveFileListHandlers } from "@/fileListHandlers";
+import { resolveEntryStyle } from "@/fss";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { onIconThemeChange, useGetCachedIcon, useLoadIconsForPaths, useResolveIcon } from "@/iconResolver";
+import { dirname, join } from "@/path";
+import type { ResolvedEntryStyle } from "@/types";
+import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
 import type { LayeredResolver } from "fss-lang";
+import { FsNode } from "fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { actionQueue } from "../../actionQueue";
-import { commandRegistry } from "../../commands";
-import { setActiveFileListHandlers } from "../../fileListHandlers";
-import { getFileOperationHandlers } from "../../features/file-ops/model/fileOperationHandlers";
-import { viewerRegistry, editorRegistry } from "../../viewerEditorRegistry";
-import { resolveEntryStyle } from "../../fss";
-import type { ResolvedEntryStyle } from "../../types";
-import {
-  useResolveIcon,
-  useLoadIconsForPaths,
-  useGetCachedIcon,
-  onIconThemeChange,
-} from "../../iconResolver";
-import { dirname, join } from "../../path";
-import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
 
@@ -31,10 +26,7 @@ interface FileListProps {
   resolver: LayeredResolver;
   requestedActiveName?: string;
   requestedTopmostName?: string;
-  onStateChange?: (
-    selectedName: string | undefined,
-    topmostName: string | undefined,
-  ) => void;
+  onStateChange?: (selectedName: string | undefined, topmostName: string | undefined) => void;
 }
 
 interface NavigationState {
@@ -57,8 +49,7 @@ function formatSize(sizeValue: unknown): string {
   else return "";
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} K`;
-  if (size < 1024 * 1024 * 1024)
-    return `${(size / (1024 * 1024)).toFixed(1)} M`;
+  if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} M`;
   return `${(size / (1024 * 1024 * 1024)).toFixed(1)} G`;
 }
 
@@ -90,9 +81,7 @@ export const FileList = memo(function FileList({
   const [maxItemsPerColumn, setMaxItemsPerColumn] = useState(1);
   const [columnCount, setColumnCount] = useState(1);
   const [iconsVersion, setIconsVersion] = useState(0);
-  const [selectedNames, setSelectedNames] = useState<ReadonlySet<string>>(
-    new Set(),
-  );
+  const [selectedNames, setSelectedNames] = useState<ReadonlySet<string>>(new Set());
   const [keyboardNavMode, setKeyboardNavMode] = useState(false);
   const keyboardNavModeRef = useRef(keyboardNavMode);
   keyboardNavModeRef.current = keyboardNavMode;
@@ -139,14 +128,7 @@ export const FileList = memo(function FileList({
       entry = { ...entry, parent: parentNode };
       const style = resolveEntryStyle(resolver, entry);
       const isDir = entry.type === "folder";
-      const resolved = resolveIcon(
-        entry.name,
-        isDir,
-        false,
-        false,
-        entry.lang,
-        style.icon,
-      );
+      const resolved = resolveIcon(entry.name, isDir, false, false, entry.lang, style.icon);
       return {
         entry,
         style,
@@ -155,10 +137,8 @@ export const FileList = memo(function FileList({
       };
     });
     withStyle.sort((a, b) => {
-      if (a.style.groupFirst !== b.style.groupFirst)
-        return a.style.groupFirst ? -1 : 1;
-      if (a.style.sortPriority !== b.style.sortPriority)
-        return b.style.sortPriority - a.style.sortPriority;
+      if (a.style.groupFirst !== b.style.groupFirst) return a.style.groupFirst ? -1 : 1;
+      if (a.style.sortPriority !== b.style.sortPriority) return b.style.sortPriority - a.style.sortPriority;
       return a.entry.name.localeCompare(b.entry.name);
     });
     return withStyle;
@@ -231,12 +211,8 @@ export const FileList = memo(function FileList({
 
       if (savedState) {
         // Restore from stack
-        const selectedIdx = displayEntries.findIndex(
-          (d) => d.entry.name === savedState.selectedName,
-        );
-        const topmostIdx = displayEntries.findIndex(
-          (d) => d.entry.name === savedState.topmostName,
-        );
+        const selectedIdx = displayEntries.findIndex((d) => d.entry.name === savedState.selectedName);
+        const topmostIdx = displayEntries.findIndex((d) => d.entry.name === savedState.topmostName);
         setActiveIndex(selectedIdx >= 0 ? selectedIdx : 0);
         setTopmostIndex(topmostIdx >= 0 ? topmostIdx : 0);
         return;
@@ -285,10 +261,8 @@ export const FileList = memo(function FileList({
     if (!onStateChangeRef.current) return;
     clearTimeout(stateChangeTimerRef.current);
     stateChangeTimerRef.current = setTimeout(() => {
-      const selectedName =
-        displayEntriesRef.current[activeIndexRef.current]?.entry.name;
-      const topmostName =
-        displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
+      const selectedName = displayEntriesRef.current[activeIndexRef.current]?.entry.name;
+      const topmostName = displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
       onStateChangeRef.current?.(selectedName, topmostName);
     }, 150);
   }, [activeIndex, topmostIndex, displayEntries]);
@@ -298,10 +272,8 @@ export const FileList = memo(function FileList({
     return () => {
       clearTimeout(stateChangeTimerRef.current);
       if (!onStateChangeRef.current) return;
-      const selectedName =
-        displayEntriesRef.current[activeIndexRef.current]?.entry.name;
-      const topmostName =
-        displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
+      const selectedName = displayEntriesRef.current[activeIndexRef.current]?.entry.name;
+      const topmostName = displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
       onStateChangeRef.current(selectedName, topmostName);
     };
   }, []);
@@ -313,35 +285,30 @@ export const FileList = memo(function FileList({
   // Selection helpers
   type SelectionType = "include-active" | "exclude-active";
 
-  const applySelection = useCallback(
-    (oldIndex: number, newIndex: number, selectType: SelectionType) => {
-      const entries = displayEntriesRef.current;
-      if (prevSelectRef.current === undefined) {
-        const currentName = entries[oldIndex]?.entry.name;
-        prevSelectRef.current = currentName
-          ? !selectedNamesRef.current.has(currentName)
-          : true;
+  const applySelection = useCallback((oldIndex: number, newIndex: number, selectType: SelectionType) => {
+    const entries = displayEntriesRef.current;
+    if (prevSelectRef.current === undefined) {
+      const currentName = entries[oldIndex]?.entry.name;
+      prevSelectRef.current = currentName ? !selectedNamesRef.current.has(currentName) : true;
+    }
+    const selecting = prevSelectRef.current;
+    const lo = Math.min(oldIndex, newIndex);
+    const hi = Math.max(oldIndex, newIndex);
+
+    setSelectedNames((prev) => {
+      const next = new Set(prev);
+      for (let i = lo; i <= hi; i++) {
+        if (selectType === "exclude-active" && i === newIndex) continue;
+        const name = entries[i]?.entry.name;
+        if (!name) continue;
+        if (selecting) next.add(name);
+        else next.delete(name);
       }
-      const selecting = prevSelectRef.current;
-      const lo = Math.min(oldIndex, newIndex);
-      const hi = Math.max(oldIndex, newIndex);
+      return next;
+    });
 
-      setSelectedNames((prev) => {
-        const next = new Set(prev);
-        for (let i = lo; i <= hi; i++) {
-          if (selectType === "exclude-active" && i === newIndex) continue;
-          const name = entries[i]?.entry.name;
-          if (!name) continue;
-          if (selecting) next.add(name);
-          else next.delete(name);
-        }
-        return next;
-      });
-
-      setActiveIndex(clamp(newIndex, 0, entries.length - 1));
-    },
-    [],
-  );
+    setActiveIndex(clamp(newIndex, 0, entries.length - 1));
+  }, []);
 
   // Reset shift selection state on keyup
   useEffect(() => {
@@ -366,10 +333,8 @@ export const FileList = memo(function FileList({
       await onNavigateRef.current(dirname(currentPathRef.current));
     } else if (entry.type === "folder") {
       // Save current state to navigation stack before entering folder
-      const selectedName =
-        displayEntriesRef.current[activeIndexRef.current]?.entry.name;
-      const topmostName =
-        displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
+      const selectedName = displayEntriesRef.current[activeIndexRef.current]?.entry.name;
+      const topmostName = displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
       if (selectedName) {
         navStackRef.current.push({
           path: currentPathRef.current,
@@ -379,19 +344,11 @@ export const FileList = memo(function FileList({
       }
       await onNavigateRef.current(join(currentPathRef.current, entry.name));
     } else if (entry.type === "file") {
-      void commandRegistry.executeCommand(
-        "dotdir.viewFile",
-        entry.path as string,
-        entry.name,
-        Number(entry.meta.size),
-      );
+      void commandRegistry.executeCommand("dotdir.viewFile", entry.path as string, entry.name, Number(entry.meta.size));
     }
   }, []);
 
-  const displayedItems = Math.min(
-    displayEntries.length,
-    maxItemsPerColumn * columnCount,
-  );
+  const displayedItems = Math.min(displayEntries.length, maxItemsPerColumn * columnCount);
   const maxItemsPerColumnRef = useRef(maxItemsPerColumn);
   maxItemsPerColumnRef.current = maxItemsPerColumn;
   const displayedItemsRef = useRef(displayedItems);
@@ -401,8 +358,7 @@ export const FileList = memo(function FileList({
     setTopmostIndex((t) => {
       const totalVisible = maxItemsPerColumn * columnCount;
       if (activeIndex < t) return activeIndex;
-      if (activeIndex > t + totalVisible - 1)
-        return activeIndex - totalVisible + 1;
+      if (activeIndex > t + totalVisible - 1) return activeIndex - totalVisible + 1;
       return t;
     });
   }, [activeIndex, maxItemsPerColumn, columnCount]);
@@ -411,23 +367,14 @@ export const FileList = memo(function FileList({
   const updateSelectionContext = useCallback(() => {
     const item = displayEntriesRef.current[activeIndexRef.current];
     const isFile = item?.entry.type === "file";
-    const isExecutable =
-      isFile &&
-      item != null &&
-      !!(item.entry.meta as { executable?: boolean }).executable;
+    const isExecutable = isFile && item != null && !!(item.entry.meta as { executable?: boolean }).executable;
     const fileName = item?.entry.name ?? "";
     commandRegistry.beginBatch();
     commandRegistry.setContext("listItemIsFile", isFile);
     commandRegistry.setContext("listItemIsFolder", !isFile && item != null);
     commandRegistry.setContext("listItemIsExecutable", isExecutable);
-    commandRegistry.setContext(
-      "listItemHasViewer",
-      isFile && viewerRegistry.resolve(fileName) !== null,
-    );
-    commandRegistry.setContext(
-      "listItemHasEditor",
-      isFile && editorRegistry.resolve(fileName) !== null,
-    );
+    commandRegistry.setContext("listItemHasViewer", isFile && viewerRegistry.resolve(fileName) !== null);
+    commandRegistry.setContext("listItemHasEditor", isFile && editorRegistry.resolve(fileName) !== null);
     commandRegistry.endBatch();
   }, []);
 
@@ -459,9 +406,7 @@ export const FileList = memo(function FileList({
       cursorDown: () =>
         actionQueue.enqueue(() => {
           markKeyboardNav();
-          setActiveIndex((i) =>
-            Math.min(displayEntriesRef.current.length - 1, i + 1),
-          );
+          setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + 1));
         }),
       cursorLeft: () =>
         actionQueue.enqueue(() => {
@@ -471,12 +416,7 @@ export const FileList = memo(function FileList({
       cursorRight: () =>
         actionQueue.enqueue(() => {
           markKeyboardNav();
-          setActiveIndex((i) =>
-            Math.min(
-              displayEntriesRef.current.length - 1,
-              i + maxItemsPerColumnRef.current,
-            ),
-          );
+          setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + maxItemsPerColumnRef.current));
         }),
       cursorHome: () =>
         actionQueue.enqueue(() => {
@@ -496,23 +436,14 @@ export const FileList = memo(function FileList({
       cursorPageDown: () =>
         actionQueue.enqueue(() => {
           markKeyboardNav();
-          setActiveIndex((i) =>
-            Math.min(
-              displayEntriesRef.current.length - 1,
-              i + displayedItemsRef.current - 1,
-            ),
-          );
+          setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + displayedItemsRef.current - 1));
         }),
       selectUp: () =>
         actionQueue.enqueue(() => {
           markKeyboardNav();
           const cur = activeIndexRef.current;
           const target = Math.max(0, cur - 1);
-          applySelection(
-            cur,
-            target,
-            cur === 0 ? "include-active" : "exclude-active",
-          );
+          applySelection(cur, target, cur === 0 ? "include-active" : "exclude-active");
         }),
       selectDown: () =>
         actionQueue.enqueue(() => {
@@ -520,34 +451,19 @@ export const FileList = memo(function FileList({
           const cur = activeIndexRef.current;
           const last = displayEntriesRef.current.length - 1;
           const target = Math.min(last, cur + 1);
-          applySelection(
-            cur,
-            target,
-            cur === last ? "include-active" : "exclude-active",
-          );
+          applySelection(cur, target, cur === last ? "include-active" : "exclude-active");
         }),
       selectLeft: () =>
         actionQueue.enqueue(() => {
           markKeyboardNav();
           const cur = activeIndexRef.current;
-          applySelection(
-            cur,
-            Math.max(0, cur - maxItemsPerColumnRef.current),
-            "include-active",
-          );
+          applySelection(cur, Math.max(0, cur - maxItemsPerColumnRef.current), "include-active");
         }),
       selectRight: () =>
         actionQueue.enqueue(() => {
           markKeyboardNav();
           const cur = activeIndexRef.current;
-          applySelection(
-            cur,
-            Math.min(
-              displayEntriesRef.current.length - 1,
-              cur + maxItemsPerColumnRef.current,
-            ),
-            "include-active",
-          );
+          applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + maxItemsPerColumnRef.current), "include-active");
         }),
       selectHome: () =>
         actionQueue.enqueue(() => {
@@ -557,44 +473,26 @@ export const FileList = memo(function FileList({
       selectEnd: () =>
         actionQueue.enqueue(() => {
           markKeyboardNav();
-          applySelection(
-            activeIndexRef.current,
-            displayEntriesRef.current.length - 1,
-            "include-active",
-          );
+          applySelection(activeIndexRef.current, displayEntriesRef.current.length - 1, "include-active");
         }),
       selectPageUp: () =>
         actionQueue.enqueue(() => {
           markKeyboardNav();
           const cur = activeIndexRef.current;
-          applySelection(
-            cur,
-            Math.max(0, cur - displayedItemsRef.current + 1),
-            "include-active",
-          );
+          applySelection(cur, Math.max(0, cur - displayedItemsRef.current + 1), "include-active");
         }),
       selectPageDown: () =>
         actionQueue.enqueue(() => {
           markKeyboardNav();
           const cur = activeIndexRef.current;
-          applySelection(
-            cur,
-            Math.min(
-              displayEntriesRef.current.length - 1,
-              cur + displayedItemsRef.current - 1,
-            ),
-            "include-active",
-          );
+          applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + displayedItemsRef.current - 1), "include-active");
         }),
       execute: () =>
         actionQueue.enqueue(async () => {
           const item = displayEntriesRef.current[activeIndexRef.current];
           if (!item || item.entry.type !== "file") return;
           if (!(item.entry.meta as { executable?: boolean }).executable) return;
-          void commandRegistry.executeCommand(
-            "terminal.execute",
-            item.entry.path as string,
-          );
+          void commandRegistry.executeCommand("terminal.execute", item.entry.path as string);
         }),
       open: () =>
         actionQueue.enqueue(async () => {
@@ -605,29 +503,15 @@ export const FileList = memo(function FileList({
         actionQueue.enqueue(() => {
           const item = displayEntriesRef.current[activeIndexRef.current];
           if (item && item.entry.type === "file") {
-            void commandRegistry.executeCommand(
-              "dotdir.viewFile",
-              item.entry.path as string,
-              item.entry.name,
-              Number(item.entry.meta.size),
-            );
+            void commandRegistry.executeCommand("dotdir.viewFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
           }
         }),
       editFile: () =>
         actionQueue.enqueue(() => {
           const item = displayEntriesRef.current[activeIndexRef.current];
           if (item && item.entry.type === "file") {
-            const langId =
-              typeof item.entry.lang === "string" && item.entry.lang
-                ? item.entry.lang
-                : "plaintext";
-            void commandRegistry.executeCommand(
-              "dotdir.editFile",
-              item.entry.path as string,
-              item.entry.name,
-              Number(item.entry.meta.size),
-              langId,
-            );
+            const langId = typeof item.entry.lang === "string" && item.entry.lang ? item.entry.lang : "plaintext";
+            void commandRegistry.executeCommand("dotdir.editFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size), langId);
           }
         }),
       moveToTrash: () =>
@@ -639,9 +523,7 @@ export const FileList = memo(function FileList({
           const refresh = () => onNavigateRef.current(currentPathRef.current);
           const sourcePaths =
             selected.size > 0
-              ? all
-                  .filter((d) => selected.has(d.entry.name))
-                  .map((d) => d.entry.path as string)
+              ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
               : (() => {
                   const item = all[activeIndexRef.current];
                   return item ? [item.entry.path as string] : [];
@@ -658,9 +540,7 @@ export const FileList = memo(function FileList({
           const refresh = () => onNavigateRef.current(currentPathRef.current);
           const sourcePaths =
             selected.size > 0
-              ? all
-                  .filter((d) => selected.has(d.entry.name))
-                  .map((d) => d.entry.path as string)
+              ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
               : (() => {
                   const item = all[activeIndexRef.current];
                   return item ? [item.entry.path as string] : [];
@@ -677,9 +557,7 @@ export const FileList = memo(function FileList({
           const refresh = () => onNavigateRef.current(currentPathRef.current);
           const sourcePaths =
             selected.size > 0
-              ? all
-                  .filter((d) => selected.has(d.entry.name))
-                  .map((d) => d.entry.path as string)
+              ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
               : (() => {
                   const item = all[activeIndexRef.current];
                   return item ? [item.entry.path as string] : [];
@@ -696,9 +574,7 @@ export const FileList = memo(function FileList({
           const refresh = () => onNavigateRef.current(currentPathRef.current);
           const sourcePaths =
             selected.size > 0
-              ? all
-                  .filter((d) => selected.has(d.entry.name))
-                  .map((d) => d.entry.path as string)
+              ? all.filter((d) => selected.has(d.entry.name)).map((d) => d.entry.path as string)
               : (() => {
                   const item = all[activeIndexRef.current];
                   return item ? [item.entry.path as string] : [];
@@ -722,9 +598,7 @@ export const FileList = memo(function FileList({
           const ops = getFileOperationHandlers();
           if (!ops) return;
           const name = item.entry.name;
-          const arg = /^[a-zA-Z0-9._+-]+$/.test(name)
-            ? name
-            : JSON.stringify(name);
+          const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? name : JSON.stringify(name);
           ops.pasteToCommandLine(arg);
         }),
       pastePath: () =>
@@ -734,9 +608,7 @@ export const FileList = memo(function FileList({
           const ops = getFileOperationHandlers();
           if (!ops) return;
           const path = ((item.entry.path as string) ?? "").split("\0")[0];
-          const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path)
-            ? path
-            : JSON.stringify(path);
+          const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
           ops.pasteToCommandLine(arg);
         }),
     });
@@ -748,29 +620,18 @@ export const FileList = memo(function FileList({
 
   const handleItemsPerColumnChanged = useCallback((count: number) => {
     setMaxItemsPerColumn(count);
-    setTopmostIndex((t) =>
-      Math.max(
-        0,
-        Math.min(
-          t,
-          displayEntriesRef.current.length - count * columnCountRef.current,
-        ),
-      ),
-    );
+    setTopmostIndex((t) => Math.max(0, Math.min(t, displayEntriesRef.current.length - count * columnCountRef.current)));
   }, []);
 
   const handleColumnCountChanged = useCallback((count: number) => {
     setColumnCount(count);
   }, []);
 
-  const handlePosChange: ColumnsScrollerProps["onPosChange"] = useCallback(
-    (topmost: number, active: number) => {
-      const len = displayEntriesRef.current.length;
-      setActiveIndex(clamp(active, 0, len - 1));
-      setTopmostIndex(clamp(topmost, 0, len - 1));
-    },
-    [],
-  );
+  const handlePosChange: ColumnsScrollerProps["onPosChange"] = useCallback((topmost: number, active: number) => {
+    const len = displayEntriesRef.current.length;
+    setActiveIndex(clamp(active, 0, len - 1));
+    setTopmostIndex(clamp(topmost, 0, len - 1));
+  }, []);
 
   const getItemKey = useCallback((index: number) => {
     return displayEntriesRef.current[index]?.entry.name ?? index;
@@ -785,9 +646,7 @@ export const FileList = memo(function FileList({
       const { entry, style, iconPath, iconFallbackUrl } = item;
       const iconUrl = getIconUrl(iconPath) ?? iconFallbackUrl;
 
-      const isExecutable =
-        entry.type === "file" &&
-        !!(entry.meta as { executable?: boolean }).executable;
+      const isExecutable = entry.type === "file" && !!(entry.meta as { executable?: boolean }).executable;
       return (
         <div
           className={`entry${isActive ? " selected" : ""}${isSelected ? " marked" : ""}`}
@@ -799,12 +658,7 @@ export const FileList = memo(function FileList({
             if (now - lastClickTimeRef.current < 300) {
               lastClickTimeRef.current = 0;
               if (isExecutable) {
-                actionQueue.enqueue(() =>
-                  commandRegistry.executeCommand(
-                    "terminal.execute",
-                    entry.path as string,
-                  ),
-                );
+                actionQueue.enqueue(() => commandRegistry.executeCommand("terminal.execute", entry.path as string));
               } else {
                 actionQueue.enqueue(() => navigateToEntry(entry));
               }
@@ -830,9 +684,7 @@ export const FileList = memo(function FileList({
           >
             {entry.name}
           </span>
-          {"size" in entry.meta && entry.type === "file" && (
-            <span className="entry-size">{formatSize(entry.meta.size)}</span>
-          )}
+          {"size" in entry.meta && entry.type === "file" && <span className="entry-size">{formatSize(entry.meta.size)}</span>}
         </div>
       );
     },
@@ -841,16 +693,12 @@ export const FileList = memo(function FileList({
 
   const activeEntry = displayEntries[activeIndex];
   const footerName = activeEntry?.entry.name ?? "";
-  const footerDate = activeEntry
-    ? formatDate(Number(activeEntry.entry.meta.mtimeMs ?? 0))
-    : "";
+  const footerDate = activeEntry ? formatDate(Number(activeEntry.entry.meta.mtimeMs ?? 0)) : "";
   const footerInfo = (() => {
     if (!activeEntry) return "";
     const entry = activeEntry.entry;
     if (entry.name === "..") return "Up";
-    const kind: string =
-      (entry.meta.entryKind as string | undefined) ??
-      (entry.type === "folder" ? "directory" : "file");
+    const kind: string = (entry.meta.entryKind as string | undefined) ?? (entry.type === "folder" ? "directory" : "file");
     const nlink: number = (entry.meta.nlink as number | undefined) ?? 1;
     switch (kind) {
       case "directory":
@@ -881,22 +729,17 @@ export const FileList = memo(function FileList({
   })();
   const footerLink = (() => {
     if (!activeEntry) return "";
-    const kind: string =
-      (activeEntry.entry.meta.entryKind as string | undefined) ?? "";
+    const kind: string = (activeEntry.entry.meta.entryKind as string | undefined) ?? "";
     if (kind !== "symlink") return "";
     const target = activeEntry.entry.meta.linkTarget as string | undefined;
     return `\u2192 ${target ?? "?"}`;
   })();
 
-  const totalFiles = useMemo(
-    () => displayEntries.filter((d) => d.entry.type === "file").length,
-    [displayEntries],
-  );
+  const totalFiles = useMemo(() => displayEntries.filter((d) => d.entry.type === "file").length, [displayEntries]);
   const totalSize = useMemo(
     () =>
       displayEntries.reduce((acc, d) => {
-        if (d.entry.type === "file" && typeof d.entry.meta.size === "number")
-          return acc + d.entry.meta.size;
+        if (d.entry.type === "file" && typeof d.entry.meta.size === "number") return acc + d.entry.meta.size;
         return acc;
       }, 0),
     [displayEntries],
@@ -909,8 +752,7 @@ export const FileList = memo(function FileList({
     for (const d of displayEntries) {
       if (!selectedNames.has(d.entry.name)) continue;
       count++;
-      if (d.entry.type === "file" && typeof d.entry.meta.size === "number")
-        size += d.entry.meta.size;
+      if (d.entry.type === "file" && typeof d.entry.meta.size === "number") size += d.entry.meta.size;
     }
     return { count, size };
   }, [selectedNames, displayEntries]);
@@ -922,10 +764,7 @@ export const FileList = memo(function FileList({
       onMouseDownCapture={clearKeyboardNav}
     >
       <div className="path-bar">
-        <Breadcrumbs
-          currentPath={currentPath}
-          onNavigate={handleBreadcrumbNavigate}
-        />
+        <Breadcrumbs currentPath={currentPath} onNavigate={handleBreadcrumbNavigate} />
       </div>
       <div className="file-list-body">
         <ColumnsScroller

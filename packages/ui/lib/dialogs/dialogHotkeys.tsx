@@ -16,7 +16,7 @@
  *    of the OS input language.
  */
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { HelpDialog } from "../HelpDialog";
+import { HelpDialog } from "./HelpDialog";
 
 interface Registration {
   label: string;

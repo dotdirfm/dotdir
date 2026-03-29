@@ -4,20 +4,20 @@
  * Loads viewer/editor extensions inside an iframe (VFS origin) and bridges HostApi via postMessage RPC.
  */
 
+import { loadFsProvider } from "@/browserFsProvider";
+import { isContainerPath, parseContainerPath } from "@/containerPath";
+import { commandRegistry } from "@/features/commands/commands";
+import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
+import { focusContext } from "@/focusContext";
+import { readFileText as readFileTextFromFs } from "@/fs";
+import { useBridge } from "@/hooks/useBridge";
+import { basename, dirname, join, normalizePath } from "@/path";
+import { registerExtensionKeybinding } from "@/registerKeybindings";
+import { Bridge } from "@/shared/api/bridge";
+import { vfsUrl } from "@/vfs";
+import { fsProviderRegistry } from "@/viewerEditorRegistry";
+import { getActiveColorThemeData, onColorThemeChange } from "@/vscodeColorTheme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useBridge } from "../hooks/useBridge";
-import { commandRegistry } from "../commands";
-import { registerExtensionKeybinding } from "../registerKeybindings";
-import { readFileText as readFileTextFromFs } from "../fs";
-import { basename, dirname, join, normalizePath } from "../path";
-import { vfsUrl } from "../vfs";
-import type { HostApi, ColorThemeData, ViewerProps, EditorProps } from "../extensionApi";
-import { getActiveColorThemeData, onColorThemeChange } from "../vscodeColorTheme";
-import { focusContext } from "../focusContext";
-import { isContainerPath, parseContainerPath } from "../containerPath";
-import { fsProviderRegistry } from "../viewerEditorRegistry";
-import { loadFsProvider } from "../browserFsProvider";
-import { Bridge } from "../shared/api/bridge";
 
 // ── Container props ─────────────────────────────────────────────────────
 

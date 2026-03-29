@@ -1,8 +1,8 @@
+import { focusContext } from "@/focusContext";
+import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
+import { INPUT_NO_ASSIST } from "@/inputNoAssist";
 import { ConflictResolution } from "@/shared/api/bridge";
 import { useEffect, useRef, useState } from "react";
-import { focusContext } from "../focusContext";
-import { useDialogButtonNav } from "../hooks/useDialogButtonNav";
-import { INPUT_NO_ASSIST } from "../inputNoAssist";
 import { SmartLabel } from "./dialogHotkeys";
 
 export interface ConflictDialogProps {

@@ -1,6 +1,6 @@
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import type React from "react";
 import { type CSSProperties, type ReactNode, useEffect, useRef } from "react";
-import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 interface ScrollableContainerProps {
   children: ReactNode;
@@ -120,7 +120,14 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
   }, [velocityFactor, frictionFactor, scrollHeight, lineSize, isTouchscreen]);
 
   return (
-    <div style={{ overflow: "hidden", position: "relative", touchAction: "none", ...style }}>
+    <div
+      style={{
+        overflow: "hidden",
+        position: "relative",
+        touchAction: "none",
+        ...style,
+      }}
+    >
       <div ref={containerRef} style={{ position: "absolute", inset: 0, pointerEvents: "auto" }}>
         {children}
       </div>

@@ -4,17 +4,17 @@
  * Watches ~/.dotdir/settings.json for changes and notifies listeners.
  */
 
-import {
-  createJsoncFileWatcher,
-  type JsoncFileWatcher,
-} from "./jsoncFileWatcher";
-import { join } from "./path";
-import type { DotDirSettings } from "./extensions";
-import { Bridge } from "./shared/api/bridge";
+import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/jsoncFileWatcher";
+import { join } from "@/path";
+import { Bridge } from "@/shared/api/bridge";
+import type { DotDirSettings } from "./types";
 
 let watcher: JsoncFileWatcher<DotDirSettings> | null = null;
 let settingsPath: string | null = null;
 let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+// 0 disables the limit (allows editing any size file).
+export const DEFAULT_EDITOR_FILE_SIZE_LIMIT = 0;
 
 function validateSettings(parsed: unknown): DotDirSettings | null {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -28,10 +28,7 @@ export function getSettings(): DotDirSettings {
   return watcher?.getValue() ?? {};
 }
 
-export function updateSettings(
-  bridge: Bridge,
-  partial: Partial<DotDirSettings>,
-): void {
+export function updateSettings(bridge: Bridge, partial: Partial<DotDirSettings>): void {
   if (!watcher) return;
   const current = watcher.getValue();
   const updated = { ...current, ...partial };
@@ -45,10 +42,7 @@ export function updateSettings(
   }, 500);
 }
 
-async function saveSettingsToDisk(
-  bridge: Bridge,
-  settings: DotDirSettings,
-): Promise<void> {
+async function saveSettingsToDisk(bridge: Bridge, settings: DotDirSettings): Promise<void> {
   try {
     if (!settingsPath) {
       const homePath = await bridge.utils.getHomePath();
@@ -60,15 +54,11 @@ async function saveSettingsToDisk(
   }
 }
 
-export function onSettingsChange(
-  callback: (settings: DotDirSettings) => void,
-): () => void {
+export function onSettingsChange(callback: (settings: DotDirSettings) => void): () => void {
   return watcher?.onChange(callback) ?? (() => {});
 }
 
-export async function initUserSettings(
-  bridge: Bridge,
-): Promise<DotDirSettings> {
+export async function initUserSettings(bridge: Bridge): Promise<DotDirSettings> {
   watcher = await createJsoncFileWatcher<DotDirSettings>(bridge, {
     name: "userSettings",
     getPath: async () => {

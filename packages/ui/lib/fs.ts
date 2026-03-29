@@ -1,6 +1,6 @@
-import type { EntryKind, FsChangeEvent, FsChangeType } from "./types";
-import { join, normalizePath } from "./path";
-import { Bridge } from "./shared/api/bridge";
+import { join, normalizePath } from "@/path";
+import { Bridge } from "@/shared/api/bridge";
+import type { EntryKind, FsChangeEvent, FsChangeType } from "@/types";
 
 export interface HandleMeta {
   size: number;
@@ -45,7 +45,10 @@ export class FileSystemObserver {
   #cleanup: (() => void) | null = null;
   #generation = 0; // incremented on disconnect to discard stale observe() results
 
-  constructor(private bridge: Bridge, callback: ObserverCallback) {
+  constructor(
+    private bridge: Bridge,
+    callback: ObserverCallback,
+  ) {
     this.#callback = callback;
   }
 

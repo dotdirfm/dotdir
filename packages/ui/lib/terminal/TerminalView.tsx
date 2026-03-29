@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
-import { Terminal, type IDisposable } from "@xterm/xterm";
+import { focusContext } from "@/focusContext";
 import { FitAddon } from "@xterm/addon-fit";
+import { Terminal, type IDisposable } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { focusContext } from "../focusContext";
+import { useEffect, useRef } from "react";
 import { normalizeTerminalPath } from "./path";
 import type { TerminalSession } from "./TerminalSession";
 

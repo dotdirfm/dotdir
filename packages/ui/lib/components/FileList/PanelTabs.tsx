@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { basename } from "../../path";
+import { basename } from "@/path";
 
 export type PanelTab =
   | { id: string; type: "filelist"; path: string }

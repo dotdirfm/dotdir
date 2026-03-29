@@ -1,6 +1,6 @@
 import { Bridge } from "@/shared/api/bridge";
 import { createLayer, FsNode, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from "fss-lang";
-import type { LoadedExtension } from "./extensions";
+import type { LoadedExtension } from "./features/extensions/extensions";
 import { readFileText } from "./fs";
 import { basename, dirname, join, normalizePath } from "./path";
 import type { ResolvedEntryStyle } from "./types";

@@ -6,13 +6,13 @@
  * and notifies listeners when extensions finish loading.
  */
 
-import { readFileText } from "./fs";
-import type { LoadedExtension } from "./extensions";
-import { normalizePath } from "./path";
-import { Bridge } from "./shared/api/bridge";
+import { readFileText } from "@/fs";
+import { bridgeAtom } from "@/hooks/useBridge";
+import { normalizePath } from "@/path";
+import { Bridge } from "@/shared/api/bridge";
 import { atom, useAtomValue } from "jotai";
-import { bridgeAtom } from "./hooks/useBridge";
 import worker2 from "./extensionHost.worker.ts?worker&inline";
+import type { LoadedExtension } from "./extensions";
 
 type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
 

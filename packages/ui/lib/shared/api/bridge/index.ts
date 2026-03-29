@@ -1,7 +1,4 @@
-/// Dynamic bridge provider - detects Tauri vs browser and loads the right backend.
-///
-/// Uses ES module live bindings: importers of `bridge` always see the current value.
-import type { FsRawEntry, FsChangeEvent } from "../../../types";
+import type { FsRawEntry, FsChangeEvent } from "@/types";
 
 export type ConflictPolicy = "ask" | "overwrite" | "skip" | "rename" | "append" | "onlyNewer";
 export type SymlinkMode = "smart" | "alwaysLink" | "alwaysTarget";

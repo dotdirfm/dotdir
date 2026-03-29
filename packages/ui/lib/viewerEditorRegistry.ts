@@ -5,7 +5,7 @@
  * based on glob patterns and priority.
  */
 
-import type { ExtensionViewerContribution, ExtensionEditorContribution, ExtensionFsProviderContribution, LoadedExtension } from "./extensions";
+import type { ExtensionEditorContribution, ExtensionFsProviderContribution, ExtensionViewerContribution, LoadedExtension } from "@/features/extensions/extensions";
 
 export interface ResolvedViewer {
   contribution: ExtensionViewerContribution;

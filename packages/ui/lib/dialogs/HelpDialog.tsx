@@ -1,6 +1,6 @@
+import { focusContext } from "@/focusContext";
 import { marked } from "marked";
 import { useEffect, useRef } from "react";
-import { focusContext } from "./focusContext";
 
 interface HelpDialogProps {
   content: string;

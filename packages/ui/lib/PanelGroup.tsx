@@ -1,12 +1,8 @@
-import type { FsNode, LayeredResolver } from "fss-lang";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { ViewerContainer } from "./components/ExtensionContainer";
-import { FileList } from "./components/FileList";
-import { PanelTabs } from "./components/FileList/PanelTabs";
-import { activePanelAtom, showHiddenAtom } from "./atoms";
-import type { PanelSide } from "./entities/panel/model/types";
-import type { PanelPersistedState } from "./extensions";
+import { activePanelAtom, showHiddenAtom } from "@/atoms";
+import { ViewerContainer } from "@/components/ExtensionContainer";
+import { FileList } from "@/components/FileList";
+import { PanelTabs } from "@/components/FileList/PanelTabs";
+import type { PanelSide } from "@/entities/panel/model/types";
 import {
   createFilelistTab,
   leftActiveIndexAtom,
@@ -15,10 +11,14 @@ import {
   rightActiveIndexAtom,
   rightActiveTabIdAtom,
   rightTabsAtom,
-} from "./entities/tab/model/tabsAtoms";
-import { setActivePanelGroupHandlers } from "./panelGroupHandlers";
-import { viewerRegistry } from "./viewerEditorRegistry";
-import { useBridge } from "./hooks/useBridge";
+} from "@/entities/tab/model/tabsAtoms";
+import type { PanelPersistedState } from "@/features/ui-state/types";
+import { useBridge } from "@/hooks/useBridge";
+import { setActivePanelGroupHandlers } from "@/panelGroupHandlers";
+import { viewerRegistry } from "@/viewerEditorRegistry";
+import type { FsNode, LayeredResolver } from "fss-lang";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 interface PanelModel {
   currentPath: string;

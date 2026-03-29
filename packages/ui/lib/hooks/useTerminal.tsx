@@ -1,5 +1,3 @@
-import { useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useRef } from "react";
 import {
   commandLineCwdAtom,
   panelsVisibleAtom,
@@ -7,12 +5,14 @@ import {
   resolvedProfilesAtom,
   terminalFocusRequestKeyAtom,
   terminalProfilesLoadedAtom,
-} from "../atoms";
-import { commandRegistry } from "../commands";
-import { focusContext } from "../focusContext";
-import { normalizePath } from "../path";
-import { normalizeTerminalPath } from "../terminal/path";
-import { useTerminalState } from "../terminal/useTerminalState";
+} from "@/atoms";
+import { commandRegistry } from "@/features/commands/commands";
+import { focusContext } from "@/focusContext";
+import { normalizePath } from "@/path";
+import { normalizeTerminalPath } from "@/terminal/path";
+import { useTerminalState } from "@/terminal/useTerminalState";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect, useRef } from "react";
 import { useBridge } from "./useBridge";
 
 interface UseTerminalOptions {

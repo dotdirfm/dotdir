@@ -1,13 +1,13 @@
-import { commandRegistry } from "./commands";
-import { registerExtensionKeybinding } from "./registerKeybindings";
-import { join, normalizePath } from "./path";
-import { vfsUrl } from "./vfs";
-import type { LoadedExtension } from "./extensions";
+import { commandRegistry } from "@/features/commands/commands";
+import type { LoadedExtension } from "@/features/extensions/extensions";
+import { join, normalizePath } from "@/path";
+import { registerExtensionKeybinding } from "@/registerKeybindings";
+import { vfsUrl } from "@/vfs";
 
 export type BrowserDisposable = { dispose: () => void };
 
 export interface BrowserExtensionKeybinding {
-  command: string;
+  command: string; 
   key: string;
   mac?: string;
   when?: string;

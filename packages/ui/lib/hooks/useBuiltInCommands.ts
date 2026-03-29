@@ -1,7 +1,3 @@
-import { isTauri as isTauriApp } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { RefObject, useEffect, useRef } from "react";
 import {
   activePanelAtom,
   commandPaletteOpenAtom,
@@ -11,18 +7,22 @@ import {
   showExtensionsAtom,
   showHiddenAtom,
   viewerFileAtom,
-} from "../atoms";
-import { useBridge } from "../hooks/useBridge";
-import { commandRegistry } from "../commands";
-import { isContainerPath, parseContainerPath } from "../containerPath";
-import type { DialogSpec } from "../dialogs/dialogContext";
-import { focusContext } from "../focusContext";
-import { getActiveFileListHandlers } from "../fileListHandlers";
-import { getActivePanelGroupHandlers } from "../panelGroupHandlers";
-import type { LanguageOption } from "../dialogs/OpenCreateFileDialog";
-import { basename, dirname } from "../path";
-import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "../registerKeybindings";
-import { useUserSettings } from "./useUserSettings";
+} from "@/atoms";
+import { isContainerPath, parseContainerPath } from "@/containerPath";
+import type { DialogSpec } from "@/dialogs/dialogContext";
+import type { LanguageOption } from "@/dialogs/OpenCreateFileDialog";
+import { commandRegistry } from "@/features/commands/commands";
+import { getActiveFileListHandlers } from "@/fileListHandlers";
+import { focusContext } from "@/focusContext";
+import { useBridge } from "@/hooks/useBridge";
+import { getActivePanelGroupHandlers } from "@/panelGroupHandlers";
+import { basename, dirname } from "@/path";
+import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/registerKeybindings";
+import { isTauri as isTauriApp } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { RefObject, useEffect, useRef } from "react";
+import { useUserSettings } from "../features/settings/useUserSettings";
 
 interface PanelHandle {
   currentPath: string;

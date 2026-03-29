@@ -1,31 +1,27 @@
-import type { FsNode } from "fss-lang";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { PanelSide } from "../../../entities/panel/model/types";
+import type { PanelTab } from "@/components/FileList/PanelTabs";
 import {
+  OPPOSITE_PANEL,
   PANEL_SETTINGS_KEY,
   PANEL_SIDES,
-  OPPOSITE_PANEL,
-} from "../../../entities/panel/model/panelSide";
+} from "@/entities/panel/model/panelSide";
+import type { PanelSide } from "@/entities/panel/model/types";
 import {
   createFilelistTab,
   genTabId,
-} from "../../../entities/tab/model/tabsAtoms";
-import type {
-  DotDirUiState,
-  PanelPersistedState,
-  PersistedTab,
-} from "../../../extensions";
-import { flushUiState, initUiState, updateUiState } from "../../../uiState";
-import type { PanelTab } from "../../../components/FileList/PanelTabs";
-import { useBridge } from "../../../hooks/useBridge";
+} from "@/entities/tab/model/tabsAtoms";
+import { DotDirUiState, PanelPersistedState, PersistedTab } from "@/features/ui-state/types";
+import { flushUiState, initUiState, updateUiState } from "@/features/ui-state/uiState";
+import { useBridge } from "@/hooks/useBridge";
+import type { FsNode } from "fss-lang";
+import type { Dispatch, RefObject, SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-type TabSelectionRef = MutableRefObject<
+type TabSelectionRef = RefObject<
   Record<string, { selectedName?: string; topmostName?: string }>
 >;
-type NameRef = MutableRefObject<string | undefined>;
-type IdRef = MutableRefObject<string>;
-type TabsRef = MutableRefObject<PanelTab[]>;
+type NameRef = RefObject<string | undefined>;
+type IdRef = RefObject<string>;
+type TabsRef = RefObject<PanelTab[]>;
 
 interface PanelModel {
   currentPath: string;
@@ -40,8 +36,8 @@ interface RestoreParams {
   setRightActiveTabId: Dispatch<SetStateAction<string>>;
   leftTabSelectionRef: TabSelectionRef;
   rightTabSelectionRef: TabSelectionRef;
-  prevLeftActiveTabIdRef: MutableRefObject<string>;
-  prevRightActiveTabIdRef: MutableRefObject<string>;
+  prevLeftActiveTabIdRef: RefObject<string>;
+  prevRightActiveTabIdRef: RefObject<string>;
   onAfterRestore: () => void;
 }
 

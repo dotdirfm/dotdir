@@ -6,17 +6,17 @@
  * goes through the shared DialogContext (useDialog()).
  */
 
+import { loadFsProvider } from "@/browserFsProvider";
+import { isContainerPath, parseContainerPath } from "@/containerPath";
+import { useDialog } from "@/dialogs/dialogContext";
+import type { PanelSide } from "@/entities/panel/model/types";
+import type { FsProviderExtensionApi } from "@/features/extensions/extensionApi";
+import { useBridge } from "@/hooks/useBridge";
+import { basename, dirname, join } from "@/path";
+import { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "@/shared/api/bridge";
+import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef } from "react";
-import { loadFsProvider } from "../../../browserFsProvider";
-import { isContainerPath, parseContainerPath } from "../../../containerPath";
-import { useDialog } from "../../../dialogs/dialogContext";
-import type { FsProviderExtensionApi } from "../../../extensionApi";
-import type { PanelSide } from "../../../entities/panel/model/types";
-import { basename, dirname, join } from "../../../path";
-import { fsProviderRegistry } from "../../../viewerEditorRegistry";
-import { useBridge } from "../../../hooks/useBridge";
-import { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "../../../shared/api/bridge";
 
 export type { PanelSide };
 

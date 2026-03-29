@@ -1,7 +1,7 @@
+import { panelsVisibleAtom, resolvedProfilesAtom, terminalFocusRequestKeyAtom, terminalProfilesLoadedAtom } from "@/atoms";
+import { TerminalView } from "@/terminal/TerminalView";
+import { useTerminalState } from "@/terminal/useTerminalState";
 import { useAtomValue } from "jotai";
-import { panelsVisibleAtom, resolvedProfilesAtom, terminalFocusRequestKeyAtom, terminalProfilesLoadedAtom } from "./atoms";
-import { useTerminalState } from "./terminal/useTerminalState";
-import { TerminalView } from "./terminal/TerminalView";
 
 export function TerminalToolbar() {
   const profiles = useAtomValue(resolvedProfilesAtom);

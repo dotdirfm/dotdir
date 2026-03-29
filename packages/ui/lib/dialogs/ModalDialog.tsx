@@ -1,6 +1,6 @@
+import { focusContext } from "@/focusContext";
+import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
 import { useEffect, useRef } from "react";
-import { focusContext } from "../focusContext";
-import { useDialogButtonNav } from "../hooks/useDialogButtonNav";
 import { SmartLabel } from "./dialogHotkeys";
 
 interface ModalButton {

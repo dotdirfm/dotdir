@@ -13,7 +13,7 @@
  * 3. User (from ~/.dotdir/keybindings.json)
  */
 
-import { focusContext } from "./focusContext";
+import { focusContext } from "../../focusContext";
 
 export interface Command {
   id: string;

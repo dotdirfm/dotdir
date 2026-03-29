@@ -1,8 +1,8 @@
 import { Command } from "cmdk";
 import { useAtom } from "jotai";
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { commandPaletteOpenAtom } from "./atoms";
-import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from "./commands";
+import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from "./features/commands/commands";
 import { focusContext } from "./focusContext";
 import { INPUT_NO_ASSIST } from "./inputNoAssist";
 

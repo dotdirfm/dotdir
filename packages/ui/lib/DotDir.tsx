@@ -1,12 +1,12 @@
-import "./index.css";
 import { Provider as JotaiProvider } from "jotai";
 import { useEffect } from "react";
 import { App } from "./app";
-import { builtInCommandContributions } from "./builtInCommandContributions";
-import { commandRegistry } from "./commands";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { DialogProvider } from "./dialogs/dialogContext";
+import { builtInCommandContributions } from "./features/commands/builtInCommandContributions";
+import { commandRegistry } from "./features/commands/commands";
 import { BridgeProvider } from "./hooks/useBridge";
+import "./index.css";
 import { Bridge } from "./shared/api/bridge";
 
 export { basename, dirname, join, normalizePath } from "./path";
@@ -19,7 +19,7 @@ export type {
   FspEntry,
   MoveOptions,
   MoveProgressEvent,
-  PtyLaunchInfo,
+  PtyLaunchInfo
 } from "./shared/api/bridge";
 export type { FsChangeEvent, FsChangeType, FsRawEntry } from "./types";
 

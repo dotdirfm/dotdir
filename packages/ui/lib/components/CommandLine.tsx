@@ -1,9 +1,9 @@
+import { commandLineCwdAtom, commandLineOnExecuteAtom, commandLinePasteFnAtom, panelsVisibleAtom } from "@/atoms";
+import { commandRegistry } from "@/features/commands/commands";
+import { registerCommandLineKeybindings } from "@/registerKeybindings";
 import { useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
-import { commandLineCwdAtom, commandLineOnExecuteAtom, commandLinePasteFnAtom, panelsVisibleAtom } from "../atoms";
-import { commandRegistry } from "../commands";
-import { registerCommandLineKeybindings } from "../registerKeybindings";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function CommandLine() {
   const cwd = useAtomValue(commandLineCwdAtom);

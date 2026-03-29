@@ -1,4 +1,4 @@
-import { TerminalProfile } from "../shared/api/bridge";
+import { TerminalProfile } from "@/shared/api/bridge";
 import type { TerminalSession } from "./TerminalSession";
 
 export type TerminalSessionStatus = "idle" | "starting" | "running" | "exited" | "error";

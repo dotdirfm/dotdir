@@ -5,10 +5,10 @@
  * to .dir's CSS custom properties.
  */
 
-import { parse as parseJsonc } from "jsonc-parser";
-import { readFileText } from "./fs";
-import { dirname, join } from "./path";
+import { readFileText } from "@/fs";
+import { dirname, join } from "@/path";
 import { Bridge } from "@/shared/api/bridge";
+import { parse as parseJsonc } from "jsonc-parser";
 
 export interface VSCodeColorThemeJson {
   name?: string;

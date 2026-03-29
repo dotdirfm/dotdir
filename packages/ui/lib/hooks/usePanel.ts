@@ -6,23 +6,22 @@
  * refreshes or navigates up automatically.
  */
 
-import { useAtomValue } from "jotai";
-import { FsNode } from "fss-lang";
+import { osThemeAtom } from "@/atoms";
+import { loadFsProvider } from "@/browserFsProvider";
+import { buildContainerPath, isContainerPath, parseContainerPath } from "@/containerPath";
+import { FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from "@/fs";
+import { createPanelResolver, invalidateFssCache, syncLayers } from "@/fss";
+import { useBridge } from "@/hooks/useBridge";
+import { languageRegistry } from "@/languageRegistry";
+import { basename, dirname, isFileExecutable, isRootPath, join } from "@/path";
+import { Bridge } from "@/shared/api/bridge";
+import type { FsChangeType, FsRawEntry } from "@/types";
+import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import type { LayeredResolver } from "fss-lang";
+import { FsNode } from "fss-lang";
 import { createFsNode } from "fss-lang/helpers";
+import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { osThemeAtom } from "../atoms";
-import type { FsChangeType } from "../types";
-import { useBridge } from "../hooks/useBridge";
-import { fsProviderRegistry } from "../viewerEditorRegistry";
-import { isContainerPath, parseContainerPath, buildContainerPath } from "../containerPath";
-import { loadFsProvider } from "../browserFsProvider";
-import { createPanelResolver, invalidateFssCache, syncLayers } from "../fss";
-import { FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from "../fs";
-import { basename, dirname, isFileExecutable, isRootPath, join } from "../path";
-import { languageRegistry } from "../languageRegistry";
-import type { FsRawEntry } from "../types";
-import { Bridge } from "../shared/api/bridge";
 
 // ── Helper functions ──────────────────────────────────────────────────────────
 
@@ -182,7 +181,7 @@ export function usePanel(showError: (message: string) => void) {
             if (!providerMatch) {
               throw new Error(`No fsProvider registered for "${basename(hostFile)}"`);
             }
-            let entries: import("../extensionApi").FsProviderEntry[];
+            let entries: import("../features/extensions/extensionApi").FsProviderEntry[];
             if (providerMatch.contribution.runtime === "backend" && bridge.fsProvider) {
               const wasmPath = join(providerMatch.extensionDirPath, providerMatch.contribution.entry);
               const raw = await bridge.fsProvider.listEntries(wasmPath, hostFile, innerPath);

@@ -1,5 +1,5 @@
-import { useRef, useEffect } from "react";
-import { focusContext } from "../focusContext";
+import { focusContext } from "@/focusContext";
+import { useEffect, useRef } from "react";
 import { SmartLabel } from "./dialogHotkeys";
 
 export interface DeleteProgressDialogProps {

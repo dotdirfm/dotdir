@@ -1,5 +1,5 @@
 import { CwdEscapeMode, TerminalProfile } from "@/shared/api/bridge";
-import { normalizePath } from "../path";
+import { normalizePath } from "@/path";
 
 export function normalizeTerminalPath(raw: string): string {
   const normalized = raw.replace(/\\/g, "/");

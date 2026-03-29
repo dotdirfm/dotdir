@@ -6,10 +6,10 @@
  * external changes.
  */
 
-import { readFileText } from "./fs";
-import type { DotDirUiState } from "./extensions";
-import { join } from "./path";
-import { Bridge } from "./shared/api/bridge";
+import { readFileText } from "@/fs";
+import { join } from "@/path";
+import { Bridge } from "@/shared/api/bridge";
+import { DotDirUiState } from "./types";
 
 let currentState: DotDirUiState = {};
 let statePath: string | null = null;

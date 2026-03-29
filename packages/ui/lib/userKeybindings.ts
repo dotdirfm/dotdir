@@ -4,13 +4,10 @@
  * Loads and watches user-defined keybindings from ~/.dotdir/keybindings.json
  */
 
-import { commandRegistry, type Keybinding } from "./commands";
-import {
-  createJsoncFileWatcher,
-  type JsoncFileWatcher,
-} from "./jsoncFileWatcher";
-import { join } from "./path";
-import { Bridge } from "./shared/api/bridge";
+import { commandRegistry, type Keybinding } from "@/features/commands/commands";
+import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/jsoncFileWatcher";
+import { join } from "@/path";
+import { Bridge } from "@/shared/api/bridge";
 
 let watcher: JsoncFileWatcher<Keybinding[]> | null = null;
 
@@ -45,9 +42,7 @@ export async function initUserKeybindings(bridge: Bridge): Promise<void> {
     defaultValue: [],
     onLoad: (keybindings) => {
       commandRegistry.setLayerKeybindings("user", keybindings);
-      console.log(
-        `[userKeybindings] Applied ${keybindings.length} keybindings`,
-      );
+      console.log(`[userKeybindings] Applied ${keybindings.length} keybindings`);
     },
   });
 }

@@ -14,10 +14,10 @@
  * evaluated once per extension.
  */
 
-import { join } from "./path";
-import { readFileBuffer, readFileText } from "./fs";
-import type { FsProviderExtensionApi, FsProviderHostApi } from "./extensionApi";
-import { Bridge } from "./shared/api/bridge";
+import type { FsProviderExtensionApi, FsProviderHostApi } from "@/features/extensions/extensionApi";
+import { readFileBuffer, readFileText } from "@/fs";
+import { join } from "@/path";
+import { Bridge } from "@/shared/api/bridge";
 
 /** Cache: key → settled Promise<FsProviderExtensionApi> */
 const cache = new Map<string, Promise<FsProviderExtensionApi>>();

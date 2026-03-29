@@ -1,32 +1,32 @@
+import { clearFsProviderCache } from "@/browserFsProvider";
+import { commandRegistry } from "@/features/commands/commands";
+import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
+import { type LoadedExtension, findColorTheme } from "@/features/extensions/extensions";
+import { readFileText } from "@/fs";
+import { setExtensionLayers } from "@/fss";
+import { useBridge } from "@/hooks/useBridge";
+import { useSetIconTheme, useSetIconThemeKind } from "@/iconResolver";
+import { languageRegistry } from "@/languageRegistry";
+import { dirname, join } from "@/path";
+import { registerExtensionKeybindings } from "@/registerKeybindings";
+import { resolveShellProfiles } from "@/terminal/shellProfiles";
+import { populateRegistries } from "@/viewerEditorRegistry";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
-import { useBridge } from "../hooks/useBridge";
-import { commandRegistry } from "../commands";
-import { useExtensionHostClient } from "../extensionHostClient";
-import { type LoadedExtension, findColorTheme } from "../extensions";
-import { readFileText } from "../fs";
-import { setExtensionLayers } from "../fss";
-import { useSetIconTheme, useSetIconThemeKind } from "../iconResolver";
-import { languageRegistry } from "../languageRegistry";
-import { dirname, join } from "../path";
-import { registerExtensionKeybindings } from "../registerKeybindings";
-import { resolveShellProfiles } from "../terminal/shellProfiles";
-import { clearFsProviderCache } from "../browserFsProvider";
-import { populateRegistries } from "../viewerEditorRegistry";
 import {
-  loadAndApplyColorTheme,
-  clearColorTheme,
-  uiThemeToKind,
-} from "../vscodeColorTheme";
-import {
-  activeIconThemeAtom,
   activeColorThemeAtom,
-  osThemeAtom,
+  activeIconThemeAtom,
   loadedExtensionsAtom,
-  themesReadyAtom,
+  osThemeAtom,
   resolvedProfilesAtom,
   terminalProfilesLoadedAtom,
+  themesReadyAtom,
 } from "../atoms";
+import {
+  clearColorTheme,
+  loadAndApplyColorTheme,
+  uiThemeToKind,
+} from "../vscodeColorTheme";
 
 interface UseExtensionHostOptions {
   settingsLoaded: boolean;

@@ -1,8 +1,8 @@
+import { DotDirSettings } from "@/features/settings/types";
+import { initUserSettings, onSettingsChange, updateSettings as updateUserSettings } from "@/features/settings/userSettings";
 import { atom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect } from "react";
-import type { DotDirSettings } from "../extensions";
-import { initUserSettings, onSettingsChange, updateSettings as updateUserSettings } from "../userSettings";
-import { useBridge } from "./useBridge";
+import { useBridge } from "../../hooks/useBridge";
 
 const settingsAtom = atom<DotDirSettings>({});
 const settingsReadyAtom = atom(false);
@@ -24,7 +24,7 @@ export function useUserSettings() {
       setReady(true);
     });
     return onSettingsChange(setSettings);
-  }, [setSettings, setReady]);
+  }, [setSettings, setReady, bridge]);
 
   const updateSettings = useCallback(
     (partial: Partial<DotDirSettings>) => {

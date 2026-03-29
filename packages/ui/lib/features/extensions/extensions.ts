@@ -1,6 +1,6 @@
-import { Bridge, type CwdEscapeMode, type DeleteProgressEvent } from "./shared/api/bridge";
-import { readFileBuffer, readFileText } from "./fs";
-import { dirname, join, normalizePath } from "./path";
+import { readFileBuffer, readFileText } from "@/fs";
+import { dirname, join, normalizePath } from "@/path";
+import { Bridge, type CwdEscapeMode, type DeleteProgressEvent } from "@/shared/api/bridge";
 
 export const MARKETPLACE_URL = "https://dotdir.dev";
 
@@ -722,59 +722,6 @@ export async function uninstallExtension(bridge: Bridge, publisherUsername: stri
   }
   const filtered = refs.filter((r) => !(r.publisher === publisherUsername && r.name === extName));
   await writeRefs(bridge, filtered);
-}
-
-// ── Settings ────────────────────────────────────────────────────────
-
-export type PersistedTab =
-  | { type: "filelist"; path: string; selectedName?: string; topmostName?: string }
-  | { type: "preview"; path: string; name: string; size: number };
-
-export interface PanelPersistedState {
-  currentPath: string;
-  tabs?: PersistedTab[];
-  activeTabIndex?: number;
-}
-
-export interface DotDirSettings {
-  iconTheme?: string; // "publisher.name" of the active icon theme
-  colorTheme?: string; // "publisher.name:themeId" of the active color theme
-  /**
-   * Max file size in bytes to open for editing.
-   * Use 0 (or any negative value) to disable the limit.
-   */
-  editorFileSizeLimit?: number;
-  showHidden?: boolean;
-  /** Command-line folder aliases: `cd:name` navigates to the absolute path. Set with `cd::name`. */
-  pathAliases?: Record<string, string>;
-}
-
-/** UI state persisted across launches (tabs, active panel). Not watched — read once on startup. */
-export interface DotDirUiState {
-  leftPanel?: PanelPersistedState;
-  rightPanel?: PanelPersistedState;
-  activePanel?: "left" | "right";
-}
-
-// 0 disables the limit (allows editing any size file).
-export const DEFAULT_EDITOR_FILE_SIZE_LIMIT = 0;
-
-async function getSettingsPath(bridge: Bridge): Promise<string> {
-  const homePath = await bridge.utils.getHomePath();
-  return join(homePath, ".dotdir", "settings.json");
-}
-
-export async function readSettings(bridge: Bridge): Promise<DotDirSettings> {
-  try {
-    const text = await readFileText(bridge, await getSettingsPath(bridge));
-    return JSON.parse(text);
-  } catch {
-    return {};
-  }
-}
-
-export async function writeSettings(bridge: Bridge, settings: DotDirSettings): Promise<void> {
-  await bridge.fs.writeFile(await getSettingsPath(bridge), JSON.stringify(settings, null, 2));
 }
 
 export function extensionIconThemeId(ext: LoadedExtension): string | null {

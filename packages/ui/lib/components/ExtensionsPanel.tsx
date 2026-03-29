@@ -1,31 +1,30 @@
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { showExtensionsAtom, activeIconThemeAtom, activeColorThemeAtom, loadedExtensionsAtom } from "../atoms";
-import { focusContext } from "../focusContext";
-import { useExtensionHostClient } from "../extensionHostClient";
+import { activeColorThemeAtom, activeIconThemeAtom, loadedExtensionsAtom, showExtensionsAtom } from "@/atoms";
+import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import {
   type ExtensionRef,
+  type LoadedExtension,
   type MarketplaceExtension,
-  searchMarketplace,
+  colorThemeKey,
+  extensionIconThemeId,
   installExtension,
   installVSCodeExtension,
+  searchMarketplace,
   uninstallExtension,
-  type LoadedExtension,
-  extensionIconThemeId,
-  colorThemeKey,
-  readSettings,
-  writeSettings,
-} from "../extensions";
+} from "@/features/extensions/extensions";
+import { useUserSettings } from "@/features/settings/useUserSettings";
+import { focusContext } from "@/focusContext";
+import { useBridge } from "@/hooks/useBridge";
+import { INPUT_NO_ASSIST } from "@/inputNoAssist";
 import {
-  searchVSCodeMarketplace,
   type VSCodeExtension,
-  getVSCodeInstallCount,
-  getVSCodeLatestVersion,
   getVSCodeDownloadUrl,
   getVSCodeIconUrl,
-} from "../vscodeMarketplace";
-import { INPUT_NO_ASSIST } from "../inputNoAssist";
-import { useBridge } from "../hooks/useBridge";
+  getVSCodeInstallCount,
+  getVSCodeLatestVersion,
+  searchVSCodeMarketplace,
+} from "@/vscodeMarketplace";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Extract a message from Tauri invoke errors (plain {errno,message} objects) or Error instances. */
 function errMsg(err: unknown): string {
@@ -54,6 +53,7 @@ export function ExtensionsPanel() {
   const [installing, setInstalling] = useState<string | null>(null);
   const [error, setError] = useState("");
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const{settings,updateSettings} = useUserSettings();
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -134,7 +134,6 @@ export function ExtensionsPanel() {
     setError("");
     try {
       await uninstallExtension(bridge, ref.publisher, ref.name);
-      const settings = await readSettings(bridge);
       let settingsChanged = false;
       if (activeIconTheme === key) {
         delete settings.iconTheme;
@@ -146,7 +145,7 @@ export function ExtensionsPanel() {
         setActiveColorTheme(undefined);
         settingsChanged = true;
       }
-      if (settingsChanged) await writeSettings(bridge, settings);
+      if (settingsChanged) updateSettings(settings);
       void extensionHost.restart();
     } catch (err) {
       setError(`Uninstall failed: ${errMsg(err)}`);
@@ -158,26 +157,24 @@ export function ExtensionsPanel() {
     const themeId = extensionIconThemeId(ext);
     if (!themeId) return;
     const newId = themeId === activeIconTheme ? undefined : themeId;
-    const settings = await readSettings(bridge);
     if (newId) {
       settings.iconTheme = newId;
     } else {
       delete settings.iconTheme;
     }
-    await writeSettings(bridge, settings);
+    updateSettings(settings);
     setActiveIconTheme(newId);
   };
 
   const handleSetColorTheme = async (ext: LoadedExtension, themeId: string) => {
     const key = colorThemeKey(ext, themeId);
     const newKey = key === activeColorTheme ? undefined : key;
-    const settings = await readSettings(bridge);
     if (newKey) {
       settings.colorTheme = newKey;
     } else {
       delete settings.colorTheme;
     }
-    await writeSettings(bridge, settings);
+    updateSettings(settings);
     setActiveColorTheme(newKey);
   };
 
