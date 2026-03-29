@@ -3,6 +3,8 @@ import { focusContext } from "@/focusContext";
 import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useEffect, useRef, useState } from "react";
+import styles from "../styles/dialogs.module.css";
+import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
 
 export interface CopyConfigDialogProps {
@@ -56,26 +58,26 @@ export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: C
   return (
     <dialog
       ref={dialogRef}
-      className="modal-dialog copy-config-dialog"
+      className={cx(styles, "modal-dialog", "copy-config-dialog")}
       onCancel={(e) => {
         e.preventDefault();
         onCancel();
       }}
       onKeyDown={onKeyDown}
     >
-      <div className="modal-dialog-header">
+      <div className={styles["modal-dialog-header"]}>
         Copy {itemCount} item{itemCount !== 1 ? "s" : ""}
       </div>
       <form onSubmit={handleSubmit}>
-        <div className="modal-dialog-body">
-          <div className="copy-config-field">
+        <div className={styles["modal-dialog-body"]}>
+          <div className={styles["copy-config-field"]}>
             <label htmlFor="copy-dest">
               <SmartLabel>Destination</SmartLabel>
             </label>
             <input id="copy-dest" type="text" value={destValue} onChange={(e) => setDestValue(e.target.value)} {...INPUT_NO_ASSIST} />
           </div>
 
-          <div className="copy-config-field">
+          <div className={styles["copy-config-field"]}>
             <label htmlFor="copy-conflict">
               <SmartLabel>Conflict handling</SmartLabel>
             </label>
@@ -88,7 +90,7 @@ export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: C
             </select>
           </div>
 
-          <div className="copy-config-field">
+          <div className={styles["copy-config-field"]}>
             <label htmlFor="copy-symlink">
               <SmartLabel>Symlinks</SmartLabel>
             </label>
@@ -99,7 +101,7 @@ export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: C
             </select>
           </div>
 
-          <fieldset className="copy-config-section">
+          <fieldset className={styles["copy-config-section"]}>
             <legend>Options</legend>
             <label>
               <input type="checkbox" checked={copyPermissions} onChange={(e) => setCopyPermissions(e.target.checked)} />{" "}
@@ -120,7 +122,7 @@ export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: C
             </label>
           </fieldset>
         </div>
-        <div className="modal-dialog-buttons" ref={buttonsRef}>
+        <div className={styles["modal-dialog-buttons"]} ref={buttonsRef}>
           <button type="button" onClick={onCancel}>
             <SmartLabel>Cancel</SmartLabel>
           </button>

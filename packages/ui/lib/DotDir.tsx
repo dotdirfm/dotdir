@@ -7,7 +7,6 @@ import { commandRegistry } from "@/features/commands/commands";
 import { Provider as JotaiProvider } from "jotai";
 import { useEffect } from "react";
 import { App } from "./app";
-import "./index.css";
 
 export type {
   Bridge,

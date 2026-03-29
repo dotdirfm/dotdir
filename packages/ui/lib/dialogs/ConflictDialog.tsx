@@ -3,6 +3,8 @@ import { focusContext } from "@/focusContext";
 import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useEffect, useRef, useState } from "react";
+import styles from "../styles/dialogs.module.css";
+import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
 
 export interface ConflictDialogProps {
@@ -58,16 +60,16 @@ export function ConflictDialog({ src, dest, srcSize, srcMtimeMs, destSize, destM
     return (
       <dialog
         ref={dialogRef}
-        className="modal-dialog conflict-dialog"
+        className={cx(styles, "modal-dialog", "conflict-dialog")}
         onCancel={(e) => {
           e.preventDefault();
           onResolve({ type: "cancel" });
         }}
         onKeyDown={renameKeyDown}
       >
-        <div className="modal-dialog-header">Rename</div>
-        <div className="modal-dialog-body">
-          <div className="conflict-rename-field">
+        <div className={styles["modal-dialog-header"]}>Rename</div>
+        <div className={styles["modal-dialog-body"]}>
+          <div className={styles["conflict-rename-field"]}>
             <label htmlFor="conflict-rename-input">
               <SmartLabel>New name</SmartLabel>
             </label>
@@ -86,7 +88,7 @@ export function ConflictDialog({ src, dest, srcSize, srcMtimeMs, destSize, destM
             />
           </div>
         </div>
-        <div className="modal-dialog-buttons" ref={renameButtonsRef}>
+        <div className={styles["modal-dialog-buttons"]} ref={renameButtonsRef}>
           <button type="button" onClick={() => setRenaming(false)}>
             <SmartLabel>Back</SmartLabel>
           </button>
@@ -101,35 +103,35 @@ export function ConflictDialog({ src, dest, srcSize, srcMtimeMs, destSize, destM
   return (
     <dialog
       ref={dialogRef}
-      className="modal-dialog conflict-dialog"
+      className={cx(styles, "modal-dialog", "conflict-dialog")}
       onCancel={(e) => {
         e.preventDefault();
         onResolve({ type: "cancel" });
       }}
       onKeyDown={mainKeyDown}
     >
-      <div className="modal-dialog-header">File already exists</div>
-      <div className="modal-dialog-body">
-        <div className="conflict-file-info">
-          <div className="conflict-file-label">Source:</div>
-          <div className="conflict-file-path" title={src}>
+      <div className={styles["modal-dialog-header"]}>File already exists</div>
+      <div className={styles["modal-dialog-body"]}>
+        <div className={styles["conflict-file-info"]}>
+          <div className={styles["conflict-file-label"]}>Source:</div>
+          <div className={styles["conflict-file-path"]} title={src}>
             {src}
           </div>
-          <div className="conflict-file-meta">
+          <div className={styles["conflict-file-meta"]}>
             {formatSize(srcSize)}, {formatDate(srcMtimeMs)}
           </div>
         </div>
-        <div className="conflict-file-info">
-          <div className="conflict-file-label">Destination:</div>
-          <div className="conflict-file-path" title={dest}>
+        <div className={styles["conflict-file-info"]}>
+          <div className={styles["conflict-file-label"]}>Destination:</div>
+          <div className={styles["conflict-file-path"]} title={dest}>
             {dest}
           </div>
-          <div className="conflict-file-meta">
+          <div className={styles["conflict-file-meta"]}>
             {formatSize(destSize)}, {formatDate(destMtimeMs)}
           </div>
         </div>
       </div>
-      <div className="modal-dialog-buttons conflict-buttons" ref={buttonsRef}>
+      <div className={cx(styles, "modal-dialog-buttons", "conflict-buttons")} ref={buttonsRef}>
         <button type="button" onClick={() => onResolve({ type: "overwrite" })}>
           <SmartLabel>Overwrite</SmartLabel>
         </button>

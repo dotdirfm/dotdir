@@ -2,6 +2,8 @@ import { focusContext } from "@/focusContext";
 import { languageRegistry } from "@/languageRegistry";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useEffect, useRef, useState } from "react";
+import styles from "../styles/dialogs.module.css";
+import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
 
 export interface LanguageOption {
@@ -59,11 +61,11 @@ export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCanc
   };
 
   return (
-    <dialog ref={dialogRef} className="modal-dialog open-create-file-dialog" onCancel={handleCancel}>
-      <div className="modal-dialog-header">Open / Create File</div>
-      <form className="open-create-file-form" onSubmit={handleSubmit}>
-        <div className="modal-dialog-body">
-          <div className="open-create-file-field">
+    <dialog ref={dialogRef} className={cx(styles, "modal-dialog", "open-create-file-dialog")} onCancel={handleCancel}>
+      <div className={styles["modal-dialog-header"]}>Open / Create File</div>
+      <form className={styles["open-create-file-form"]} onSubmit={handleSubmit}>
+        <div className={styles["modal-dialog-body"]}>
+          <div className={styles["open-create-file-field"]}>
             <label htmlFor="open-create-filename">
               <SmartLabel>Filename</SmartLabel>
             </label>
@@ -77,11 +79,11 @@ export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCanc
               aria-describedby="open-create-file-hint"
               {...INPUT_NO_ASSIST}
             />
-            <span id="open-create-file-hint" className="open-create-file-hint">
+            <span id="open-create-file-hint" className={styles["open-create-file-hint"]}>
               File will be created in the current panel directory if it does not exist.
             </span>
           </div>
-          <div className="open-create-file-field">
+          <div className={styles["open-create-file-field"]}>
             <label htmlFor="open-create-language">
               <SmartLabel>Language</SmartLabel>
             </label>
@@ -102,7 +104,7 @@ export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCanc
             </select>
           </div>
         </div>
-        <div className="modal-dialog-buttons">
+        <div className={styles["modal-dialog-buttons"]}>
           <button type="button" onClick={handleCancel}>
             <SmartLabel>Cancel</SmartLabel>
           </button>

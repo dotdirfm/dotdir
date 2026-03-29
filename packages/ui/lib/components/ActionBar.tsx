@@ -1,5 +1,7 @@
 import { commandRegistry, type Command, type Keybinding } from "@/features/commands/commands";
 import { useCallback, useEffect, useState } from "react";
+import styles from "../styles/action-bar.module.css";
+import { cx } from "../utils/cssModules";
 
 interface ActionBarItem {
   fKey: number;
@@ -95,11 +97,11 @@ export function ActionBar() {
   }, []);
 
   return (
-    <div className="action-bar">
+    <div className={styles["action-bar"]}>
       {items.map((item) => (
-        <div key={item.fKey} className={`action-bar-item${item.command ? "" : " disabled"}`} onClick={() => handleClick(item)}>
-          <span className="action-bar-key">F{item.fKey}</span>
-          <span className="action-bar-label">{item.command ? (item.command.shortTitle ?? item.command.title) : ""}</span>
+        <div key={item.fKey} className={cx(styles, "action-bar-item", !item.command && "disabled")} onClick={() => handleClick(item)}>
+          <span className={styles["action-bar-key"]}>F{item.fKey}</span>
+          <span className={styles["action-bar-label"]}>{item.command ? (item.command.shortTitle ?? item.command.title) : ""}</span>
         </div>
       ))}
     </div>

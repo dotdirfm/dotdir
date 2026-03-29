@@ -2,8 +2,10 @@
 import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useState } from "react";
+import { cx } from "../../packages/ui/lib/utils/cssModules";
 import { authSigningInAtom, authUserAtom } from "../atoms";
 import { clearStoredTokens, startSignIn } from "../auth";
+import styles from "./AccountWidget.module.css";
 
 export function AccountWidget() {
   // Not shown in headless/browser mode — auth is only for the desktop app.
@@ -37,8 +39,8 @@ function AccountWidgetInner() {
 
   if (signingIn) {
     return (
-      <div className="account-widget account-widget--loading">
-        <span className="account-widget-label">Signing in…</span>
+      <div className={cx(styles, "account-widget", "account-widget--loading")}>
+        <span className={styles["account-widget-label"]}>Signing in…</span>
       </div>
     );
   }
@@ -47,27 +49,27 @@ function AccountWidgetInner() {
     const display = authUser.name ?? authUser.email ?? authUser.sub;
     const initial = display[0]?.toUpperCase() ?? "?";
     return (
-      <div className="account-widget account-widget--signed-in">
+      <div className={cx(styles, "account-widget", "account-widget--signed-in")}>
         <button
-          className="account-widget-btn"
+          className={styles["account-widget-btn"]}
           onClick={() => setMenuOpen((v) => !v)}
           title={authUser.email ?? authUser.sub}
         >
-          <span className="account-widget-avatar">{initial}</span>
-          <span className="account-widget-label">{display}</span>
+          <span className={styles["account-widget-avatar"]}>{initial}</span>
+          <span className={styles["account-widget-label"]}>{display}</span>
         </button>
         {menuOpen && (
           <>
             <div
-              className="account-widget-backdrop"
+              className={styles["account-widget-backdrop"]}
               onClick={() => setMenuOpen(false)}
             />
-            <div className="account-widget-menu">
-              <div className="account-widget-menu-email">
+            <div className={styles["account-widget-menu"]}>
+              <div className={styles["account-widget-menu-email"]}>
                 {authUser.email ?? authUser.sub}
               </div>
               <button
-                className="account-widget-menu-item"
+                className={styles["account-widget-menu-item"]}
                 onClick={handleSignOut}
               >
                 Sign out
@@ -80,13 +82,13 @@ function AccountWidgetInner() {
   }
 
   return (
-    <div className="account-widget">
+    <div className={styles["account-widget"]}>
       {error && (
-        <span className="account-widget-error" title={error}>
+        <span className={styles["account-widget-error"]} title={error}>
           ! {error}
         </span>
       )}
-      <button className="account-widget-btn" onClick={handleSignIn}>
+      <button className={styles["account-widget-btn"]} onClick={handleSignIn}>
         Sign in
       </button>
     </div>

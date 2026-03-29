@@ -1,5 +1,7 @@
 import { focusContext } from "@/focusContext";
 import { useEffect, useRef } from "react";
+import styles from "../styles/dialogs.module.css";
+import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
 
 export interface CopyProgressDialogProps {
@@ -37,18 +39,18 @@ export function CopyProgressDialog({ bytesCopied, bytesTotal, filesDone, filesTo
   return (
     <dialog
       ref={dialogRef}
-      className="modal-dialog copy-progress-dialog"
+      className={cx(styles, "modal-dialog", "copy-progress-dialog")}
       onCancel={(e) => {
         e.preventDefault();
         onCancel();
       }}
     >
-      <div className="modal-dialog-header">Copying</div>
-      <div className="modal-dialog-body">
-        <div className="copy-progress-bar-container">
-          <div className="copy-progress-bar" style={{ width: `${pct}%` }} />
+      <div className={styles["modal-dialog-header"]}>Copying</div>
+      <div className={styles["modal-dialog-body"]}>
+        <div className={styles["copy-progress-bar-container"]}>
+          <div className={styles["copy-progress-bar"]} style={{ width: `${pct}%` }} />
         </div>
-        <div className="copy-progress-stats">
+        <div className={styles["copy-progress-stats"]}>
           <span>
             {formatSize(bytesCopied)} / {formatSize(bytesTotal)}
           </span>
@@ -56,11 +58,11 @@ export function CopyProgressDialog({ bytesCopied, bytesTotal, filesDone, filesTo
             {filesDone} / {filesTotal} files
           </span>
         </div>
-        <div className="copy-progress-current" title={currentFile}>
+        <div className={styles["copy-progress-current"]} title={currentFile}>
           {currentFile}
         </div>
       </div>
-      <div className="modal-dialog-buttons">
+      <div className={styles["modal-dialog-buttons"]}>
         <button type="button" onClick={onCancel}>
           <SmartLabel>Cancel</SmartLabel>
         </button>

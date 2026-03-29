@@ -18,6 +18,7 @@ import { vfsUrl } from "@/utils/vfs";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import { getActiveColorThemeData, onColorThemeChange } from "@/vscodeColorTheme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import styles from "../styles/viewers.module.css";
 
 // ── Container props ─────────────────────────────────────────────────────
 
@@ -825,7 +826,6 @@ export function ViewerContainer({
   const toolbarHeight = 38;
   const toolbar = (
     <div
-      className="extension-dialog-toolbar"
       style={{
         display: "flex",
         alignItems: "center",
@@ -869,22 +869,21 @@ export function ViewerContainer({
       active={isVisible}
       onClose={onClose}
       onExecuteCommand={onExecuteCommand}
-      className="extension-viewer-frame"
       style={{ width: "100%", height: "100%" }}
     />
   );
 
   if (inline) {
     return (
-      <div className="file-viewer file-viewer-inline" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div className={`${styles["file-viewer"]} ${styles["file-viewer-inline"]}`} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
         <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
       </div>
     );
   }
 
   return (
-    <div className="file-viewer-overlay" style={{ display: isVisible ? "flex" : "none" }}>
-      <div className="file-viewer" style={{ display: "flex", flexDirection: "column", padding: 0 }}>
+    <div className={styles["file-viewer-overlay"]} style={{ display: isVisible ? "flex" : "none" }}>
+      <div className={styles["file-viewer"]} style={{ display: "flex", flexDirection: "column", padding: 0 }}>
         {toolbar}
         <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
       </div>
@@ -989,10 +988,9 @@ export function EditorContainer({
   const showLangSelect = langList.length > 0;
 
   return (
-    <div className="file-editor-overlay" style={{ display: isVisible ? "flex" : "none" }}>
-      <div className="file-editor" style={{ display: "flex", flexDirection: "column", padding: 0 }}>
+    <div className={styles["file-editor-overlay"]} style={{ display: isVisible ? "flex" : "none" }}>
+      <div className={styles["file-editor"]} style={{ display: "flex", flexDirection: "column", padding: 0 }}>
         <div
-          className="extension-dialog-toolbar"
           style={{
             display: "flex",
             alignItems: "center",
@@ -1049,7 +1047,6 @@ export function EditorContainer({
             active={isVisible}
             onClose={onClose}
             onDirtyChange={onDirtyChange}
-            className="extension-editor-frame"
             style={{ width: "100%", height: "100%" }}
           />
         </div>

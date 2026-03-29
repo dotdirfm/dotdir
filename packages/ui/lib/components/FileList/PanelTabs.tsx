@@ -1,5 +1,7 @@
 import { basename } from "@/utils/path";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import styles from "../../styles/panels.module.css";
+import { cx } from "../../utils/cssModules";
 
 export type PanelTab =
   | { id: string; type: "filelist"; path: string }
@@ -65,7 +67,7 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
     e.dataTransfer.setData("text/plain", String(index));
     e.dataTransfer.setDragImage(new Image(), 0, 0);
     requestAnimationFrame(() => {
-      (e.target as HTMLElement).classList.add("panel-tab-dragging");
+      (e.target as HTMLElement).classList.add(styles["panel-tab-dragging"]);
     });
   }, []);
 
@@ -102,7 +104,7 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
   }, []);
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
-    (e.target as HTMLElement).classList.remove("panel-tab-dragging");
+    (e.target as HTMLElement).classList.remove(styles["panel-tab-dragging"]);
     dragFromRef.current = null;
     setDropIndex(null);
   }, []);
@@ -116,9 +118,9 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
   }, []);
 
   return (
-    <div className="panel-tabs">
+    <div className={styles["panel-tabs"]}>
       <div
-        className="panel-tabs-list"
+        className={styles["panel-tabs-list"]}
         ref={listRef}
         onWheel={handleWheel}
         onDragOver={handleListDragOver}
@@ -131,13 +133,13 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
           const isActive = tab.id === activeTabId;
           const showDropBefore = dropIndex === i;
           return [
-            showDropBefore ? <div key={`drop-${i}`} className="panel-tab-drop-indicator" aria-hidden /> : null,
+            showDropBefore ? <div key={`drop-${i}`} className={styles["panel-tab-drop-indicator"]} aria-hidden /> : null,
             <div
               key={tab.id}
               ref={(el) => {
                 tabRefs.current[i] = el;
               }}
-              className={"panel-tab" + (isActive ? " active" : "") + (isTemp ? " temp" : "")}
+              className={cx(styles, "panel-tab", isActive && "active", isTemp && "temp")}
               onClick={() => onSelectTab(tab.id)}
               onDoubleClick={(e) => {
                 e.preventDefault();
@@ -148,11 +150,11 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
               onDragStart={(e) => handleDragStart(e, i)}
               onDragEnd={handleDragEnd}
             >
-              <span className="panel-tab-label">{tabLabel(tab)}</span>
+              <span className={styles["panel-tab-label"]}>{tabLabel(tab)}</span>
               {onCloseTab && (
                 <button
                   type="button"
-                  className="panel-tab-close"
+                  className={styles["panel-tab-close"]}
                   onClick={(e) => {
                     e.stopPropagation();
                     onCloseTab(tab.id);
@@ -165,9 +167,9 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
             </div>,
           ];
         })}
-        {dropIndex === tabs.length ? <div key="drop-end" className="panel-tab-drop-indicator" aria-hidden /> : null}
+        {dropIndex === tabs.length ? <div key="drop-end" className={styles["panel-tab-drop-indicator"]} aria-hidden /> : null}
       </div>
-      <button type="button" className="panel-tab-new" onClick={onNewTab} aria-label="New tab" title="New tab">
+      <button type="button" className={styles["panel-tab-new"]} onClick={onNewTab} aria-label="New tab" title="New tab">
         +
       </button>
     </div>

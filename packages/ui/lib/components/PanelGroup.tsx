@@ -19,6 +19,8 @@ import { viewerRegistry } from "@/viewerEditorRegistry";
 import type { FsNode, LayeredResolver } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import styles from "../styles/panels.module.css";
+import { cx } from "../utils/cssModules";
 
 interface PanelModel {
   currentPath: string;
@@ -116,8 +118,8 @@ export function PanelGroup({
   }, [active, handleNewTab, handleCloseTab]);
 
   return (
-    <div className={`panel ${active ? "active" : ""}`} onClick={() => setActivePanel(side)}>
-      {panel.navigating && <div className="panel-progress" />}
+    <div className={cx(styles, "panel", active && "active")} onClick={() => setActivePanel(side)}>
+      {panel.navigating && <div className={styles["panel-progress"]} />}
       <PanelTabs
         tabs={tabs}
         activeTabId={activeTabId}
@@ -127,7 +129,7 @@ export function PanelGroup({
         onNewTab={handleNewTab}
         onReorderTabs={handleReorderTabs}
       />
-      <div className="panel-content">
+      <div className={styles["panel-content"]}>
         {activeTab?.type === "filelist" ? (
           <FileList
             key={activeTab.id}

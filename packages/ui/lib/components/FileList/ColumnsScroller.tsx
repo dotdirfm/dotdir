@@ -1,4 +1,5 @@
 import { type ReactNode, memo, useCallback, useLayoutEffect, useRef, useEffect } from "react";
+import styles from "../../styles/file-list.module.css";
 import { ScrollableContainer } from "./ScrollableContainer";
 import { useElementSize } from "./useElementSize";
 
@@ -136,10 +137,10 @@ export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrol
   }
 
   return (
-    <div className="columns-scroller-root" ref={rootRef}>
-      <div className="columns-borders" style={{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }}>
+    <div className={styles["columns-scroller-root"]} ref={rootRef}>
+      <div className={styles["columns-borders"]} style={{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }}>
         {Array.from({ length: columnCount }, (_, i) => (
-          <div className="columns-border" key={i} />
+          <div className={styles["columns-border"]} key={i} />
         ))}
       </div>
       <ScrollableContainer
@@ -149,7 +150,7 @@ export const ColumnsScroller = memo(function ColumnsScroller(props: ColumnsScrol
         style={{ height: "100%" }}
         onScroll={onScroll}
       >
-        <div className="columns-scroller-content" style={{ height: itemsPerColumn * itemHeight }}>
+        <div className={styles["columns-scroller-content"]} style={{ height: itemsPerColumn * itemHeight }}>
           {items}
         </div>
       </ScrollableContainer>

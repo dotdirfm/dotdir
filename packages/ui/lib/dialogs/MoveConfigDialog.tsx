@@ -3,6 +3,8 @@ import { focusContext } from "@/focusContext";
 import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useEffect, useRef, useState } from "react";
+import styles from "../styles/dialogs.module.css";
+import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
 
 export interface MoveConfigDialogProps {
@@ -39,26 +41,26 @@ export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: M
   return (
     <dialog
       ref={dialogRef}
-      className="modal-dialog move-config-dialog"
+      className={cx(styles, "modal-dialog", "move-config-dialog")}
       onCancel={(e) => {
         e.preventDefault();
         onCancel();
       }}
       onKeyDown={onKeyDown}
     >
-      <div className="modal-dialog-header">
+      <div className={styles["modal-dialog-header"]}>
         Move {itemCount} item{itemCount !== 1 ? "s" : ""}
       </div>
       <form onSubmit={handleSubmit}>
-        <div className="modal-dialog-body">
-          <div className="copy-config-field">
+        <div className={styles["modal-dialog-body"]}>
+          <div className={styles["copy-config-field"]}>
             <label htmlFor="move-dest">
               <SmartLabel>Destination</SmartLabel>
             </label>
             <input id="move-dest" type="text" value={destValue} onChange={(e) => setDestValue(e.target.value)} {...INPUT_NO_ASSIST} />
           </div>
 
-          <div className="copy-config-field">
+          <div className={styles["copy-config-field"]}>
             <label htmlFor="move-conflict">
               <SmartLabel>Conflict handling</SmartLabel>
             </label>
@@ -71,7 +73,7 @@ export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: M
             </select>
           </div>
         </div>
-        <div className="modal-dialog-buttons" ref={buttonsRef}>
+        <div className={styles["modal-dialog-buttons"]} ref={buttonsRef}>
           <button type="button" onClick={onCancel}>
             <SmartLabel>Cancel</SmartLabel>
           </button>

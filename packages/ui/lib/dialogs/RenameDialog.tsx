@@ -1,6 +1,8 @@
 import { focusContext } from "@/focusContext";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useEffect, useRef, useState } from "react";
+import styles from "../styles/dialogs.module.css";
+import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
 
 export interface RenameDialogProps {
@@ -52,18 +54,18 @@ export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogP
   };
 
   return (
-    <dialog ref={dialogRef} className="modal-dialog rename-dialog" onCancel={handleCancel}>
-      <div className="modal-dialog-header">Rename</div>
-      <form className="rename-form" onSubmit={handleSubmit}>
-        <div className="modal-dialog-body">
-          <div className="rename-field">
+    <dialog ref={dialogRef} className={cx(styles, "modal-dialog", "rename-dialog")} onCancel={handleCancel}>
+      <div className={styles["modal-dialog-header"]}>Rename</div>
+      <form onSubmit={handleSubmit}>
+        <div className={styles["modal-dialog-body"]}>
+          <div className={styles["rename-field"]}>
             <label htmlFor="rename-input">
               <SmartLabel>New name</SmartLabel>
             </label>
             <input ref={inputRef} id="rename-input" type="text" value={newName} onChange={(e) => setNewName(e.target.value)} {...INPUT_NO_ASSIST} />
           </div>
         </div>
-        <div className="modal-dialog-buttons">
+        <div className={styles["modal-dialog-buttons"]}>
           <button type="button" onClick={handleCancel}>
             <SmartLabel>Cancel</SmartLabel>
           </button>

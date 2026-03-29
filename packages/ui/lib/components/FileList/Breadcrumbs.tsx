@@ -1,5 +1,7 @@
 import { getBreadcrumbSegments } from "@/utils/path";
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import styles from "../../styles/file-list.module.css";
+import { cx } from "../../utils/cssModules";
 
 interface BreadcrumbsProps {
   currentPath: string;
@@ -96,7 +98,7 @@ export const Breadcrumbs = memo(function Breadcrumbs({ currentPath, onNavigate }
 
   return (
     <div
-      className={`breadcrumbs${canScrollLeft ? " is-cropped-left" : ""}${canScrollRight ? " is-cropped-right" : ""}`}
+      className={cx(styles, "breadcrumbs", canScrollLeft && "is-cropped-left", canScrollRight && "is-cropped-right")}
       ref={containerRef}
       onWheel={(e) => {
         const root = containerRef.current;
@@ -116,16 +118,16 @@ export const Breadcrumbs = memo(function Breadcrumbs({ currentPath, onNavigate }
         return (
           <Fragment key={`${i}-${seg.path}`}>
             <div
-              className="breadcrumb-segment"
+              className={styles["breadcrumb-segment"]}
               onClick={(e) => {
                 e.stopPropagation();
                 handleSegmentClick(seg, i, isLast);
               }}
             >
-              <span className="breadcrumb-segment-text">{seg.label}</span>
+              <span className={styles["breadcrumb-segment-text"]}>{seg.label}</span>
             </div>
             {!isLast && seg.label !== "/" && (
-              <span className="breadcrumb-separator" aria-hidden>
+              <span className={styles["breadcrumb-separator"]} aria-hidden>
                 {separator}
               </span>
             )}
@@ -133,7 +135,7 @@ export const Breadcrumbs = memo(function Breadcrumbs({ currentPath, onNavigate }
         );
       })}
       {showCopiedTooltip && (
-        <span className="breadcrumb-copied-tooltip" role="status">
+        <span className={styles["breadcrumb-copied-tooltip"]} role="status">
           Path copied to clipboard
         </span>
       )}

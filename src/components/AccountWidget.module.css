@@ -1,5 +1,3 @@
-/* Account widget — compact sign-in/user indicator in the status bar */
-
 .account-widget {
   display: flex;
   align-items: center;
@@ -71,8 +69,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* Sign-out dropdown */
 
 .account-widget-backdrop {
   position: fixed;

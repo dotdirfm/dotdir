@@ -1,6 +1,8 @@
 import { focusContext } from "@/focusContext";
 import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
 import { useEffect, useRef } from "react";
+import styles from "../styles/dialogs.module.css";
+import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
 
 interface ModalButton {
@@ -39,10 +41,10 @@ export function ModalDialog({ title, message, variant = "default", buttons, onCl
   }, [onClose]);
 
   return (
-    <dialog ref={dialogRef} className={`modal-dialog ${variant}`} onKeyDown={onKeyDown}>
-      {title && <div className="modal-dialog-header">{title}</div>}
-      <div className="modal-dialog-body">{message}</div>
-      <div className="modal-dialog-buttons" ref={buttonsRef}>
+    <dialog ref={dialogRef} className={cx(styles, "modal-dialog", variant)} onKeyDown={onKeyDown}>
+      {title && <div className={styles["modal-dialog-header"]}>{title}</div>}
+      <div className={styles["modal-dialog-body"]}>{message}</div>
+      <div className={styles["modal-dialog-buttons"]} ref={buttonsRef}>
         {resolvedButtons.map((btn) => (
           <button
             key={btn.label}

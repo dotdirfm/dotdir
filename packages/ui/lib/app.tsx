@@ -46,6 +46,10 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "./features/settings/userSettings";
 import { PanelPersistedState } from "./features/ui-state/types";
+import baseStyles from "./styles/base.module.css";
+import panelsStyles from "./styles/panels.module.css";
+import terminalStyles from "./styles/terminal.module.css";
+import { cx } from "./utils/cssModules";
 
 export function App({ widget }: { widget: React.ReactNode }) {
   const bridge = useBridge();
@@ -620,17 +624,17 @@ export function App({ widget }: { widget: React.ReactNode }) {
   }, []);
 
   if (!left.currentPath || !right.currentPath || !themesReady) {
-    return <div className="loading">Loading...</div>;
+    return <div className={baseStyles["loading"]}>Loading...</div>;
   }
 
   return (
-    <div className="app">
+    <div className={baseStyles["app"]}>
       <>
-        <div className="terminal-and-panels">
-          <div className={`terminal-background${panelsVisible ? "" : " expanded"}`}>
+        <div className={terminalStyles["terminal-and-panels"]}>
+          <div className={terminalStyles["terminal-background"]}>
             <TerminalPanelBody />
           </div>
-          <div className={`panels-overlay${panelsVisible ? "" : " hidden"}`}>
+          <div className={cx(panelsStyles, "panels-overlay", !panelsVisible && "hidden")}>
             <PanelGroup
               side="left"
               panel={left}
@@ -654,7 +658,7 @@ export function App({ widget }: { widget: React.ReactNode }) {
         <CommandLine />
         <TerminalToolbar />
       </>
-      <div className="status-bar">
+      <div className={baseStyles["status-bar"]}>
         <ActionBar />
         {widget}
       </div>

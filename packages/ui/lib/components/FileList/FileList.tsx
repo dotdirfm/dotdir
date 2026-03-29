@@ -11,6 +11,8 @@ import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
 import type { LayeredResolver } from "fss-lang";
 import { FsNode } from "fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import styles from "../../styles/file-list.module.css";
+import { cx } from "../../utils/cssModules";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
 
@@ -649,7 +651,7 @@ export const FileList = memo(function FileList({
       const isExecutable = entry.type === "file" && !!(entry.meta as { executable?: boolean }).executable;
       return (
         <div
-          className={`entry${isActive ? " selected" : ""}${isSelected ? " marked" : ""}`}
+          className={cx(styles, "entry", isActive && "selected", isSelected && "marked")}
           style={{ height: ROW_HEIGHT, opacity: style.opacity }}
           onMouseDown={(e) => {
             e.stopPropagation();
@@ -668,11 +670,11 @@ export const FileList = memo(function FileList({
             }
           }}
         >
-          <span className="entry-icon">
+          <span className={styles["entry-icon"]}>
             <img src={iconUrl} width={16} height={16} alt="" />
           </span>
           <span
-            className="entry-name"
+            className={styles["entry-name"]}
             style={{
               color: style.color,
               fontWeight: style.fontWeight,
@@ -684,7 +686,7 @@ export const FileList = memo(function FileList({
           >
             {entry.name}
           </span>
-          {"size" in entry.meta && entry.type === "file" && <span className="entry-size">{formatSize(entry.meta.size)}</span>}
+          {"size" in entry.meta && entry.type === "file" && <span className={styles["entry-size"]}>{formatSize(entry.meta.size)}</span>}
         </div>
       );
     },
@@ -759,14 +761,14 @@ export const FileList = memo(function FileList({
 
   return (
     <div
-      className={`file-list${isTouchscreen || keyboardNavMode ? " no-hover" : ""}`}
+      className={cx(styles, "file-list", isTouchscreen || keyboardNavMode ? "no-hover" : null, active ? "active-panel" : "inactive-panel")}
       onMouseMoveCapture={clearKeyboardNav}
       onMouseDownCapture={clearKeyboardNav}
     >
-      <div className="path-bar">
+      <div className={styles["path-bar"]}>
         <Breadcrumbs currentPath={currentPath} onNavigate={handleBreadcrumbNavigate} />
       </div>
-      <div className="file-list-body">
+      <div className={styles["file-list-body"]}>
         <ColumnsScroller
           topmostIndex={topmostIndex}
           activeIndex={activeIndex}
@@ -782,13 +784,13 @@ export const FileList = memo(function FileList({
           onColumnCountChanged={handleColumnCountChanged}
         />
       </div>
-      <div className="file-info-footer">
-        <span className="file-info-name">{footerName}</span>
-        {footerLink && <span className="file-info-link">{footerLink}</span>}
-        <span className="file-info-size">{footerInfo}</span>
-        <span className="file-info-date">{footerDate}</span>
+      <div className={styles["file-info-footer"]}>
+        <span className={styles["file-info-name"]}>{footerName}</span>
+        {footerLink && <span className={styles["file-info-link"]}>{footerLink}</span>}
+        <span className={styles["file-info-size"]}>{footerInfo}</span>
+        <span className={styles["file-info-date"]}>{footerDate}</span>
       </div>
-      <div className="panel-summary">
+      <div className={styles["panel-summary"]}>
         {selectionSummary
           ? `${selectionSummary.count} selected, ${formatSize(selectionSummary.size)}`
           : `${totalFiles.toLocaleString()} file${totalFiles !== 1 ? "s" : ""}, ${formatSize(totalSize)}`}

@@ -1,4 +1,6 @@
 .action-bar {
+  flex: 1 1 auto;
+  min-width: 0;
   height: 24px;
   display: flex;
   align-items: center;
@@ -56,24 +58,7 @@
   white-space: nowrap;
 }
 
-.terminal-loading {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  padding: 0 10px;
-  color: var(--fg-muted);
-  min-height: 0;
-}
-
-body.terminal-resizing {
+:global(body.terminal-resizing) {
   cursor: row-resize;
   user-select: none;
-}
-
-.loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--fg-muted);
 }

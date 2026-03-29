@@ -4,6 +4,11 @@
   height: 100%;
 }
 
+.file-list.active-panel .path-bar {
+  background: var(--bg);
+  color: var(--fg);
+}
+
 .path-bar {
   position: relative;
   padding: 8px 12px;
@@ -17,7 +22,6 @@
   overflow: visible;
 }
 
-/* Breadcrumbs: no segment truncation; crop via horizontal overflow + edge fades */
 .breadcrumbs {
   position: relative;
   display: flex;
@@ -164,6 +168,11 @@
   color: var(--entry-selected-fg);
 }
 
+.file-list.inactive-panel .entry.selected {
+  background: var(--entry-selected-inactive);
+  color: var(--entry-selected-inactive-fg);
+}
+
 .entry.marked::before {
   content: "";
   position: absolute;
@@ -173,13 +182,11 @@
   pointer-events: none;
 }
 
-/* Remove bottom radius when next sibling also has a marked entry */
 .columns-scroller-content > div:has(> .entry.marked) + div:has(> .entry.marked) > .entry.marked::before {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }
 
-/* Remove bottom radius on the first of consecutive marked entries */
 .columns-scroller-content > div:has(> .entry.marked):has(+ div > .entry.marked) > .entry.marked::before {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;

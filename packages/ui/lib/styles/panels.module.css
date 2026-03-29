@@ -34,16 +34,6 @@
   border-color: var(--border-active);
 }
 
-.panel.active .path-bar {
-  background: var(--bg);
-  color: var(--fg);
-}
-
-.panel:not(.active) .entry.selected {
-  background: var(--entry-selected-inactive);
-  color: var(--entry-selected-inactive-fg);
-}
-
 .panel-progress {
   position: absolute;
   top: 0;
@@ -74,7 +64,6 @@
   }
 }
 
-/* Panel tabs (VSCode-style) */
 .panel-tabs {
   display: flex;
   align-items: center;
@@ -111,7 +100,7 @@
   color: var(--fg-muted, var(--fg));
   flex-shrink: 0;
   max-width: 160px;
-  min-width: 48px; /* ensure close button + some label visible */
+  min-width: 48px;
 }
 
 .panel-tab .panel-tab-label {
@@ -174,7 +163,7 @@
   background: var(--entry-hover, rgba(255, 255, 255, 0.06));
 }
 
-.panel-tab.panel-tab-dragging {
+.panel-tab-dragging {
   opacity: 0.5;
 }
 

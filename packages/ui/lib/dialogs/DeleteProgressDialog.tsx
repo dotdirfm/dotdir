@@ -1,5 +1,7 @@
 import { focusContext } from "@/focusContext";
 import { useEffect, useRef } from "react";
+import styles from "../styles/dialogs.module.css";
+import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
 
 export interface DeleteProgressDialogProps {
@@ -22,16 +24,16 @@ export function DeleteProgressDialog({ filesDone, currentFile, onCancel }: Delet
   }, []);
 
   return (
-    <dialog ref={dialogRef} className="modal-dialog delete-progress-dialog">
-      <div className="modal-dialog-header">Permanently deleting</div>
-      <div className="modal-dialog-body">
-        <div className="delete-progress-text">{filesDone.toLocaleString()} items deleted</div>
-        <div className="delete-progress-path" title={currentFile}>
+    <dialog ref={dialogRef} className={cx(styles, "modal-dialog", "delete-progress-dialog")}>
+      <div className={styles["modal-dialog-header"]}>Permanently deleting</div>
+      <div className={styles["modal-dialog-body"]}>
+        <div className={styles["delete-progress-text"]}>{filesDone.toLocaleString()} items deleted</div>
+        <div className={styles["delete-progress-path"]} title={currentFile}>
           {currentFile}
         </div>
-        <p className="delete-progress-hint">Already deleted items cannot be recovered.</p>
+        <p className={styles["delete-progress-hint"]}>Already deleted items cannot be recovered.</p>
       </div>
-      <div className="modal-dialog-buttons">
+      <div className={styles["modal-dialog-buttons"]}>
         <button type="button" onClick={onCancel}>
           <SmartLabel>Cancel</SmartLabel>
         </button>

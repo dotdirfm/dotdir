@@ -25,6 +25,8 @@ import { focusContext } from "@/focusContext";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
+import styles from "../styles/extensions.module.css";
+import { cx } from "../utils/cssModules";
 
 /** Extract a message from Tauri invoke errors (plain {errno,message} objects) or Error instances. */
 function errMsg(err: unknown): string {
@@ -185,28 +187,28 @@ export function ExtensionsPanel() {
   };
 
   return (
-    <dialog ref={dialogRef} className="ext-panel">
-      <div className="ext-panel-header">
-        <span className="ext-panel-title">Extensions</span>
-        <button className="ext-panel-close" onClick={() => dialogRef.current?.close()}>
+    <dialog ref={dialogRef} className={styles["ext-panel"]}>
+      <div className={styles["ext-panel-header"]}>
+        <span className={styles["ext-panel-title"]}>Extensions</span>
+        <button className={styles["ext-panel-close"]} onClick={() => dialogRef.current?.close()}>
           ✕
         </button>
       </div>
 
-      <div className="ext-panel-tabs">
-        <button className={`ext-tab ${tab === "marketplace" ? "active" : ""}`} onClick={() => setTab("marketplace")}>
+      <div className={styles["ext-panel-tabs"]}>
+        <button className={cx(styles, "ext-tab", tab === "marketplace" && "active")} onClick={() => setTab("marketplace")}>
           Marketplace
         </button>
-        <button className={`ext-tab ${tab === "installed" ? "active" : ""}`} onClick={() => setTab("installed")}>
+        <button className={cx(styles, "ext-tab", tab === "installed" && "active")} onClick={() => setTab("installed")}>
           Installed ({installed.length})
         </button>
       </div>
 
       {tab === "marketplace" && (
-        <div className="ext-search">
-          <div className="ext-source-selector">
+        <div className={styles["ext-search"]}>
+          <div className={styles["ext-source-selector"]}>
             <button
-              className={`ext-source-btn ${marketplaceSource === "vscode" ? "active" : ""}`}
+              className={cx(styles, "ext-source-btn", marketplaceSource === "vscode" && "active")}
               onClick={() => {
                 setMarketplaceSource("vscode");
                 setQuery("");
@@ -215,7 +217,7 @@ export function ExtensionsPanel() {
               VS Code
             </button>
             <button
-              className={`ext-source-btn ${marketplaceSource === "dotdir" ? "active" : ""}`}
+              className={cx(styles, "ext-source-btn", marketplaceSource === "dotdir" && "active")}
               onClick={() => {
                 setMarketplaceSource("dotdir");
                 setQuery("");
@@ -235,42 +237,42 @@ export function ExtensionsPanel() {
         </div>
       )}
 
-      {error && <div className="ext-error">{error}</div>}
+      {error && <div className={styles["ext-error"]}>{error}</div>}
 
-      <div className="ext-list">
+      <div className={styles["ext-list"]}>
         {tab === "marketplace" &&
           marketplaceSource === "dotdir" &&
           (loading ? (
-            <div className="ext-empty">Searching...</div>
+            <div className={styles["ext-empty"]}>Searching...</div>
           ) : results.length === 0 ? (
-            <div className="ext-empty">No extensions found</div>
+            <div className={styles["ext-empty"]}>No extensions found</div>
           ) : (
             results.map((ext) => {
               const key = `${ext.publisher.username}.${ext.name}`;
               const isInstalled = installedSet.has(key);
               const isBusy = installing === key;
               return (
-                <div key={ext.id} className="ext-item">
-                  <div className="ext-icon">
+                <div key={ext.id} className={styles["ext-item"]}>
+                  <div className={styles["ext-icon"]}>
                     {ext.icon_url ? <img src={ext.icon_url} width={36} height={36} alt="" /> : (ext.display_name[0]?.toUpperCase() ?? "?")}
                   </div>
-                  <div className="ext-info">
-                    <div className="ext-name">{ext.display_name}</div>
-                    <div className="ext-publisher">{ext.publisher.display_name || ext.publisher.username}</div>
-                    <div className="ext-desc">{ext.description}</div>
-                    <div className="ext-meta">
+                  <div className={styles["ext-info"]}>
+                    <div className={styles["ext-name"]}>{ext.display_name}</div>
+                    <div className={styles["ext-publisher"]}>{ext.publisher.display_name || ext.publisher.username}</div>
+                    <div className={styles["ext-desc"]}>{ext.description}</div>
+                    <div className={styles["ext-meta"]}>
                       {ext.latest_version && <span>v{ext.latest_version.version}</span>}
                       {ext.latest_version && <span>{formatSize(ext.latest_version.archive_size)}</span>}
                       <span>↓ {ext.total_downloads}</span>
                     </div>
                   </div>
-                  <div className="ext-actions">
+                  <div className={styles["ext-actions"]}>
                     {isInstalled ? (
-                      <button className="ext-btn installed" disabled>
+                      <button className={cx(styles, "ext-btn", "installed")} disabled>
                         Installed
                       </button>
                     ) : (
-                      <button className="ext-btn install" disabled={isBusy || !ext.latest_version} onClick={() => handleInstall(ext)}>
+                      <button className={cx(styles, "ext-btn", "install")} disabled={isBusy || !ext.latest_version} onClick={() => handleInstall(ext)}>
                         {isBusy ? "Installing..." : "Install"}
                       </button>
                     )}
@@ -283,9 +285,9 @@ export function ExtensionsPanel() {
         {tab === "marketplace" &&
           marketplaceSource === "vscode" &&
           (loading ? (
-            <div className="ext-empty">Searching...</div>
+            <div className={styles["ext-empty"]}>Searching...</div>
           ) : vscodeResults.length === 0 ? (
-            <div className="ext-empty">No extensions found</div>
+            <div className={styles["ext-empty"]}>No extensions found</div>
           ) : (
             vscodeResults.map((ext) => {
               const key = `${ext.publisher.publisherName}.${ext.extensionName}`;
@@ -295,24 +297,24 @@ export function ExtensionsPanel() {
               const iconUrl = getVSCodeIconUrl(ext);
               const installs = getVSCodeInstallCount(ext);
               return (
-                <div key={key} className="ext-item">
-                  <div className="ext-icon">{iconUrl ? <img src={iconUrl} width={36} height={36} alt="" /> : (ext.displayName[0]?.toUpperCase() ?? "?")}</div>
-                  <div className="ext-info">
-                    <div className="ext-name">{ext.displayName}</div>
-                    <div className="ext-publisher">{ext.publisher.displayName || ext.publisher.publisherName}</div>
-                    <div className="ext-desc">{ext.shortDescription}</div>
-                    <div className="ext-meta">
+                <div key={key} className={styles["ext-item"]}>
+                  <div className={styles["ext-icon"]}>{iconUrl ? <img src={iconUrl} width={36} height={36} alt="" /> : (ext.displayName[0]?.toUpperCase() ?? "?")}</div>
+                  <div className={styles["ext-info"]}>
+                    <div className={styles["ext-name"]}>{ext.displayName}</div>
+                    <div className={styles["ext-publisher"]}>{ext.publisher.displayName || ext.publisher.publisherName}</div>
+                    <div className={styles["ext-desc"]}>{ext.shortDescription}</div>
+                    <div className={styles["ext-meta"]}>
                       {version && <span>v{version}</span>}
                       <span>↓ {installs.toLocaleString()}</span>
                     </div>
                   </div>
-                  <div className="ext-actions">
+                  <div className={styles["ext-actions"]}>
                     {isInstalled ? (
-                      <button className="ext-btn installed" disabled>
+                      <button className={cx(styles, "ext-btn", "installed")} disabled>
                         Installed
                       </button>
                     ) : (
-                      <button className="ext-btn install" disabled={isBusy || !version} onClick={() => handleVSCodeInstall(ext)}>
+                      <button className={cx(styles, "ext-btn", "install")} disabled={isBusy || !version} onClick={() => handleVSCodeInstall(ext)}>
                         {isBusy ? "Installing..." : "Install"}
                       </button>
                     )}
@@ -324,7 +326,7 @@ export function ExtensionsPanel() {
 
         {tab === "installed" &&
           (installed.length === 0 ? (
-            <div className="ext-empty">No extensions installed</div>
+            <div className={styles["ext-empty"]}>No extensions installed</div>
           ) : (
             installed.map((ext) => {
               const key = `${ext.ref.publisher}.${ext.ref.name}`;
@@ -333,52 +335,52 @@ export function ExtensionsPanel() {
               const isActiveIconTheme = iconThemeId != null && iconThemeId === activeIconTheme;
               const hasColorThemes = ext.colorThemes && ext.colorThemes.length > 0;
               return (
-                <div key={key} className="ext-item">
-                  <div className="ext-icon">
+                <div key={key} className={styles["ext-item"]}>
+                  <div className={styles["ext-icon"]}>
                     {ext.iconUrl ? (
                       <img src={ext.iconUrl} width={36} height={36} alt="" />
                     ) : (
                       ((ext.manifest.displayName || ext.manifest.name)[0]?.toUpperCase() ?? "?")
                     )}
                   </div>
-                  <div className="ext-info">
-                    <div className="ext-name">{ext.manifest.displayName || ext.manifest.name}</div>
-                    <div className="ext-publisher">{ext.manifest.publisher}</div>
-                    <div className="ext-desc">{ext.manifest.description || ""}</div>
-                    <div className="ext-meta">
+                  <div className={styles["ext-info"]}>
+                    <div className={styles["ext-name"]}>{ext.manifest.displayName || ext.manifest.name}</div>
+                    <div className={styles["ext-publisher"]}>{ext.manifest.publisher}</div>
+                    <div className={styles["ext-desc"]}>{ext.manifest.description || ""}</div>
+                    <div className={styles["ext-meta"]}>
                       <span>v{ext.ref.version}</span>
                       {iconThemeId && (
-                        <span className={`ext-theme-badge${isActiveIconTheme ? " active" : ""}`}>{isActiveIconTheme ? "● Icon theme" : "Icon theme"}</span>
+                        <span className={cx(styles, "ext-theme-badge", isActiveIconTheme && "active")}>{isActiveIconTheme ? "● Icon theme" : "Icon theme"}</span>
                       )}
                       {hasColorThemes && (
-                        <span className="ext-theme-badge">
+                        <span className={styles["ext-theme-badge"]}>
                           {ext.colorThemes!.length} color theme
                           {ext.colorThemes!.length > 1 ? "s" : ""}
                         </span>
                       )}
                       {ext.languages && ext.languages.length > 0 && (
-                        <span className="ext-theme-badge">
+                        <span className={styles["ext-theme-badge"]}>
                           {ext.languages.length} language{ext.languages.length > 1 ? "s" : ""}
                         </span>
                       )}
                       {ext.grammarRefs && ext.grammarRefs.length > 0 && (
-                        <span className="ext-theme-badge">
+                        <span className={styles["ext-theme-badge"]}>
                           {ext.grammarRefs.length} grammar{ext.grammarRefs.length > 1 ? "s" : ""}
                         </span>
                       )}
                     </div>
                     {hasColorThemes && (
-                      <div className="ext-color-themes">
+                      <div className={styles["ext-color-themes"]}>
                         {ext.colorThemes!.map((ct) => {
                           const ctKey = colorThemeKey(ext, ct.id);
                           const isActive = ctKey === activeColorTheme;
                           return (
                             <button
                               key={ct.id}
-                              className={`ext-btn ext-color-theme-btn ${isActive ? "installed" : "install"}`}
+                              className={cx(styles, "ext-btn", "ext-color-theme-btn", isActive ? "installed" : "install")}
                               onClick={() => handleSetColorTheme(ext, ct.id)}
                             >
-                              <span className="ext-color-theme-indicator" data-ui-theme={ct.uiTheme} />
+                              <span className={styles["ext-color-theme-indicator"]} data-ui-theme={ct.uiTheme} />
                               {ct.label}
                               {isActive && " ●"}
                             </button>
@@ -387,13 +389,13 @@ export function ExtensionsPanel() {
                       </div>
                     )}
                   </div>
-                  <div className="ext-actions">
+                  <div className={styles["ext-actions"]}>
                     {iconThemeId && (
-                      <button className={`ext-btn ${isActiveIconTheme ? "installed" : "install"}`} onClick={() => handleSetIconTheme(ext)}>
+                      <button className={cx(styles, "ext-btn", isActiveIconTheme ? "installed" : "install")} onClick={() => handleSetIconTheme(ext)}>
                         {isActiveIconTheme ? "Deactivate" : "Activate"}
                       </button>
                     )}
-                    <button className="ext-btn uninstall" disabled={isBusy} onClick={() => handleUninstall(ext.ref)}>
+                    <button className={cx(styles, "ext-btn", "uninstall")} disabled={isBusy} onClick={() => handleUninstall(ext.ref)}>
                       {isBusy ? "Removing..." : "Uninstall"}
                     </button>
                   </div>

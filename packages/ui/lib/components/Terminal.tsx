@@ -2,6 +2,8 @@ import { panelsVisibleAtom, resolvedProfilesAtom, terminalFocusRequestKeyAtom, t
 import { TerminalView } from "@/terminal/TerminalView";
 import { useTerminalState } from "@/terminal/useTerminalState";
 import { useAtomValue } from "jotai";
+import styles from "../styles/terminal.module.css";
+import { cx } from "../utils/cssModules";
 
 export function TerminalToolbar() {
   const profiles = useAtomValue(resolvedProfilesAtom);
@@ -12,20 +14,20 @@ export function TerminalToolbar() {
   const activeError = activeSession?.error ?? null;
 
   return (
-    <div className="terminal-toolbar">
-      <div className="terminal-tabs">
+    <div className={styles["terminal-toolbar"]}>
+      <div className={styles["terminal-tabs"]}>
         {sessions.map((session) => (
           <button
             key={session.id}
             type="button"
-            className={`terminal-tab ${session.id === activeSessionId ? "active" : ""}`}
+            className={cx(styles, "terminal-tab", session.id === activeSessionId && "active")}
             onClick={() => activate(session.id)}
           >
-            <span className={`terminal-tab-status status-${session.status}`} />
-            <span className="terminal-tab-label">{session.profileLabel}</span>
+            <span className={cx(styles, "terminal-tab-status", `status-${session.status}`)} />
+            <span className={styles["terminal-tab-label"]}>{session.profileLabel}</span>
             {sessions.length > 1 && (
               <span
-                className="terminal-tab-close"
+                className={styles["terminal-tab-close"]}
                 onClick={(event) => {
                   event.stopPropagation();
                   closeSession(session.id);
@@ -36,12 +38,12 @@ export function TerminalToolbar() {
             )}
           </button>
         ))}
-        <button type="button" className="terminal-tab terminal-tab-add" onClick={() => createSession(activeProfileId ?? profiles[0]?.id)}>
+        <button type="button" className={cx(styles, "terminal-tab", "terminal-tab-add")} onClick={() => createSession(activeProfileId ?? profiles[0]?.id)}>
           +
         </button>
       </div>
-      <label className="terminal-profile-picker">
-        <span className="terminal-profile-label">Shell</span>
+      <label className={styles["terminal-profile-picker"]}>
+        <span className={styles["terminal-profile-label"]}>Shell</span>
         <select
           value={activeProfileId ?? ""}
           disabled={!profilesLoaded || profiles.length === 0 || !activeSessionId}
@@ -54,8 +56,8 @@ export function TerminalToolbar() {
           ))}
         </select>
       </label>
-      {activeSessionId && <div className="terminal-profile-shell">{activeProfileShell ?? ""}</div>}
-      {activeError && <div className="terminal-status-error">{activeError}</div>}
+      {activeSessionId && <div className={styles["terminal-profile-shell"]}>{activeProfileShell ?? ""}</div>}
+      {activeError && <div className={styles["terminal-status-error"]}>{activeError}</div>}
     </div>
   );
 }
@@ -66,8 +68,8 @@ export function TerminalPanelBody() {
   const focusRequestKey = useAtomValue(terminalFocusRequestKeyAtom);
 
   return (
-    <div className="terminal-panel">
-      <div className="terminal-body">
+    <div className={styles["terminal-panel"]}>
+      <div className={styles["terminal-body"]}>
         {activeSession ? (
           <TerminalView
             key={activeSession.id}
@@ -76,7 +78,7 @@ export function TerminalPanelBody() {
             focusRequestKey={focusRequestKey}
           />
         ) : (
-          <div className="terminal-loading">Loading terminal...</div>
+          <div className={styles["terminal-loading"]}>Loading terminal...</div>
         )}
       </div>
     </div>

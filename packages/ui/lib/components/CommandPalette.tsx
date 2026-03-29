@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { commandPaletteOpenAtom } from "../atoms";
 import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from "../features/commands/commands";
 import { focusContext } from "../focusContext";
+import paletteStyles from "../styles/command-palette.module.css";
+import terminalStyles from "../styles/terminal.module.css";
 import { INPUT_NO_ASSIST } from "../utils/inputNoAssist";
 
 interface CommandPaletteProps {
@@ -101,13 +103,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   return (
     <dialog
       ref={dialogRef}
-      className="command-palette-dialog"
+      className={paletteStyles["command-palette-dialog"]}
       onClick={(e) => {
         if (e.target === dialogRef.current) onOpenChange(false);
       }}
       onClose={() => onOpenChange(false)}
     >
-      <Command className="command-palette" onKeyDown={handleKeyDown} shouldFilter={true}>
+      <Command className={paletteStyles["command-palette"]} onKeyDown={handleKeyDown} shouldFilter={true}>
         <Command.Input ref={inputRef} value={search} onValueChange={setSearch} placeholder="Type a command or search..." {...INPUT_NO_ASSIST} />
         <Command.List>
           <Command.Empty>No results found.</Command.Empty>
@@ -115,8 +117,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             <Command.Group key={category} heading={category}>
               {categoryItems.map(({ command, keybinding, displayTitle }) => (
                 <Command.Item key={command.id} value={displayTitle} onSelect={() => handleSelect(command.id)}>
-                  <span className="command-item-title">{command.title}</span>
-                  {keybinding && <span className="command-item-keybinding">{formatKeybinding(keybinding)}</span>}
+                  <span className={paletteStyles["command-item-title"]}>{command.title}</span>
+                  {keybinding && <span className={paletteStyles["command-item-keybinding"]}>{formatKeybinding(keybinding)}</span>}
                 </Command.Item>
               ))}
             </Command.Group>
@@ -151,7 +153,7 @@ export function useCommandPalette() {
       // Let command registry handle other shortcuts when palette is closed
       if (!open) {
         const target = e.target as HTMLElement;
-        const inTerminal = target.closest(".terminal-container");
+        const inTerminal = target.closest(`.${terminalStyles["terminal-container"]}`);
 
         // When in terminal, only intercept shortcuts with Ctrl/Cmd modifier
         // (but not Ctrl+C/D/Z which are terminal control sequences)

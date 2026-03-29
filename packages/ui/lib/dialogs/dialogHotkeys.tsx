@@ -16,6 +16,7 @@
  *    of the OS input language.
  */
 import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import styles from "../styles/dialogs.module.css";
 import { HelpDialog } from "./HelpDialog";
 
 interface Registration {
@@ -179,7 +180,7 @@ export function SmartLabel({ children }: { children: string }) {
   return (
     <span ref={spanRef}>
       {children.slice(0, idx)}
-      <span className="hotkey-char">{children[idx]}</span>
+      <span className={styles["hotkey-char"]}>{children[idx]}</span>
       {children.slice(idx + 1)}
     </span>
   );

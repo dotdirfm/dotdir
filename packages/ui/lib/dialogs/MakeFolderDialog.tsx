@@ -1,6 +1,8 @@
 import { focusContext } from "@/focusContext";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useEffect, useRef, useState } from "react";
+import styles from "../styles/dialogs.module.css";
+import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
 
 export type MakeFolderResult = { mode: "single"; name: string } | { mode: "multiple"; names: string[] };
@@ -59,11 +61,11 @@ export function MakeFolderDialog({ currentPath: _currentPath, onConfirm, onCance
   };
 
   return (
-    <dialog ref={dialogRef} className="modal-dialog make-folder-dialog" onCancel={handleCancel}>
-      <div className="modal-dialog-header">Make Folder</div>
-      <form className="make-folder-form" onSubmit={handleSubmit}>
-        <div className="modal-dialog-body">
-          <div className="make-folder-field">
+    <dialog ref={dialogRef} className={cx(styles, "modal-dialog", "make-folder-dialog")} onCancel={handleCancel}>
+      <div className={styles["modal-dialog-header"]}>Make Folder</div>
+      <form className={styles["make-folder-form"]} onSubmit={handleSubmit}>
+        <div className={styles["modal-dialog-body"]}>
+          <div className={styles["make-folder-field"]}>
             <label htmlFor="make-folder-name">
               <SmartLabel>{processMultiple ? "Folder names" : "Folder name"}</SmartLabel>
             </label>
@@ -77,14 +79,14 @@ export function MakeFolderDialog({ currentPath: _currentPath, onConfirm, onCance
               {...INPUT_NO_ASSIST}
             />
           </div>
-          <label className="make-folder-checkbox">
+          <label className={styles["make-folder-checkbox"]}>
             <input type="checkbox" checked={processMultiple} onChange={(e) => setProcessMultiple(e.target.checked)} />
             <span>
               <SmartLabel>Process multiple names</SmartLabel>
             </span>
           </label>
         </div>
-        <div className="modal-dialog-buttons">
+        <div className={styles["modal-dialog-buttons"]}>
           <button type="button" onClick={handleCancel}>
             <SmartLabel>Cancel</SmartLabel>
           </button>

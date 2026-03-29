@@ -1,4 +1,3 @@
-/* Command Palette */
 .command-palette-dialog {
   position: fixed;
   top: 15vh;
@@ -94,10 +93,7 @@
 .command-item-keybinding {
   font-size: 11px;
   color: var(--fg-muted);
-  font-family:
-    system-ui,
-    -apple-system,
-    sans-serif;
+  font-family: system-ui, -apple-system, sans-serif;
   background: var(--bg-secondary);
   padding: 2px 6px;
   border-radius: 4px;

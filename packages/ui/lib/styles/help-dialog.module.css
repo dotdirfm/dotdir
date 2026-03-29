@@ -1,4 +1,3 @@
-/* ── Help dialog ──────────────────────────────────────────────────── */
 .help-dialog {
   width: 560px;
   max-width: 90vw;
@@ -33,7 +32,6 @@
   outline: none;
 }
 
-/* Markdown content styles inside help dialog */
 .help-dialog-body h1 {
   font-size: 15px;
   font-weight: 600;

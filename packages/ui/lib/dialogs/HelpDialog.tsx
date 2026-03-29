@@ -1,6 +1,7 @@
 import { focusContext } from "@/focusContext";
 import { marked } from "marked";
 import { useEffect, useRef } from "react";
+import styles from "../styles/help-dialog.module.css";
 
 interface HelpDialogProps {
   content: string;
@@ -40,23 +41,23 @@ export function HelpDialog({ content, onClose }: HelpDialogProps) {
   return (
     <dialog
       ref={dialogRef}
-      className="help-dialog"
+      className={styles["help-dialog"]}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
       }}
     >
-      <div className="help-dialog-header">Help</div>
+      <div className={styles["help-dialog-header"]}>Help</div>
       <div
         ref={bodyRef}
-        className="help-dialog-body"
+        className={styles["help-dialog-body"]}
         // tabIndex makes the div focusable so the browser scrolls it with keyboard.
         tabIndex={0}
         // Content is internal static strings — not user-provided.
         // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{ __html: html }}
       />
-      <div className="help-dialog-buttons">
+      <div className={styles["help-dialog-buttons"]}>
         <button onClick={onClose}>Close</button>
       </div>
     </dialog>

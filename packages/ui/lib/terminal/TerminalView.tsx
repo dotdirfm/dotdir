@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal, type IDisposable } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
+import styles from "../styles/terminal.module.css";
 import { normalizeTerminalPath } from "./path";
 import type { TerminalSession } from "./TerminalSession";
 
@@ -247,5 +248,5 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
     });
   }, [expanded]);
 
-  return <div ref={containerRef} className="terminal-container" />;
+  return <div ref={containerRef} className={styles["terminal-container"]} />;
 }
