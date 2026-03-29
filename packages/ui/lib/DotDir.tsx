@@ -9,6 +9,13 @@ import { useEffect, useRef } from "react";
 import { App } from "./app";
 import baseStyles from "./styles/base.module.css";
 import { setStyleHostElement } from "./styleHost";
+import {
+  defaultResolveVfsUrl,
+  pushVfsUrlResolver,
+  VfsUrlResolverContext,
+  type VfsUrlKind,
+  type VfsUrlResolver,
+} from "./utils/vfs";
 
 export type {
   Bridge,
@@ -25,18 +32,23 @@ export type {
   PtyLaunchInfo
 } from "@/features/bridge";
 export { basename, dirname, join, normalizePath } from "./utils/path";
+export { defaultResolveVfsUrl };
+export type { VfsUrlKind, VfsUrlResolver };
 
 export type DotDirProps = {
   bridge: Bridge;
   widget: React.ReactNode;
+  resolveVfsUrl?: VfsUrlResolver;
 };
 
-export function DotDir({ bridge, widget }: DotDirProps) {
+export function DotDir({ bridge, widget, resolveVfsUrl = defaultResolveVfsUrl }: DotDirProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     commandRegistry.registerContributions(builtInCommandContributions);
   }, []);
+
+  useEffect(() => pushVfsUrlResolver(resolveVfsUrl), [resolveVfsUrl]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -51,15 +63,17 @@ export function DotDir({ bridge, widget }: DotDirProps) {
 
   return (
     <div ref={rootRef} className={baseStyles["dotdir-root"]}>
-      <JotaiProvider>
-        <BridgeProvider bridge={bridge}>
-          <ErrorBoundary>
-            <DialogProvider>
-              <App widget={widget} />
-            </DialogProvider>
-          </ErrorBoundary>
-        </BridgeProvider>
-      </JotaiProvider>
+      <VfsUrlResolverContext.Provider value={resolveVfsUrl}>
+        <JotaiProvider>
+          <BridgeProvider bridge={bridge}>
+            <ErrorBoundary>
+              <DialogProvider>
+                <App widget={widget} />
+              </DialogProvider>
+            </ErrorBoundary>
+          </BridgeProvider>
+        </JotaiProvider>
+      </VfsUrlResolverContext.Provider>
     </div>
   );
 }

@@ -31,6 +31,7 @@ import { setFileOperationHandlers } from "@/features/file-ops/model/fileOperatio
 import { useFileOperations } from "@/features/file-ops/model/useFileOperations";
 import { isExistingDirectory, parseCdCommand, resolveCdPath } from "@/features/navigation/lib/commandLineCd";
 import { useUserSettings } from "@/features/settings/useUserSettings";
+import { focusContext } from "@/focusContext";
 import { useBuiltInCommands } from "@/hooks/useBuiltInCommands";
 import { findExistingParent, usePanel } from "@/hooks/usePanel";
 import { useTerminal } from "@/hooks/useTerminal";
@@ -41,7 +42,6 @@ import { CONTAINER_SEP } from "@/utils/containerPath";
 import { isMediaFile } from "@/utils/mediaFiles";
 import { basename, normalizePath, resolveDotSegments } from "@/utils/path";
 import { editorRegistry, fsProviderRegistry, viewerRegistry } from "@/viewerEditorRegistry";
-import { focusContext } from "@/focusContext";
 import type { ThemeKind } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -617,6 +617,11 @@ export function App({ widget }: { widget: React.ReactNode }) {
   });
 
   useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    root.focus();
+
     const isEditableTarget = (target: EventTarget | null) => {
       const el = target as HTMLElement | null;
       if (!el) return false;
@@ -625,7 +630,6 @@ export function App({ widget }: { widget: React.ReactNode }) {
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      const root = rootRef.current;
       const target = event.target as Node | null;
       if (!root || !target || !root.contains(target)) return;
       if (isEditableTarget(target)) return;
@@ -636,8 +640,8 @@ export function App({ widget }: { widget: React.ReactNode }) {
       commandRegistry.handleKeyboardEvent(event);
     };
 
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
+    root.addEventListener("keydown", handleKeyDown, true);
+    return () => root.removeEventListener("keydown", handleKeyDown, true);
   }, []);
 
   useEffect(() => {
@@ -649,96 +653,102 @@ export function App({ widget }: { widget: React.ReactNode }) {
     }
   }, []);
 
+  let body = null;
+
   if (!left.currentPath || !right.currentPath || !themesReady) {
-    return <div className={baseStyles["loading"]}>Loading...</div>;
+    body = <div className={baseStyles["loading"]}>Loading...</div>;
+  } else {
+    body = (
+      <>
+        <>
+          <div className={terminalStyles["terminal-and-panels"]}>
+            <div className={terminalStyles["terminal-background"]}>
+              <TerminalPanelBody />
+            </div>
+            <div className={cx(panelsStyles, "panels-overlay", !panelsVisible && "hidden")}>
+              <PanelGroup
+                side="left"
+                panel={left}
+                onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
+                selectionKey={selectionKey}
+                requestedActiveName={leftRequestedCursor}
+                initialPanelState={initialLeftPanel}
+                onStateChange={(sel, top) => handlePanelStateChange("left", sel, top)}
+              />
+              <PanelGroup
+                side="right"
+                panel={right}
+                onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
+                selectionKey={selectionKey}
+                requestedActiveName={rightRequestedCursor}
+                initialPanelState={initialRightPanel}
+                onStateChange={(sel, top) => handlePanelStateChange("right", sel, top)}
+              />
+            </div>
+          </div>
+          <CommandLine />
+          <TerminalToolbar />
+        </>
+        <div className={baseStyles["status-bar"]}>
+          <ActionBar />
+          {widget}
+        </div>
+        {viewerFile && !viewerResolved && (
+          <ModalDialog
+            title="No viewer"
+            message="No viewer extension found for this file type. Install viewer extensions (e.g. Image Viewer, File Viewer) from the extensions panel."
+            onClose={() => setViewerFile(null)}
+          />
+        )}
+        {viewerExt && viewerFile && viewerResolved && (
+          <ViewerContainer
+            key={`viewer:${viewerExt.dirPath}:${viewerExt.entry}`}
+            extensionDirPath={viewerExt.dirPath}
+            entry={viewerExt.entry}
+            filePath={viewerFile.path}
+            fileName={viewerFile.name}
+            fileSize={viewerFile.size}
+            onClose={() => setViewerFile(null)}
+            onExecuteCommand={handleExecuteCommand}
+          />
+        )}
+        {editorFile && !editorResolved && (
+          <ModalDialog
+            title="No editor"
+            message="No editor extension found for this file type. Install an editor extension (e.g. Monaco Editor) from the extensions panel."
+            onClose={() => setEditorFile(null)}
+          />
+        )}
+        {editorExt &&
+          editorFile &&
+          editorResolved &&
+          (() => {
+            const allLanguages = loadedExtensions.flatMap((e) => e.languages ?? []);
+            const allGrammarRefs = loadedExtensions.flatMap((e) => e.grammarRefs ?? []);
+            const grammars = allGrammarRefs.map((gr) => ({
+              contribution: gr.contribution,
+              path: gr.path,
+            }));
+            return (
+              <EditorContainer
+                key={`editor:${editorExt.dirPath}:${editorExt.entry}`}
+                extensionDirPath={editorExt.dirPath}
+                entry={editorExt.entry}
+                filePath={editorFile.path}
+                fileName={editorFile.name}
+                langId={editorFile.langId}
+                onClose={() => setEditorFile(null)}
+                languages={allLanguages}
+                grammars={grammars}
+              />
+            );
+          })()}
+        {showExtensions && <ExtensionsPanel />}
+        <DialogHolder />
+        <CommandPalette open={commandPalette.open} onOpenChange={commandPalette.setOpen} />
+      </>
+    );
   }
 
-  return (
-    <div ref={rootRef} className={baseStyles["app"]}>
-      <>
-        <div className={terminalStyles["terminal-and-panels"]}>
-          <div className={terminalStyles["terminal-background"]}>
-            <TerminalPanelBody />
-          </div>
-          <div className={cx(panelsStyles, "panels-overlay", !panelsVisible && "hidden")}>
-            <PanelGroup
-              side="left"
-              panel={left}
-              onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
-              selectionKey={selectionKey}
-              requestedActiveName={leftRequestedCursor}
-              initialPanelState={initialLeftPanel}
-              onStateChange={(sel, top) => handlePanelStateChange("left", sel, top)}
-            />
-            <PanelGroup
-              side="right"
-              panel={right}
-              onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
-              selectionKey={selectionKey}
-              requestedActiveName={rightRequestedCursor}
-              initialPanelState={initialRightPanel}
-              onStateChange={(sel, top) => handlePanelStateChange("right", sel, top)}
-            />
-          </div>
-        </div>
-        <CommandLine />
-        <TerminalToolbar />
-      </>
-      <div className={baseStyles["status-bar"]}>
-        <ActionBar />
-        {widget}
-      </div>
-      {viewerFile && !viewerResolved && (
-        <ModalDialog
-          title="No viewer"
-          message="No viewer extension found for this file type. Install viewer extensions (e.g. Image Viewer, File Viewer) from the extensions panel."
-          onClose={() => setViewerFile(null)}
-        />
-      )}
-      {viewerExt && viewerFile && viewerResolved && (
-        <ViewerContainer
-          key={`viewer:${viewerExt.dirPath}:${viewerExt.entry}`}
-          extensionDirPath={viewerExt.dirPath}
-          entry={viewerExt.entry}
-          filePath={viewerFile.path}
-          fileName={viewerFile.name}
-          fileSize={viewerFile.size}
-          onClose={() => setViewerFile(null)}
-          onExecuteCommand={handleExecuteCommand}
-        />
-      )}
-      {editorFile && !editorResolved && (
-        <ModalDialog
-          title="No editor"
-          message="No editor extension found for this file type. Install an editor extension (e.g. Monaco Editor) from the extensions panel."
-          onClose={() => setEditorFile(null)}
-        />
-      )}
-      {editorExt && editorFile && editorResolved &&
-        (() => {
-          const allLanguages = loadedExtensions.flatMap((e) => e.languages ?? []);
-          const allGrammarRefs = loadedExtensions.flatMap((e) => e.grammarRefs ?? []);
-          const grammars = allGrammarRefs.map((gr) => ({
-            contribution: gr.contribution,
-            path: gr.path,
-          }));
-          return (
-            <EditorContainer
-              key={`editor:${editorExt.dirPath}:${editorExt.entry}`}
-              extensionDirPath={editorExt.dirPath}
-              entry={editorExt.entry}
-              filePath={editorFile.path}
-              fileName={editorFile.name}
-              langId={editorFile.langId}
-              onClose={() => setEditorFile(null)}
-              languages={allLanguages}
-              grammars={grammars}
-            />
-          );
-        })()}
-      {showExtensions && <ExtensionsPanel />}
-      <DialogHolder />
-      <CommandPalette open={commandPalette.open} onOpenChange={commandPalette.setOpen} />
-    </div>
-  );
+  return <div ref={rootRef} className={baseStyles["app"]} tabIndex={0}>{body}</div>;
 }

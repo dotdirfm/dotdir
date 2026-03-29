@@ -16,7 +16,7 @@ import { registerExtensionKeybinding } from "@/registerKeybindings";
 import { getStyleHostElement } from "@/styleHost";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
-import { vfsUrl } from "@/utils/vfs";
+import { useVfsUrlResolver } from "@/utils/vfs";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import { getActiveColorThemeData, onColorThemeChange } from "@/vscodeColorTheme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -66,6 +66,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const { extensionDirPath, entry, kind, props, onClose, className, style, active } = containerProps;
 
   const bridge = useBridge();
+  const resolveVfsUrl = useVfsUrlResolver();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -348,7 +349,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
 
     const entryRel = normalizePath(entry.replace(/^\.\//, "")) || "index.js";
     const entryPath = join(extensionDirPath, entryRel);
-    const entryUrl = vfsUrl(entryPath);
+    const entryUrl = resolveVfsUrl(entryPath);
     const isEsm = /\.mjs(?:\?|$)/i.test(entryRel);
 
     // postMessage RPC state
@@ -714,13 +715,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     );
   }
 
-  // Serve extension iframe `index.html` from the same `_ext/<bundleDir>/` VFS directory
-  // as the extension entry bundle. This keeps relative asset URLs working.
+  // Serve extension iframe `index.html` from the `_ext/<bundleDir>` VFS directory
+  // that corresponds to the extension entry bundle. This keeps relative asset URLs working.
   const entryRelForIframe = normalizePath(entry.replace(/^\.\//, "")) || "index.js";
   const entryPathForIframe = join(extensionDirPath, entryRelForIframe);
   const entryDirForIframe = dirname(entryPathForIframe);
-  // Must keep `_ext/` and the Windows drive root separate: `/_ext` + `C:/...` → `_extC:` (broken).
-  const iframeSrc = vfsUrl(`/_ext/${entryDirForIframe.replace(/^\//, "")}`);
+  const iframeSrc = resolveVfsUrl(entryDirForIframe, "extension-directory");
 
   return (
     <div className={className} style={{ ...style, position: "relative" }}>

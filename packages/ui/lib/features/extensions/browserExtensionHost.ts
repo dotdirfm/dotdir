@@ -2,7 +2,7 @@ import { commandRegistry } from "@/features/commands/commands";
 import type { LoadedExtension } from "@/features/extensions/extensions";
 import { registerExtensionKeybinding } from "@/registerKeybindings";
 import { join, normalizePath } from "@/utils/path";
-import { vfsUrl } from "@/utils/vfs";
+import { resolveVfsUrl } from "@/utils/vfs";
 
 export type BrowserDisposable = { dispose: () => void };
 
@@ -177,7 +177,7 @@ export class BrowserExtensionHost {
     const key = extActivationKey(ext);
     const scriptRel = ext.manifest.browser!;
     const absScriptPath = join(ext.dirPath, normalizePath(scriptRel).replace(/^\//, ""));
-    const scriptUrl = vfsUrl(absScriptPath);
+    const scriptUrl = resolveVfsUrl(absScriptPath);
 
     const module = await loadBrowserModule(scriptUrl);
     const activateFn = module.activate ?? module.default?.activate;
