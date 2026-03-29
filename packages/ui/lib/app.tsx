@@ -620,8 +620,6 @@ export function App({ widget }: { widget: React.ReactNode }) {
     const root = rootRef.current;
     if (!root) return;
 
-    root.focus();
-
     const isEditableTarget = (target: EventTarget | null) => {
       const el = target as HTMLElement | null;
       if (!el) return false;

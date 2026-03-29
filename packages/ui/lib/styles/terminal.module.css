@@ -15,6 +15,7 @@
   font-family: Menlo, Monaco, "Courier New", monospace;
   font-size: 13px;
   color: #d7dae0;
+  overflow: hidden;
 }
 
 .command-line.hidden {
