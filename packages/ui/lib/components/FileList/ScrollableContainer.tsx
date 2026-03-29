@@ -54,6 +54,8 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
     const isWindows = navigator.platform.startsWith("Win");
 
     const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
       const delta = lineSize && isWindows ? Math.sign(event.deltaY) * lineSize : event.deltaY;
       updateScrollTop(delta);
     };
@@ -100,7 +102,7 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
       }
     };
 
-    container.addEventListener("wheel", handleWheel, { passive: true });
+    container.addEventListener("wheel", handleWheel, { passive: false });
     if (isTouchscreen) {
       container.addEventListener("pointerdown", handlePointerDown);
       container.addEventListener("pointermove", handlePointerMove);

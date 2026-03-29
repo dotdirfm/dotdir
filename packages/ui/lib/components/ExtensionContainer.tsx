@@ -18,6 +18,7 @@ import { basename, dirname, join, normalizePath } from "@/utils/path";
 import { vfsUrl } from "@/utils/vfs";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import { getActiveColorThemeData, onColorThemeChange } from "@/vscodeColorTheme";
+import { getActiveFileListHandlers } from "@/fileListHandlers";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "../styles/viewers.module.css";
 
@@ -785,6 +786,15 @@ export function ViewerContainer({
 }: ViewerContainerWrapperProps) {
   const focusPushedRef = useRef(false);
   const isVisible = visible ?? true;
+  const restorePanelFocus = useCallback(() => {
+    requestAnimationFrame(() => {
+      getActiveFileListHandlers()?.focus();
+    });
+  }, []);
+  const handleClose = useCallback(() => {
+    onClose();
+    restorePanelFocus();
+  }, [onClose, restorePanelFocus]);
 
   // Manage focus context for non-inline overlay mode.
   useEffect(() => {
@@ -844,7 +854,7 @@ export function ViewerContainer({
       <button
         type="button"
         title="Close (Esc)"
-        onClick={onClose}
+        onClick={handleClose}
         style={{
           background: "transparent",
           border: "none",
@@ -868,7 +878,7 @@ export function ViewerContainer({
       entry={entry}
       props={viewerProps}
       active={isVisible}
-      onClose={onClose}
+      onClose={handleClose}
       onExecuteCommand={onExecuteCommand}
       style={{ width: "100%", height: "100%" }}
     />
@@ -920,6 +930,15 @@ export function EditorContainer({
   const [currentLangId, setCurrentLangId] = useState(langId);
   const focusPushedRef = useRef(false);
   const isVisible = visible ?? true;
+  const restorePanelFocus = useCallback(() => {
+    requestAnimationFrame(() => {
+      getActiveFileListHandlers()?.focus();
+    });
+  }, []);
+  const handleClose = useCallback(() => {
+    onClose();
+    restorePanelFocus();
+  }, [onClose, restorePanelFocus]);
 
   useEffect(() => {
     setCurrentLangId(langId);
@@ -1024,7 +1043,7 @@ export function EditorContainer({
           <button
             type="button"
             title="Close (Esc)"
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               background: "transparent",
               border: "none",
@@ -1046,7 +1065,7 @@ export function EditorContainer({
             entry={entry}
             props={editorProps}
             active={isVisible}
-            onClose={onClose}
+            onClose={handleClose}
             onDirtyChange={onDirtyChange}
             style={{ width: "100%", height: "100%" }}
           />

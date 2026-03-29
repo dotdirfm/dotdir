@@ -41,6 +41,7 @@ import { CONTAINER_SEP } from "@/utils/containerPath";
 import { isMediaFile } from "@/utils/mediaFiles";
 import { basename, normalizePath, resolveDotSegments } from "@/utils/path";
 import { editorRegistry, fsProviderRegistry, viewerRegistry } from "@/viewerEditorRegistry";
+import { focusContext } from "@/focusContext";
 import type { ThemeKind } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -52,6 +53,7 @@ import terminalStyles from "./styles/terminal.module.css";
 import { cx } from "./utils/cssModules";
 
 export function App({ widget }: { widget: React.ReactNode }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const bridge = useBridge();
   const { settings, ready, updateSettings } = useUserSettings();
   const settingsRef = useRef(settings);
@@ -615,6 +617,30 @@ export function App({ widget }: { widget: React.ReactNode }) {
   });
 
   useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName?.toLowerCase();
+      return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const root = rootRef.current;
+      const target = event.target as Node | null;
+      if (!root || !target || !root.contains(target)) return;
+      if (isEditableTarget(target)) return;
+
+      const layer = focusContext.current;
+      if (layer !== "panel" && layer !== "viewer" && layer !== "editor") return;
+
+      commandRegistry.handleKeyboardEvent(event);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, []);
+
+  useEffect(() => {
     if (bridge.onReconnect) {
       return bridge.onReconnect(() => {
         leftRef.current.navigateTo(leftPathRef.current);
@@ -628,7 +654,7 @@ export function App({ widget }: { widget: React.ReactNode }) {
   }
 
   return (
-    <div className={baseStyles["app"]}>
+    <div ref={rootRef} className={baseStyles["app"]}>
       <>
         <div className={terminalStyles["terminal-and-panels"]}>
           <div className={terminalStyles["terminal-background"]}>

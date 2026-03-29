@@ -78,6 +78,7 @@ export const FileList = memo(function FileList({
   requestedTopmostName,
   onStateChange,
 }: FileListProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [topmostIndex, setTopmostIndex] = useState(0);
   const [maxItemsPerColumn, setMaxItemsPerColumn] = useState(1);
@@ -400,6 +401,9 @@ export const FileList = memo(function FileList({
   useEffect(() => {
     if (!active) return;
     setActiveFileListHandlers({
+      focus: () => {
+        rootRef.current?.focus({ preventScroll: true });
+      },
       cursorUp: () =>
         actionQueue.enqueue(() => {
           markKeyboardNav();
@@ -761,9 +765,14 @@ export const FileList = memo(function FileList({
 
   return (
     <div
+      ref={rootRef}
+      tabIndex={0}
       className={cx(styles, "file-list", isTouchscreen || keyboardNavMode ? "no-hover" : null, active ? "active-panel" : "inactive-panel")}
       onMouseMoveCapture={clearKeyboardNav}
-      onMouseDownCapture={clearKeyboardNav}
+      onMouseDownCapture={() => {
+        clearKeyboardNav();
+        rootRef.current?.focus({ preventScroll: true });
+      }}
     >
       <div className={styles["path-bar"]}>
         <Breadcrumbs currentPath={currentPath} onNavigate={handleBreadcrumbNavigate} />

@@ -1,4 +1,5 @@
 export interface ActiveFileListHandlers {
+  focus(): void;
   cursorUp(): void;
   cursorDown(): void;
   cursorLeft(): void;
