@@ -1,14 +1,11 @@
-import "./index.css";
+import "@dotdirfm/ui/dotdir.css";
 
+import { DotDir } from "@dotdirfm/ui";
 import { invoke, isTauri as isTauriApp } from "@tauri-apps/api/core";
-import { initBridge } from "./shared/api/bridge";
-import { builtInCommandContributions } from "./builtInCommandContributions";
-import { commandRegistry } from "./commands";
 import { createRoot } from "react-dom/client";
-import { createElement } from "react";
-import { App } from "./app";
-import { DialogProvider } from "./dialogs/dialogContext";
-import { ErrorBoundary } from "./components/ErrorBoundary";
+import { AccountWidget } from "./components/AccountWidget";
+import { tauriBridge } from "./tauriBridge";
+import { createWsBridge } from "./wsBridge";
 
 declare global {
   interface Window {
@@ -27,8 +24,17 @@ async function writeBootLog(message: string): Promise<void> {
   }
 }
 
+async function initBridge() {
+  if (isTauriApp()) {
+    return tauriBridge;
+  } else {
+    return await createWsBridge(`ws://${location.host}/ws`);
+  }
+}
+
 function renderBootError(error: unknown): void {
-  const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  const message =
+    error instanceof Error ? `${error.name}: ${error.message}` : String(error);
   const pre = document.createElement("pre");
   pre.textContent = `.dir failed to start\n\n${message}`;
   pre.style.whiteSpace = "pre-wrap";
@@ -59,7 +65,8 @@ window.addEventListener("unhandledrejection", (event) => {
 });
 
 // Disable native tab navigation — .dir uses its own key handling engine.
-const FOCUSABLE = 'a[href],button,input,select,textarea,dialog,iframe,[tabindex]:not([tabindex="-1"])';
+const FOCUSABLE =
+  'a[href],button,input,select,textarea,dialog,iframe,[tabindex]:not([tabindex="-1"])';
 function defocusAll(root: ParentNode) {
   for (const el of root.querySelectorAll<HTMLElement>(FOCUSABLE)) {
     el.tabIndex = -1;
@@ -77,11 +84,9 @@ new MutationObserver((mutations) => {
   }
 }).observe(document.body, { childList: true, subtree: true });
 
-commandRegistry.registerContributions(builtInCommandContributions);
-
 try {
   await writeBootLog("main.tsx starting");
-  await initBridge();
+  const bridge = await initBridge();
   await writeBootLog("bridge initialized");
 
   const container = document.getElementById("app");
@@ -91,7 +96,7 @@ try {
 
   document.getElementById("boot-status")?.remove();
   const root = createRoot(container);
-  root.render(createElement(ErrorBoundary, null, createElement(DialogProvider, null, createElement(App))));
+  root.render(<DotDir bridge={bridge} widget={<AccountWidget />} />);
   appBooted = true;
   await writeBootLog("React render started");
 } catch (error) {

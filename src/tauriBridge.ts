@@ -14,9 +14,10 @@ import type {
   DeleteProgressEvent,
   FspEntry,
   Bridge,
-} from "./bridge";
-import type { FsRawEntry, FsChangeEvent } from "./types";
-import { normalizePath } from "./path";
+  FsRawEntry,
+  FsChangeEvent,
+} from "@dotdirfm/ui";
+import { normalizePath } from "@dotdirfm/ui";
 
 const ptyWriteEncoder = new TextEncoder();
 
@@ -38,7 +39,9 @@ export const tauriBridge: Bridge = {
       return await invoke<FsRawEntry[]>("fs_entries", { dirPath });
     },
     async stat(filePath: string): Promise<{ size: number; mtimeMs: number }> {
-      return await invoke<{ size: number; mtimeMs: number }>("fs_stat", { filePath });
+      return await invoke<{ size: number; mtimeMs: number }>("fs_stat", {
+        filePath,
+      });
     },
     async exists(filePath: string): Promise<boolean> {
       return invoke<boolean>("fs_exists", { filePath });
@@ -51,7 +54,10 @@ export const tauriBridge: Bridge = {
       return invoke<void>("fs_write_text", { filePath, data });
     },
     async writeBinaryFile(filePath: string, data: Uint8Array): Promise<void> {
-      return invoke<void>("fs_write_binary", { filePath, data: Array.from(data) });
+      return invoke<void>("fs_write_binary", {
+        filePath,
+        data: Array.from(data),
+      });
     },
     async createDir(dirPath: string): Promise<void> {
       return invoke<void>("fs_create_dir", { dirPath });
@@ -62,10 +68,18 @@ export const tauriBridge: Bridge = {
     async open(filePath: string): Promise<number> {
       return invoke<number>("fs_open", { filePath });
     },
-    async read(fd: number, offset: number, length: number): Promise<ArrayBuffer> {
+    async read(
+      fd: number,
+      offset: number,
+      length: number,
+    ): Promise<ArrayBuffer> {
       const offsetInt = Math.max(0, Math.floor(offset));
       const lengthInt = Math.max(0, Math.floor(length));
-      const bytes = await invoke<number[]>("fs_read", { fd, offset: offsetInt, length: lengthInt });
+      const bytes = await invoke<number[]>("fs_read", {
+        fd,
+        offset: offsetInt,
+        length: lengthInt,
+      });
       return new Uint8Array(bytes).buffer;
     },
     async close(fd: number): Promise<void> {
@@ -80,13 +94,16 @@ export const tauriBridge: Bridge = {
     onFsChange(callback: (event: FsChangeEvent) => void): () => void {
       let unlisten: UnlistenFn | null = null;
       let disposed = false;
-      const unlistenPromise = listen<RustFsChangeEvent>("fsa:change", (event) => {
-        callback({
-          watchId: event.payload.watch_id,
-          type: event.payload.kind as FsChangeEvent["type"],
-          name: event.payload.name,
-        });
-      }).then((fn) => {
+      const unlistenPromise = listen<RustFsChangeEvent>(
+        "fsa:change",
+        (event) => {
+          callback({
+            watchId: event.payload.watch_id,
+            type: event.payload.kind as FsChangeEvent["type"],
+            name: event.payload.name,
+          });
+        },
+      ).then((fn) => {
         unlisten = fn;
         if (disposed) void fn();
         return fn;
@@ -101,13 +118,20 @@ export const tauriBridge: Bridge = {
       };
     },
     copy: {
-      async start(sources: string[], destDir: string, options: CopyOptions): Promise<number> {
+      async start(
+        sources: string[],
+        destDir: string,
+        options: CopyOptions,
+      ): Promise<number> {
         return invoke<number>("copy_start", { sources, destDir, options });
       },
       async cancel(copyId: number): Promise<void> {
         return invoke<void>("copy_cancel", { copyId });
       },
-      async resolveConflict(copyId: number, resolution: ConflictResolution): Promise<void> {
+      async resolveConflict(
+        copyId: number,
+        resolution: ConflictResolution,
+      ): Promise<void> {
         // Map TS discriminated union to Rust serde format
         let rustRes: unknown;
         switch (resolution.type) {
@@ -130,7 +154,10 @@ export const tauriBridge: Bridge = {
             rustRes = "cancel";
             break;
         }
-        return invoke<void>("copy_resolve_conflict", { copyId, resolution: rustRes });
+        return invoke<void>("copy_resolve_conflict", {
+          copyId,
+          resolution: rustRes,
+        });
       },
       onProgress(callback: (event: CopyProgressEvent) => void): () => void {
         let unlisten: (() => void) | null = null;
@@ -145,13 +172,20 @@ export const tauriBridge: Bridge = {
       },
     },
     move: {
-      async start(sources: string[], destDir: string, options: MoveOptions): Promise<number> {
+      async start(
+        sources: string[],
+        destDir: string,
+        options: MoveOptions,
+      ): Promise<number> {
         return invoke<number>("move_start", { sources, destDir, options });
       },
       async cancel(moveId: number): Promise<void> {
         return invoke<void>("move_cancel", { moveId });
       },
-      async resolveConflict(moveId: number, resolution: ConflictResolution): Promise<void> {
+      async resolveConflict(
+        moveId: number,
+        resolution: ConflictResolution,
+      ): Promise<void> {
         let rustRes: unknown;
         switch (resolution.type) {
           case "overwrite":
@@ -173,7 +207,10 @@ export const tauriBridge: Bridge = {
             rustRes = "cancel";
             break;
         }
-        return invoke<void>("move_resolve_conflict", { moveId, resolution: rustRes });
+        return invoke<void>("move_resolve_conflict", {
+          moveId,
+          resolution: rustRes,
+        });
       },
       onProgress(callback: (event: MoveProgressEvent) => void): () => void {
         let unlisten: (() => void) | null = null;
@@ -213,11 +250,18 @@ export const tauriBridge: Bridge = {
     },
   },
   pty: {
-    async spawn(cwd: string, shellPath: string, options?: { spawnArgs?: string[] }): Promise<PtyLaunchInfo> {
+    async spawn(
+      cwd: string,
+      shellPath: string,
+      options?: { spawnArgs?: string[] },
+    ): Promise<PtyLaunchInfo> {
       const raw = await invoke<RustPtySpawnResult>("pty_spawn", {
         cwd,
         shellPath,
-        spawnArgs: options?.spawnArgs && options.spawnArgs.length > 0 ? options.spawnArgs : null,
+        spawnArgs:
+          options?.spawnArgs && options.spawnArgs.length > 0
+            ? options.spawnArgs
+            : null,
       });
       return {
         ptyId: raw.pty_id,
@@ -241,7 +285,9 @@ export const tauriBridge: Bridge = {
     async close(ptyId: number): Promise<void> {
       return invoke<void>("pty_close", { ptyId });
     },
-    async setShellIntegrations(integrations: Record<string, { script: string; scriptArg: boolean }>): Promise<void> {
+    async setShellIntegrations(
+      integrations: Record<string, { script: string; scriptArg: boolean }>,
+    ): Promise<void> {
       return invoke<void>("pty_set_shell_integrations", { integrations });
     },
     onData(callback: (ptyId: number, data: Uint8Array) => void): () => void {
@@ -277,11 +323,14 @@ export const tauriBridge: Bridge = {
   },
   theme: {
     async get(): Promise<string> {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
     },
     onChange(callback: (theme: string) => void): () => void {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
-      const handler = (e: MediaQueryListEvent) => callback(e.matches ? "dark" : "light");
+      const handler = (e: MediaQueryListEvent) =>
+        callback(e.matches ? "dark" : "light");
       mq.addEventListener("change", handler);
       return () => mq.removeEventListener("change", handler);
     },
@@ -290,8 +339,14 @@ export const tauriBridge: Bridge = {
     async load(wasmPath: string): Promise<void> {
       return invoke<void>("fsp_load", { wasmPath });
     },
-    async listEntries(wasmPath: string, containerPath: string, innerPath: string): Promise<FspEntry[]> {
-      const raw = await invoke<Array<{ name: string; kind: string; size?: number; mtime_ms?: number }>>("fsp_list_entries", {
+    async listEntries(
+      wasmPath: string,
+      containerPath: string,
+      innerPath: string,
+    ): Promise<FspEntry[]> {
+      const raw = await invoke<
+        Array<{ name: string; kind: string; size?: number; mtime_ms?: number }>
+      >("fsp_list_entries", {
         wasmPath,
         containerPath,
         innerPath,
@@ -303,7 +358,13 @@ export const tauriBridge: Bridge = {
         mtimeMs: e.mtime_ms,
       }));
     },
-    async readFileRange(wasmPath: string, containerPath: string, innerPath: string, offset: number, length: number): Promise<ArrayBuffer> {
+    async readFileRange(
+      wasmPath: string,
+      containerPath: string,
+      innerPath: string,
+      offset: number,
+      length: number,
+    ): Promise<ArrayBuffer> {
       const bytes = await invoke<number[]>("fsp_read_file_range", {
         wasmPath,
         containerPath,

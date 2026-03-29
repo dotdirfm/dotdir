@@ -9,6 +9,10 @@ export default defineConfig(({ command }) => ({
   plugins: [react()],
   base: command === "build" ? "./" : "/",
 
+  resolve: {
+    dedupe: ["react", "react-dom", "jotai"],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

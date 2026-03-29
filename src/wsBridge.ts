@@ -3,18 +3,21 @@
 /// Implements the same Bridge interface as tauriBridge.ts, using JSON-RPC 2.0
 /// over WebSocket. Binary frames are used for fs.read responses.
 /// Automatically reconnects on disconnection with exponential backoff.
-import type {
+
+import {
   Bridge,
-  PtyLaunchInfo,
-  CopyOptions,
   ConflictResolution,
+  CopyOptions,
   CopyProgressEvent,
+  DeleteProgressEvent,
+  FsChangeEvent,
+  FsChangeType,
+  FspEntry,
+  FsRawEntry,
   MoveOptions,
   MoveProgressEvent,
-  DeleteProgressEvent,
-  FspEntry,
-} from "./bridge";
-import type { FsRawEntry, FsChangeEvent, FsChangeType } from "./types";
+  PtyLaunchInfo,
+} from "@dotdirfm/ui";
 
 type Pending = {
   resolve: (value: unknown) => void;
@@ -35,7 +38,9 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
   const ptyExitListeners = new Set<PtyExitCallback>();
   const copyProgressListeners = new Set<(event: CopyProgressEvent) => void>();
   const moveProgressListeners = new Set<(event: MoveProgressEvent) => void>();
-  const deleteProgressListeners = new Set<(event: DeleteProgressEvent) => void>();
+  const deleteProgressListeners = new Set<
+    (event: DeleteProgressEvent) => void
+  >();
   const reconnectCallbacks = new Set<() => void>();
 
   let wsReady: Promise<void>;
@@ -70,10 +75,16 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       } else if (msg.method === "pty.exit") {
         for (const cb of ptyExitListeners) cb(msg.params.ptyId);
       } else if (msg.method === "copy.progress") {
-        const event: CopyProgressEvent = { copyId: msg.params.copyId, event: msg.params.event };
+        const event: CopyProgressEvent = {
+          copyId: msg.params.copyId,
+          event: msg.params.event,
+        };
         for (const cb of copyProgressListeners) cb(event);
       } else if (msg.method === "move.progress") {
-        const event: MoveProgressEvent = { moveId: msg.params.moveId, event: msg.params.event };
+        const event: MoveProgressEvent = {
+          moveId: msg.params.moveId,
+          event: msg.params.event,
+        };
         for (const cb of moveProgressListeners) cb(event);
       } else if (msg.method === "delete.progress") {
         const event: DeleteProgressEvent = {
@@ -195,7 +206,10 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
     }
   }
 
-  function rpc(method: string, params: Record<string, unknown>): Promise<unknown> {
+  function rpc(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<unknown> {
     return wsReady.then(
       () =>
         new Promise((resolve, reject) => {
@@ -217,19 +231,37 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
 
   return {
     fs: {
-      entries: (dirPath: string) => rpc("fs.entries", { path: dirPath }) as Promise<FsRawEntry[]>,
-      stat: (filePath: string) => rpc("fs.stat", { path: filePath }) as Promise<{ size: number; mtimeMs: number }>,
-      exists: (filePath: string) => rpc("fs.exists", { path: filePath }) as Promise<boolean>,
-      readFile: (filePath: string) => rpc("fs.readFile", { path: filePath }) as Promise<ArrayBuffer>,
-      open: (filePath: string) => rpc("fs.open", { path: filePath }) as Promise<number>,
-      read: (fd: number, offset: number, length: number) => rpc("fs.read", { handle: fd, offset, length }) as Promise<ArrayBuffer>,
+      entries: (dirPath: string) =>
+        rpc("fs.entries", { path: dirPath }) as Promise<FsRawEntry[]>,
+      stat: (filePath: string) =>
+        rpc("fs.stat", { path: filePath }) as Promise<{
+          size: number;
+          mtimeMs: number;
+        }>,
+      exists: (filePath: string) =>
+        rpc("fs.exists", { path: filePath }) as Promise<boolean>,
+      readFile: (filePath: string) =>
+        rpc("fs.readFile", { path: filePath }) as Promise<ArrayBuffer>,
+      open: (filePath: string) =>
+        rpc("fs.open", { path: filePath }) as Promise<number>,
+      read: (fd: number, offset: number, length: number) =>
+        rpc("fs.read", { handle: fd, offset, length }) as Promise<ArrayBuffer>,
       close: (fd: number) => rpc("fs.close", { handle: fd }) as Promise<void>,
-      watch: (watchId: string, dirPath: string) => rpc("fs.watch", { watchId, path: dirPath }) as Promise<boolean>,
-      unwatch: (watchId: string) => rpc("fs.unwatch", { watchId }) as Promise<void>,
-      writeFile: (filePath: string, data: string) => rpc("fs.writeFile", { path: filePath, data }) as Promise<void>,
-      writeBinaryFile: (filePath: string, data: Uint8Array) => rpc("fs.writeBinary", { path: filePath, data: Array.from(data) }) as Promise<void>,
-      createDir: (dirPath: string) => rpc("fs.createDir", { path: dirPath }) as Promise<void>,
-      moveToTrash: (paths: string[]) => rpc("fs.moveToTrash", { paths }) as Promise<void>,
+      watch: (watchId: string, dirPath: string) =>
+        rpc("fs.watch", { watchId, path: dirPath }) as Promise<boolean>,
+      unwatch: (watchId: string) =>
+        rpc("fs.unwatch", { watchId }) as Promise<void>,
+      writeFile: (filePath: string, data: string) =>
+        rpc("fs.writeFile", { path: filePath, data }) as Promise<void>,
+      writeBinaryFile: (filePath: string, data: Uint8Array) =>
+        rpc("fs.writeBinary", {
+          path: filePath,
+          data: Array.from(data),
+        }) as Promise<void>,
+      createDir: (dirPath: string) =>
+        rpc("fs.createDir", { path: dirPath }) as Promise<void>,
+      moveToTrash: (paths: string[]) =>
+        rpc("fs.moveToTrash", { paths }) as Promise<void>,
       onFsChange(callback: (event: FsChangeEvent) => void): () => void {
         changeListeners.add(callback);
         return () => {
@@ -237,8 +269,10 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
         };
       },
       copy: {
-        start: (sources: string[], destDir: string, options: CopyOptions) => rpc("copy.start", { sources, destDir, options }) as Promise<number>,
-        cancel: (copyId: number) => rpc("copy.cancel", { copyId }) as Promise<void>,
+        start: (sources: string[], destDir: string, options: CopyOptions) =>
+          rpc("copy.start", { sources, destDir, options }) as Promise<number>,
+        cancel: (copyId: number) =>
+          rpc("copy.cancel", { copyId }) as Promise<void>,
         resolveConflict: (copyId: number, resolution: ConflictResolution) => {
           let rustRes: unknown;
           switch (resolution.type) {
@@ -261,7 +295,10 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
               rustRes = "cancel";
               break;
           }
-          return rpc("copy.resolveConflict", { copyId, resolution: rustRes }) as Promise<void>;
+          return rpc("copy.resolveConflict", {
+            copyId,
+            resolution: rustRes,
+          }) as Promise<void>;
         },
         onProgress(callback: (event: CopyProgressEvent) => void): () => void {
           copyProgressListeners.add(callback);
@@ -271,8 +308,10 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
         },
       },
       move: {
-        start: (sources: string[], destDir: string, options: MoveOptions) => rpc("move.start", { sources, destDir, options }) as Promise<number>,
-        cancel: (moveId: number) => rpc("move.cancel", { moveId }) as Promise<void>,
+        start: (sources: string[], destDir: string, options: MoveOptions) =>
+          rpc("move.start", { sources, destDir, options }) as Promise<number>,
+        cancel: (moveId: number) =>
+          rpc("move.cancel", { moveId }) as Promise<void>,
         resolveConflict: (moveId: number, resolution: ConflictResolution) => {
           let rustRes: unknown;
           switch (resolution.type) {
@@ -295,7 +334,10 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
               rustRes = "cancel";
               break;
           }
-          return rpc("move.resolveConflict", { moveId, resolution: rustRes }) as Promise<void>;
+          return rpc("move.resolveConflict", {
+            moveId,
+            resolution: rustRes,
+          }) as Promise<void>;
         },
         onProgress(callback: (event: MoveProgressEvent) => void): () => void {
           moveProgressListeners.add(callback);
@@ -305,8 +347,10 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
         },
       },
       delete: {
-        start: (paths: string[]) => rpc("delete.start", { paths }) as Promise<number>,
-        cancel: (deleteId: number) => rpc("delete.cancel", { deleteId }) as Promise<void>,
+        start: (paths: string[]) =>
+          rpc("delete.start", { paths }) as Promise<number>,
+        cancel: (deleteId: number) =>
+          rpc("delete.cancel", { deleteId }) as Promise<void>,
         onProgress(callback: (event: DeleteProgressEvent) => void): () => void {
           deleteProgressListeners.add(callback);
           return () => {
@@ -315,17 +359,26 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
         },
       },
       rename: {
-        rename: (source: string, newName: string) => rpc("fs.rename", { source, newName }) as Promise<void>,
+        rename: (source: string, newName: string) =>
+          rpc("fs.rename", { source, newName }) as Promise<void>,
       },
     },
     pty: {
-      spawn: (cwd: string, shellPath: string, options?: { spawnArgs?: string[] }) =>
+      spawn: (
+        cwd: string,
+        shellPath: string,
+        options?: { spawnArgs?: string[] },
+      ) =>
         rpc("pty.spawn", {
           cwd,
           shellPath,
-          spawnArgs: options?.spawnArgs && options.spawnArgs.length > 0 ? options.spawnArgs : undefined,
+          spawnArgs:
+            options?.spawnArgs && options.spawnArgs.length > 0
+              ? options.spawnArgs
+              : undefined,
         }) as Promise<PtyLaunchInfo>,
-      write: (ptyId: number, data: string) => rpc("pty.write", { ptyId, data }) as Promise<void>,
+      write: (ptyId: number, data: string) =>
+        rpc("pty.write", { ptyId, data }) as Promise<void>,
       resize: (ptyId: number, cols: number, rows: number) =>
         rpc("pty.resize", {
           ptyId,
@@ -333,7 +386,9 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
           rows: Math.max(1, Math.floor(rows)),
         }) as Promise<void>,
       close: (ptyId: number) => rpc("pty.close", { ptyId }) as Promise<void>,
-      setShellIntegrations: (_integrations: Record<string, { script: string; scriptArg: boolean }>) => Promise.resolve(),
+      setShellIntegrations: (
+        _integrations: Record<string, { script: string; scriptArg: boolean }>,
+      ) => Promise.resolve(),
       onData(callback: PtyDataCallback): () => void {
         ptyDataListeners.add(callback);
         return () => {
@@ -353,10 +408,16 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
     },
 
     theme: {
-      get: () => Promise.resolve(window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
+      get: () =>
+        Promise.resolve(
+          window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light",
+        ),
       onChange(callback: (theme: string) => void): () => void {
         const mq = window.matchMedia("(prefers-color-scheme: dark)");
-        const handler = (e: MediaQueryListEvent) => callback(e.matches ? "dark" : "light");
+        const handler = (e: MediaQueryListEvent) =>
+          callback(e.matches ? "dark" : "light");
         mq.addEventListener("change", handler);
         return () => mq.removeEventListener("change", handler);
       },
@@ -368,8 +429,13 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       };
     },
     fsProvider: {
-      load: (wasmPath: string) => rpc("fsp.load", { wasmPath }) as Promise<void>,
-      listEntries: async (wasmPath: string, containerPath: string, innerPath: string) => {
+      load: (wasmPath: string) =>
+        rpc("fsp.load", { wasmPath }) as Promise<void>,
+      listEntries: async (
+        wasmPath: string,
+        containerPath: string,
+        innerPath: string,
+      ) => {
         const raw = (await rpc("fsp.listEntries", {
           wasmPath,
           containerPath,
@@ -387,7 +453,13 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
           mtimeMs: e.mtimeMs,
         }));
       },
-      readFileRange: async (wasmPath: string, containerPath: string, innerPath: string, offset: number, length: number) => {
+      readFileRange: async (
+        wasmPath: string,
+        containerPath: string,
+        innerPath: string,
+        offset: number,
+        length: number,
+      ) => {
         const bytes = (await rpc("fsp.readFileRange", {
           wasmPath,
           containerPath,
