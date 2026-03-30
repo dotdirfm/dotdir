@@ -5,7 +5,6 @@ import {
   loadedExtensionsAtom,
   panelsVisibleAtom,
   showExtensionsAtom,
-  showHiddenAtom,
   terminalFocusRequestKeyAtom,
   viewerFileAtom,
 } from "@/atoms";
@@ -13,6 +12,7 @@ import type { DialogSpec } from "@/dialogs/dialogContext";
 import type { LanguageOption } from "@/dialogs/OpenCreateFileDialog";
 import { useBridge } from "@/features/bridge/useBridge";
 import { commandRegistry } from "@/features/commands/commands";
+import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
 import { useUserSettings } from "@/features/settings/useUserSettings";
 import { getActiveFileListHandlers } from "@/fileListHandlers";
 import { focusContext } from "@/focusContext";
@@ -46,7 +46,6 @@ export interface BuiltInCommandDeps {
   onEditFile: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
   onRequestCloseEditor: () => void;
   onExecuteInTerminal: (cmd: string) => Promise<void>;
-  editorFileSizeLimit: number;
 }
 
 export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
@@ -61,11 +60,12 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const loadedExtensionsRef = useRef(loadedExtensions);
   loadedExtensionsRef.current = loadedExtensions;
 
-  const { updateSettings } = useUserSettings();
+  const { settings, updateSettings } = useUserSettings();
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   // Atom setters are stable (Jotai guarantee) — safe to capture in the effect.
   const [activePanel, setActivePanel] = useAtom(activePanelAtom);
-  const setShowHidden = useSetAtom(showHiddenAtom);
   const setPanelsVisible = useSetAtom(panelsVisibleAtom);
   const setTerminalFocusRequestKey = useSetAtom(terminalFocusRequestKeyAtom);
   const setShowExtensions = useSetAtom(showExtensionsAtom);
@@ -82,13 +82,10 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // ── View ──────────────────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand("dotdir.toggleHiddenFiles", () =>
-        setShowHidden((h) => {
-          const next = !h;
-          updateSettings({ showHidden: next });
-          return next;
-        }),
-      ),
+      commandRegistry.registerCommand("dotdir.toggleHiddenFiles", () => {
+        const next = !settingsRef.current.showHidden;
+        updateSettings({ showHidden: next });
+      }),
     );
 
     disposables.push(
@@ -259,7 +256,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
     disposables.push(
       commandRegistry.registerCommand("dotdir.editFile", (path: unknown, name: unknown, size: unknown, langId: unknown) => {
-        const limit = depsRef.current.editorFileSizeLimit;
+        const limit = settingsRef.current.editorFileSizeLimit ?? DEFAULT_EDITOR_FILE_SIZE_LIMIT;
         if (limit > 0 && (size as number) > limit) return;
         depsRef.current.onEditFile(path as string, name as string, size as number, langId as string);
       }),
@@ -303,6 +300,5 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     return () => {
       for (const d of disposables) d();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- atom setters and updateSettings are stable; effect intentionally runs once
-  }, [setActivePanel, setShowHidden, setPanelsVisible, setShowExtensions, setViewerFile, setEditorFile, setCommandPaletteOpen, updateSettings]);
+  }, [setActivePanel, setPanelsVisible, setShowExtensions, setViewerFile, setEditorFile, setCommandPaletteOpen, updateSettings]);
 }

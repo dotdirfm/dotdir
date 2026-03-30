@@ -1,4 +1,4 @@
-import { activeColorThemeAtom, activeIconThemeAtom, loadedExtensionsAtom, showExtensionsAtom } from "@/atoms";
+import { loadedExtensionsAtom, showExtensionsAtom } from "@/atoms";
 import type { ExtensionInstallProgressEvent } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
@@ -19,13 +19,13 @@ import {
   getVSCodeLatestVersion,
   searchVSCodeMarketplace,
 } from "@/features/marketplace/vscodeMarketplace";
-import { useUserSettings } from "@/features/settings/useUserSettings";
+import { activeColorThemeAtom, activeIconThemeAtom, useUserSettings } from "@/features/settings/useUserSettings";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { OverlayDialog } from "../dialogs/OverlayDialog";
 import styles from "../styles/extensions.module.css";
 import { cx } from "../utils/cssModules";
-import { OverlayDialog } from "../dialogs/OverlayDialog";
 
 /** Extract a message from Tauri invoke errors (plain {errno,message} objects) or Error instances. */
 function errMsg(err: unknown): string {
@@ -37,15 +37,13 @@ function errMsg(err: unknown): string {
 type Tab = "marketplace" | "installed";
 type MarketplaceSource = "dotdir" | "vscode";
 type InstallPhase = "download" | "extract" | "write" | "finalize";
-type BusyState =
-  | { kind: "install"; phase: InstallPhase }
-  | { kind: "uninstall" };
+type BusyState = { kind: "install"; phase: InstallPhase } | { kind: "uninstall" };
 
 export function ExtensionsPanel() {
   const bridge = useBridge();
   const setShowExtensions = useSetAtom(showExtensionsAtom);
-  const [activeIconTheme, setActiveIconTheme] = useAtom(activeIconThemeAtom);
-  const [activeColorTheme, setActiveColorTheme] = useAtom(activeColorThemeAtom);
+  const activeIconTheme = useAtomValue(activeIconThemeAtom);
+  const activeColorTheme = useAtomValue(activeColorThemeAtom);
   const installed = useAtomValue(loadedExtensionsAtom);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const extensionHost = useExtensionHostClient();
@@ -59,7 +57,9 @@ export function ExtensionsPanel() {
   const [error, setError] = useState("");
   const installIdToKeyRef = useRef(new Map<number, string>());
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const{settings,updateSettings} = useUserSettings();
+  const { settings, updateSettings } = useUserSettings();
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   const doSearch = useCallback(async (q: string, source: MarketplaceSource) => {
     setLoading(true);
@@ -205,18 +205,12 @@ export function ExtensionsPanel() {
     setError("");
     try {
       await uninstallExtension(bridge, ref.publisher, ref.name);
-      let settingsChanged = false;
       if (activeIconTheme === key) {
-        delete settings.iconTheme;
-        setActiveIconTheme(undefined);
-        settingsChanged = true;
+        updateSettings({ iconTheme: undefined });
       }
       if (activeColorTheme?.startsWith(key + ":")) {
-        delete settings.colorTheme;
-        setActiveColorTheme(undefined);
-        settingsChanged = true;
+        updateSettings({ colorTheme: undefined });
       }
-      if (settingsChanged) updateSettings(settings);
       await extensionHost.restart();
     } catch (err) {
       setError(`Uninstall failed: ${errMsg(err)}`);
@@ -232,25 +226,13 @@ export function ExtensionsPanel() {
     const themeId = extensionIconThemeId(ext);
     if (!themeId) return;
     const newId = themeId === activeIconTheme ? undefined : themeId;
-    if (newId) {
-      settings.iconTheme = newId;
-    } else {
-      delete settings.iconTheme;
-    }
-    updateSettings(settings);
-    setActiveIconTheme(newId);
+    updateSettings({ iconTheme: newId });
   };
 
   const handleSetColorTheme = async (ext: LoadedExtension, themeId: string) => {
     const key = colorThemeKey(ext, themeId);
     const newKey = key === activeColorTheme ? undefined : key;
-    if (newKey) {
-      settings.colorTheme = newKey;
-    } else {
-      delete settings.colorTheme;
-    }
-    updateSettings(settings);
-    setActiveColorTheme(newKey);
+    updateSettings({ colorTheme: newKey });
   };
 
   const formatSize = (bytes: number) => {
@@ -348,7 +330,14 @@ export function ExtensionsPanel() {
                       </button>
                     ) : (
                       <button className={cx(styles, "ext-btn", "install")} disabled={isBusy || !ext.latest_version} onClick={() => handleInstall(ext)}>
-                        {isBusy ? <><span className={styles["ext-spinner"]} aria-hidden="true" />{installLabel}</> : "Install"}
+                        {isBusy ? (
+                          <>
+                            <span className={styles["ext-spinner"]} aria-hidden="true" />
+                            {installLabel}
+                          </>
+                        ) : (
+                          "Install"
+                        )}
                       </button>
                     )}
                   </div>
@@ -375,7 +364,9 @@ export function ExtensionsPanel() {
               const installs = getVSCodeInstallCount(ext);
               return (
                 <div key={key} className={styles["ext-item"]}>
-                  <div className={styles["ext-icon"]}>{iconUrl ? <img src={iconUrl} width={36} height={36} alt="" /> : (ext.displayName[0]?.toUpperCase() ?? "?")}</div>
+                  <div className={styles["ext-icon"]}>
+                    {iconUrl ? <img src={iconUrl} width={36} height={36} alt="" /> : (ext.displayName[0]?.toUpperCase() ?? "?")}
+                  </div>
                   <div className={styles["ext-info"]}>
                     <div className={styles["ext-name"]}>{ext.displayName}</div>
                     <div className={styles["ext-publisher"]}>{ext.publisher.displayName || ext.publisher.publisherName}</div>
@@ -392,7 +383,14 @@ export function ExtensionsPanel() {
                       </button>
                     ) : (
                       <button className={cx(styles, "ext-btn", "install")} disabled={isBusy || !version} onClick={() => handleVSCodeInstall(ext)}>
-                        {isBusy ? <><span className={styles["ext-spinner"]} aria-hidden="true" />{installLabel}</> : "Install"}
+                        {isBusy ? (
+                          <>
+                            <span className={styles["ext-spinner"]} aria-hidden="true" />
+                            {installLabel}
+                          </>
+                        ) : (
+                          "Install"
+                        )}
                       </button>
                     )}
                   </div>
@@ -428,7 +426,9 @@ export function ExtensionsPanel() {
                     <div className={styles["ext-meta"]}>
                       <span>v{ext.ref.version}</span>
                       {iconThemeId && (
-                        <span className={cx(styles, "ext-theme-badge", isActiveIconTheme && "active")}>{isActiveIconTheme ? "● Icon theme" : "Icon theme"}</span>
+                        <span className={cx(styles, "ext-theme-badge", isActiveIconTheme && "active")}>
+                          {isActiveIconTheme ? "● Icon theme" : "Icon theme"}
+                        </span>
                       )}
                       {hasColorThemes && (
                         <span className={styles["ext-theme-badge"]}>

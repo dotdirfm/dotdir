@@ -1,6 +1,4 @@
 import {
-  activeColorThemeAtom,
-  activeIconThemeAtom,
   activePanelAtom,
   commandLineOnExecuteAtom,
   commandLinePasteFnAtom,
@@ -9,7 +7,6 @@ import {
   osThemeAtom,
   panelsVisibleAtom,
   showExtensionsAtom,
-  showHiddenAtom,
   themesReadyAtom,
   viewerFileAtom,
 } from "@/atoms";
@@ -30,7 +27,7 @@ import { useExtensionHost } from "@/features/extensions/useExtensionHost";
 import { setFileOperationHandlers } from "@/features/file-ops/model/fileOperationHandlers";
 import { useFileOperations } from "@/features/file-ops/model/useFileOperations";
 import { isExistingDirectory, parseCdCommand, resolveCdPath } from "@/features/navigation/lib/commandLineCd";
-import { useUserSettings } from "@/features/settings/useUserSettings";
+import { showHiddenAtom, useUserSettings } from "@/features/settings/useUserSettings";
 import { focusContext } from "@/focusContext";
 import { useBuiltInCommands } from "@/hooks/useBuiltInCommands";
 import { emptyPanel, findExistingParent, type PanelController } from "@/hooks/usePanel";
@@ -45,7 +42,6 @@ import { editorRegistry, fsProviderRegistry, viewerRegistry } from "@/viewerEdit
 import type { FsNode, ThemeKind } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "./features/settings/userSettings";
 import { PanelPersistedState } from "./features/ui-state/types";
 import baseStyles from "./styles/base.module.css";
 import panelsStyles from "./styles/panels.module.css";
@@ -82,7 +78,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   settingsRef.current = settings;
   const setTheme = useSetAtom(osThemeAtom);
   const { dialog, showDialog } = useDialog();
-  const [showHidden, setShowHidden] = useAtom(showHiddenAtom);
+  const showHidden = useAtomValue(showHiddenAtom);
   const showError = useCallback(
     (message: string) => {
       showDialog({
@@ -116,9 +112,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   } | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
   const showExtensions = useAtomValue(showExtensionsAtom);
-  const setActiveIconTheme = useSetAtom(activeIconThemeAtom);
-  const setActiveColorTheme = useSetAtom(activeColorThemeAtom);
-  const [editorFileSizeLimit, setEditorFileSizeLimit] = useState(DEFAULT_EDITOR_FILE_SIZE_LIMIT);
   const [leftTabs, setLeftTabs] = useAtom(leftTabsAtom);
   const [rightTabs, setRightTabs] = useAtom(rightTabsAtom);
   const [leftActiveTabId, setLeftActiveTabId] = useAtom(leftActiveTabIdAtom);
@@ -145,15 +138,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const commandLinePasteFnAtomValue = useAtomValue(commandLinePasteFnAtom);
   const commandLinePasteRef = useRef<(text: string) => void>(() => {});
   if (commandLinePasteFnAtomValue) commandLinePasteRef.current = commandLinePasteFnAtomValue;
-
-  // Apply non-structural settings reactively (initial load + external file changes)
-  useEffect(() => {
-    if (!ready) return;
-    if (settings.iconTheme) setActiveIconTheme(settings.iconTheme);
-    if (settings.colorTheme !== undefined) setActiveColorTheme(settings.colorTheme || undefined);
-    if (settings.editorFileSizeLimit !== undefined) setEditorFileSizeLimit(settings.editorFileSizeLimit);
-    if (settings.showHidden !== undefined) setShowHidden(settings.showHidden);
-  }, [settings, ready]);
 
   const onAfterRestore = useCallback(() => {
     initUserKeybindings(bridge);
@@ -724,7 +708,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     onEditFile: handleEditFile,
     onRequestCloseEditor: requestCloseEditor,
     onExecuteInTerminal: (cmd) => terminal.writeToTerminal(cmd),
-    editorFileSizeLimit,
   });
 
   useEffect(() => {

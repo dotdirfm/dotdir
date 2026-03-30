@@ -1,3 +1,4 @@
+import { loadedExtensionsAtom, osThemeAtom, resolvedProfilesAtom, terminalProfilesLoadedAtom, themesReadyAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { commandRegistry } from "@/features/commands/commands";
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
@@ -5,6 +6,7 @@ import { executeMountedExtensionCommand } from "@/features/extensions/extensionC
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { type LoadedExtension, findColorTheme } from "@/features/extensions/extensions";
 import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
+import { activeColorThemeAtom, activeIconThemeAtom } from "@/features/settings/useUserSettings";
 import { readFileText } from "@/fs";
 import { setExtensionLayers } from "@/fss";
 import { languageRegistry } from "@/languageRegistry";
@@ -13,32 +15,16 @@ import { getStyleHostElement } from "@/styleHost";
 import { resolveShellProfiles } from "@/terminal/shellProfiles";
 import { dirname, join } from "@/utils/path";
 import { populateRegistries } from "@/viewerEditorRegistry";
+import { clearColorTheme, loadAndApplyColorTheme, uiThemeToKind } from "@/vscodeColorTheme";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
-import {
-  activeColorThemeAtom,
-  activeIconThemeAtom,
-  loadedExtensionsAtom,
-  osThemeAtom,
-  resolvedProfilesAtom,
-  terminalProfilesLoadedAtom,
-  themesReadyAtom,
-} from "../../atoms";
-import {
-  clearColorTheme,
-  loadAndApplyColorTheme,
-  uiThemeToKind,
-} from "../../vscodeColorTheme";
 
 interface UseExtensionHostOptions {
   settingsLoaded: boolean;
   onRefreshPanels: () => void;
 }
 
-export function useExtensionHost({
-  settingsLoaded,
-  onRefreshPanels,
-}: UseExtensionHostOptions): void {
+export function useExtensionHost({ settingsLoaded, onRefreshPanels }: UseExtensionHostOptions): void {
   const bridge = useBridge();
   const extensionHost = useExtensionHostClient();
   const activeIconTheme = useAtomValue(activeIconThemeAtom);
@@ -66,9 +52,7 @@ export function useExtensionHost({
 
   // OS theme + active color theme → keep iconThemeKind in sync
   useEffect(() => {
-    const colorThemeMatch = activeColorTheme
-      ? findColorTheme(latestExtensionsRef.current, activeColorTheme)
-      : null;
+    const colorThemeMatch = activeColorTheme ? findColorTheme(latestExtensionsRef.current, activeColorTheme) : null;
     const effectiveKind = colorThemeMatch
       ? uiThemeToKind(colorThemeMatch.theme.uiTheme)
       : osTheme === "light" || osTheme === "high-contrast-light"
@@ -79,20 +63,14 @@ export function useExtensionHost({
   }, [osTheme, activeColorTheme]);
 
   const ensureActiveIconThemeFssLoaded = useCallback(
-    async (
-      exts: LoadedExtension[],
-      themeId: string | undefined,
-    ): Promise<void> => {
+    async (exts: LoadedExtension[], themeId: string | undefined): Promise<void> => {
       if (!themeId) return;
-      const ext = exts.find(
-        (e) => `${e.ref.publisher}.${e.ref.name}` === themeId,
-      );
+      const ext = exts.find((e) => `${e.ref.publisher}.${e.ref.name}` === themeId);
       if (!ext?.iconThemeFssPath) return;
       if (ext.iconThemeFss) return;
       try {
         ext.iconThemeFss = await readFileText(bridge, ext.iconThemeFssPath);
-        if (!ext.iconThemeBasePath)
-          ext.iconThemeBasePath = dirname(ext.iconThemeFssPath);
+        if (!ext.iconThemeBasePath) ext.iconThemeBasePath = dirname(ext.iconThemeFssPath);
       } catch {
         // Ignore; resolver will fall back
       }
@@ -110,9 +88,7 @@ export function useExtensionHost({
       if (!activeIconTheme) {
         setIconTheme("fss");
       } else {
-        const ext = exts.find(
-          (e) => `${e.ref.publisher}.${e.ref.name}` === activeIconTheme,
-        );
+        const ext = exts.find((e) => `${e.ref.publisher}.${e.ref.name}` === activeIconTheme);
         if (ext?.vscodeIconThemePath) {
           setIconTheme("vscode", ext.vscodeIconThemePath);
         } else if (ext?.iconThemeFssPath) {
@@ -131,16 +107,9 @@ export function useExtensionHost({
     if (!activeColorTheme) {
       clearColorTheme();
     } else {
-      const match = findColorTheme(
-        latestExtensionsRef.current,
-        activeColorTheme,
-      );
+      const match = findColorTheme(latestExtensionsRef.current, activeColorTheme);
       if (match) {
-        loadAndApplyColorTheme(
-          bridge,
-          match.theme.jsonPath,
-          match.theme.uiTheme,
-        ).catch(() => clearColorTheme());
+        loadAndApplyColorTheme(bridge, match.theme.jsonPath, match.theme.uiTheme).catch(() => clearColorTheme());
       }
     }
   }, [activeColorTheme]);
@@ -162,17 +131,12 @@ export function useExtensionHost({
       await languageRegistry.activateGrammars();
     };
 
-    const updateIconTheme = async (
-      exts: LoadedExtension[],
-      themeId: string | undefined,
-    ): Promise<void> => {
+    const updateIconTheme = async (exts: LoadedExtension[], themeId: string | undefined): Promise<void> => {
       if (!themeId) {
         await setIconTheme("fss");
         return;
       }
-      const ext = exts.find(
-        (e) => `${e.ref.publisher}.${e.ref.name}` === themeId,
-      );
+      const ext = exts.find((e) => `${e.ref.publisher}.${e.ref.name}` === themeId);
       if (ext?.vscodeIconThemePath) {
         await setIconTheme("vscode", ext.vscodeIconThemePath);
       } else if (ext?.iconThemeFssPath) {
@@ -182,10 +146,7 @@ export function useExtensionHost({
       }
     };
 
-    const updateColorTheme = async (
-      exts: LoadedExtension[],
-      themeKey: string | undefined,
-    ): Promise<void> => {
+    const updateColorTheme = async (exts: LoadedExtension[], themeKey: string | undefined): Promise<void> => {
       if (!themeKey) {
         clearColorTheme();
         return;
@@ -196,11 +157,7 @@ export function useExtensionHost({
         getStyleHostElement().dataset.theme = kind;
         setIconThemeKind(kind);
         try {
-          await loadAndApplyColorTheme(
-            bridge,
-            match.theme.jsonPath,
-            match.theme.uiTheme,
-          );
+          await loadAndApplyColorTheme(bridge, match.theme.jsonPath, match.theme.uiTheme);
         } catch (err) {
           console.warn("[ExtHost] Failed to load color theme:", themeKey, err);
           clearColorTheme();
@@ -222,29 +179,19 @@ export function useExtensionHost({
 
       for (const ext of exts) {
         if (ext.commands) {
-          const disposeContributions = commandRegistry.registerContributions(
-            ext.commands,
-          );
+          const disposeContributions = commandRegistry.registerContributions(ext.commands);
           extensionContributionDisposersRef.current.push(disposeContributions);
           for (const cmd of ext.commands) {
-            const disposeCmd = commandRegistry.registerCommand(
-              cmd.command,
-              async (...args: unknown[]) => {
-                const handled = await executeMountedExtensionCommand(
-                  cmd.command,
-                  args,
-                );
-                if (handled) return;
-                await extensionHost.executeCommand(cmd.command, args);
-              },
-            );
+            const disposeCmd = commandRegistry.registerCommand(cmd.command, async (...args: unknown[]) => {
+              const handled = await executeMountedExtensionCommand(cmd.command, args);
+              if (handled) return;
+              await extensionHost.executeCommand(cmd.command, args);
+            });
             extensionContributionDisposersRef.current.push(disposeCmd);
           }
         }
         if (ext.keybindings?.length) {
-          extensionContributionDisposersRef.current.push(
-            ...registerExtensionKeybindings(commandRegistry, ext.keybindings),
-          );
+          extensionContributionDisposersRef.current.push(...registerExtensionKeybindings(commandRegistry, ext.keybindings));
         }
       }
     };
@@ -272,18 +219,13 @@ export function useExtensionHost({
         bridge.utils
           .getEnv()
           .then((env) =>
-            resolveShellProfiles(bridge, exts, env).then(
-              ({ profiles, shellScripts }) => {
-                setResolvedProfiles(profiles);
-                setTerminalProfilesLoaded(true);
-                if (
-                  bridge.pty.setShellIntegrations &&
-                  Object.keys(shellScripts).length > 0
-                ) {
-                  bridge.pty.setShellIntegrations(shellScripts).catch(() => {});
-                }
-              },
-            ),
+            resolveShellProfiles(bridge, exts, env).then(({ profiles, shellScripts }) => {
+              setResolvedProfiles(profiles);
+              setTerminalProfilesLoaded(true);
+              if (bridge.pty.setShellIntegrations && Object.keys(shellScripts).length > 0) {
+                bridge.pty.setShellIntegrations(shellScripts).catch(() => {});
+              }
+            }),
           )
           .catch(() => {
             setTerminalProfilesLoaded(true);
@@ -295,10 +237,7 @@ export function useExtensionHost({
         registerLanguages(exts);
         registerExtensionCommands(exts);
 
-        Promise.all([
-          updateIconTheme(exts, activeIconThemeRef.current),
-          updateColorTheme(exts, activeColorThemeRef.current),
-        ]).then(() => {
+        Promise.all([updateIconTheme(exts, activeIconThemeRef.current), updateColorTheme(exts, activeColorThemeRef.current)]).then(() => {
           setThemesReady(true);
           themesReadyRef.current = true;
           onNavigatePanelsRef.current();
@@ -319,12 +258,5 @@ export function useExtensionHost({
       extensionContributionDisposersRef.current = [];
       extensionHost.dispose();
     };
-  }, [
-    settingsLoaded,
-    ensureActiveIconThemeFssLoaded,
-    setLoadedExtensions,
-    setResolvedProfiles,
-    setTerminalProfilesLoaded,
-    setThemesReady,
-  ]);
+  }, [settingsLoaded, ensureActiveIconThemeFssLoaded, setLoadedExtensions, setResolvedProfiles, setTerminalProfilesLoaded, setThemesReady]);
 }

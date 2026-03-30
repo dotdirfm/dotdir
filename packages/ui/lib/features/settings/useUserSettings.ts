@@ -7,6 +7,10 @@ import { useCallback, useEffect } from "react";
 const settingsAtom = atom<DotDirSettings>({});
 const settingsReadyAtom = atom(false);
 
+export const showHiddenAtom = atom(get => get(settingsAtom).showHidden ?? false);
+export const activeIconThemeAtom = atom(get => get(settingsAtom).iconTheme);
+export const activeColorThemeAtom = atom(get => get(settingsAtom).colorTheme);
+
 // Ensures initUserSettings() is called at most once across all hook instances
 let initPromise: Promise<DotDirSettings> | null = null;
 
