@@ -102,14 +102,8 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const panelsVisible = useAtomValue(panelsVisibleAtom);
   const [viewerFile, setViewerFile] = useAtom(viewerFileAtom);
   const [editorFile, setEditorFile] = useAtom(editorFileAtom);
-  const [viewerExt, setViewerExt] = useState<{
-    dirPath: string;
-    entry: string;
-  } | null>(null);
-  const [editorExt, setEditorExt] = useState<{
-    dirPath: string;
-    entry: string;
-  } | null>(null);
+  const [viewerExt, setViewerExt] = useState<{ dirPath: string; entry: string } | null>(null);
+  const [editorExt, setEditorExt] = useState<{ dirPath: string; entry: string } | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
   const showExtensions = useAtomValue(showExtensionsAtom);
   const [leftTabs, setLeftTabs] = useAtom(leftTabsAtom);
@@ -146,10 +140,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const { settingsLoaded, initialLeftPanel, initialRightPanel, initialActivePanel, setInitialLeftPanel, setInitialRightPanel, setInitialActivePanel } =
     useWorkspaceRestoreProcess({
       ready,
-      setLeftTabs,
-      setRightTabs,
-      setLeftActiveTabId,
-      setRightActiveTabId,
       leftTabSelectionRef,
       rightTabSelectionRef,
       prevLeftActiveTabIdRef,
@@ -295,7 +285,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   }, [handleCommandLineExecute, setCommandLineOnExecute]);
 
   const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } = useFileOperations(
-    activePanelRef,
     leftRef,
     rightRef,
     setSelectionKey,

@@ -6,6 +6,7 @@
  * goes through the shared DialogContext (useDialog()).
  */
 
+import { activePanelAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
 import { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "@/features/bridge";
@@ -15,6 +16,7 @@ import type { FsProviderExtensionApi } from "@/features/extensions/extensionApi"
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join } from "@/utils/path";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
+import { useAtomValue } from "jotai";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef } from "react";
 
@@ -43,12 +45,15 @@ async function collectContainerFiles(
 }
 
 export function useFileOperations(
-  activePanelRef: RefObject<PanelSide>,
   leftRef: RefObject<PanelHandle>,
   rightRef: RefObject<PanelHandle>,
   setSelectionKey: Dispatch<SetStateAction<number>>,
 ) {
   const { showDialog, closeDialog, updateDialog } = useDialog();
+
+  const activePanel = useAtomValue(activePanelAtom);
+  const activePanelRef = useRef<PanelSide>(activePanel);
+  activePanelRef.current = activePanel;
 
   const bridge = useBridge();
   const activeCopyIdRef = useRef<number | null>(null);

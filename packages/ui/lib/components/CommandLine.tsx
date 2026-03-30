@@ -5,7 +5,6 @@ import { useAtomValue, useSetAtom } from "jotai";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "../styles/terminal.module.css";
-import { cx } from "../utils/cssModules";
 
 export function CommandLine() {
   const cwd = useAtomValue(commandLineCwdAtom);
@@ -383,7 +382,7 @@ export function CommandLine() {
   }
 
   return (
-    <div className={cx(styles, "command-line")}>
+    <div className={styles["command-line"]}>
       <span className={styles["command-line-prompt"]}>{promptLabel}&gt;</span>
       <span ref={inputRef} className={styles["command-line-input"]} onMouseDown={handleMouseDown}>
         {inputContent}

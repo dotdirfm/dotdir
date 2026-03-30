@@ -1,24 +1,16 @@
 import type { PanelTab } from "@/components/FileList/PanelTabs";
-import {
-  OPPOSITE_PANEL,
-  PANEL_SETTINGS_KEY,
-  PANEL_SIDES,
-} from "@/entities/panel/model/panelSide";
+import { OPPOSITE_PANEL, PANEL_SETTINGS_KEY, PANEL_SIDES } from "@/entities/panel/model/panelSide";
 import type { PanelSide } from "@/entities/panel/model/types";
-import {
-  createFilelistTab,
-  genTabId,
-} from "@/entities/tab/model/tabsAtoms";
+import { createFilelistTab, genTabId, leftActiveTabIdAtom, leftTabsAtom, rightActiveTabIdAtom, rightTabsAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { DotDirUiState, PanelPersistedState, PersistedTab } from "@/features/ui-state/types";
 import { flushUiState, initUiState, updateUiState } from "@/features/ui-state/uiState";
 import type { FsNode } from "fss-lang";
+import { useSetAtom } from "jotai";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type TabSelectionRef = RefObject<
-  Record<string, { selectedName?: string; topmostName?: string }>
->;
+type TabSelectionRef = RefObject<Record<string, { selectedName?: string; topmostName?: string }>>;
 type NameRef = RefObject<string | undefined>;
 type IdRef = RefObject<string>;
 type TabsRef = RefObject<PanelTab[]>;
@@ -30,10 +22,6 @@ interface PanelModel {
 
 interface RestoreParams {
   ready: boolean;
-  setLeftTabs: Dispatch<SetStateAction<PanelTab[]>>;
-  setRightTabs: Dispatch<SetStateAction<PanelTab[]>>;
-  setLeftActiveTabId: Dispatch<SetStateAction<string>>;
-  setRightActiveTabId: Dispatch<SetStateAction<string>>;
   leftTabSelectionRef: TabSelectionRef;
   rightTabSelectionRef: TabSelectionRef;
   prevLeftActiveTabIdRef: RefObject<string>;
@@ -43,10 +31,6 @@ interface RestoreParams {
 
 export function useWorkspaceRestoreProcess({
   ready,
-  setLeftTabs,
-  setRightTabs,
-  setLeftActiveTabId,
-  setRightActiveTabId,
   leftTabSelectionRef,
   rightTabSelectionRef,
   prevLeftActiveTabIdRef,
@@ -54,18 +38,18 @@ export function useWorkspaceRestoreProcess({
   onAfterRestore,
 }: RestoreParams) {
   const bridge = useBridge();
+
+  const setLeftTabs = useSetAtom(leftTabsAtom);
+  const setRightTabs = useSetAtom(rightTabsAtom);
+  const setLeftActiveTabId = useSetAtom(leftActiveTabIdAtom);
+  const setRightActiveTabId = useSetAtom(rightActiveTabIdAtom);
+
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const uiStateRef = useRef<DotDirUiState>({});
   const [uiStateLoaded, setUiStateLoaded] = useState(false);
-  const [initialLeftPanel, setInitialLeftPanel] = useState<
-    PanelPersistedState | undefined
-  >(undefined);
-  const [initialRightPanel, setInitialRightPanel] = useState<
-    PanelPersistedState | undefined
-  >(undefined);
-  const [initialActivePanel, setInitialActivePanel] = useState<
-    PanelSide | undefined
-  >(undefined);
+  const [initialLeftPanel, setInitialLeftPanel] = useState<PanelPersistedState | undefined>(undefined);
+  const [initialRightPanel, setInitialRightPanel] = useState<PanelPersistedState | undefined>(undefined);
+  const [initialActivePanel, setInitialActivePanel] = useState<PanelSide | undefined>(undefined);
 
   useEffect(() => {
     initUiState(bridge).then((state) => {
@@ -79,9 +63,7 @@ export function useWorkspaceRestoreProcess({
 
     const ui = uiStateRef.current;
 
-    const restoreTabs = (
-      panel: PanelPersistedState | undefined,
-    ): PanelTab[] | null => {
+    const restoreTabs = (panel: PanelPersistedState | undefined): PanelTab[] | null => {
       if (panel?.tabs?.length) {
         return panel.tabs.map((t) => {
           if (t.type === "filelist") return createFilelistTab(t.path);
@@ -101,20 +83,12 @@ export function useWorkspaceRestoreProcess({
       return null;
     };
 
-    const seedTabSelections = (
-      refs: TabSelectionRef,
-      restored: PanelTab[] | null,
-      persisted: PanelPersistedState | undefined,
-    ) => {
+    const seedTabSelections = (refs: TabSelectionRef, restored: PanelTab[] | null, persisted: PanelPersistedState | undefined) => {
       if (!restored?.length || !persisted?.tabs?.length) return;
       for (let i = 0; i < restored.length && i < persisted.tabs.length; i++) {
         const t = restored[i];
         const p = persisted.tabs[i];
-        if (
-          t.type === "filelist" &&
-          p.type === "filelist" &&
-          (p.selectedName != null || p.topmostName != null)
-        ) {
+        if (t.type === "filelist" && p.type === "filelist" && (p.selectedName != null || p.topmostName != null)) {
           refs.current[t.id] = {
             selectedName: p.selectedName,
             topmostName: p.topmostName,
@@ -125,26 +99,15 @@ export function useWorkspaceRestoreProcess({
 
     const restoredLeftTabs = restoreTabs(ui.leftPanel);
     const restoredRightTabs = restoreTabs(ui.rightPanel);
-    if (restoredLeftTabs)
-      seedTabSelections(leftTabSelectionRef, restoredLeftTabs, ui.leftPanel);
-    if (restoredRightTabs)
-      seedTabSelections(rightTabSelectionRef, restoredRightTabs, ui.rightPanel);
-    const restoredLeftIndex = restoredLeftTabs
-      ? Math.min(ui.leftPanel?.activeTabIndex ?? 0, restoredLeftTabs.length - 1)
-      : 0;
-    const restoredRightIndex = restoredRightTabs
-      ? Math.min(
-          ui.rightPanel?.activeTabIndex ?? 0,
-          restoredRightTabs.length - 1,
-        )
-      : 0;
+    if (restoredLeftTabs) seedTabSelections(leftTabSelectionRef, restoredLeftTabs, ui.leftPanel);
+    if (restoredRightTabs) seedTabSelections(rightTabSelectionRef, restoredRightTabs, ui.rightPanel);
+    const restoredLeftIndex = restoredLeftTabs ? Math.min(ui.leftPanel?.activeTabIndex ?? 0, restoredLeftTabs.length - 1) : 0;
+    const restoredRightIndex = restoredRightTabs ? Math.min(ui.rightPanel?.activeTabIndex ?? 0, restoredRightTabs.length - 1) : 0;
     const restoredLeftActiveId = restoredLeftTabs?.[restoredLeftIndex]?.id;
     const restoredRightActiveId = restoredRightTabs?.[restoredRightIndex]?.id;
 
-    if (restoredLeftActiveId)
-      prevLeftActiveTabIdRef.current = restoredLeftActiveId;
-    if (restoredRightActiveId)
-      prevRightActiveTabIdRef.current = restoredRightActiveId;
+    if (restoredLeftActiveId) prevLeftActiveTabIdRef.current = restoredLeftActiveId;
+    if (restoredRightActiveId) prevRightActiveTabIdRef.current = restoredRightActiveId;
 
     if (restoredLeftTabs) setLeftTabs(restoredLeftTabs);
     if (restoredRightTabs) setRightTabs(restoredRightTabs);
@@ -209,19 +172,12 @@ export function useWorkspacePersistenceProcess({
 }: PersistParams) {
   const bridge = useBridge();
 
-  const panelStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const panelStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPanelStateRef = useRef<Partial<DotDirUiState>>({});
 
   const buildPersistedTabs = useCallback(
-    (
-      side: PanelSide,
-      tabs: PanelTab[],
-      activeTabId: string,
-    ): { tabs: PersistedTab[]; activeTabIndex: number } => {
-      const selectionRef =
-        side === "left" ? leftTabSelectionRef : rightTabSelectionRef;
+    (side: PanelSide, tabs: PanelTab[], activeTabId: string): { tabs: PersistedTab[]; activeTabIndex: number } => {
+      const selectionRef = side === "left" ? leftTabSelectionRef : rightTabSelectionRef;
       const persisted: PersistedTab[] = tabs.map((tab) => {
         if (tab.type === "filelist") {
           const sel = selectionRef.current[tab.id];
@@ -260,25 +216,13 @@ export function useWorkspacePersistenceProcess({
         };
       }
       const tabsRef = side === "left" ? leftTabsRef : rightTabsRef;
-      const activeTabIdRef =
-        side === "left" ? leftActiveTabIdRef : rightActiveTabIdRef;
-      Object.assign(
-        pending[key]!,
-        buildPersistedTabs(side, tabsRef.current, activeTabIdRef.current),
-      );
+      const activeTabIdRef = side === "left" ? leftActiveTabIdRef : rightActiveTabIdRef;
+      Object.assign(pending[key]!, buildPersistedTabs(side, tabsRef.current, activeTabIdRef.current));
     }
     updateUiState(bridge, pending);
     flushUiState(bridge);
     pendingPanelStateRef.current = {};
-  }, [
-    buildPersistedTabs,
-    left.currentPath,
-    right.currentPath,
-    leftTabsRef,
-    rightTabsRef,
-    leftActiveTabIdRef,
-    rightActiveTabIdRef,
-  ]);
+  }, [buildPersistedTabs, left.currentPath, right.currentPath, leftTabsRef, rightTabsRef, leftActiveTabIdRef, rightActiveTabIdRef]);
 
   const savePanelStateDebounced = useCallback(() => {
     if (panelStateSaveTimerRef.current) {
@@ -300,58 +244,37 @@ export function useWorkspacePersistenceProcess({
   }, [flushPanelState]);
 
   const handlePanelStateChange = useCallback(
-    (
-      side: PanelSide,
-      selectedName: string | undefined,
-      topmostName: string | undefined,
-    ) => {
+    (side: PanelSide, selectedName: string | undefined, topmostName: string | undefined) => {
       const selfTabsRef = side === "left" ? leftTabsRef : rightTabsRef;
-      const selfActiveTabIdRef =
-        side === "left" ? leftActiveTabIdRef : rightActiveTabIdRef;
-      const selfTabSelRef =
-        side === "left" ? leftTabSelectionRef : rightTabSelectionRef;
-      const selfSelectedNameRef =
-        side === "left" ? leftSelectedNameRef : rightSelectedNameRef;
+      const selfActiveTabIdRef = side === "left" ? leftActiveTabIdRef : rightActiveTabIdRef;
+      const selfTabSelRef = side === "left" ? leftTabSelectionRef : rightTabSelectionRef;
+      const selfSelectedNameRef = side === "left" ? leftSelectedNameRef : rightSelectedNameRef;
       const panel = side === "left" ? left : right;
 
-      const tab = selfTabsRef.current.find(
-        (t) => t.id === selfActiveTabIdRef.current,
-      );
+      const tab = selfTabsRef.current.find((t) => t.id === selfActiveTabIdRef.current);
       if (tab?.type === "filelist") {
         selfTabSelRef.current[tab.id] = { selectedName, topmostName };
       }
       selfSelectedNameRef.current = selectedName;
       pendingPanelStateRef.current[PANEL_SETTINGS_KEY[side]] = {
         currentPath: panel.currentPath,
-        ...buildPersistedTabs(
-          side,
-          selfTabsRef.current,
-          selfActiveTabIdRef.current,
-        ),
+        ...buildPersistedTabs(side, selfTabsRef.current, selfActiveTabIdRef.current),
       };
       savePanelStateDebounced();
 
       const opposite = OPPOSITE_PANEL[side];
       const oppTabsRef = opposite === "left" ? leftTabsRef : rightTabsRef;
       const setOppTabs = opposite === "right" ? setRightTabs : setLeftTabs;
-      const setOppActiveId =
-        opposite === "right" ? setRightActiveTabId : setLeftActiveTabId;
+      const setOppActiveId = opposite === "right" ? setRightActiveTabId : setLeftActiveTabId;
       const tabs = oppTabsRef.current;
-      const tempTab = tabs.find(
-        (t) => t.type === "preview" && t.isTemp && t.sourcePanel === side,
-      );
+      const tempTab = tabs.find((t) => t.type === "preview" && t.isTemp && t.sourcePanel === side);
       if (!tempTab || !selectedName) return;
       const entry = panel.entries.find((e) => e.name === selectedName);
       if (!entry || entry.type !== "file") return;
       const path = entry.path as string;
       const name = entry.name;
       const size = Number(entry.meta.size);
-      if (
-        tempTab.type === "preview" &&
-        tempTab.path === path &&
-        tempTab.name === name
-      )
-        return;
+      if (tempTab.type === "preview" && tempTab.path === path && tempTab.name === name) return;
       setOppTabs((prev) =>
         prev.map((t) =>
           t.id === tempTab.id
