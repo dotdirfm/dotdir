@@ -44,7 +44,7 @@ import { basename, normalizePath, resolveDotSegments } from "@/utils/path";
 import { editorRegistry, fsProviderRegistry, viewerRegistry } from "@/viewerEditorRegistry";
 import type { ThemeKind } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "./features/settings/userSettings";
 import { PanelPersistedState } from "./features/ui-state/types";
 import baseStyles from "./styles/base.module.css";
@@ -52,8 +52,27 @@ import panelsStyles from "./styles/panels.module.css";
 import terminalStyles from "./styles/terminal.module.css";
 import { cx } from "./utils/cssModules";
 
-export function App({ widget }: { widget: React.ReactNode }) {
+export type AppHandle = {
+  focus(): void;
+};
+
+export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function App({ widget }, ref) {
   const rootRef = useRef<HTMLDivElement>(null);
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus() {
+        const root = rootRef.current;
+        if (!root) return;
+        try {
+          root.focus({ preventScroll: true });
+        } catch {
+          root.focus();
+        }
+      },
+    }),
+    [],
+  );
   const bridge = useBridge();
   const { settings, ready, updateSettings } = useUserSettings();
   const settingsRef = useRef(settings);
@@ -756,4 +775,4 @@ export function App({ widget }: { widget: React.ReactNode }) {
   }
 
   return <div ref={rootRef} className={baseStyles["app"]} tabIndex={0}>{body}</div>;
-}
+});

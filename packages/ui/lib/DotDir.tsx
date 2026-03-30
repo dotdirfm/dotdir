@@ -5,8 +5,8 @@ import { BridgeProvider } from "@/features/bridge/useBridge";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { commandRegistry } from "@/features/commands/commands";
 import { Provider as JotaiProvider } from "jotai";
-import { useEffect, useRef } from "react";
-import { App } from "./app";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { App, type AppHandle } from "./app";
 import baseStyles from "./styles/base.module.css";
 import { setStyleHostElement } from "./styleHost";
 import {
@@ -36,6 +36,7 @@ export type {
 export { basename, dirname, join, normalizePath } from "./utils/path";
 export { defaultResolveVfsUrl };
 export type { VfsUrlKind, VfsUrlResolver };
+export type { AppHandle };
 
 export type DotDirProps = {
   bridge: Bridge;
@@ -43,8 +44,13 @@ export type DotDirProps = {
   resolveVfsUrl?: VfsUrlResolver;
 };
 
-export function DotDir({ bridge, widget, resolveVfsUrl = defaultResolveVfsUrl }: DotDirProps) {
+export type DotDirHandle = {
+  focus(): void;
+};
+
+export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ bridge, widget, resolveVfsUrl = defaultResolveVfsUrl }, ref) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const appRef = useRef<AppHandle>(null);
 
   useEffect(() => {
     commandRegistry.registerContributions(builtInCommandContributions);
@@ -63,6 +69,16 @@ export function DotDir({ bridge, widget, resolveVfsUrl = defaultResolveVfsUrl }:
     };
   }, []);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus() {
+        appRef.current?.focus();
+      },
+    }),
+    [],
+  );
+
   return (
     <div ref={rootRef} className={baseStyles["dotdir-root"]}>
       <VfsUrlResolverContext.Provider value={resolveVfsUrl}>
@@ -70,7 +86,7 @@ export function DotDir({ bridge, widget, resolveVfsUrl = defaultResolveVfsUrl }:
           <BridgeProvider bridge={bridge}>
             <ErrorBoundary>
               <DialogProvider>
-                <App widget={widget} />
+                <App ref={appRef} widget={widget} />
               </DialogProvider>
             </ErrorBoundary>
           </BridgeProvider>
@@ -78,4 +94,4 @@ export function DotDir({ bridge, widget, resolveVfsUrl = defaultResolveVfsUrl }:
       </VfsUrlResolverContext.Provider>
     </div>
   );
-}
+});

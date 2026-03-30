@@ -1,4 +1,5 @@
 import { commandRegistry, type Command, type Keybinding } from "@/features/commands/commands";
+import { focusContext } from "@/focusContext";
 import { useCallback, useEffect, useState } from "react";
 import styles from "../styles/action-bar.module.css";
 import { cx } from "../utils/cssModules";
@@ -55,7 +56,12 @@ export function ActionBar() {
 
   useEffect(() => {
     updateItems();
-    return commandRegistry.onChange(updateItems);
+    const offCommands = commandRegistry.onChange(updateItems);
+    const offFocus = focusContext.onChange(() => updateItems());
+    return () => {
+      offCommands();
+      offFocus();
+    };
   }, [updateItems]);
 
   useEffect(() => {
