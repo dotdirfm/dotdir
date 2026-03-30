@@ -34,6 +34,7 @@ export interface BuiltInCommandDeps {
   leftRef: RefObject<PanelHandle>;
   rightRef: RefObject<PanelHandle>;
   onPreviewInOppositePanel: () => void;
+  onEditInOppositePanel: () => void;
   onOpenCurrentFolderInOppositeCurrentTab: () => void;
   onOpenCurrentFolderInOppositeNewTab: () => void;
   onOpenSelectedFolderInOppositeCurrentTab: () => void;
@@ -42,6 +43,7 @@ export interface BuiltInCommandDeps {
   showDialog: (spec: DialogSpec) => void;
   onViewFile: (filePath: string, fileName: string, fileSize: number) => void;
   onEditFile: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
+  onRequestCloseEditor: () => void;
   onExecuteInTerminal: (cmd: string) => Promise<void>;
   editorFileSizeLimit: number;
 }
@@ -100,7 +102,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     disposables.push(commandRegistry.registerCommand("dotdir.showExtensions", () => setShowExtensions(true)));
     disposables.push(commandRegistry.registerCommand("dotdir.showCommandPalette", () => setCommandPaletteOpen((o) => !o)));
     disposables.push(commandRegistry.registerCommand("dotdir.closeViewer", () => setViewerFile(null)));
-    disposables.push(commandRegistry.registerCommand("dotdir.closeEditor", () => setEditorFile(null)));
+    disposables.push(commandRegistry.registerCommand("dotdir.closeEditor", () => depsRef.current.onRequestCloseEditor()));
 
     // ── Navigation ────────────────────────────────────────────────────────────
 
@@ -154,6 +156,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     disposables.push(commandRegistry.registerCommand("dotdir.newTab", () => void getActivePanelGroupHandlers()?.newTab()));
     disposables.push(commandRegistry.registerCommand("dotdir.closeTab", () => void getActivePanelGroupHandlers()?.closeActiveTab()));
     disposables.push(commandRegistry.registerCommand("dotdir.previewInOppositePanel", () => depsRef.current.onPreviewInOppositePanel()));
+    disposables.push(commandRegistry.registerCommand("dotdir.editInOppositePanel", () => depsRef.current.onEditInOppositePanel()));
     disposables.push(
       commandRegistry.registerCommand("dotdir.openCurrentFolderInOppositePanelCurrentTab", () => depsRef.current.onOpenCurrentFolderInOppositeCurrentTab()),
     );

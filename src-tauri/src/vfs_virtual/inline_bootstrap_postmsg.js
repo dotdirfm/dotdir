@@ -178,6 +178,7 @@ function createDotdirApi() {
     readFileRange: (path, offset, length) => rpcCall("readFileRange", [path, offset, length]),
     statFile: (path) => rpcCall("statFile", [path]),
     writeFile: (path, content) => rpcCall("writeFile", [path, content]),
+    setDirty: (dirty) => rpcCall("setDirty", [dirty]),
 
     // Theme ops
     getTheme: () => rpcCall("getTheme", []),

@@ -25,7 +25,8 @@ const appBuiltInKeybindings: Keybinding[] = [
   // File commands
   { command: "dotdir.newTab", key: "ctrl+t", mac: "cmd+t", when: "focusPanel" },
   { command: "dotdir.closeTab", key: "ctrl+w", mac: "cmd+w", when: "focusPanel" },
-  { command: "dotdir.previewInOppositePanel", key: "ctrl+shift+o", mac: "cmd+shift+o", when: "focusPanel && listItemIsFile" },
+  { command: "dotdir.previewInOppositePanel", key: "ctrl+f3", mac: "cmd+f3", when: "focusPanel && listItemIsFile" },
+  { command: "dotdir.editInOppositePanel", key: "ctrl+f4", mac: "cmd+f4", when: "focusPanel && listItemHasEditor" },
   { command: "dotdir.refresh", key: "ctrl+r", mac: "cmd+r", when: "focusPanel" },
   { command: "dotdir.openCreateFile", key: "shift+f4", when: "focusPanel" },
   { command: "dotdir.makeFolder", key: "f7", when: "focusPanel" },
@@ -124,4 +125,3 @@ export function registerExtensionKeybinding(registry: CommandRegistryLike, bindi
 export function registerExtensionKeybindings(registry: CommandRegistryLike, bindings: Keybinding[]): Disposable[] {
   return registerKeybindings(registry, bindings, "extension");
 }
-

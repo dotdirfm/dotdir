@@ -12,6 +12,9 @@ export type PanelTab =
       name: string;
       size: number;
       isTemp: boolean;
+      dirty?: boolean;
+      mode?: "viewer" | "editor";
+      langId?: string;
       sourcePanel?: "left" | "right";
     };
 
@@ -30,7 +33,7 @@ function tabLabel(tab: PanelTab): string {
     const base = basename(tab.path);
     return base || tab.path || "File list";
   }
-  return tab.name;
+  return `${tab.dirty ? "* " : ""}${tab.name}`;
 }
 
 export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTab, onDoubleClickTab, onCloseTab, onNewTab, onReorderTabs }: PanelTabsProps) {
@@ -129,7 +132,7 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
       >
         {tabs.flatMap((tab, i) => {
           const isPreview = tab.type === "preview";
-          const isTemp = isPreview && tab.isTemp;
+          const isTemp = isPreview && tab.isTemp && !tab.dirty;
           const isActive = tab.id === activeTabId;
           const showDropBefore = dropIndex === i;
           return [

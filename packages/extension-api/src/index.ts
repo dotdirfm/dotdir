@@ -48,6 +48,7 @@ export interface HostApi {
   statFile(path: string): Promise<{ size: number; mtimeMs: number }>;
   onFileChange(callback: () => void): () => void;
   writeFile(path: string, content: string): Promise<void>;
+  setDirty?(dirty: boolean): void;
   getTheme(): Promise<string>;
   getColorTheme(): ColorThemeData | null;
   onThemeChange(callback: (theme: ColorThemeData) => void): () => void;

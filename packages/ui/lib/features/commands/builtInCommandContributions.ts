@@ -22,6 +22,7 @@ export const builtInCommandContributions: CommandContribution[] = [
   { command: "dotdir.newTab", title: "New Tab", category: "File" },
   { command: "dotdir.closeTab", title: "Close Tab", category: "File" },
   { command: "dotdir.previewInOppositePanel", title: "Show Preview in Opposite Panel", category: "File" },
+  { command: "dotdir.editInOppositePanel", title: "Open Editor in Opposite Panel", category: "File" },
   { command: "dotdir.openCurrentFolderInOppositePanelCurrentTab", title: "Open Current Folder in Opposite Panel (Current Tab)", category: "File" },
   { command: "dotdir.openCurrentFolderInOppositePanelNewTab", title: "Open Current Folder in Opposite Panel (New Tab)", category: "File" },
   { command: "dotdir.openSelectedFolderInOppositePanelCurrentTab", title: "Open Selected Folder in Opposite Panel (Current Tab)", category: "File" },

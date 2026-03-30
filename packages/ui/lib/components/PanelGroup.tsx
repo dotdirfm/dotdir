@@ -1,7 +1,8 @@
 import { activePanelAtom, showHiddenAtom } from "@/atoms";
-import { ViewerContainer } from "@/components/ExtensionContainer";
+import { EditorContainer, ViewerContainer } from "@/components/ExtensionContainer";
 import { FileList } from "@/components/FileList";
 import { PanelTabs } from "@/components/FileList/PanelTabs";
+import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
 import {
   createFilelistTab,
@@ -15,7 +16,7 @@ import {
 import { useBridge } from "@/features/bridge/useBridge";
 import type { PanelPersistedState } from "@/features/ui-state/types";
 import { setActivePanelGroupHandlers } from "@/panelGroupHandlers";
-import { viewerRegistry } from "@/viewerEditorRegistry";
+import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
 import type { FsNode, LayeredResolver } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -54,6 +55,7 @@ export function PanelGroup({
 }: PanelGroupProps) {
   const activePanel = useAtomValue(activePanelAtom);
   const setActivePanel = useSetAtom(activePanelAtom);
+  const { showDialog } = useDialog();
   const active = activePanel === side;
 
   const [tabs, setTabs] = useAtom(side === "left" ? leftTabsAtom : rightTabsAtom);
@@ -78,7 +80,7 @@ export function PanelGroup({
   const handlePinTab = useCallback((id: string) => {
     setTabs((prev) => prev.map((t) => (t.id === id && t.type === "preview" && t.isTemp ? { ...t, isTemp: false } : t)));
   }, []);
-  const handleCloseTab = useCallback(async (id: string) => {
+  const closeTabNow = useCallback(async (id: string) => {
     const currentTabs = tabsRef.current;
     if (currentTabs.length > 1) {
       const idx = currentTabs.findIndex((t) => t.id === id);
@@ -93,6 +95,30 @@ export function PanelGroup({
     setActiveTabId(newTab.id);
     panelRef.current.navigateTo(home);
   }, []);
+  const handleCloseTab = useCallback(async (id: string) => {
+    const tab = tabsRef.current.find((t) => t.id === id);
+    if (tab?.type === "preview" && tab.mode === "editor" && tab.dirty) {
+      showDialog({
+        type: "message",
+        title: "Unsaved Changes",
+        message: `Close "${tab.name}" and discard unsaved changes?`,
+        buttons: [
+          {
+            label: "Cancel",
+            default: true,
+          },
+          {
+            label: "Discard",
+            onClick: () => {
+              void closeTabNow(id);
+            },
+          },
+        ],
+      });
+      return;
+    }
+    await closeTabNow(id);
+  }, [closeTabNow, showDialog]);
 
   const handleReorderTabs = useCallback((fromIndex: number, toIndex: number) => {
     setTabs((prev) => {
@@ -152,6 +178,41 @@ export function PanelGroup({
           (() => {
             const tab = activeTab;
             if (tab.type !== "preview") return null;
+            if (tab.mode === "editor") {
+              const resolvedEditor = editorRegistry.resolve(tab.name);
+              if (!resolvedEditor) {
+                return (
+                  <div style={{ padding: 16, color: "var(--fg-muted, #888)", textAlign: "center" }}>
+                    No editor extension for this file type. Install editor extensions from the extensions panel.
+                  </div>
+                );
+              }
+              const langId = tab.langId ?? "plaintext";
+              return (
+                <EditorContainer
+                  extensionDirPath={resolvedEditor.extensionDirPath}
+                  entry={resolvedEditor.contribution.entry}
+                  filePath={tab.path}
+                  fileName={tab.name}
+                  langId={langId}
+                  inline
+                  onClose={() => handleCloseTab(tab.id)}
+                  onDirtyChange={(dirty) => {
+                    setTabs((prev) =>
+                      prev.map((t) =>
+                        t.id === tab.id && t.type === "preview"
+                          ? {
+                              ...t,
+                              dirty,
+                              isTemp: dirty ? false : t.isTemp,
+                            }
+                          : t,
+                      ),
+                    );
+                  }}
+                />
+              );
+            }
             const resolved = viewerRegistry.resolve(tab.name);
             if (resolved) {
               return (

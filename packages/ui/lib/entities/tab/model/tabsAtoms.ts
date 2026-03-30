@@ -12,8 +12,25 @@ export function createFilelistTab(path: string): PanelTab {
   return { id: genTabId(), type: "filelist", path };
 }
 
-export function createPreviewTab(path: string, name: string, size: number, sourcePanel: PanelSide): PanelTab {
-  return { id: genTabId(), type: "preview", path, name, size, isTemp: true, sourcePanel };
+export function createPreviewTab(
+  path: string,
+  name: string,
+  size: number,
+  sourcePanel: PanelSide,
+  options?: { mode?: "viewer" | "editor"; langId?: string },
+): PanelTab {
+  return {
+    id: genTabId(),
+    type: "preview",
+    path,
+    name,
+    size,
+    isTemp: true,
+    sourcePanel,
+    mode: options?.mode ?? "viewer",
+    langId: options?.langId,
+    dirty: false,
+  };
 }
 
 const defaultLeftTab = createFilelistTab("");

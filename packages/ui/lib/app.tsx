@@ -105,6 +105,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     dirPath: string;
     entry: string;
   } | null>(null);
+  const [editorDirty, setEditorDirty] = useState(false);
   const showExtensions = useAtomValue(showExtensionsAtom);
   const setActiveIconTheme = useSetAtom(activeIconThemeAtom);
   const setActiveColorTheme = useSetAtom(activeColorThemeAtom);
@@ -294,6 +295,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   }, []);
 
   const handleEditFile = useCallback((filePath: string, fileName: string, fileSize: number, langId: string) => {
+    setEditorDirty(false);
     setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
   }, []);
 
@@ -303,8 +305,32 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
       await bridge.fs.writeFile(filePath, "");
     }
     const size = exists ? (await bridge.fs.stat(filePath)).size : 0;
+    setEditorDirty(false);
     setEditorFile({ path: filePath, name: fileName, size, langId });
   }, []);
+
+  const requestCloseEditor = useCallback(() => {
+    if (!editorDirty || !editorFile) {
+      setEditorDirty(false);
+      setEditorFile(null);
+      return;
+    }
+    showDialog({
+      type: "message",
+      title: "Unsaved Changes",
+      message: `Close "${editorFile.name}" and discard unsaved changes?`,
+      buttons: [
+        { label: "Cancel", default: true },
+        {
+          label: "Discard",
+          onClick: () => {
+            setEditorDirty(false);
+            setEditorFile(null);
+          },
+        },
+      ],
+    });
+  }, [editorDirty, editorFile, showDialog]);
 
   const viewerPanelEntries = viewerFile ? (viewerFile.panel === "left" ? left.entries : right.entries) : [];
 
@@ -493,10 +519,44 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
 
     const tempTab = tabs.find((t) => t.type === "preview" && t.isTemp);
     if (tempTab && tempTab.type === "preview") {
-      setTabs((prev) => prev.map((t) => (t.id === tempTab.id ? { ...t, path, name, size, sourcePanel } : t)));
+      setTabs((prev) => prev.map((t) => (t.id === tempTab.id ? { ...t, path, name, size, sourcePanel, mode: "viewer", dirty: false } : t)));
       setActiveId(tempTab.id);
     } else {
-      const newTab = createPreviewTab(path, name, size, sourcePanel);
+      const newTab = createPreviewTab(path, name, size, sourcePanel, { mode: "viewer" });
+      setTabs((prev) => [...prev, newTab]);
+      setActiveId(newTab.id);
+    }
+    setActivePanel(opposite);
+  }, [left.entries, right.entries]);
+
+  const handleEditInOppositePanel = useCallback(() => {
+    const side = activePanelRef.current;
+    const entries = side === "left" ? left.entries : right.entries;
+    const selectedName = side === "left" ? leftSelectedNameRef.current : rightSelectedNameRef.current;
+    const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
+    if (!entry || entry.type !== "file") return;
+    const path = entry.path as string;
+    const name = entry.name;
+    const size = Number(entry.meta.size);
+    const langId = typeof entry.lang === "string" && entry.lang ? entry.lang : "plaintext";
+    const sourcePanel = side;
+    const opposite = OPPOSITE_PANEL[side];
+    const tabs = (opposite === "left" ? leftTabsRef : rightTabsRef).current;
+    const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
+    const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
+
+    const tempTab = tabs.find((t) => t.type === "preview" && t.isTemp);
+    if (tempTab && tempTab.type === "preview") {
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === tempTab.id
+            ? { ...t, path, name, size, sourcePanel, mode: "editor", langId, dirty: false }
+            : t,
+        ),
+      );
+      setActiveId(tempTab.id);
+    } else {
+      const newTab = createPreviewTab(path, name, size, sourcePanel, { mode: "editor", langId });
       setTabs((prev) => [...prev, newTab]);
       setActiveId(newTab.id);
     }
@@ -623,6 +683,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     leftRef,
     rightRef,
     onPreviewInOppositePanel: handlePreviewInOppositePanel,
+    onEditInOppositePanel: handleEditInOppositePanel,
     onOpenCurrentFolderInOppositeCurrentTab: handleOpenCurrentFolderInOppositeCurrentTab,
     onOpenCurrentFolderInOppositeNewTab: handleOpenCurrentFolderInOppositeNewTab,
     onOpenSelectedFolderInOppositeCurrentTab: handleOpenSelectedFolderInOppositeCurrentTab,
@@ -631,6 +692,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     showDialog,
     onViewFile: handleViewFile,
     onEditFile: handleEditFile,
+    onRequestCloseEditor: requestCloseEditor,
     onExecuteInTerminal: (cmd) => terminal.writeToTerminal(cmd),
     editorFileSizeLimit,
   });
@@ -740,7 +802,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
           <ModalDialog
             title="No editor"
             message="No editor extension found for this file type. Install an editor extension (e.g. Monaco Editor) from the extensions panel."
-            onClose={() => setEditorFile(null)}
+            onClose={requestCloseEditor}
           />
         )}
         {editorExt &&
@@ -761,7 +823,8 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
                 filePath={editorFile.path}
                 fileName={editorFile.name}
                 langId={editorFile.langId}
-                onClose={() => setEditorFile(null)}
+                onClose={requestCloseEditor}
+                onDirtyChange={setEditorDirty}
                 languages={allLanguages}
                 grammars={grammars}
               />

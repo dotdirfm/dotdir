@@ -11,7 +11,12 @@ export type {
   FsProviderExtensionApi,
   FsProviderFactory,
   FsProviderHostApi,
-  HostApi,
   ViewerExtensionApi,
   ViewerProps,
 } from "@dotdirfm/extension-api";
+
+import type { HostApi as BaseHostApi } from "@dotdirfm/extension-api";
+
+export type HostApi = BaseHostApi & {
+  setDirty?(dirty: boolean): void;
+};

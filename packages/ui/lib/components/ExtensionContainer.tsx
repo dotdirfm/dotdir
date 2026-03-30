@@ -279,6 +279,9 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       async writeFile(path: string, content: string): Promise<void> {
         await bridge.fs.writeFile(path, content);
       },
+      setDirty(dirty: boolean): void {
+        onDirtyChangeRef.current?.(dirty);
+      },
       async getTheme(): Promise<string> {
         return bridge.theme.get();
       },
@@ -929,6 +932,7 @@ interface EditorContainerWrapperProps {
   filePath: string;
   fileName: string;
   langId: string;
+  inline?: boolean;
   visible?: boolean;
   onClose: () => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -942,6 +946,7 @@ export function EditorContainer({
   filePath,
   fileName,
   langId,
+  inline,
   visible,
   onClose,
   onDirtyChange,
@@ -991,6 +996,7 @@ export function EditorContainer({
 
   // Manage focus context for overlay mode.
   useEffect(() => {
+    if (inline) return;
     if (isVisible) {
       if (!focusPushedRef.current) {
         restoreFocusElRef.current = document.activeElement as HTMLElement | null;
@@ -1007,7 +1013,7 @@ export function EditorContainer({
         focusPushedRef.current = false;
       }
     }
-  }, [isVisible]);
+  }, [inline, isVisible]);
 
   // Cleanup focus context on unmount.
   useEffect(() => {
@@ -1032,9 +1038,9 @@ export function EditorContainer({
       extensionDirPath,
       languages,
       grammars,
-      inline: false,
+      inline: !!inline,
     }),
-    [filePath, fileName, currentLangId, extensionDirPath, languages, grammars],
+    [filePath, fileName, currentLangId, extensionDirPath, languages, grammars, inline],
   );
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -1053,69 +1059,83 @@ export function EditorContainer({
   }, [languages]);
   const showLangSelect = langList.length > 0;
 
+  const content = (
+    <>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "6px 10px",
+          borderBottom: "1px solid var(--border, #333)",
+          flexShrink: 0,
+          minHeight: 38,
+          boxSizing: "border-box",
+        }}
+      >
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={fileName}>
+          {fileName}
+        </span>
+        {showLangSelect && (
+          <>
+            <label htmlFor="editor-lang-select" style={{ whiteSpace: "nowrap" }}>
+              Language:
+            </label>
+            <select id="editor-lang-select" value={currentLangId} onChange={handleLanguageChange} style={{ minWidth: 120, padding: "2px 6px" }}>
+              <option value="plaintext">Plain Text</option>
+              {langList.map((lang) => (
+                <option key={lang.id} value={lang.id}>
+                  {lang.aliases?.[0] ?? lang.id}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+        <button
+          type="button"
+          title="Close (Esc)"
+          onClick={handleClose}
+          style={{
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            fontSize: 18,
+            padding: "0 8px",
+            flexShrink: 0,
+            color: "inherit",
+          }}
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <ExtensionContainer
+          kind="editor"
+          extensionDirPath={extensionDirPath}
+          entry={entry}
+          props={editorProps}
+          active={isVisible}
+          onClose={handleClose}
+          onDirtyChange={onDirtyChange}
+          style={{ width: "100%", height: "100%" }}
+        />
+      </div>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div className={`${styles["file-editor"]} ${styles["file-viewer-inline"]}`} style={{ display: "flex", flexDirection: "column", height: "100%", padding: 0 }}>
+        {content}
+      </div>
+    );
+  }
+
   return (
     <div className={styles["file-editor-overlay"]} style={{ display: isVisible ? "flex" : "none" }}>
       <div className={styles["file-editor"]} style={{ display: "flex", flexDirection: "column", padding: 0 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "6px 10px",
-            borderBottom: "1px solid var(--border, #333)",
-            flexShrink: 0,
-            minHeight: 38,
-            boxSizing: "border-box",
-          }}
-        >
-          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={fileName}>
-            {fileName}
-          </span>
-          {showLangSelect && (
-            <>
-              <label htmlFor="editor-lang-select" style={{ whiteSpace: "nowrap" }}>
-                Language:
-              </label>
-              <select id="editor-lang-select" value={currentLangId} onChange={handleLanguageChange} style={{ minWidth: 120, padding: "2px 6px" }}>
-                <option value="plaintext">Plain Text</option>
-                {langList.map((lang) => (
-                  <option key={lang.id} value={lang.id}>
-                    {lang.aliases?.[0] ?? lang.id}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
-          <button
-            type="button"
-            title="Close (Esc)"
-            onClick={handleClose}
-            style={{
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              fontSize: 18,
-              padding: "0 8px",
-              flexShrink: 0,
-              color: "inherit",
-            }}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <ExtensionContainer
-            kind="editor"
-            extensionDirPath={extensionDirPath}
-            entry={entry}
-            props={editorProps}
-            active={isVisible}
-            onClose={handleClose}
-            onDirtyChange={onDirtyChange}
-            style={{ width: "100%", height: "100%" }}
-          />
-        </div>
+        {content}
       </div>
     </div>
   );
