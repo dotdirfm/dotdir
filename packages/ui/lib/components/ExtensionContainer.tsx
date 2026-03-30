@@ -21,6 +21,8 @@ import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import { getActiveColorThemeData, onColorThemeChange } from "@/vscodeColorTheme";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "../styles/viewers.module.css";
+import { useAtomValue } from "jotai";
+import { loadedExtensionsAtom } from "@/atoms";
 
 // ── Container props ─────────────────────────────────────────────────────
 
@@ -491,9 +493,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           if (isInlineViewer && key === "tab" && inlineIframeFocusedRef.current) {
             inlineIframeFocusedRef.current = false;
             const tabBackHandler =
-              (containerProps.kind === "viewer"
-                ? (containerProps as ViewerContainerProps & { onTabBackToPanel?: () => void }).onTabBackToPanel
-                : undefined);
+              containerProps.kind === "viewer" ? (containerProps as ViewerContainerProps & { onTabBackToPanel?: () => void }).onTabBackToPanel : undefined;
             if (tabBackHandler) {
               tabBackHandler();
               return;
@@ -937,7 +937,11 @@ export function ViewerContainer({
 
   if (inline) {
     return (
-      <div ref={containerRef} className={`${styles["file-viewer"]} ${styles["file-viewer-inline"]}`} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div
+        ref={containerRef}
+        className={`${styles["file-viewer"]} ${styles["file-viewer-inline"]}`}
+        style={{ display: "flex", flexDirection: "column", height: "100%" }}
+      >
         <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
       </div>
     );
@@ -967,19 +971,16 @@ interface EditorContainerWrapperProps {
   grammars?: EditorProps["grammars"];
 }
 
-export function EditorContainer({
-  extensionDirPath,
-  entry,
-  filePath,
-  fileName,
-  langId,
-  inline,
-  visible,
-  onClose,
-  onDirtyChange,
-  languages,
-  grammars,
-}: EditorContainerWrapperProps) {
+export function EditorContainer({ extensionDirPath, entry, filePath, fileName, langId, inline, visible, onClose, onDirtyChange }: EditorContainerWrapperProps) {
+  const loadedExtensions = useAtomValue(loadedExtensionsAtom);
+
+  const languages = loadedExtensions.flatMap((e) => e.languages ?? []);
+  const allGrammarRefs = loadedExtensions.flatMap((e) => e.grammarRefs ?? []);
+  const grammars = allGrammarRefs.map((gr) => ({
+    contribution: gr.contribution,
+    path: gr.path,
+  }));
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentLangId, setCurrentLangId] = useState(langId);
   const focusPushedRef = useRef(false);
@@ -1185,7 +1186,11 @@ export function EditorContainer({
 
   if (inline) {
     return (
-      <div ref={containerRef} className={`${styles["file-editor"]} ${styles["file-viewer-inline"]}`} style={{ display: "flex", flexDirection: "column", height: "100%", padding: 0 }}>
+      <div
+        ref={containerRef}
+        className={`${styles["file-editor"]} ${styles["file-viewer-inline"]}`}
+        style={{ display: "flex", flexDirection: "column", height: "100%", padding: 0 }}
+      >
         {content}
       </div>
     );

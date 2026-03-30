@@ -1,4 +1,4 @@
-import { activePanelAtom, showHiddenAtom } from "@/atoms";
+import { activePanelAtom } from "@/atoms";
 import { EditorContainer, ViewerContainer } from "@/components/ExtensionContainer";
 import { PanelTabs } from "@/components/FileList/PanelTabs";
 import { useDialog } from "@/dialogs/dialogContext";
@@ -24,6 +24,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "../styles/panels.module.css";
 import { cx } from "../utils/cssModules";
 import { FileListTabPane } from "./FileListTabPane";
+import { showHiddenAtom } from "@/features/settings/useUserSettings";
 
 interface PanelGroupProps {
   side: PanelSide;

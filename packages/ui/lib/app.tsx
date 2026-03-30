@@ -3,7 +3,6 @@ import {
   commandLineOnExecuteAtom,
   commandLinePasteFnAtom,
   editorFileAtom,
-  loadedExtensionsAtom,
   osThemeAtom,
   panelsVisibleAtom,
   showExtensionsAtom,
@@ -116,7 +115,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const rightTabSelectionRef = useRef<Record<string, { selectedName?: string; topmostName?: string }>>({});
   const prevLeftActiveTabIdRef = useRef(leftActiveTabId);
   const prevRightActiveTabIdRef = useRef(rightActiveTabId);
-  const loadedExtensions = useAtomValue(loadedExtensionsAtom);
   const themesReady = useAtomValue(themesReadyAtom);
   const leftTabsRef = useRef(leftTabs);
   leftTabsRef.current = leftTabs;
@@ -284,11 +282,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     setCommandLineOnExecute(() => handleCommandLineExecute);
   }, [handleCommandLineExecute, setCommandLineOnExecute]);
 
-  const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } = useFileOperations(
-    leftRef,
-    rightRef,
-    setSelectionKey,
-  );
+  const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } = useFileOperations(leftRef, rightRef, setSelectionKey);
 
   useEffect(() => {
     setFileOperationHandlers({
@@ -812,12 +806,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
           editorFile &&
           editorResolved &&
           (() => {
-            const allLanguages = loadedExtensions.flatMap((e) => e.languages ?? []);
-            const allGrammarRefs = loadedExtensions.flatMap((e) => e.grammarRefs ?? []);
-            const grammars = allGrammarRefs.map((gr) => ({
-              contribution: gr.contribution,
-              path: gr.path,
-            }));
             return (
               <EditorContainer
                 key={`editor:${editorExt.dirPath}:${editorExt.entry}`}
@@ -828,8 +816,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
                 langId={editorFile.langId}
                 onClose={requestCloseEditor}
                 onDirtyChange={setEditorDirty}
-                languages={allLanguages}
-                grammars={grammars}
               />
             );
           })()}
