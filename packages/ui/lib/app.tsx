@@ -78,17 +78,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const setTheme = useSetAtom(osThemeAtom);
   const { dialog, showDialog } = useDialog();
   const showHidden = useAtomValue(showHiddenAtom);
-  const showError = useCallback(
-    (message: string) => {
-      showDialog({
-        type: "message",
-        title: "Error",
-        message,
-        variant: "error",
-      });
-    },
-    [showDialog],
-  );
   const [leftPanelState, setLeftPanelState] = useState({
     ...emptyPanel,
     entries: [] as FsNode[],
@@ -749,7 +738,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
             <div className={panelsStyles["side-by-side-panels"]}>
               <PanelGroup
                 side="left"
-                showError={showError}
                 onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
                 selectionKey={selectionKey}
                 requestedActiveName={leftRequestedCursor}
@@ -759,7 +747,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
               />
               <PanelGroup
                 side="right"
-                showError={showError}
                 onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
                 selectionKey={selectionKey}
                 requestedActiveName={rightRequestedCursor}

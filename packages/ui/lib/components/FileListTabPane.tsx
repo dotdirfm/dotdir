@@ -10,7 +10,6 @@ interface FileListTabPaneProps {
   visible: boolean;
   focused: boolean;
   showHidden: boolean;
-  showError: (message: string) => void;
   onRememberExpectedTerminalCwd: (path: string) => void;
   selectionKey?: number;
   requestedActiveName?: string;
@@ -27,7 +26,6 @@ export function FileListTabPane({
   visible,
   focused,
   showHidden,
-  showError,
   onRememberExpectedTerminalCwd,
   selectionKey,
   requestedActiveName,
@@ -36,7 +34,7 @@ export function FileListTabPane({
   onActivatePanelFocus,
   onActivePanelChange,
 }: FileListTabPaneProps) {
-  const panel = usePanel(showError);
+  const panel = usePanel();
   const lastRequestedPathRef = useRef<string | null>(null);
 
   useEffect(() => {

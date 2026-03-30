@@ -7,6 +7,7 @@
  */
 
 import { osThemeAtom } from "@/atoms";
+import { useDialog } from "@/dialogs/dialogContext";
 import { Bridge, FsChangeType, FsRawEntry } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
@@ -131,7 +132,8 @@ export const emptyPanel: PanelState = {
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-export function usePanel(showError: (message: string) => void) {
+export function usePanel() {
+  const { showError } = useDialog();
   const bridge = useBridge();
   const theme = useAtomValue(osThemeAtom);
   const [state, setState] = useState<PanelState>(emptyPanel);

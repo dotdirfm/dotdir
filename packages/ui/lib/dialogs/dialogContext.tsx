@@ -127,6 +127,7 @@ export type DialogUpdate =
 interface DialogContextValue {
   dialog: DialogSpec | null;
   showDialog: (spec: DialogSpec) => void;
+  showError: (message: string) => void;
   closeDialog: () => void;
   /** Update the current dialog (for deleteProgress or copyProgress: partial updates). */
   updateDialog: (update: DialogUpdate) => void;
@@ -141,6 +142,18 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     setDialog(spec);
   }, []);
 
+  const showError = useCallback(
+    (message: string) => {
+      showDialog({
+        type: "message",
+        title: "Error",
+        message,
+        variant: "error",
+      });
+    },
+    [showDialog],
+  );
+
   const closeDialog = useCallback(() => {
     setDialog(null);
   }, []);
@@ -154,7 +167,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const value = useMemo(() => ({ dialog, showDialog, closeDialog, updateDialog }), [dialog, showDialog, closeDialog, updateDialog]);
+  const value = useMemo(() => ({ dialog, showDialog, closeDialog, updateDialog, showError }), [dialog, showDialog, closeDialog, updateDialog]);
 
   return <DialogContext.Provider value={value}>{children}</DialogContext.Provider>;
 }

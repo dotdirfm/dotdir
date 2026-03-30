@@ -28,7 +28,6 @@ import { showHiddenAtom } from "@/features/settings/useUserSettings";
 
 interface PanelGroupProps {
   side: PanelSide;
-  showError: (message: string) => void;
   onRememberExpectedTerminalCwd: (path: string) => void;
   selectionKey?: number;
   requestedActiveName?: string;
@@ -40,7 +39,6 @@ interface PanelGroupProps {
 
 export function PanelGroup({
   side,
-  showError,
   onRememberExpectedTerminalCwd,
   selectionKey,
   requestedActiveName,
@@ -313,7 +311,6 @@ export function PanelGroup({
                 visible={isVisible}
                 focused={active && isVisible}
                 showHidden={showHidden}
-                showError={showError}
                 onRememberExpectedTerminalCwd={onRememberExpectedTerminalCwd}
                 selectionKey={selectionKey}
                 requestedActiveName={
