@@ -14,8 +14,7 @@ import {
   ExtensionInstallRequest,
   FsChangeEvent,
   FsChangeType,
-  FspEntry,
-  FsRawEntry,
+  FsEntry,
   MoveOptions,
   MoveProgressEvent,
   PtyLaunchInfo,
@@ -243,7 +242,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
   return {
     fs: {
       entries: (dirPath: string) =>
-        rpc("fs.entries", { path: dirPath }) as Promise<FsRawEntry[]>,
+        rpc("fs.entries", { path: dirPath }) as Promise<FsEntry[]>,
       stat: (filePath: string) =>
         rpc("fs.stat", { path: filePath }) as Promise<{
           size: number;
@@ -461,22 +460,11 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
         containerPath: string,
         innerPath: string,
       ) => {
-        const raw = (await rpc("fsp.listEntries", {
+        return (await rpc("fsp.listEntries", {
           wasmPath,
           containerPath,
           innerPath,
-        })) as Array<{
-          name: string;
-          kind: string;
-          size?: number;
-          mtimeMs?: number;
-        }>;
-        return raw.map((e) => ({
-          name: e.name,
-          kind: e.kind as FspEntry["kind"],
-          size: e.size,
-          mtimeMs: e.mtimeMs,
-        }));
+        })) as FsEntry[];
       },
       readFileRange: async (
         wasmPath: string,

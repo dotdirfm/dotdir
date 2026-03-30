@@ -32,16 +32,22 @@ pub mod serve;
 
 // ── Serializable types for Tauri IPC ─────────────────────────────────
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FsEntry {
     pub name: String,
     pub kind: String,
+    #[serde(default)]
     pub size: f64,
+    #[serde(default, alias = "mtime_ms")]
     pub mtime_ms: f64,
+    #[serde(default)]
     pub mode: u32,
+    #[serde(default)]
     pub nlink: u32,
+    #[serde(default)]
     pub hidden: bool,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link_target: Option<String>,
 }
@@ -1048,7 +1054,7 @@ fn fsp_list_entries(
     container_path: String,
     inner_path: String,
     state: State<'_, AppState>,
-) -> Result<Vec<fsprovider::FspEntry>, String> {
+) -> Result<Vec<FsEntry>, String> {
     state.fsp_manager.list_entries(&wasm_path, &container_path, &inner_path)
 }
 

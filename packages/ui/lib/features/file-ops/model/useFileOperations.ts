@@ -243,7 +243,7 @@ export function useFileOperations(
                 const listFn = async (ip: string) => {
                   if (wasmPath) return bridge.fsProvider!.listEntries(wasmPath, hostFile, ip);
                   const raw = await provider!.listEntries(hostFile, ip);
-                  return raw.map((e) => ({ name: e.name, kind: e.type as string }));
+                  return raw.map((e) => ({ name: e.name, kind: e.kind }));
                 };
                 const files = await collectContainerFiles(listFn, innerPath, basename(innerPath));
                 files.forEach((f) => jobs.push({ ...f, hostFile, wasmPath, provider }));

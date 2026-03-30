@@ -793,13 +793,7 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
             let entries = session.fsp_manager
                 .list_entries(wasm_path, container_path, inner_path)
                 .map_err(|e| FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
-            let js: Vec<serde_json::Value> = entries.iter().map(|e| json!({
-                "name": e.name,
-                "kind": e.kind,
-                "size": e.size,
-                "mtimeMs": e.mtime_ms,
-            })).collect();
-            Ok(serde_json::to_value(js).unwrap())
+            Ok(serde_json::to_value(entries).unwrap())
         }
         "fsp.readFileRange" => {
             let wasm_path = params["wasmPath"].as_str().ok_or(FsError::InvalidInput)?;

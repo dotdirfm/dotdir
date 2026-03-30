@@ -23,6 +23,8 @@ use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
 use wasmtime::{Engine, Linker, Module, Store};
 
+use crate::FsEntry;
+
 /// The source of bytes that the WASM plugin reads via host_read_range.
 /// For top-level containers this is a real file; for nested containers (e.g. a
 /// zip inside a zip) the inner archive has already been extracted into memory.
@@ -83,16 +85,6 @@ pub struct FsProviderManager {
     plugins: Mutex<HashMap<String, Arc<FsProviderPlugin>>>,
 }
 
-/// A single directory entry returned by a plugin.
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct FspEntry {
-    pub name: String,
-    /// "file" or "directory"
-    pub kind: String,
-    pub size: Option<f64>,
-    pub mtime_ms: Option<f64>,
-}
-
 impl FsProviderManager {
     pub fn new() -> Self {
         Self { plugins: Mutex::new(HashMap::new()) }
@@ -117,7 +109,7 @@ impl FsProviderManager {
         wasm_path: &str,
         container_path: &str,
         inner_path: &str,
-    ) -> Result<Vec<FspEntry>, String> {
+    ) -> Result<Vec<FsEntry>, String> {
         let plugin = self.get_or_load(wasm_path)?;
         call_plugin_list(&plugin, container_path, inner_path)
     }
@@ -265,7 +257,7 @@ fn call_plugin_list(
     plugin: &FsProviderPlugin,
     container_path: &str,
     inner_path: &str,
-) -> Result<Vec<FspEntry>, String> {
+) -> Result<Vec<FsEntry>, String> {
     let source = resolve_container_source(container_path)?;
     let mut store = Store::new(&plugin.engine, HostData { container_source: source, output_data: Vec::new() });
     let linker = make_linker(&plugin.engine)?;

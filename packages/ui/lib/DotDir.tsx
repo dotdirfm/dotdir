@@ -7,8 +7,8 @@ import { commandRegistry } from "@/features/commands/commands";
 import { Provider as JotaiProvider } from "jotai";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { App, type AppHandle } from "./app";
-import baseStyles from "./styles/base.module.css";
 import { setStyleHostElement } from "./styleHost";
+import baseStyles from "./styles/base.module.css";
 import {
   defaultResolveVfsUrl,
   pushVfsUrlResolver,
@@ -27,16 +27,14 @@ export type {
   ExtensionInstallRequest,
   FsChangeEvent,
   FsChangeType,
-  FspEntry,
-  FsRawEntry,
+  FsEntry,
   MoveOptions,
   MoveProgressEvent,
   PtyLaunchInfo
 } from "@/features/bridge";
 export { basename, dirname, join, normalizePath } from "./utils/path";
 export { defaultResolveVfsUrl };
-export type { VfsUrlKind, VfsUrlResolver };
-export type { AppHandle };
+export type { AppHandle, VfsUrlKind, VfsUrlResolver };
 
 export type DotDirProps = {
   bridge: Bridge;

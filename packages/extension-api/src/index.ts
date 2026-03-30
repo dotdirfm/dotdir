@@ -69,11 +69,29 @@ export interface EditorExtensionApi {
   setLanguage?(langId: string): void | Promise<void>;
 }
 
+export type EntryKind =
+  | "file"
+  | "directory"
+  | "symlink"
+  | "block_device"
+  | "char_device"
+  | "named_pipe"
+  | "socket"
+  | "whiteout"
+  | "door"
+  | "event_port"
+  | "unknown";
+
 export interface FsProviderEntry {
   name: string;
-  type: "file" | "directory";
-  size?: number;
-  mtimeMs?: number;
+  kind: EntryKind;
+  size: number;
+  mtimeMs: number;
+  mode: number;
+  nlink: number;
+  hidden: boolean;
+  /** Populated only when kind === 'symlink'. Omitted when not a symlink. */
+  linkTarget?: string;
 }
 
 export interface FsProviderHostApi {
@@ -90,10 +108,7 @@ export type DotDirHostReadyCallback = (api: ViewerExtensionApi | EditorExtension
 export type FsProviderFactory = (hostApi: FsProviderHostApi) => FsProviderExtensionApi;
 
 export interface DotDirCommandsApi {
-  registerCommand: (
-    commandId: string,
-    handler: (...args: unknown[]) => void | Promise<void>,
-  ) => { dispose: () => void };
+  registerCommand: (commandId: string, handler: (...args: unknown[]) => void | Promise<void>) => { dispose: () => void };
 }
 
 export type DotDirGlobalApi = HostApi & {

@@ -2,24 +2,23 @@
 ///
 /// Provides the same interface so renderer components need minimal changes.
 /// Uses Tauri's invoke() for commands and listen() for events.
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
-  PtyLaunchInfo,
-  CopyOptions,
+  Bridge,
   ConflictResolution,
+  CopyOptions,
   CopyProgressEvent,
+  DeleteProgressEvent,
   ExtensionInstallProgressEvent,
   ExtensionInstallRequest,
+  FsChangeEvent,
+  FsEntry,
   MoveOptions,
   MoveProgressEvent,
-  DeleteProgressEvent,
-  FspEntry,
-  Bridge,
-  FsRawEntry,
-  FsChangeEvent,
+  PtyLaunchInfo,
 } from "@dotdirfm/ui";
 import { normalizePath } from "@dotdirfm/ui";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 const ptyWriteEncoder = new TextEncoder();
 
@@ -37,8 +36,8 @@ interface RustPtySpawnResult {
 
 export const tauriBridge: Bridge = {
   fs: {
-    async entries(dirPath: string): Promise<FsRawEntry[]> {
-      return await invoke<FsRawEntry[]>("fs_entries", { dirPath });
+    async entries(dirPath: string): Promise<FsEntry[]> {
+      return await invoke<FsEntry[]>("fs_entries", { dirPath });
     },
     async stat(filePath: string): Promise<{ size: number; mtimeMs: number }> {
       return await invoke<{ size: number; mtimeMs: number }>("fs_stat", {
@@ -366,20 +365,12 @@ export const tauriBridge: Bridge = {
       wasmPath: string,
       containerPath: string,
       innerPath: string,
-    ): Promise<FspEntry[]> {
-      const raw = await invoke<
-        Array<{ name: string; kind: string; size?: number; mtime_ms?: number }>
-      >("fsp_list_entries", {
+    ): Promise<FsEntry[]> {
+      return await invoke<FsEntry[]>("fsp_list_entries", {
         wasmPath,
         containerPath,
         innerPath,
       });
-      return raw.map((e) => ({
-        name: e.name,
-        kind: e.kind as FspEntry["kind"],
-        size: e.size,
-        mtimeMs: e.mtime_ms,
-      }));
     },
     async readFileRange(
       wasmPath: string,

@@ -8,7 +8,7 @@
 
 import { osThemeAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
-import { Bridge, FsChangeType, FsRawEntry } from "@/features/bridge";
+import { Bridge, FsChangeType, FsEntry } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import { FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from "@/fs";
@@ -50,11 +50,11 @@ function buildParentChain(dirPath: string): FsNode | undefined {
   return node;
 }
 
-function isDirectoryEntry(entry: FsRawEntry): boolean {
+function isDirectoryEntry(entry: FsEntry): boolean {
   return entry.kind === "directory" || (entry.kind === "symlink" && (entry.mode & 0o170000) === 0o040000);
 }
 
-function entryToFsNode(entry: FsRawEntry, dirPath: string, parent?: FsNode): FsNode {
+function entryToFsNode(entry: FsEntry, dirPath: string, parent?: FsNode): FsNode {
   const isDir = isDirectoryEntry(entry);
   const meta: HandleMeta = {
     size: entry.size,
@@ -193,14 +193,8 @@ export function usePanel() {
             let entries: import("../features/extensions/extensionApi").FsProviderEntry[];
             if (providerMatch.contribution.runtime === "backend" && bridge.fsProvider) {
               const wasmPath = join(providerMatch.extensionDirPath, providerMatch.contribution.entry);
-              const raw = await bridge.fsProvider.listEntries(wasmPath, hostFile, innerPath);
+              entries = await bridge.fsProvider.listEntries(wasmPath, hostFile, innerPath);
               if (abort.signal.aborted) return;
-              entries = raw.map((e) => ({
-                name: e.name,
-                type: e.kind,
-                size: e.size,
-                mtimeMs: e.mtimeMs,
-              }));
             } else {
               const provider = await loadFsProvider(bridge, providerMatch.extensionDirPath, providerMatch.contribution.entry);
               if (abort.signal.aborted) return;
@@ -213,15 +207,15 @@ export function usePanel() {
               const entryInner = (innerPath === "/" ? "" : innerPath) + "/" + entry.name;
               return createFsNode({
                 name: entry.name,
-                type: entry.type === "directory" ? "folder" : "file",
-                lang: entry.type === "file" ? languageRegistry.detectLanguage(entry.name) : "",
+                type: entry.kind === "directory" ? "folder" : "file",
+                lang: entry.kind === "file" ? languageRegistry.detectLanguage(entry.name) : "",
                 meta: {
                   size: entry.size ?? 0,
                   mtimeMs: entry.mtimeMs ?? 0,
                   executable: false,
                   hidden: entry.name.startsWith("."),
                   nlink: 1,
-                  entryKind: entry.type === "directory" ? "directory" : "file",
+                  entryKind: entry.kind === "directory" ? "directory" : "file",
                 },
                 path: buildContainerPath(hostFile, entryInner),
                 parent,
