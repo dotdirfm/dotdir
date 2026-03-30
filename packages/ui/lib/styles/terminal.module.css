@@ -18,10 +18,6 @@
   overflow: hidden;
 }
 
-.command-line.hidden {
-  display: none;
-}
-
 .command-line-prompt {
   color: #8b9fc2;
   white-space: nowrap;

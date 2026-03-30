@@ -114,6 +114,14 @@ export interface PanelState {
   requestedCursor?: string;
 }
 
+export interface PanelController extends PanelState {
+  navigateTo: (path: string, force?: boolean, cursorName?: string) => Promise<void>;
+  navigating: boolean;
+  cancelNavigation: () => void;
+  refresh: () => void;
+  resolver: LayeredResolver;
+}
+
 export const emptyPanel: PanelState = {
   currentPath: "",
   parentNode: undefined,
@@ -355,5 +363,15 @@ export function usePanel(showError: (message: string) => void) {
     navigateToRef.current(currentPathRef.current, true);
   }, []);
 
-  return { ...state, navigateTo, navigating, cancelNavigation, refresh, resolver: resolverRef.current! };
+  return useMemo(
+    () => ({
+      ...state,
+      navigateTo,
+      navigating,
+      cancelNavigation,
+      refresh,
+      resolver: resolverRef.current!,
+    }),
+    [state, navigateTo, navigating, cancelNavigation, refresh],
+  );
 }

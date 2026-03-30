@@ -33,7 +33,7 @@ import { isExistingDirectory, parseCdCommand, resolveCdPath } from "@/features/n
 import { useUserSettings } from "@/features/settings/useUserSettings";
 import { focusContext } from "@/focusContext";
 import { useBuiltInCommands } from "@/hooks/useBuiltInCommands";
-import { findExistingParent, usePanel } from "@/hooks/usePanel";
+import { emptyPanel, findExistingParent, type PanelController } from "@/hooks/usePanel";
 import { useTerminal } from "@/hooks/useTerminal";
 import { useWorkspacePersistenceProcess, useWorkspaceRestoreProcess } from "@/processes/workspace-session/model/useWorkspaceSessionProcess";
 import { normalizeTerminalPath } from "@/terminal/path";
@@ -42,7 +42,7 @@ import { CONTAINER_SEP } from "@/utils/containerPath";
 import { isMediaFile } from "@/utils/mediaFiles";
 import { basename, normalizePath, resolveDotSegments } from "@/utils/path";
 import { editorRegistry, fsProviderRegistry, viewerRegistry } from "@/viewerEditorRegistry";
-import type { ThemeKind } from "fss-lang";
+import type { FsNode, ThemeKind } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "./features/settings/userSettings";
@@ -54,6 +54,15 @@ import { cx } from "./utils/cssModules";
 
 export type AppHandle = {
   focus(): void;
+};
+
+type ActivePanelHandle = {
+  currentPath: string;
+  entries: FsNode[];
+  requestedCursor?: string;
+  navigateTo: (path: string, force?: boolean, cursorName?: string) => Promise<void>;
+  cancelNavigation: () => void;
+  refresh: () => void;
 };
 
 export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function App({ widget }, ref) {
@@ -85,8 +94,14 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     },
     [showDialog],
   );
-  const left = usePanel(showError);
-  const right = usePanel(showError);
+  const [leftPanelState, setLeftPanelState] = useState({
+    ...emptyPanel,
+    entries: [] as FsNode[],
+  });
+  const [rightPanelState, setRightPanelState] = useState({
+    ...emptyPanel,
+    entries: [] as FsNode[],
+  });
   const [activePanel, setActivePanel] = useAtom(activePanelAtom);
   const panelsVisible = useAtomValue(panelsVisibleAtom);
   const [viewerFile, setViewerFile] = useAtom(viewerFileAtom);
@@ -160,16 +175,66 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
 
   const activePanelRef = useRef(activePanel);
   activePanelRef.current = activePanel;
-  // Points to the active panel's navigateTo so handleViewFile can enter containers.
-  const activePanelNavigateRef = useRef(left.navigateTo);
-  activePanelNavigateRef.current = activePanel === "left" ? left.navigateTo : right.navigateTo;
-
-  const leftRef = useRef(left);
-  leftRef.current = left;
-  const rightRef = useRef(right);
-  rightRef.current = right;
+  const noopNavigate = useCallback(async () => {}, []);
+  const noopFn = useCallback(() => {}, []);
+  const leftRef = useRef<ActivePanelHandle>({
+    currentPath: "",
+    entries: [],
+    navigateTo: noopNavigate,
+    cancelNavigation: noopFn,
+    refresh: noopFn,
+  });
+  const rightRef = useRef<ActivePanelHandle>({
+    currentPath: "",
+    entries: [],
+    navigateTo: noopNavigate,
+    cancelNavigation: noopFn,
+    refresh: noopFn,
+  });
+  const activePanelNavigateRef = useRef<ActivePanelHandle["navigateTo"]>(noopNavigate);
+  activePanelNavigateRef.current = activePanel === "left" ? leftRef.current.navigateTo : rightRef.current.navigateTo;
 
   const activeCwdForExecuteRef = useRef("");
+
+  const handleLeftPanelChange = useCallback((panel: PanelController) => {
+    leftRef.current = panel;
+    setLeftPanelState((prev) => {
+      if (
+        prev.currentPath === panel.currentPath &&
+        prev.parentNode === panel.parentNode &&
+        prev.entries === panel.entries &&
+        prev.requestedCursor === panel.requestedCursor
+      ) {
+        return prev;
+      }
+      return {
+        currentPath: panel.currentPath,
+        parentNode: panel.parentNode,
+        entries: panel.entries,
+        requestedCursor: panel.requestedCursor,
+      };
+    });
+  }, []);
+
+  const handleRightPanelChange = useCallback((panel: PanelController) => {
+    rightRef.current = panel;
+    setRightPanelState((prev) => {
+      if (
+        prev.currentPath === panel.currentPath &&
+        prev.parentNode === panel.parentNode &&
+        prev.entries === panel.entries &&
+        prev.requestedCursor === panel.requestedCursor
+      ) {
+        return prev;
+      }
+      return {
+        currentPath: panel.currentPath,
+        parentNode: panel.parentNode,
+        entries: panel.entries,
+        requestedCursor: panel.requestedCursor,
+      };
+    });
+  }, []);
 
   const handleCommandLineExecute = useCallback(
     async (cmd: string) => {
@@ -326,7 +391,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     });
   }, [editorDirty, editorFile, showDialog]);
 
-  const viewerPanelEntries = viewerFile ? (viewerFile.panel === "left" ? left.entries : right.entries) : [];
+  const viewerPanelEntries = viewerFile ? (viewerFile.panel === "left" ? leftPanelState.entries : rightPanelState.entries) : [];
 
   // Helper: match a filename against simple glob patterns like "*.png"
   const matchesPatterns = useCallback((name: string, patterns: string[]): boolean => {
@@ -414,14 +479,14 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   }, [editorResolved?.extensionDirPath, editorResolved?.contribution.entry]);
 
   const viewerActiveName = viewerFile && isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
-  const leftRequestedCursor = left.requestedCursor ?? (viewerFile?.panel === "left" ? viewerActiveName : undefined);
-  const rightRequestedCursor = right.requestedCursor ?? (viewerFile?.panel === "right" ? viewerActiveName : undefined);
+  const leftRequestedCursor = leftPanelState.requestedCursor ?? (viewerFile?.panel === "left" ? viewerActiveName : undefined);
+  const rightRequestedCursor = rightPanelState.requestedCursor ?? (viewerFile?.panel === "right" ? viewerActiveName : undefined);
 
   const { handlePanelStateChange } = useWorkspacePersistenceProcess({
     activePanel,
     settingsLoaded,
-    left,
-    right,
+    left: { currentPath: leftPanelState.currentPath, entries: leftPanelState.entries },
+    right: { currentPath: rightPanelState.currentPath, entries: rightPanelState.entries },
     leftTabsRef,
     rightTabsRef,
     leftActiveTabIdRef,
@@ -439,32 +504,28 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const handleOpenCurrentFolderInOppositeCurrentTab = useCallback(() => {
     const side = activePanelRef.current;
     const opposite = OPPOSITE_PANEL[side];
-    const path = side === "left" ? left.currentPath : right.currentPath;
+    const path = side === "left" ? leftPanelState.currentPath : rightPanelState.currentPath;
     const activeTabId = (opposite === "left" ? leftActiveTabIdRef : rightActiveTabIdRef).current;
     const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
-    const panel = opposite === "left" ? left : right;
     setTabs((prev) => prev.map((t) => (t.id === activeTabId && t.type === "filelist" ? { ...t, path } : t)));
-    panel.navigateTo(path);
     setActivePanel(opposite);
-  }, [left.currentPath, right.currentPath, left, right]);
+  }, [leftPanelState.currentPath, rightPanelState.currentPath]);
 
   const handleOpenCurrentFolderInOppositeNewTab = useCallback(() => {
     const side = activePanelRef.current;
     const opposite = OPPOSITE_PANEL[side];
-    const path = side === "left" ? left.currentPath : right.currentPath;
+    const path = side === "left" ? leftPanelState.currentPath : rightPanelState.currentPath;
     const newTab = createFilelistTab(path);
     const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
     const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
-    const panel = opposite === "left" ? left : right;
     setTabs((prev) => [...prev, newTab]);
     setActiveId(newTab.id);
-    panel.navigateTo(path);
     setActivePanel(opposite);
-  }, [left.currentPath, right.currentPath, left, right]);
+  }, [leftPanelState.currentPath, rightPanelState.currentPath]);
 
   const handleOpenSelectedFolderInOppositeCurrentTab = useCallback(() => {
     const side = activePanelRef.current;
-    const entries = side === "left" ? left.entries : right.entries;
+    const entries = side === "left" ? leftPanelState.entries : rightPanelState.entries;
     const selectedName = side === "left" ? leftSelectedNameRef.current : rightSelectedNameRef.current;
     const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
     if (!entry || entry.type !== "folder") return;
@@ -472,15 +533,13 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     const opposite = OPPOSITE_PANEL[side];
     const activeTabId = (opposite === "left" ? leftActiveTabIdRef : rightActiveTabIdRef).current;
     const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
-    const panel = opposite === "left" ? left : right;
     setTabs((prev) => prev.map((t) => (t.id === activeTabId && t.type === "filelist" ? { ...t, path } : t)));
-    panel.navigateTo(path);
     setActivePanel(opposite);
-  }, [left.entries, right.entries, left, right]);
+  }, [leftPanelState.entries, rightPanelState.entries]);
 
   const handleOpenSelectedFolderInOppositeNewTab = useCallback(() => {
     const side = activePanelRef.current;
-    const entries = side === "left" ? left.entries : right.entries;
+    const entries = side === "left" ? leftPanelState.entries : rightPanelState.entries;
     const selectedName = side === "left" ? leftSelectedNameRef.current : rightSelectedNameRef.current;
     const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
     if (!entry || entry.type !== "folder") return;
@@ -489,16 +548,14 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     const newTab = createFilelistTab(path);
     const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
     const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
-    const panel = opposite === "left" ? left : right;
     setTabs((prev) => [...prev, newTab]);
     setActiveId(newTab.id);
-    panel.navigateTo(path);
     setActivePanel(opposite);
-  }, [left.entries, right.entries, left, right]);
+  }, [leftPanelState.entries, rightPanelState.entries]);
 
   const handlePreviewInOppositePanel = useCallback(() => {
     const side = activePanelRef.current;
-    const entries = side === "left" ? left.entries : right.entries;
+    const entries = side === "left" ? leftPanelState.entries : rightPanelState.entries;
     const selectedName = side === "left" ? leftSelectedNameRef.current : rightSelectedNameRef.current;
     const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
     if (!entry || entry.type !== "file") return;
@@ -521,11 +578,11 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
       setActiveId(newTab.id);
     }
     setActivePanel(opposite);
-  }, [left.entries, right.entries]);
+  }, [leftPanelState.entries, rightPanelState.entries]);
 
   const handleEditInOppositePanel = useCallback(() => {
     const side = activePanelRef.current;
-    const entries = side === "left" ? left.entries : right.entries;
+    const entries = side === "left" ? leftPanelState.entries : rightPanelState.entries;
     const selectedName = side === "left" ? leftSelectedNameRef.current : rightSelectedNameRef.current;
     const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
     if (!entry || entry.type !== "file") return;
@@ -541,13 +598,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
 
     const tempTab = tabs.find((t) => t.type === "preview" && t.isTemp);
     if (tempTab && tempTab.type === "preview") {
-      setTabs((prev) =>
-        prev.map((t) =>
-          t.id === tempTab.id
-            ? { ...t, path, name, size, sourcePanel, mode: "editor", langId, dirty: false }
-            : t,
-        ),
-      );
+      setTabs((prev) => prev.map((t) => (t.id === tempTab.id ? { ...t, path, name, size, sourcePanel, mode: "editor", langId, dirty: false } : t)));
       setActiveId(tempTab.id);
     } else {
       const newTab = createPreviewTab(path, name, size, sourcePanel, { mode: "editor", langId });
@@ -555,74 +606,58 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
       setActiveId(newTab.id);
     }
     setActivePanel(opposite);
-  }, [left.entries, right.entries]);
+  }, [leftPanelState.entries, rightPanelState.entries]);
 
   useEffect(() => {
     bridge.theme.get().then((t) => setTheme(t as ThemeKind));
     return bridge.theme.onChange((t) => setTheme(t as ThemeKind));
   }, []);
 
-  const leftPathRef = useRef(left.currentPath);
-  leftPathRef.current = left.currentPath;
-  const rightPathRef = useRef(right.currentPath);
-  rightPathRef.current = right.currentPath;
+  const leftPathRef = useRef(leftPanelState.currentPath);
+  leftPathRef.current = leftPanelState.currentPath;
+  const rightPathRef = useRef(rightPanelState.currentPath);
+  rightPathRef.current = rightPanelState.currentPath;
 
-  // Sync panel path with active filelist tab.
-  // Only navigate when the user *switches* tabs (activeTabId changes). Do NOT depend on leftTabs/rightTabs
-  // or we get a loop: panel path change → we update tab path → this effect runs with stale tab.path → navigates back.
+  const prevLeftPathRef = useRef(leftPanelState.currentPath);
+  const prevRightPathRef = useRef(rightPanelState.currentPath);
   useEffect(() => {
-    if (prevLeftActiveTabIdRef.current === leftActiveTabId) return;
-    prevLeftActiveTabIdRef.current = leftActiveTabId;
-    const tab = leftTabsRef.current.find((t) => t.id === leftActiveTabId);
-    if (tab?.type === "filelist" && tab.path != null) {
-      left.navigateTo(tab.path);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only run on tab switch; adding leftTabs/left would cause navigate loop
-  }, [leftActiveTabId]);
-  useEffect(() => {
-    if (prevRightActiveTabIdRef.current === rightActiveTabId) return;
-    prevRightActiveTabIdRef.current = rightActiveTabId;
-    const tab = rightTabsRef.current.find((t) => t.id === rightActiveTabId);
-    if (tab?.type === "filelist" && tab.path != null) {
-      right.navigateTo(tab.path);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only run on tab switch; adding rightTabs/right would cause navigate loop
-  }, [rightActiveTabId]);
-  // Only sync panel path → tab path when the path actually changed (user navigated), not when active tab index changed
-  const prevLeftPathRef = useRef(left.currentPath);
-  const prevRightPathRef = useRef(right.currentPath);
-  useEffect(() => {
-    if (prevLeftPathRef.current === left.currentPath) return;
-    prevLeftPathRef.current = left.currentPath;
+    if (prevLeftPathRef.current === leftPanelState.currentPath) return;
+    prevLeftPathRef.current = leftPanelState.currentPath;
     setLeftTabs((prev) => {
       const idx = prev.findIndex((t) => t.id === leftActiveTabId);
       if (idx < 0) return prev;
       const tab = prev[idx];
-      if (tab?.type !== "filelist" || tab.path === left.currentPath) return prev;
+      if (tab?.type !== "filelist" || tab.path === leftPanelState.currentPath) return prev;
       const next = [...prev];
-      next[idx] = { ...tab, path: left.currentPath };
+      next[idx] = { ...tab, path: leftPanelState.currentPath };
       return next;
     });
-  }, [left.currentPath, leftActiveTabId]);
+  }, [leftPanelState.currentPath, leftActiveTabId]);
   useEffect(() => {
-    if (prevRightPathRef.current === right.currentPath) return;
-    prevRightPathRef.current = right.currentPath;
+    if (prevRightPathRef.current === rightPanelState.currentPath) return;
+    prevRightPathRef.current = rightPanelState.currentPath;
     setRightTabs((prev) => {
       const idx = prev.findIndex((t) => t.id === rightActiveTabId);
       if (idx < 0) return prev;
       const tab = prev[idx];
-      if (tab?.type !== "filelist" || tab.path === right.currentPath) return prev;
+      if (tab?.type !== "filelist" || tab.path === rightPanelState.currentPath) return prev;
       const next = [...prev];
-      next[idx] = { ...tab, path: right.currentPath };
+      next[idx] = { ...tab, path: rightPanelState.currentPath };
       return next;
     });
-  }, [right.currentPath, rightActiveTabId]);
+  }, [rightPanelState.currentPath, rightActiveTabId]);
 
   // Navigate panels using persisted state or defaults — fires once when settings are loaded
   useEffect(() => {
     if (!settingsLoaded) return;
 
-    const navigatePanel = async (panel: typeof left, persistedState: PanelPersistedState | undefined, fallbackPath?: string) => {
+    const navigatePanel = async (
+      panel: ActivePanelHandle,
+      setTabs: typeof setLeftTabs,
+      activeTabId: string,
+      persistedState: PanelPersistedState | undefined,
+      fallbackPath?: string,
+    ) => {
       let targetPath = persistedState?.currentPath ?? fallbackPath;
 
       if (targetPath) {
@@ -636,11 +671,12 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
         targetPath = await bridge.utils.getHomePath();
       }
 
+      setTabs((prev) => prev.map((t) => (t.id === activeTabId && t.type === "filelist" ? { ...t, path: targetPath! } : t)));
       await panel.navigateTo(targetPath);
     };
 
-    navigatePanel(left, initialLeftPanel);
-    navigatePanel(right, initialRightPanel);
+    navigatePanel(leftRef.current, setLeftTabs, leftActiveTabIdRef.current, initialLeftPanel);
+    navigatePanel(rightRef.current, setRightTabs, rightActiveTabIdRef.current, initialRightPanel);
     if (initialActivePanel) {
       setActivePanel(initialActivePanel);
     }
@@ -668,7 +704,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   }, []);
 
   const terminal = useTerminal({
-    activePanelCwd: activePanel === "left" ? left.currentPath : right.currentPath,
+    activePanelCwd: activePanel === "left" ? leftPanelState.currentPath : rightPanelState.currentPath,
     onNavigatePanel,
   });
   activeCwdForExecuteRef.current = terminal.activeCwd;
@@ -734,40 +770,42 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
 
   let body = null;
 
-  if (!left.currentPath || !right.currentPath || !themesReady) {
+  if (!settingsLoaded || !themesReady) {
     body = <div className={baseStyles["loading"]}>Loading...</div>;
   } else {
     body = (
       <>
-        <>
-          <div className={terminalStyles["terminal-and-panels"]}>
-            <div className={terminalStyles["terminal-background"]}>
-              <TerminalPanelBody />
-            </div>
-            <div className={cx(panelsStyles, "panels-overlay", !panelsVisible && "hidden")}>
+        <div className={terminalStyles["terminal-and-panels"]}>
+          <div inert={panelsVisible} className={cx(terminalStyles, "terminal-background", panelsVisible && "hidden")}>
+            <TerminalPanelBody />
+          </div>
+          <div inert={!panelsVisible} className={cx(panelsStyles, "panels-overlay", !panelsVisible && "hidden")}>
+            <div className={panelsStyles["side-by-side-panels"]}>
               <PanelGroup
                 side="left"
-                panel={left}
+                showError={showError}
                 onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
                 selectionKey={selectionKey}
                 requestedActiveName={leftRequestedCursor}
                 initialPanelState={initialLeftPanel}
                 onStateChange={(sel, top) => handlePanelStateChange("left", sel, top)}
+                onActivePanelChange={handleLeftPanelChange}
               />
               <PanelGroup
                 side="right"
-                panel={right}
+                showError={showError}
                 onRememberExpectedTerminalCwd={terminal.rememberExpectedTerminalCwd}
                 selectionKey={selectionKey}
                 requestedActiveName={rightRequestedCursor}
                 initialPanelState={initialRightPanel}
                 onStateChange={(sel, top) => handlePanelStateChange("right", sel, top)}
+                onActivePanelChange={handleRightPanelChange}
               />
             </div>
+            <CommandLine />
           </div>
-          <CommandLine />
-          <TerminalToolbar />
-        </>
+        </div>
+        <TerminalToolbar />
         <div className={baseStyles["status-bar"]}>
           <ActionBar />
           {widget}
@@ -830,5 +868,9 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     );
   }
 
-  return <div ref={rootRef} className={baseStyles["app"]} tabIndex={0}>{body}</div>;
+  return (
+    <div ref={rootRef} className={baseStyles["app"]} tabIndex={0}>
+      {body}
+    </div>
+  );
 });

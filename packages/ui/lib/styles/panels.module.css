@@ -2,16 +2,25 @@
   z-index: 1;
   grid-row: 1;
   grid-column: 1;
-  display: flex;
-  gap: 4px;
+  display: grid;
   background: var(--bg);
   min-height: 0;
   overflow: hidden;
+  grid-template-rows: 1fr auto;
+  height: 100%;
 }
 
 .panels-overlay.hidden {
   visibility: hidden;
+  opacity: 0;
   pointer-events: none;
+}
+
+.side-by-side-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  overflow: hidden;
 }
 
 .panel {

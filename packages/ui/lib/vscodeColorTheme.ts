@@ -29,20 +29,11 @@ const COLOR_MAPPING: Array<{ cssVar: string; keys: string[] }> = [
   { cssVar: "--bg-secondary", keys: ["sideBar.background", "editorGroupHeader.tabsBackground"] },
   { cssVar: "--fg-secondary", keys: ["sideBar.foreground", "foreground"] },
   { cssVar: "--fg-muted", keys: ["descriptionForeground", "tab.inactiveForeground"] },
-  {
-    cssVar: "--border",
-    keys: ["panel.border", "sideBar.border", "widget.border", "editorGroup.border"],
-  },
+  { cssVar: "--border", keys: ["panel.border", "sideBar.border", "widget.border", "editorGroup.border"] },
   { cssVar: "--border-active", keys: ["focusBorder"] },
   { cssVar: "--entry-hover", keys: ["list.hoverBackground"] },
-  {
-    cssVar: "--entry-selected",
-    keys: ["list.activeSelectionBackground", "list.focusBackground", "selection.background"],
-  },
-  {
-    cssVar: "--entry-selected-fg",
-    keys: ["list.activeSelectionForeground", "list.focusForeground"],
-  },
+  { cssVar: "--entry-selected", keys: ["list.activeSelectionBackground", "list.focusBackground", "selection.background"] },
+  { cssVar: "--entry-selected-fg", keys: ["list.activeSelectionForeground", "list.focusForeground"] },
   { cssVar: "--entry-selected-inactive", keys: ["list.inactiveSelectionBackground"] },
   { cssVar: "--entry-selected-inactive-fg", keys: ["list.inactiveSelectionForeground"] },
   { cssVar: "--error-bg", keys: ["inputValidation.errorBackground"] },

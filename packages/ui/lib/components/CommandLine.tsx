@@ -383,7 +383,7 @@ export function CommandLine() {
   }
 
   return (
-    <div className={cx(styles, "command-line", !visible && "hidden")}>
+    <div className={cx(styles, "command-line")}>
       <span className={styles["command-line-prompt"]}>{promptLabel}&gt;</span>
       <span ref={inputRef} className={styles["command-line-input"]} onMouseDown={handleMouseDown}>
         {inputContent}

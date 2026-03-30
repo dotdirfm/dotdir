@@ -145,6 +145,7 @@ class CommandRegistry {
       return;
     }
     console.log("[dotdir:command]", id, ...args);
+    console.log(focusContext.current);
     try {
       await handler(...args);
     } catch (err) {

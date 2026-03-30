@@ -159,7 +159,7 @@
   overflow: hidden;
 }
 
-.file-list:not(.no-hover) .entry:hover {
+.file-list:not(.no-hover) .entry:not(.selected):hover {
   background: var(--entry-hover);
 }
 
@@ -169,8 +169,8 @@
 }
 
 .file-list.inactive-panel .entry.selected {
-  background: var(--entry-selected-inactive);
-  color: var(--entry-selected-inactive-fg);
+  background: initial;
+  color: initial;
 }
 
 .entry.marked::before {

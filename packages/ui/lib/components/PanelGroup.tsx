@@ -1,11 +1,8 @@
 import { activePanelAtom, showHiddenAtom } from "@/atoms";
 import { EditorContainer, ViewerContainer } from "@/components/ExtensionContainer";
-import { FileList } from "@/components/FileList";
 import { PanelTabs } from "@/components/FileList/PanelTabs";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
-import { focusContext } from "@/focusContext";
-import { getFileListHandlers } from "@/fileListHandlers";
 import {
   createFilelistTab,
   leftActiveIndexAtom,
@@ -17,49 +14,39 @@ import {
 } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import type { PanelPersistedState } from "@/features/ui-state/types";
+import { getFileListHandlers } from "@/fileListHandlers";
+import { focusContext } from "@/focusContext";
+import { type PanelController } from "@/hooks/usePanel";
 import { setActivePanelGroupHandlers } from "@/panelGroupHandlers";
 import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
-import type { FsNode, LayeredResolver } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "../styles/panels.module.css";
 import { cx } from "../utils/cssModules";
-
-interface PanelModel {
-  currentPath: string;
-  parentNode?: FsNode;
-  entries: FsNode[];
-  navigating: boolean;
-  resolver: LayeredResolver;
-  navigateTo: (path: string, force?: boolean) => Promise<void>;
-}
-
-interface FileListSnapshot {
-  currentPath: string;
-  parentNode?: FsNode;
-  entries: FsNode[];
-}
+import { FileListTabPane } from "./FileListTabPane";
 
 interface PanelGroupProps {
   side: PanelSide;
-  panel: PanelModel;
+  showError: (message: string) => void;
   onRememberExpectedTerminalCwd: (path: string) => void;
   selectionKey?: number;
   requestedActiveName?: string;
   requestedTopmostName?: string;
   initialPanelState?: PanelPersistedState;
   onStateChange: (selectedName: string | undefined, topmostName: string | undefined) => void;
+  onActivePanelChange: (panel: PanelController) => void;
 }
 
 export function PanelGroup({
   side,
-  panel,
+  showError,
   onRememberExpectedTerminalCwd,
   selectionKey,
   requestedActiveName,
   requestedTopmostName,
   initialPanelState,
   onStateChange,
+  onActivePanelChange,
 }: PanelGroupProps) {
   const activePanel = useAtomValue(activePanelAtom);
   const setActivePanel = useSetAtom(activePanelAtom);
@@ -74,15 +61,12 @@ export function PanelGroup({
   const initialTabPersisted = initialPanelState?.tabs?.[activeIndex];
 
   const showHidden = useAtomValue(showHiddenAtom);
-
-  const panelRef = useRef(panel);
-  panelRef.current = panel;
+  const [activeFileListNavigating, setActiveFileListNavigating] = useState(false);
 
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
   const activeTabIdRef = useRef(activeTabId);
   activeTabIdRef.current = activeTabId;
-  const fileListSnapshotsRef = useRef<Record<string, FileListSnapshot>>({});
 
   const handleSelectTab = useCallback((id: string) => setActiveTabId(id), [setActiveTabId]);
   const handlePinTab = useCallback((id: string) => {
@@ -101,32 +85,34 @@ export function PanelGroup({
     const newTab = createFilelistTab(home);
     setTabs([newTab]);
     setActiveTabId(newTab.id);
-    panelRef.current.navigateTo(home);
   }, []);
-  const handleCloseTab = useCallback(async (id: string) => {
-    const tab = tabsRef.current.find((t) => t.id === id);
-    if (tab?.type === "preview" && tab.mode === "editor" && tab.dirty) {
-      showDialog({
-        type: "message",
-        title: "Unsaved Changes",
-        message: `Close "${tab.name}" and discard unsaved changes?`,
-        buttons: [
-          {
-            label: "Cancel",
-            default: true,
-          },
-          {
-            label: "Discard",
-            onClick: () => {
-              void closeTabNow(id);
+  const handleCloseTab = useCallback(
+    async (id: string) => {
+      const tab = tabsRef.current.find((t) => t.id === id);
+      if (tab?.type === "preview" && tab.mode === "editor" && tab.dirty) {
+        showDialog({
+          type: "message",
+          title: "Unsaved Changes",
+          message: `Close "${tab.name}" and discard unsaved changes?`,
+          buttons: [
+            {
+              label: "Cancel",
+              default: true,
             },
-          },
-        ],
-      });
-      return;
-    }
-    await closeTabNow(id);
-  }, [closeTabNow, showDialog]);
+            {
+              label: "Discard",
+              onClick: () => {
+                void closeTabNow(id);
+              },
+            },
+          ],
+        });
+        return;
+      }
+      await closeTabNow(id);
+    },
+    [closeTabNow, showDialog],
+  );
 
   const handleReorderTabs = useCallback((fromIndex: number, toIndex: number) => {
     setTabs((prev) => {
@@ -137,13 +123,26 @@ export function PanelGroup({
     });
   }, []);
 
+  useEffect(() => {
+    if (activeTab?.type !== "filelist") {
+      setActiveFileListNavigating(false);
+    }
+  }, [activeTab?.type]);
+
+  const handleActiveFileListChange = useCallback(
+    (panel: PanelController) => {
+      setActiveFileListNavigating(panel.navigating);
+      onActivePanelChange(panel);
+    },
+    [onActivePanelChange],
+  );
+
   const handleNewTab = useCallback(() => {
-    const path = panelRef.current.currentPath;
+    const path = activeTab?.type === "filelist" ? activeTab.path : "";
     const newTab = createFilelistTab(path);
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newTab.id);
-    void panelRef.current.navigateTo(path);
-  }, [setTabs, setActiveTabId]);
+  }, [activeTab, setTabs, setActiveTabId]);
 
   const activatePanelFocus = useCallback(() => {
     setActivePanel(side);
@@ -159,16 +158,6 @@ export function PanelGroup({
     setActivePanelGroupHandlers({ newTab: handleNewTab, closeActiveTab: () => handleCloseTab(activeTabIdRef.current) });
     return () => setActivePanelGroupHandlers(null);
   }, [active, handleNewTab, handleCloseTab]);
-
-  useEffect(() => {
-    const tab = activeTab;
-    if (!tab || tab.type !== "filelist") return;
-    fileListSnapshotsRef.current[tab.id] = {
-      currentPath: panel.currentPath,
-      parentNode: panel.parentNode,
-      entries: panel.entries,
-    };
-  }, [activeTab, panel.currentPath, panel.parentNode, panel.entries]);
 
   const renderPreviewTab = useCallback(
     (tab: Extract<(typeof tabs)[number], { type: "preview" }>) => {
@@ -193,7 +182,17 @@ export function PanelGroup({
         }
         const langId = tab.langId ?? "plaintext";
         return (
-          <div key={tab.id} style={{ display: isVisible ? "block" : "none", height: "100%" }}>
+          <div
+            key={tab.id}
+            inert={!isVisible}
+            style={{
+              visibility: isVisible ? "visible" : "hidden",
+              position: "absolute",
+              inset: 0,
+              opacity: isVisible ? 1 : 0,
+              pointerEvents: isVisible ? "auto" : "none",
+            }}
+          >
             <EditorContainer
               extensionDirPath={resolvedEditor.extensionDirPath}
               entry={resolvedEditor.contribution.entry}
@@ -225,7 +224,17 @@ export function PanelGroup({
       if (resolved) {
         const quickViewSourcePanel = tab.isTemp ? tab.sourcePanel : undefined;
         return (
-          <div key={tab.id} style={{ display: isVisible ? "block" : "none", height: "100%" }}>
+          <div
+            key={tab.id}
+            inert={!isVisible}
+            style={{
+              visibility: isVisible ? "visible" : "hidden",
+              position: "absolute",
+              inset: 0,
+              opacity: isVisible ? 1 : 0,
+              pointerEvents: isVisible ? "auto" : "none",
+            }}
+          >
             <ViewerContainer
               extensionDirPath={resolved.extensionDirPath}
               entry={resolved.contribution.entry}
@@ -278,12 +287,8 @@ export function PanelGroup({
   );
 
   return (
-    <div
-      className={cx(styles, "panel", active && "active")}
-      onMouseDown={activatePanelFocus}
-      onClick={activatePanelFocus}
-    >
-      {panel.navigating && <div className={styles["panel-progress"]} />}
+    <div className={cx(styles, "panel", active && "active")} onMouseDown={activatePanelFocus} onClick={activatePanelFocus}>
+      {activeFileListNavigating && <div className={styles["panel-progress"]} />}
       <PanelTabs
         tabs={tabs}
         activeTabId={activeTabId}
@@ -293,49 +298,36 @@ export function PanelGroup({
         onNewTab={handleNewTab}
         onReorderTabs={handleReorderTabs}
       />
-      <div className={styles["panel-content"]}>
+      <div className={styles["panel-content"]} style={{ position: "relative" }}>
         {tabs
           .filter((tab): tab is Extract<(typeof tabs)[number], { type: "filelist" }> => tab.type === "filelist")
           .map((tab) => {
             const isVisible = tab.id === activeTabId;
-            const snapshot = fileListSnapshotsRef.current[tab.id];
-            const currentPath = isVisible ? panel.currentPath : (snapshot?.currentPath ?? tab.path);
-            const parentNode = isVisible ? panel.parentNode : snapshot?.parentNode;
-            const rawEntries = isVisible ? panel.entries : (snapshot?.entries ?? []);
-            const tabEntries = showHidden ? rawEntries : rawEntries.filter((e) => !e.meta.hidden);
             return (
-              <div key={tab.id} style={{ display: isVisible ? "block" : "none", height: "100%" }}>
-                <FileList
-                  side={side}
-                  currentPath={currentPath}
-                  parentNode={parentNode}
-                  entries={tabEntries}
-                  onNavigate={(path) => {
-                    activatePanelFocus();
-                    onRememberExpectedTerminalCwd(path);
-                    return panel.navigateTo(path);
-                  }}
-                  selectionKey={selectionKey}
-                  active={active && isVisible}
-                  resolver={panel.resolver}
-                  requestedActiveName={
-                    isVisible
-                      ? requestedActiveName ?? (initialTabPersisted?.type === "filelist" ? initialTabPersisted.selectedName : undefined)
-                      : undefined
-                  }
-                  requestedTopmostName={
-                    isVisible
-                      ? requestedTopmostName ?? (initialTabPersisted?.type === "filelist" ? initialTabPersisted.topmostName : undefined)
-                      : undefined
-                  }
-                  onStateChange={isVisible ? onStateChange : undefined}
-                />
-              </div>
+              <FileListTabPane
+                key={tab.id}
+                side={side}
+                tabId={tab.id}
+                path={tab.path}
+                visible={isVisible}
+                focused={active && isVisible}
+                showHidden={showHidden}
+                showError={showError}
+                onRememberExpectedTerminalCwd={onRememberExpectedTerminalCwd}
+                selectionKey={selectionKey}
+                requestedActiveName={
+                  isVisible ? (requestedActiveName ?? (initialTabPersisted?.type === "filelist" ? initialTabPersisted.selectedName : undefined)) : undefined
+                }
+                requestedTopmostName={
+                  isVisible ? (requestedTopmostName ?? (initialTabPersisted?.type === "filelist" ? initialTabPersisted.topmostName : undefined)) : undefined
+                }
+                onStateChange={isVisible ? onStateChange : undefined}
+                onActivatePanelFocus={activatePanelFocus}
+                onActivePanelChange={handleActiveFileListChange}
+              />
             );
           })}
-        {tabs
-          .filter((tab): tab is Extract<(typeof tabs)[number], { type: "preview" }> => tab.type === "preview")
-          .map(renderPreviewTab)}
+        {tabs.filter((tab): tab is Extract<(typeof tabs)[number], { type: "preview" }> => tab.type === "preview").map(renderPreviewTab)}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 export type Action = () => Promise<void> | void;
 
-class ActionQueue {
+export class ActionQueue {
   private tail = Promise.resolve();
 
   enqueue(action: Action): void {
@@ -17,5 +17,3 @@ class ActionQueue {
     });
   }
 }
-
-export const actionQueue = new ActionQueue();

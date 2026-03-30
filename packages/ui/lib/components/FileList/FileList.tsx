@@ -1,4 +1,4 @@
-import { actionQueue } from "@/actionQueue";
+import { ActionQueue } from "@/actionQueue";
 import type { PanelSide } from "@/entities/panel/model/types";
 import { commandRegistry } from "@/features/commands/commands";
 import { onIconThemeChange, useGetCachedIcon, useLoadIconsForPaths, useResolveIcon } from "@/features/file-icons/iconResolver";
@@ -81,6 +81,7 @@ export const FileList = memo(function FileList({
   requestedTopmostName,
   onStateChange,
 }: FileListProps) {
+  const [actionQueue] = useState(() => new ActionQueue());
   const rootRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [topmostIndex, setTopmostIndex] = useState(0);
@@ -620,11 +621,15 @@ export const FileList = memo(function FileList({
           ops.pasteToCommandLine(arg);
         }),
     };
-    setFileListHandlers(side, handlers);
-    if (active) setActiveFileListHandlers(handlers);
+    if (active) {
+      setFileListHandlers(side, handlers);
+      setActiveFileListHandlers(handlers);
+    }
     return () => {
-      setFileListHandlers(side, null);
-      if (active) setActiveFileListHandlers(null);
+      if (active) {
+        setFileListHandlers(side, null);
+        setActiveFileListHandlers(null);
+      }
     };
   }, [active, side, markKeyboardNav, navigateToEntry, applySelection]);
 
