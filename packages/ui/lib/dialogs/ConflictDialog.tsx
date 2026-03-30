@@ -1,8 +1,7 @@
 import { ConflictResolution } from "@/features/bridge";
-import { focusContext } from "@/focusContext";
 import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
@@ -46,13 +45,6 @@ export function ConflictDialog({ src, dest, srcSize, srcMtimeMs, destSize, destM
   const [newName, setNewName] = useState(basename(dest));
   const { onKeyDown: mainKeyDown } = useDialogButtonNav(buttonsRef, { defaultIndex: 0 });
   const { onKeyDown: renameKeyDown } = useDialogButtonNav(renameButtonsRef, { defaultIndex: 1 });
-
-  useEffect(() => {
-    focusContext.push("modal");
-    return () => {
-      focusContext.pop("modal");
-    };
-  }, []);
 
   if (renaming) {
     return (

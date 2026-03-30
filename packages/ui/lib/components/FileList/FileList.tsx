@@ -1,8 +1,9 @@
 import { actionQueue } from "@/actionQueue";
+import type { PanelSide } from "@/entities/panel/model/types";
 import { commandRegistry } from "@/features/commands/commands";
 import { onIconThemeChange, useGetCachedIcon, useLoadIconsForPaths, useResolveIcon } from "@/features/file-icons/iconResolver";
 import { getFileOperationHandlers } from "@/features/file-ops/model/fileOperationHandlers";
-import { setActiveFileListHandlers } from "@/fileListHandlers";
+import { setActiveFileListHandlers, setFileListHandlers } from "@/fileListHandlers";
 import { resolveEntryStyle } from "@/fss";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import type { ResolvedEntryStyle } from "@/types";
@@ -19,6 +20,7 @@ import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
 const ROW_HEIGHT = 26;
 
 interface FileListProps {
+  side: PanelSide;
   currentPath: string;
   parentNode?: FsNode;
   entries: FsNode[];
@@ -67,6 +69,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 export const FileList = memo(function FileList({
+  side,
   currentPath,
   parentNode,
   entries,
@@ -399,8 +402,7 @@ export const FileList = memo(function FileList({
   // Publish handlers to the module-level registry when this panel is active.
   // Commands are registered once in useBuiltInCommands and read from here at call time.
   useEffect(() => {
-    if (!active) return;
-    setActiveFileListHandlers({
+    const handlers = {
       focus: () => {
         rootRef.current?.focus({ preventScroll: true });
       },
@@ -617,9 +619,14 @@ export const FileList = memo(function FileList({
           const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
           ops.pasteToCommandLine(arg);
         }),
-    });
-    return () => setActiveFileListHandlers(null);
-  }, [active, markKeyboardNav, navigateToEntry, applySelection]);
+    };
+    setFileListHandlers(side, handlers);
+    if (active) setActiveFileListHandlers(handlers);
+    return () => {
+      setFileListHandlers(side, null);
+      if (active) setActiveFileListHandlers(null);
+    };
+  }, [active, side, markKeyboardNav, navigateToEntry, applySelection]);
 
   const columnCountRef = useRef(columnCount);
   columnCountRef.current = columnCount;

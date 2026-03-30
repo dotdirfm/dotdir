@@ -1,5 +1,3 @@
-import { focusContext } from "@/focusContext";
-import { useEffect } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
@@ -23,13 +21,6 @@ function formatSize(bytes: number): string {
 }
 
 export function CopyProgressDialog({ bytesCopied, bytesTotal, filesDone, filesTotal, currentFile, onCancel }: CopyProgressDialogProps) {
-  useEffect(() => {
-    focusContext.push("modal");
-    return () => {
-      focusContext.pop("modal");
-    };
-  }, []);
-
   const pct = bytesTotal > 0 ? Math.min(100, (bytesCopied / bytesTotal) * 100) : 0;
 
   return (

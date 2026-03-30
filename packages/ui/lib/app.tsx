@@ -62,13 +62,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     ref,
     () => ({
       focus() {
-        const root = rootRef.current;
-        if (!root) return;
-        try {
-          root.focus({ preventScroll: true });
-        } catch {
-          root.focus();
-        }
+        focusContext.request("panel");
       },
     }),
     [],
@@ -701,28 +695,27 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     const root = rootRef.current;
     if (!root) return;
 
-    const isEditableTarget = (target: EventTarget | null) => {
-      const el = target as HTMLElement | null;
-      if (!el) return false;
-      const tag = el.tagName?.toLowerCase();
-      return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
-    };
+    return focusContext.registerAdapter("panel", {
+      focus() {
+        try {
+          root.focus({ preventScroll: true });
+        } catch {
+          root.focus();
+        }
+      },
+      contains(node) {
+        return node instanceof Node ? root.contains(node) : false;
+      },
+    });
+  }, []);
 
-    const isDialogTarget = (target: EventTarget | null) => {
-      const el = target as HTMLElement | null;
-      return Boolean(el?.closest?.('[role="dialog"], [aria-modal="true"], dialog'));
-    };
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as Node | null;
-      if (!root || !target || !root.contains(target)) return;
-      const active = document.activeElement;
-      if (isEditableTarget(target) || isEditableTarget(active)) return;
-      if (isDialogTarget(target) || isDialogTarget(active)) return;
-
-      const layer = focusContext.current;
-      if (layer !== "panel" && layer !== "viewer" && layer !== "editor") return;
-
+      const shouldRoute = focusContext.shouldRouteCommandEvent(event, root);
+      if (!shouldRoute) return;
       commandRegistry.handleKeyboardEvent(event);
     };
 

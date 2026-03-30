@@ -1,6 +1,5 @@
-import { focusContext } from "@/focusContext";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
@@ -18,13 +17,6 @@ export function MakeFolderDialog({ currentPath: _currentPath, onConfirm, onCance
   const inputRef = useRef<HTMLInputElement>(null);
   const [folderName, setFolderName] = useState("");
   const [processMultiple, setProcessMultiple] = useState(false);
-
-  useEffect(() => {
-    focusContext.push("modal");
-    return () => {
-      focusContext.pop("modal");
-    };
-  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

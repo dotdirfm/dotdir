@@ -1,6 +1,7 @@
 import {
   commandLineCwdAtom,
   panelsVisibleAtom,
+  promptActiveAtom,
   requestedTerminalCwdAtom,
   resolvedProfilesAtom,
   terminalFocusRequestKeyAtom,
@@ -34,6 +35,7 @@ export function useTerminal({ activePanelCwd, onNavigatePanel }: UseTerminalOpti
 
   const panelsVisible = useAtomValue(panelsVisibleAtom);
   const setPanelsVisible = useSetAtom(panelsVisibleAtom);
+  const setPromptActive = useSetAtom(promptActiveAtom);
   const setTerminalFocusRequestKey = useSetAtom(terminalFocusRequestKeyAtom);
   const requestedTerminalCwd = useAtomValue(requestedTerminalCwdAtom);
   const setRequestedTerminalCwd = useSetAtom(requestedTerminalCwdAtom);
@@ -45,48 +47,32 @@ export function useTerminal({ activePanelCwd, onNavigatePanel }: UseTerminalOpti
   activePanelCwdRef.current = activePanelCwd;
   const onNavigatePanelRef = useRef(onNavigatePanel);
   onNavigatePanelRef.current = onNavigatePanel;
-
-  const hiddenForCommandRef = useRef(false);
-  const promptHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Debounced handler: delay hiding panels to avoid flash on fast commands
-  const handlePromptActive = useCallback(
-    (active: boolean) => {
-      if (promptHideTimerRef.current) {
-        clearTimeout(promptHideTimerRef.current);
-        promptHideTimerRef.current = null;
-      }
-      setPanelsVisible(active);
-    },
-    [setPanelsVisible],
-  );
-
   // Subscribe to active session command-start / command-finish events
   useEffect(() => {
     if (!activeSession) {
-      handlePromptActive(true);
+      setPromptActive(true);
       commandRegistry.setContext("terminalCommandRunning", false);
       return;
     }
     const running = activeSession.session.getCapabilities().commandRunning;
-    handlePromptActive(!running);
+    setPromptActive(!running);
     commandRegistry.setContext("terminalCommandRunning", running);
 
     return activeSession.session.subscribe((event) => {
       if (event.type === "command-start") {
-        handlePromptActive(false);
+        setPromptActive(false);
         commandRegistry.setContext("terminalCommandRunning", true);
       } else if (event.type === "command-finish") {
-        handlePromptActive(true);
+        setPromptActive(true);
         commandRegistry.setContext("terminalCommandRunning", false);
       } else if (event.type === "capabilities") {
         const r = event.capabilities.commandRunning;
-        handlePromptActive(!r);
+        setPromptActive(!r);
         commandRegistry.setContext("terminalCommandRunning", r);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessionId, handlePromptActive]);
+  }, [activeSessionId, setPromptActive]);
 
   // Initialize sessions from profiles
   useEffect(() => {
@@ -143,7 +129,7 @@ export function useTerminal({ activePanelCwd, onNavigatePanel }: UseTerminalOpti
   useEffect(() => {
     if (!panelsVisible) return;
     const frame = requestAnimationFrame(() => {
-      focusContext.set("panel");
+      focusContext.request("panel");
     });
     return () => cancelAnimationFrame(frame);
   }, [panelsVisible]);
@@ -164,9 +150,8 @@ export function useTerminal({ activePanelCwd, onNavigatePanel }: UseTerminalOpti
 
   const runCommand = useCallback(
     async (cmd: string, cwd: string): Promise<void> => {
-      hiddenForCommandRef.current = true;
       setPanelsVisible(false);
-      focusContext.set("terminal");
+      focusContext.request("terminal");
       setTerminalFocusRequestKey((k) => k + 1);
       await executeCommandInCwd(cmd, cwd);
     },

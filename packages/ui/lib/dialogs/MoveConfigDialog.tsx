@@ -1,8 +1,7 @@
 import type { ConflictPolicy, MoveOptions } from "@/features/bridge";
-import { focusContext } from "@/focusContext";
 import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
@@ -20,13 +19,6 @@ export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: M
   const [destValue, setDestValue] = useState(destPath);
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("ask");
   const { onKeyDown } = useDialogButtonNav(buttonsRef, { defaultIndex: 1 });
-
-  useEffect(() => {
-    focusContext.push("modal");
-    return () => {
-      focusContext.pop("modal");
-    };
-  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

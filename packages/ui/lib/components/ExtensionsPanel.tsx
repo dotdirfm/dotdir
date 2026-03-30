@@ -20,7 +20,6 @@ import {
   searchVSCodeMarketplace,
 } from "@/features/marketplace/vscodeMarketplace";
 import { useUserSettings } from "@/features/settings/useUserSettings";
-import { focusContext } from "@/focusContext";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -61,13 +60,6 @@ export function ExtensionsPanel() {
   const installIdToKeyRef = useRef(new Map<number, string>());
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const{settings,updateSettings} = useUserSettings();
-
-  useEffect(() => {
-    focusContext.push("modal");
-    return () => {
-      focusContext.pop("modal");
-    };
-  }, [setShowExtensions]);
 
   const doSearch = useCallback(async (q: string, source: MarketplaceSource) => {
     setLoading(true);

@@ -3,7 +3,6 @@ import { useAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { commandPaletteOpenAtom } from "../atoms";
 import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from "../features/commands/commands";
-import { focusContext } from "../focusContext";
 import { OverlayDialog } from "../dialogs/OverlayDialog";
 import paletteStyles from "../styles/command-palette.module.css";
 import { INPUT_NO_ASSIST } from "../utils/inputNoAssist";
@@ -76,14 +75,6 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     if (!open) setSearch("");
   }, [open]);
 
-  // Manage focus context
-  useEffect(() => {
-    if (open) {
-      focusContext.push("commandPalette");
-      return () => focusContext.pop("commandPalette");
-    }
-  }, [open]);
-
   // Stop all keyboard events from propagating to panels
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     e.stopPropagation();
@@ -97,6 +88,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       onClose={() => onOpenChange(false)}
       initialFocusRef={inputRef}
       placement="top"
+      focusLayer="commandPalette"
     >
       <Command className={paletteStyles["command-palette"]} onKeyDown={handleKeyDown} shouldFilter={true}>
         <Command.Input ref={inputRef} value={search} onValueChange={setSearch} placeholder="Type a command or search..." {...INPUT_NO_ASSIST} />

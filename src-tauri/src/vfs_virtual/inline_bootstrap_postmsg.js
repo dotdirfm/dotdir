@@ -2,7 +2,7 @@
 //
 // Host ↔ iframe protocol:
 // - iframe -> host: `ext:call`, `ext:subscribe`, `ext:unsubscribe`
-// - iframe -> host: `ext:registerCommand`, `ext:registerKeybinding`
+// - iframe -> host: `ext:registerCommand`
 // - host -> iframe: `host:reply`, `host:callback`, `host:runCommand`
 // - iframe -> host: `ext:commandResult`
 
@@ -219,23 +219,15 @@ function createDotdirApi() {
 
     // VS Code-like commands API (functions remain inside iframe)
     commands: {
-      registerCommand: (commandId, handler, options) => {
+      registerCommand: (commandId, handler) => {
         const handlerId = uid();
         commandHandlers.set(handlerId, handler);
-        postToHost({ type: "ext:registerCommand", handlerId, commandId, options });
+        postToHost({ type: "ext:registerCommand", handlerId, commandId });
         return {
           dispose: () => {
             commandHandlers.delete(handlerId);
             postToHost({ type: "ext:unregisterCommand", handlerId });
           },
-        };
-      },
-
-      registerKeybinding: (binding) => {
-        const bindingId = uid();
-        postToHost({ type: "ext:registerKeybinding", bindingId, binding });
-        return {
-          dispose: () => postToHost({ type: "ext:unregisterKeybinding", bindingId }),
         };
       },
     },
@@ -310,6 +302,10 @@ window.addEventListener("message", async (e) => {
         if (!keyDownListener) {
           keyDownListener = (ev) => {
             try {
+              if (iframeKind === "viewer" && ev.key === "Tab" && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+                ev.preventDefault();
+                ev.stopPropagation();
+              }
               postToHost({
                 type: "dotdir:iframeKeyDown",
                 kind: iframeKind,

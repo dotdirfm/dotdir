@@ -1,21 +1,9 @@
 import { commandRegistry } from "@/features/commands/commands";
 import type { LoadedExtension } from "@/features/extensions/extensions";
-import { registerExtensionKeybinding } from "@/registerKeybindings";
 import { join, normalizePath } from "@/utils/path";
 import { resolveVfsUrl } from "@/utils/vfs";
 
 export type BrowserDisposable = { dispose: () => void };
-
-export interface BrowserExtensionKeybinding {
-  command: string; 
-  key: string;
-  mac?: string;
-  when?: string;
-}
-
-export interface BrowserExtensionContributions {
-  keybindings?: BrowserExtensionKeybinding[];
-}
 
 export interface BrowserExtensionContext {
   subscriptions: BrowserDisposable[];
@@ -24,9 +12,7 @@ export interface BrowserExtensionContext {
       registerCommand: (
         commandId: string,
         handler: (...args: unknown[]) => void | Promise<void>,
-        options?: { title?: string; category?: string; icon?: string; when?: string },
       ) => BrowserDisposable;
-      registerKeybinding: (binding: BrowserExtensionKeybinding) => BrowserDisposable;
     };
   };
 }
@@ -34,11 +20,9 @@ export interface BrowserExtensionContext {
 type BrowserExtensionModule = {
   activate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
   deactivate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
-  contributes?: BrowserExtensionContributions;
   default?: {
     activate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
     deactivate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
-    contributes?: BrowserExtensionContributions;
   };
 };
 
@@ -140,10 +124,6 @@ export class BrowserExtensionHost {
       ): BrowserDisposable => {
         return { dispose: commandRegistry.registerCommand(commandId, handler) };
       },
-      registerKeybinding: (binding: BrowserExtensionKeybinding): BrowserDisposable => {
-        const disposeFn = registerExtensionKeybinding(commandRegistry, { command: binding.command, key: binding.key, mac: binding.mac, when: binding.when });
-        return { dispose: disposeFn };
-      },
     },
   };
 
@@ -193,16 +173,7 @@ export class BrowserExtensionHost {
     // Also expose a VS Code-like global (some extensions may rely on it).
     (globalThis as any).dotdir = this.dotdir;
 
-    const activationResult = await activateFn(ctx);
-
-    const contributes: BrowserExtensionContributions | undefined = module.contributes ?? module.default?.contributes ?? (activationResult as any)?.contributes;
-
-    if (contributes?.keybindings?.length) {
-      for (const kb of contributes.keybindings) {
-        const disposable = this.dotdir.commands.registerKeybinding(kb);
-        ctx.subscriptions.push(disposable);
-      }
-    }
+    await activateFn(ctx);
 
     this.active.set(key, { module, ctx, deactivate: deactivateFn });
   }

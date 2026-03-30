@@ -54,8 +54,6 @@ export interface HostApi {
   onThemeChange(callback: (theme: ColorThemeData) => void): () => void;
   onClose(): void;
   executeCommand<T = unknown>(command: string, args?: unknown): Promise<T>;
-  registerCommand(commandId: string, handler: (...args: unknown[]) => void | Promise<void>): () => void;
-  registerKeybinding(binding: { command: string; key: string; mac?: string; when?: string }): () => void;
   getExtensionResourceUrl(relativePath: string): Promise<string>;
 }
 
@@ -95,11 +93,7 @@ export interface DotDirCommandsApi {
   registerCommand: (
     commandId: string,
     handler: (...args: unknown[]) => void | Promise<void>,
-    options?: { title?: string; category?: string; icon?: string; when?: string },
   ) => { dispose: () => void };
-  registerKeybinding: (binding: { command: string; key: string; mac?: string; when?: string }) => {
-    dispose: () => void;
-  };
 }
 
 export type DotDirGlobalApi = HostApi & {

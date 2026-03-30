@@ -6,6 +6,7 @@ import {
   panelsVisibleAtom,
   showExtensionsAtom,
   showHiddenAtom,
+  terminalFocusRequestKeyAtom,
   viewerFileAtom,
 } from "@/atoms";
 import type { DialogSpec } from "@/dialogs/dialogContext";
@@ -66,6 +67,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const [activePanel, setActivePanel] = useAtom(activePanelAtom);
   const setShowHidden = useSetAtom(showHiddenAtom);
   const setPanelsVisible = useSetAtom(panelsVisibleAtom);
+  const setTerminalFocusRequestKey = useSetAtom(terminalFocusRequestKeyAtom);
   const setShowExtensions = useSetAtom(showExtensionsAtom);
   const setViewerFile = useSetAtom(viewerFileAtom);
   const setEditorFile = useSetAtom(editorFileAtom);
@@ -93,7 +95,11 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       commandRegistry.registerCommand("dotdir.togglePanels", () =>
         setPanelsVisible((v) => {
           const next = !v;
-          if (next) focusContext.set("panel");
+          if (next) {
+            focusContext.request("panel");
+          } else {
+            setTerminalFocusRequestKey((k) => k + 1);
+          }
           return next;
         }),
       ),

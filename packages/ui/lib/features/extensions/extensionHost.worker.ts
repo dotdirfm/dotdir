@@ -214,7 +214,6 @@ interface BrowserExtensionContext {
   dotdir: {
     commands: {
       registerCommand: (commandId: string, handler: (...args: unknown[]) => void | Promise<void>) => BrowserDisposable;
-      registerKeybinding: (binding: { command: string; key: string; mac?: string; when?: string }) => BrowserDisposable;
     };
   };
 }
@@ -292,10 +291,6 @@ async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
         };
         localDisposables.push(disposable);
         return disposable;
-      },
-      registerKeybinding: (_binding: { command: string; key: string; mac?: string; when?: string }): BrowserDisposable => {
-        // Keybindings are currently contributed from package.json on the main thread.
-        return { dispose() {} };
       },
     },
   };

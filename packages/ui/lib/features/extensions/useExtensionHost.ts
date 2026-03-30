@@ -1,6 +1,7 @@
 import { useBridge } from "@/features/bridge/useBridge";
 import { commandRegistry } from "@/features/commands/commands";
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
+import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { type LoadedExtension, findColorTheme } from "@/features/extensions/extensions";
 import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
@@ -229,6 +230,11 @@ export function useExtensionHost({
             const disposeCmd = commandRegistry.registerCommand(
               cmd.command,
               async (...args: unknown[]) => {
+                const handled = await executeMountedExtensionCommand(
+                  cmd.command,
+                  args,
+                );
+                if (handled) return;
                 await extensionHost.executeCommand(cmd.command, args);
               },
             );

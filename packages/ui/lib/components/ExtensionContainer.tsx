@@ -8,11 +8,11 @@ import { Bridge } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { commandRegistry } from "@/features/commands/commands";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
+import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
 import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
 import { getActiveFileListHandlers } from "@/fileListHandlers";
 import { focusContext } from "@/focusContext";
 import { readFileText as readFileTextFromFs } from "@/fs";
-import { registerExtensionKeybinding } from "@/registerKeybindings";
 import { getStyleHostElement } from "@/styleHost";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
@@ -37,6 +37,8 @@ interface ViewerContainerProps extends ExtensionContainerProps {
   props: ViewerProps;
   onClose: () => void;
   onExecuteCommand?: (command: string, args?: unknown) => Promise<unknown>;
+  inlineFocusMode?: "panel-first" | "viewer-first";
+  onTabBackToPanel?: () => void;
 }
 
 interface EditorContainerProps extends ExtensionContainerProps {
@@ -73,6 +75,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const isInlineViewer = kind === "viewer" && !!(props as ViewerProps).inline;
+  const inlineFocusMode = containerProps.kind === "viewer" ? (containerProps.inlineFocusMode ?? "panel-first") : "panel-first";
   const shouldAutoFocusIframe = kind === "viewer" && !isInlineViewer;
   const panelFocusElRef = useRef<HTMLElement | null>(null);
   const inlineIframeFocusedRef = useRef(false);
@@ -81,9 +84,9 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   useEffect(() => {
     if (!isInlineViewer) return;
     panelFocusElRef.current = document.activeElement as HTMLElement | null;
-    inlineIframeFocusedRef.current = false;
+    inlineIframeFocusedRef.current = inlineFocusMode === "viewer-first";
     autoFocusOnceRef.current = false;
-  }, [isInlineViewer]);
+  }, [inlineFocusMode, isInlineViewer]);
 
   // For non-preview viewer/editor, focus iframe automatically when it appears.
   useEffect(() => {
@@ -110,6 +113,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   // Second Tab: return focus to the panel + route keybindings back.
   useEffect(() => {
     if (!isInlineViewer) return;
+    if (inlineFocusMode !== "panel-first") return;
 
     const shouldIgnoreTarget = (t: EventTarget | null) => {
       const el = t as HTMLElement | null;
@@ -150,7 +154,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
 
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [isInlineViewer]);
+  }, [inlineFocusMode, isInlineViewer]);
 
   // Single open file descriptor per container (viewer/editor).
   // Bound to the currently viewed/edited file and closed on unmount or when file changes.
@@ -301,15 +305,6 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         return handler(command, args) as Promise<T>;
       },
 
-      registerCommand(commandId: string, handler: (...args: unknown[]) => void | Promise<void>): () => void {
-        return commandRegistry.registerCommand(commandId, handler);
-      },
-
-      registerKeybinding(binding: { command: string; key: string; mac?: string; when?: string }): () => void {
-        const dispose = registerExtensionKeybinding(commandRegistry, { command: binding.command, key: binding.key, mac: binding.mac, when: binding.when });
-        return dispose;
-      },
-
       async getExtensionResourceUrl(relativePath: string): Promise<string> {
         const safe = normalizePath(relativePath).replace(/^\/+/, "");
         if (safe.includes("..")) throw new Error("Invalid extension resource path");
@@ -359,7 +354,6 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     const pendingCommandCalls = new Map<number, { resolve: () => void; reject: (err: unknown) => void }>();
     const rpcSubscriptions = new Map<string, () => void>(); // cbId -> disposer()
     const extensionCommandDisposers = new Map<string, () => void>(); // handlerId -> disposer()
-    const extensionKeybindingDisposers = new Map<string, () => void>(); // bindingId -> disposer()
 
     const handleMessage = (ev: MessageEvent) => {
       if (ev.source !== iframeWin) return;
@@ -454,7 +448,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         if (!handlerId || !commandId) return;
         if (extensionCommandDisposers.has(handlerId)) return;
 
-        const dispose = commandRegistry.registerCommand(commandId, async (...args: unknown[]) => {
+        const dispose = registerMountedExtensionCommandHandler(commandId, async (...args: unknown[]) => {
           const callId = nextCallId++;
           await new Promise<void>((resolve, reject) => {
             pendingCommandCalls.set(callId, { resolve, reject });
@@ -479,31 +473,6 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         return;
       }
 
-      if (data.type === "ext:registerKeybinding") {
-        const bindingId = String(data.bindingId ?? "");
-        const binding = data.binding;
-        if (!bindingId || !binding || typeof binding !== "object") return;
-        if (extensionKeybindingDisposers.has(bindingId)) return;
-
-        const dispose = registerExtensionKeybinding(commandRegistry, { command: binding.command, key: binding.key, mac: binding.mac, when: binding.when });
-        extensionKeybindingDisposers.set(bindingId, dispose);
-        return;
-      }
-
-      if (data.type === "ext:unregisterKeybinding") {
-        const bindingId = String(data.bindingId ?? "");
-        const dispose = extensionKeybindingDisposers.get(bindingId);
-        if (dispose) {
-          try {
-            dispose();
-          } catch {
-            // ignore
-          }
-          extensionKeybindingDisposers.delete(bindingId);
-        }
-        return;
-      }
-
       if (data.type === "dotdir:bootstrap-ready") {
         init();
       } else if (data.type === "dotdir:ready") {
@@ -521,6 +490,14 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           // - Tab while iframe-focused (message handler) moves focus back to panel (second Tab)
           if (isInlineViewer && key === "tab" && inlineIframeFocusedRef.current) {
             inlineIframeFocusedRef.current = false;
+            const tabBackHandler =
+              (containerProps.kind === "viewer"
+                ? (containerProps as ViewerContainerProps & { onTabBackToPanel?: () => void }).onTabBackToPanel
+                : undefined);
+            if (tabBackHandler) {
+              tabBackHandler();
+              return;
+            }
             try {
               focusContext.pop("viewer");
             } catch {
@@ -654,15 +631,6 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       }
       extensionCommandDisposers.clear();
 
-      for (const [, dispose] of extensionKeybindingDisposers) {
-        try {
-          dispose();
-        } catch {
-          // ignore
-        }
-      }
-      extensionKeybindingDisposers.clear();
-
       pendingCommandCalls.clear();
 
       const currentFile = currentFileRef.current;
@@ -767,9 +735,23 @@ interface ViewerContainerWrapperProps {
   fileName: string;
   fileSize: number;
   inline?: boolean;
+  inlineFocusMode?: "panel-first" | "viewer-first";
   visible?: boolean;
   onClose: () => void;
   onExecuteCommand?: (command: string, args?: unknown) => Promise<unknown>;
+  onTabBackToPanel?: () => void;
+}
+
+function focusIframeWithin(root: HTMLElement | null): void {
+  if (!root) return;
+  const iframe = root.querySelector("iframe");
+  if (!(iframe instanceof HTMLIFrameElement)) return;
+  try {
+    iframe.focus();
+    iframe.contentWindow?.focus?.();
+  } catch {
+    // ignore
+  }
 }
 
 export function ViewerContainer({
@@ -779,15 +761,18 @@ export function ViewerContainer({
   fileName,
   fileSize,
   inline,
+  inlineFocusMode = "panel-first",
   visible,
   onClose,
   onExecuteCommand,
+  onTabBackToPanel,
 }: ViewerContainerWrapperProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const focusPushedRef = useRef(false);
   const restoreFocusElRef = useRef<HTMLElement | null>(null);
   const isVisible = visible ?? true;
   const restorePanelFocus = useCallback(() => {
-    focusContext.set("panel");
+    focusContext.request("panel");
     const attemptFocus = (attempt = 0) => {
       const restoreEl = restoreFocusElRef.current;
       if (restoreEl && restoreEl.isConnected) {
@@ -818,6 +803,20 @@ export function ViewerContainer({
     onClose();
     restorePanelFocus();
   }, [onClose, restorePanelFocus]);
+
+  useEffect(() => {
+    if (!isVisible) return;
+    const root = containerRef.current;
+    if (!root) return;
+    return focusContext.registerAdapter("viewer", {
+      focus() {
+        focusIframeWithin(root);
+      },
+      contains(node) {
+        return node instanceof Node ? root.contains(node) : false;
+      },
+    });
+  }, [isVisible]);
 
   // Manage focus context for non-inline overlay mode.
   useEffect(() => {
@@ -857,6 +856,32 @@ export function ViewerContainer({
   // Keep props identity stable across app rerenders (e.g. opening command palette),
   // so the iframe doesn't get a `dotdir:update` and remount/reload the extension.
   const viewerProps: ViewerProps = useMemo(() => ({ filePath, fileName, fileSize, inline }), [filePath, fileName, fileSize, inline]);
+
+  useEffect(() => {
+    if (!inline) return;
+    if (!isVisible) return;
+    if (inlineFocusMode !== "viewer-first") return;
+    const frame = requestAnimationFrame(() => {
+      focusContext.request("viewer");
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [inline, inlineFocusMode, isVisible]);
+
+  useEffect(() => {
+    if (!inline) return;
+    if (isVisible) return;
+    if (focusContext.is("viewer")) {
+      focusContext.request("panel");
+    }
+  }, [inline, isVisible]);
+
+  useEffect(() => {
+    return () => {
+      if (inline && focusContext.is("viewer")) {
+        focusContext.request("panel");
+      }
+    };
+  }, [inline]);
 
   const toolbarHeight = 38;
   const toolbar = (
@@ -904,20 +929,22 @@ export function ViewerContainer({
       active={isVisible}
       onClose={handleClose}
       onExecuteCommand={onExecuteCommand}
+      inlineFocusMode={inlineFocusMode}
+      onTabBackToPanel={onTabBackToPanel}
       style={{ width: "100%", height: "100%" }}
     />
   );
 
   if (inline) {
     return (
-      <div className={`${styles["file-viewer"]} ${styles["file-viewer-inline"]}`} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div ref={containerRef} className={`${styles["file-viewer"]} ${styles["file-viewer-inline"]}`} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
         <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
       </div>
     );
   }
 
   return (
-    <div className={styles["file-viewer-overlay"]} style={{ display: isVisible ? "flex" : "none" }}>
+    <div ref={containerRef} className={styles["file-viewer-overlay"]} style={{ display: isVisible ? "flex" : "none" }}>
       <div className={styles["file-viewer"]} style={{ display: "flex", flexDirection: "column", padding: 0 }}>
         {toolbar}
         <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
@@ -953,12 +980,13 @@ export function EditorContainer({
   languages,
   grammars,
 }: EditorContainerWrapperProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [currentLangId, setCurrentLangId] = useState(langId);
   const focusPushedRef = useRef(false);
   const restoreFocusElRef = useRef<HTMLElement | null>(null);
   const isVisible = visible ?? true;
   const restorePanelFocus = useCallback(() => {
-    focusContext.set("panel");
+    focusContext.request("panel");
     const attemptFocus = (attempt = 0) => {
       const restoreEl = restoreFocusElRef.current;
       if (restoreEl && restoreEl.isConnected) {
@@ -994,6 +1022,26 @@ export function EditorContainer({
     setCurrentLangId(langId);
   }, [langId]);
 
+  useEffect(() => {
+    if (!isVisible) return;
+    const root = containerRef.current;
+    if (!root) return;
+    return focusContext.registerAdapter("editor", {
+      focus() {
+        focusIframeWithin(root);
+      },
+      contains(node) {
+        return node instanceof Node ? root.contains(node) : false;
+      },
+      isEditableTarget(node) {
+        const el = node as HTMLElement | null;
+        if (!el) return false;
+        const tag = el.tagName?.toLowerCase();
+        return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
+      },
+    });
+  }, [isVisible]);
+
   // Manage focus context for overlay mode.
   useEffect(() => {
     if (inline) return;
@@ -1026,8 +1074,19 @@ export function EditorContainer({
         }
         focusPushedRef.current = false;
       }
+      if (inline && focusContext.is("editor")) {
+        focusContext.request("panel");
+      }
     };
-  }, []);
+  }, [inline]);
+
+  useEffect(() => {
+    if (!inline) return;
+    if (isVisible) return;
+    if (focusContext.is("editor")) {
+      focusContext.request("panel");
+    }
+  }, [inline, isVisible]);
 
   // Keep props identity stable to avoid unnecessary `dotdir:update`.
   const editorProps: EditorProps = useMemo(
@@ -1126,14 +1185,14 @@ export function EditorContainer({
 
   if (inline) {
     return (
-      <div className={`${styles["file-editor"]} ${styles["file-viewer-inline"]}`} style={{ display: "flex", flexDirection: "column", height: "100%", padding: 0 }}>
+      <div ref={containerRef} className={`${styles["file-editor"]} ${styles["file-viewer-inline"]}`} style={{ display: "flex", flexDirection: "column", height: "100%", padding: 0 }}>
         {content}
       </div>
     );
   }
 
   return (
-    <div className={styles["file-editor-overlay"]} style={{ display: isVisible ? "flex" : "none" }}>
+    <div ref={containerRef} className={styles["file-editor-overlay"]} style={{ display: isVisible ? "flex" : "none" }}>
       <div className={styles["file-editor"]} style={{ display: "flex", flexDirection: "column", padding: 0 }}>
         {content}
       </div>

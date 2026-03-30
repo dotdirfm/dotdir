@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { focusContext, type FocusLayer } from "../focusContext";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 
@@ -12,6 +13,7 @@ export interface OverlayDialogProps {
   dismissible?: boolean;
   placement?: Placement;
   initialFocusRef?: React.RefObject<HTMLElement | null>;
+  focusLayer?: FocusLayer;
 }
 
 const FOCUSABLE =
@@ -31,27 +33,54 @@ export function OverlayDialog({
   dismissible = true,
   placement = "center",
   initialFocusRef,
+  focusLayer = "modal",
 }: OverlayDialogProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    return focusContext.registerAdapter(focusLayer, {
+      focus() {
+        const explicit = initialFocusRef?.current;
+        if (explicit) {
+          explicit.focus();
+          return;
+        }
+        const [first] = getFocusable(container);
+        (first ?? container).focus();
+      },
+      contains(node) {
+        return node instanceof Node ? container.contains(node) : false;
+      },
+      isEditableTarget(node) {
+        const el = node as HTMLElement | null;
+        if (!el || !container.contains(el)) return false;
+        const tag = el.tagName?.toLowerCase();
+        return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
+      },
+      allowCommandRouting: false,
+    });
+  }, [focusLayer, initialFocusRef]);
+
+  useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
+    focusContext.push(focusLayer);
     const frame = requestAnimationFrame(() => {
-      const explicit = initialFocusRef?.current;
-      const container = containerRef.current;
-      if (explicit) {
-        explicit.focus();
-        return;
-      }
-      if (!container) return;
-      const [first] = getFocusable(container);
-      (first ?? container).focus();
+      focusContext.focusCurrent();
     });
     return () => {
       cancelAnimationFrame(frame);
-      previous?.focus?.();
+      focusContext.pop(focusLayer);
+      requestAnimationFrame(() => {
+        if (focusContext.current === "panel") {
+          focusContext.focusCurrent();
+          return;
+        }
+        previous?.focus?.();
+      });
     };
-  }, [initialFocusRef]);
+  }, [focusLayer, initialFocusRef]);
 
   const handleKeyDownCapture: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
     onKeyDown?.(e);

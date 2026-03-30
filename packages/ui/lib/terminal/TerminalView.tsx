@@ -1,3 +1,4 @@
+import { commandRegistry } from "@/features/commands/commands";
 import { focusContext } from "@/focusContext";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal, type IDisposable } from "@xterm/xterm";
@@ -29,10 +30,45 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
   const fitRef = useRef<FitAddon | null>(null);
   const hasTerminalFocusRef = useRef(false);
   const suppressPtyInputRef = useRef(false);
+  const suppressNextCtrlORef = useRef(false);
   const expandedRef = useRef(expanded);
   expandedRef.current = expanded;
   /** Last viewport size we fitted to; avoids ResizeObserver loop from fit.fit() changing layout. */
   const lastFitSizeRef = useRef({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    return focusContext.registerAdapter("terminal", {
+      focus() {
+        const term = termRef.current;
+        if (!term) return;
+        hasTerminalFocusRef.current = true;
+        term.focus();
+      },
+      blur() {
+        const term = termRef.current;
+        if (!term) return;
+        hasTerminalFocusRef.current = false;
+        term.blur();
+      },
+      contains(node) {
+        return node instanceof Node ? container.contains(node) : false;
+      },
+      allowCommandRouting(event) {
+        const key = event.key.toLowerCase();
+        if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+          if (key === "p") return true;
+          if (key === ".") return true;
+          if (key === "q") return true;
+        }
+        if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+          if (key === "f10" || key === "f11") return true;
+        }
+        return false;
+      },
+    });
+  }, []);
 
   useEffect(() => {
     // A profile switch replaces the TerminalSession without remounting this component.
@@ -108,17 +144,21 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
     fitRef.current = fit;
     const setTerminalFocus = () => {
       if (hasTerminalFocusRef.current || !expandedRef.current) return;
-      hasTerminalFocusRef.current = true;
-      focusContext.push("terminal");
+      focusContext.request("terminal");
     };
     const clearTerminalFocus = () => {
       if (!hasTerminalFocusRef.current) return;
-      hasTerminalFocusRef.current = false;
+      focusContext.blurCurrent();
       focusContext.pop("terminal");
     };
     term.attachCustomKeyEventHandler((event) => {
       setTerminalFocus();
       if (event.key.toLowerCase() === "o" && event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+        if (suppressNextCtrlORef.current) {
+          suppressNextCtrlORef.current = false;
+          return false;
+        }
+        void commandRegistry.executeCommand("dotdir.togglePanels");
         return false;
       }
       return true;
@@ -199,13 +239,9 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
   }, [session]);
 
   useEffect(() => {
-    const term = termRef.current;
-    if (!term || !expanded) return;
-    if (!hasTerminalFocusRef.current) {
-      hasTerminalFocusRef.current = true;
-      focusContext.push("terminal");
-    }
-    term.focus();
+    if (!expanded) return;
+    suppressNextCtrlORef.current = true;
+    focusContext.request("terminal");
   }, [expanded, focusRequestKey]);
 
   useEffect(() => {
@@ -232,15 +268,10 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
         term.scrollToBottom();
       }
       if (expanded) {
-        if (!hasTerminalFocusRef.current) {
-          hasTerminalFocusRef.current = true;
-          focusContext.push("terminal");
-        }
-        term.focus();
+        focusContext.request("terminal");
       } else if (hasTerminalFocusRef.current) {
-        hasTerminalFocusRef.current = false;
+        focusContext.blurCurrent();
         focusContext.pop("terminal");
-        term.blur();
       } else {
         // Panels are visible; ensure hidden terminal cannot keep keyboard focus.
         term.blur();

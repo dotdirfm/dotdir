@@ -1,4 +1,3 @@
-import { focusContext } from "@/focusContext";
 import { marked } from "marked";
 import { useEffect, useRef } from "react";
 import styles from "../styles/help-dialog.module.css";
@@ -11,14 +10,6 @@ interface HelpDialogProps {
 
 export function HelpDialog({ content, onClose }: HelpDialogProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    // Focus the body so arrow/page keys scroll immediately.
-    focusContext.push("modal");
-    return () => {
-      focusContext.pop("modal");
-    };
-  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

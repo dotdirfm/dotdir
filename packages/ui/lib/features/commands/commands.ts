@@ -144,6 +144,7 @@ class CommandRegistry {
       console.warn(`Command not found: ${id}`);
       return;
     }
+    console.log("[dotdir:command]", id, ...args);
     try {
       await handler(...args);
     } catch (err) {

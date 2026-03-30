@@ -17,6 +17,6 @@ export type {
 
 import type { HostApi as BaseHostApi } from "@dotdirfm/extension-api";
 
-export type HostApi = BaseHostApi & {
+export type HostApi = Omit<BaseHostApi, "registerCommand" | "registerKeybinding"> & {
   setDirty?(dirty: boolean): void;
 };

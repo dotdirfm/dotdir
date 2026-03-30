@@ -1,4 +1,3 @@
-import { focusContext } from "@/focusContext";
 import { languageRegistry } from "@/languageRegistry";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useEffect, useRef, useState } from "react";
@@ -31,13 +30,6 @@ export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCanc
     const suggested = languageRegistry.getLanguageForFilename(filename.trim());
     setLangId(suggested);
   }, [filename, userTouchedLanguage]);
-
-  useEffect(() => {
-    focusContext.push("modal");
-    return () => {
-      focusContext.pop("modal");
-    };
-  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

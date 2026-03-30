@@ -1,8 +1,7 @@
 import { ConflictPolicy, CopyOptions, SymlinkMode } from "@/features/bridge";
-import { focusContext } from "@/focusContext";
 import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
@@ -26,13 +25,6 @@ export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: C
   const [useCow, setUseCow] = useState(false);
   const [disableWriteCache, setDisableWriteCache] = useState(false);
   const { onKeyDown } = useDialogButtonNav(buttonsRef, { defaultIndex: 1 });
-
-  useEffect(() => {
-    focusContext.push("modal");
-    return () => {
-      focusContext.pop("modal");
-    };
-  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

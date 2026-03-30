@@ -1,4 +1,3 @@
-import { focusContext } from "@/focusContext";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useEffect, useRef, useState } from "react";
 import styles from "../styles/dialogs.module.css";
@@ -17,7 +16,6 @@ export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogP
   const [newName, setNewName] = useState(currentName);
 
   useEffect(() => {
-    focusContext.push("modal");
     // Select the filename without extension
     const input = inputRef.current;
     if (input) {
@@ -29,9 +27,6 @@ export function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogP
         input.select();
       }
     }
-    return () => {
-      focusContext.pop("modal");
-    };
   }, [currentName]);
 
   const handleSubmit = (e: React.FormEvent) => {

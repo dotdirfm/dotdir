@@ -1,6 +1,5 @@
-import { focusContext } from "@/focusContext";
 import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
@@ -27,13 +26,6 @@ export function ModalDialog({ title, message, variant = "default", buttons, onCl
   const { onKeyDown } = useDialogButtonNav(buttonsRef, {
     defaultIndex: defaultIdx >= 0 ? defaultIdx : resolvedButtons.length - 1,
   });
-
-  useEffect(() => {
-    focusContext.push("modal");
-    return () => {
-      focusContext.pop("modal");
-    };
-  }, []);
 
   return (
     <OverlayDialog className={cx(styles, "modal-dialog", variant)} onClose={onClose} onKeyDown={onKeyDown}>

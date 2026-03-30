@@ -1,3 +1,5 @@
+import type { PanelSide } from "@/entities/panel/model/types";
+
 export interface ActiveFileListHandlers {
   focus(): void;
   cursorUp(): void;
@@ -30,6 +32,7 @@ export interface ActiveFileListHandlers {
 }
 
 let current: ActiveFileListHandlers | null = null;
+const bySide = new Map<PanelSide, ActiveFileListHandlers>();
 
 export function setActiveFileListHandlers(handlers: ActiveFileListHandlers | null): void {
   current = handlers;
@@ -37,4 +40,13 @@ export function setActiveFileListHandlers(handlers: ActiveFileListHandlers | nul
 
 export function getActiveFileListHandlers(): ActiveFileListHandlers | null {
   return current;
+}
+
+export function setFileListHandlers(side: PanelSide, handlers: ActiveFileListHandlers | null): void {
+  if (handlers) bySide.set(side, handlers);
+  else bySide.delete(side);
+}
+
+export function getFileListHandlers(side: PanelSide): ActiveFileListHandlers | null {
+  return bySide.get(side) ?? null;
 }

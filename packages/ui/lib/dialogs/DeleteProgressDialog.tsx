@@ -1,5 +1,3 @@
-import { focusContext } from "@/focusContext";
-import { useEffect } from "react";
 import styles from "../styles/dialogs.module.css";
 import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
@@ -12,13 +10,6 @@ export interface DeleteProgressDialogProps {
 }
 
 export function DeleteProgressDialog({ filesDone, currentFile, onCancel }: DeleteProgressDialogProps) {
-  useEffect(() => {
-    focusContext.push("modal");
-    return () => {
-      focusContext.pop("modal");
-    };
-  }, []);
-
   return (
     <OverlayDialog className={cx(styles, "modal-dialog", "delete-progress-dialog")} onClose={onCancel}>
       <div className={styles["modal-dialog-header"]}>Permanently deleting</div>
