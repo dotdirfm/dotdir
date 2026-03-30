@@ -4,25 +4,25 @@
  * Loads viewer/editor extensions inside an iframe (VFS origin) and bridges HostApi via postMessage RPC.
  */
 
+import { loadedExtensionsAtom } from "@/atoms";
 import { Bridge } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { commandRegistry } from "@/features/commands/commands";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
-import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
 import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
+import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
 import { getActiveFileListHandlers } from "@/fileListHandlers";
 import { focusContext } from "@/focusContext";
 import { readFileText as readFileTextFromFs } from "@/fs";
 import { getStyleHostElement } from "@/styleHost";
+import styles from "@/styles/viewers.module.css";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
 import { useVfsUrlResolver } from "@/utils/vfs";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import { getActiveColorThemeData, onColorThemeChange } from "@/vscodeColorTheme";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import styles from "../styles/viewers.module.css";
 import { useAtomValue } from "jotai";
-import { loadedExtensionsAtom } from "@/atoms";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // ── Container props ─────────────────────────────────────────────────────
 

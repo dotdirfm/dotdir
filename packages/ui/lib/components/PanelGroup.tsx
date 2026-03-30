@@ -1,9 +1,9 @@
-import { activePanelAtom } from "@/atoms";
 import { EditorContainer, ViewerContainer } from "@/components/ExtensionContainer";
 import { PanelTabs } from "@/components/FileList/PanelTabs";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
 import {
+  activePanelSideAtom,
   createFilelistTab,
   leftActiveIndexAtom,
   leftActiveTabIdAtom,
@@ -13,18 +13,18 @@ import {
   rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
+import { showHiddenAtom } from "@/features/settings/useUserSettings";
 import type { PanelPersistedState } from "@/features/ui-state/types";
 import { getFileListHandlers } from "@/fileListHandlers";
 import { focusContext } from "@/focusContext";
 import { type PanelController } from "@/hooks/usePanel";
 import { setActivePanelGroupHandlers } from "@/panelGroupHandlers";
+import styles from "@/styles/panels.module.css";
+import { cx } from "@/utils/cssModules";
 import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
-import styles from "../styles/panels.module.css";
-import { cx } from "../utils/cssModules";
 import { FileListTabPane } from "./FileListTabPane";
-import { showHiddenAtom } from "@/features/settings/useUserSettings";
 
 interface PanelGroupProps {
   side: PanelSide;
@@ -47,8 +47,8 @@ export function PanelGroup({
   onStateChange,
   onActivePanelChange,
 }: PanelGroupProps) {
-  const activePanel = useAtomValue(activePanelAtom);
-  const setActivePanel = useSetAtom(activePanelAtom);
+  const activePanel = useAtomValue(activePanelSideAtom);
+  const setActivePanel = useSetAtom(activePanelSideAtom);
   const { showDialog } = useDialog();
   const active = activePanel === side;
 

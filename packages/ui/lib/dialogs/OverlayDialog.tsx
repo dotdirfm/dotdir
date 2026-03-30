@@ -1,7 +1,7 @@
+import { cx } from "@/utils/cssModules";
 import { useEffect, useRef } from "react";
 import { focusContext, type FocusLayer } from "../focusContext";
-import styles from "../styles/dialogs.module.css";
-import { cx } from "../utils/cssModules";
+import styles from "./dialogs.module.css";
 
 type Placement = "center" | "top";
 

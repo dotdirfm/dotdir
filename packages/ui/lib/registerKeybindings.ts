@@ -12,32 +12,32 @@ function registerKeybindings(registry: CommandRegistryLike, bindings: Keybinding
 
 const appBuiltInKeybindings: Keybinding[] = [
   // View commands
-  { command: "dotdir.toggleHiddenFiles", key: "ctrl+.", mac: "cmd+." },
-  { command: "dotdir.togglePanels", key: "ctrl+o", mac: "cmd+o", when: "!terminalCommandRunning" },
-  { command: "dotdir.showExtensions", key: "f11" },
+  { command: "toggleHiddenFiles", key: "ctrl+.", mac: "cmd+." },
+  { command: "togglePanels", key: "ctrl+o", mac: "cmd+o", when: "!terminalCommandRunning" },
+  { command: "showExtensions", key: "f11" },
 
   // Navigation commands
-  { command: "dotdir.switchPanel", key: "tab", when: "focusPanel && !dialogOpen" },
+  { command: "switchPanel", key: "tab", when: "focusPanel && !dialogOpen" },
   { command: "dotdir.cancelNavigation", key: "escape", when: "focusPanel" },
-  { command: "dotdir.goToParent", key: "alt+pageup", when: "focusPanel" },
-  { command: "dotdir.goHome", key: "ctrl+home", mac: "cmd+home" },
+  { command: "panel.goToParent", key: "alt+pageup", when: "focusPanel" },
+  { command: "panel.goHome", key: "ctrl+home", mac: "cmd+home" },
 
   // File commands
-  { command: "dotdir.newTab", key: "ctrl+t", mac: "cmd+t", when: "focusPanel" },
-  { command: "dotdir.closeTab", key: "ctrl+w", mac: "cmd+w", when: "focusPanel" },
-  { command: "dotdir.previewInOppositePanel", key: "ctrl+f3", mac: "cmd+f3", when: "focusPanel && listItemIsFile" },
-  { command: "dotdir.editInOppositePanel", key: "ctrl+f4", mac: "cmd+f4", when: "focusPanel && listItemHasEditor" },
-  { command: "dotdir.refresh", key: "ctrl+r", mac: "cmd+r", when: "focusPanel" },
-  { command: "dotdir.openCreateFile", key: "shift+f4", when: "focusPanel" },
-  { command: "dotdir.makeFolder", key: "f7", when: "focusPanel" },
+  { command: "newTab", key: "ctrl+t", mac: "cmd+t", when: "focusPanel" },
+  { command: "closeTab", key: "ctrl+w", mac: "cmd+w", when: "focusPanel" },
+  { command: "previewInOppositePanel", key: "ctrl+f3", mac: "cmd+f3", when: "focusPanel && listItemIsFile" },
+  { command: "editInOppositePanel", key: "ctrl+f4", mac: "cmd+f4", when: "focusPanel && listItemHasEditor" },
+  { command: "panel.refresh", key: "ctrl+r", mac: "cmd+r", when: "focusPanel" },
+  { command: "openCreateFile", key: "shift+f4", when: "focusPanel" },
+  { command: "panel.makeDir", key: "f7", when: "focusPanel" },
 
   // Command palette
-  { command: "dotdir.showCommandPalette", key: "cmd+shift+p" },
-  { command: "dotdir.showCommandPalette", key: "cmd+p" },
+  { command: "showCommandPalette", key: "cmd+shift+p" },
+  { command: "showCommandPalette", key: "cmd+p" },
 
   // Close viewer/editor commands
-  { command: "dotdir.closeViewer", key: "escape", when: "focusViewer" },
-  { command: "dotdir.closeEditor", key: "escape", when: "focusEditor" },
+  { command: "closeViewer", key: "escape", when: "focusViewer" },
+  { command: "closeEditor", key: "escape", when: "focusEditor" },
 
   // Exit command
   { command: "dotdir.exit", key: "f10" },

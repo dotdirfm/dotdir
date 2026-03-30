@@ -6,13 +6,14 @@
  * goes through the shared DialogContext (useDialog()).
  */
 
-import { activePanelAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
+import { activePanelSideAtom, inactiveTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { FsProviderExtensionApi } from "@/features/extensions/extensionApi";
+import { isExistingDirectory } from "@/features/navigation/lib/commandLineCd";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join } from "@/utils/path";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
@@ -45,15 +46,19 @@ async function collectContainerFiles(
 }
 
 export function useFileOperations(
-  leftRef: RefObject<PanelHandle>,
-  rightRef: RefObject<PanelHandle>,
+  leftRef: RefObject<PanelHandle | undefined>,
+  rightRef: RefObject<PanelHandle | undefined>,
   setSelectionKey: Dispatch<SetStateAction<number>>,
 ) {
   const { showDialog, closeDialog, updateDialog } = useDialog();
 
-  const activePanel = useAtomValue(activePanelAtom);
+  const activePanel = useAtomValue(activePanelSideAtom);
   const activePanelRef = useRef<PanelSide>(activePanel);
   activePanelRef.current = activePanel;
+
+  const inactiveTab = useAtomValue(inactiveTabAtom);
+  const inactiveTabRef = useRef(inactiveTab);
+  inactiveTabRef.current = inactiveTab;
 
   const bridge = useBridge();
   const activeCopyIdRef = useRef<number | null>(null);
@@ -88,8 +93,8 @@ export function useFileOperations(
 
   const refreshBoth = useCallback(() => {
     setSelectionKey((k) => k + 1);
-    leftRef.current.navigateTo(leftRef.current.currentPath);
-    rightRef.current.navigateTo(rightRef.current.currentPath);
+    leftRef.current?.navigateTo(leftRef.current.currentPath);
+    rightRef.current?.navigateTo(rightRef.current.currentPath);
   }, [setSelectionKey, leftRef, rightRef]);
 
   const handleMoveToTrash = useCallback(
@@ -193,10 +198,11 @@ export function useFileOperations(
   );
 
   const handleCopy = useCallback(
-    (sourcePaths: string[], refresh: () => void) => {
-      const destPanel = activePanelRef.current === "left" ? rightRef.current : leftRef.current;
-      const destDir = destPanel.currentPath;
-      if (!destDir || sourcePaths.length === 0) return;
+    async (sourcePaths: string[], refresh: () => void) => {
+      const destDir = inactiveTabRef.current?.path;
+      if (!destDir) return;
+      if (!(await isExistingDirectory(bridge, destDir))) return;
+      if (sourcePaths.length === 0) return;
 
       showDialog({
         type: "copyConfig",
@@ -399,10 +405,11 @@ export function useFileOperations(
   }, [showDialog, closeDialog, updateDialog, refreshBoth]);
 
   const handleMove = useCallback(
-    (sourcePaths: string[], refresh: () => void) => {
-      const destPanel = activePanelRef.current === "left" ? rightRef.current : leftRef.current;
-      const destDir = destPanel.currentPath;
-      if (!destDir || sourcePaths.length === 0) return;
+    async (sourcePaths: string[], refresh: () => void) => {
+      const destDir = inactiveTabRef.current?.path;
+      if (!destDir) return;
+      if (!(await isExistingDirectory(bridge, destDir))) return;
+      if (sourcePaths.length === 0) return;
 
       showDialog({
         type: "moveConfig",

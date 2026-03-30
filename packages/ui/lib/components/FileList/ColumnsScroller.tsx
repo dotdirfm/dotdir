@@ -1,5 +1,5 @@
-import { type ReactNode, memo, useCallback, useLayoutEffect, useRef, useEffect } from "react";
-import styles from "../../styles/file-list.module.css";
+import { type ReactNode, memo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import styles from "./FileList.module.css";
 import { ScrollableContainer } from "./ScrollableContainer";
 import { useElementSize } from "./useElementSize";
 

@@ -1,11 +1,11 @@
+import { commandPaletteOpenAtom } from "@/atoms";
+import { OverlayDialog } from "@/dialogs/OverlayDialog";
+import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from "@/features/commands/commands";
+import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { Command } from "cmdk";
 import { useAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { commandPaletteOpenAtom } from "../atoms";
-import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from "../features/commands/commands";
-import { OverlayDialog } from "../dialogs/OverlayDialog";
-import paletteStyles from "../styles/command-palette.module.css";
-import { INPUT_NO_ASSIST } from "../utils/inputNoAssist";
+import paletteStyles from "./command-palette.module.css";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -130,7 +130,6 @@ export function useCommandPalette() {
         setOpen((o) => !o);
         return;
       }
-
     };
 
     window.addEventListener("keydown", handleKeyDown, true);

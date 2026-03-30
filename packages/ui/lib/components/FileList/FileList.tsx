@@ -7,15 +7,15 @@ import { setActiveFileListHandlers, setFileListHandlers } from "@/fileListHandle
 import { resolveEntryStyle } from "@/fss";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import type { ResolvedEntryStyle } from "@/types";
+import { cx } from "@/utils/cssModules";
 import { dirname, join } from "@/utils/path";
 import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
 import type { LayeredResolver } from "fss-lang";
 import { FsNode } from "fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import styles from "../../styles/file-list.module.css";
-import { cx } from "../../utils/cssModules";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
+import styles from "./FileList.module.css";
 
 const ROW_HEIGHT = 26;
 
@@ -351,7 +351,7 @@ export const FileList = memo(function FileList({
       }
       await onNavigateRef.current(join(currentPathRef.current, entry.name));
     } else if (entry.type === "file") {
-      void commandRegistry.executeCommand("dotdir.viewFile", entry.path as string, entry.name, Number(entry.meta.size));
+      void commandRegistry.executeCommand("viewFile", entry.path as string, entry.name, Number(entry.meta.size));
     }
   }, []);
 
@@ -512,7 +512,7 @@ export const FileList = memo(function FileList({
         actionQueue.enqueue(() => {
           const item = displayEntriesRef.current[activeIndexRef.current];
           if (item && item.entry.type === "file") {
-            void commandRegistry.executeCommand("dotdir.viewFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
+            void commandRegistry.executeCommand("viewFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
           }
         }),
       editFile: () =>
@@ -520,7 +520,7 @@ export const FileList = memo(function FileList({
           const item = displayEntriesRef.current[activeIndexRef.current];
           if (item && item.entry.type === "file") {
             const langId = typeof item.entry.lang === "string" && item.entry.lang ? item.entry.lang : "plaintext";
-            void commandRegistry.executeCommand("dotdir.editFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size), langId);
+            void commandRegistry.executeCommand("editFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size), langId);
           }
         }),
       moveToTrash: () =>

@@ -1,10 +1,10 @@
 import { ConflictPolicy, CopyOptions, SymlinkMode } from "@/features/bridge";
 import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
+import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useRef, useState } from "react";
-import styles from "../styles/dialogs.module.css";
-import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
+import styles from "./dialogs.module.css";
 import { OverlayDialog } from "./OverlayDialog";
 
 export interface CopyConfigDialogProps {

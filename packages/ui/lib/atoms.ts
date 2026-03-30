@@ -18,7 +18,6 @@ export const promptActiveAtom = atom(true);
 export const terminalFocusRequestKeyAtom = atom(0);
 export const requestedTerminalCwdAtom = atom<string | null>(null);
 
-export const activePanelAtom = atom<PanelSide>("left");
 export const commandPaletteOpenAtom = atom(false);
 export const viewerFileAtom = atom<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);
 export const editorFileAtom = atom<{ path: string; name: string; size: number; langId: string } | null>(null);

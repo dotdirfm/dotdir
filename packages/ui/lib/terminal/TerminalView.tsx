@@ -158,7 +158,7 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
           suppressNextCtrlORef.current = false;
           return false;
         }
-        void commandRegistry.executeCommand("dotdir.togglePanels");
+        void commandRegistry.executeCommand("togglePanels");
         return false;
       }
       return true;

@@ -1,7 +1,7 @@
+import { cx } from "@/utils/cssModules";
 import { getBreadcrumbSegments } from "@/utils/path";
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import styles from "../../styles/file-list.module.css";
-import { cx } from "../../utils/cssModules";
+import styles from "./FileList.module.css";
 
 interface BreadcrumbsProps {
   currentPath: string;
@@ -14,34 +14,19 @@ export const Breadcrumbs = memo(function Breadcrumbs({ currentPath, onNavigate }
   const adjustingScrollRef = useRef(false);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
-  const [showCopiedTooltip, setShowCopiedTooltip] = useState(false);
-  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const segments = useMemo(() => getBreadcrumbSegments(currentPath), [currentPath]);
 
   const handleSegmentClick = useCallback(
-    (seg: { path: string }, _i: number, isLast: boolean) => {
+    (seg: { path: string }, isLast: boolean) => {
       if (isLast) {
-        void navigator.clipboard.writeText(currentPath).then(() => {
-          if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
-          setShowCopiedTooltip(true);
-          copiedTimerRef.current = setTimeout(() => {
-            setShowCopiedTooltip(false);
-            copiedTimerRef.current = null;
-          }, 1000);
-        });
+        void navigator.clipboard.writeText(currentPath);
       } else {
         onNavigate(seg.path);
       }
     },
     [currentPath, onNavigate],
   );
-
-  useEffect(() => {
-    return () => {
-      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
-    };
-  }, []);
 
   const updateOverflowState = useCallback(() => {
     const root = containerRef.current;
@@ -121,7 +106,7 @@ export const Breadcrumbs = memo(function Breadcrumbs({ currentPath, onNavigate }
               className={styles["breadcrumb-segment"]}
               onClick={(e) => {
                 e.stopPropagation();
-                handleSegmentClick(seg, i, isLast);
+                handleSegmentClick(seg, isLast);
               }}
             >
               <span className={styles["breadcrumb-segment-text"]}>{seg.label}</span>
@@ -134,11 +119,6 @@ export const Breadcrumbs = memo(function Breadcrumbs({ currentPath, onNavigate }
           </Fragment>
         );
       })}
-      {showCopiedTooltip && (
-        <span className={styles["breadcrumb-copied-tooltip"]} role="status">
-          Path copied to clipboard
-        </span>
-      )}
     </div>
   );
 });

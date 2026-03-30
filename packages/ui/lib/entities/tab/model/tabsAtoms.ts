@@ -1,7 +1,6 @@
-import { activePanelAtom } from "@/atoms";
-import type { PanelTab } from "@/components/FileList/PanelTabs";
 import type { PanelSide } from "@/entities/panel/model/types";
 import { atom } from "jotai";
+import type { PanelTab } from "./types";
 
 let nextTabId = 0;
 export function genTabId(): string {
@@ -36,6 +35,8 @@ export function createPreviewTab(
 const defaultLeftTab = createFilelistTab("");
 const defaultRightTab = createFilelistTab("");
 
+export const activePanelSideAtom = atom<PanelSide>("left");
+
 export const leftTabsAtom = atom<PanelTab[]>([defaultLeftTab]);
 export const rightTabsAtom = atom<PanelTab[]>([defaultRightTab]);
 export const leftActiveTabIdAtom = atom<string>(defaultLeftTab.id);
@@ -56,7 +57,8 @@ export const rightActiveTabAtom = atom((get) => {
 });
 
 // Derived: active-panel variants (whichever panel is currently focused)
-export const activeTabsAtom = atom((get) => (get(activePanelAtom) === "left" ? get(leftTabsAtom) : get(rightTabsAtom)));
-export const activeTabIdAtom = atom((get) => (get(activePanelAtom) === "left" ? get(leftActiveTabIdAtom) : get(rightActiveTabIdAtom)));
-export const activeTabIndexAtom = atom((get) => (get(activePanelAtom) === "left" ? get(leftActiveIndexAtom) : get(rightActiveIndexAtom)));
-export const activeTabAtom = atom((get) => (get(activePanelAtom) === "left" ? get(leftActiveTabAtom) : get(rightActiveTabAtom)));
+export const activeTabsAtom = atom((get) => (get(activePanelSideAtom) === "left" ? get(leftTabsAtom) : get(rightTabsAtom)));
+export const activeTabIdAtom = atom((get) => (get(activePanelSideAtom) === "left" ? get(leftActiveTabIdAtom) : get(rightActiveTabIdAtom)));
+export const activeTabIndexAtom = atom((get) => (get(activePanelSideAtom) === "left" ? get(leftActiveIndexAtom) : get(rightActiveIndexAtom)));
+export const activeTabAtom = atom((get) => (get(activePanelSideAtom) === "left" ? get(leftActiveTabAtom) : get(rightActiveTabAtom)));
+export const inactiveTabAtom = atom((get) => (get(activePanelSideAtom) === "left" ? get(rightActiveTabAtom) : get(leftActiveTabAtom)));

@@ -1,10 +1,11 @@
 import { commandLineCwdAtom, commandLineOnExecuteAtom, commandLinePasteFnAtom, panelsVisibleAtom } from "@/atoms";
 import { commandRegistry } from "@/features/commands/commands";
 import { registerCommandLineKeybindings } from "@/registerKeybindings";
+import terminalStyles from "@/styles/terminal.module.css";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import styles from "../styles/terminal.module.css";
+import commandLineStyles from "./CommandLine.module.css";
 
 export function CommandLine() {
   const cwd = useAtomValue(commandLineCwdAtom);
@@ -226,7 +227,7 @@ export function CommandLine() {
 
     const shouldIgnoreTyping = (element: HTMLElement | null) => {
       if (!element) return false;
-      if (element.closest?.(`.${styles["terminal-container"]}`)) return true;
+      if (element.closest?.(`.${terminalStyles["terminal-container"]}`)) return true;
       if (element.closest?.('[role="dialog"], [aria-modal="true"], dialog')) return true;
       return isEditableElement(element);
     };
@@ -338,11 +339,11 @@ export function CommandLine() {
   if (!hasSelection) {
     inputContent = (
       <>
-        <span className={styles["command-line-text"]} data-start={0}>
+        <span className={commandLineStyles["command-line-text"]} data-start={0}>
           {value.slice(0, cursor)}
         </span>
-        <span className={styles["command-line-cursor"]} />
-        <span className={styles["command-line-text"]} data-start={cursor}>
+        <span className={commandLineStyles["command-line-cursor"]} />
+        <span className={commandLineStyles["command-line-text"]} data-start={cursor}>
           {value.slice(cursor)}
         </span>
       </>
@@ -351,14 +352,14 @@ export function CommandLine() {
     // cursor at start of selection
     inputContent = (
       <>
-        <span className={styles["command-line-text"]} data-start={0}>
+        <span className={commandLineStyles["command-line-text"]} data-start={0}>
           {value.slice(0, cursor)}
         </span>
-        <span className={styles["command-line-cursor"]} />
-        <span className={styles["command-line-selected"]} data-start={cursor}>
+        <span className={commandLineStyles["command-line-cursor"]} />
+        <span className={commandLineStyles["command-line-selected"]} data-start={cursor}>
           {value.slice(cursor, anchor)}
         </span>
-        <span className={styles["command-line-text"]} data-start={anchor}>
+        <span className={commandLineStyles["command-line-text"]} data-start={anchor}>
           {value.slice(anchor)}
         </span>
       </>
@@ -367,14 +368,14 @@ export function CommandLine() {
     // cursor at end of selection
     inputContent = (
       <>
-        <span className={styles["command-line-text"]} data-start={0}>
+        <span className={commandLineStyles["command-line-text"]} data-start={0}>
           {value.slice(0, anchor)}
         </span>
-        <span className={styles["command-line-selected"]} data-start={anchor}>
+        <span className={commandLineStyles["command-line-selected"]} data-start={anchor}>
           {value.slice(anchor, cursor)}
         </span>
-        <span className={styles["command-line-cursor"]} />
-        <span className={styles["command-line-text"]} data-start={cursor}>
+        <span className={commandLineStyles["command-line-cursor"]} />
+        <span className={commandLineStyles["command-line-text"]} data-start={cursor}>
           {value.slice(cursor)}
         </span>
       </>
@@ -382,9 +383,9 @@ export function CommandLine() {
   }
 
   return (
-    <div className={styles["command-line"]}>
-      <span className={styles["command-line-prompt"]}>{promptLabel}&gt;</span>
-      <span ref={inputRef} className={styles["command-line-input"]} onMouseDown={handleMouseDown}>
+    <div className={commandLineStyles["command-line"]}>
+      <span className={commandLineStyles["command-line-prompt"]}>{promptLabel}&gt;</span>
+      <span ref={inputRef} className={commandLineStyles["command-line-input"]} onMouseDown={handleMouseDown}>
         {inputContent}
       </span>
     </div>

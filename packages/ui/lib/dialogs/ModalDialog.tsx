@@ -1,8 +1,8 @@
 import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
+import { cx } from "@/utils/cssModules";
 import { useRef } from "react";
-import styles from "../styles/dialogs.module.css";
-import { cx } from "../utils/cssModules";
 import { SmartLabel } from "./dialogHotkeys";
+import styles from "./dialogs.module.css";
 import { OverlayDialog } from "./OverlayDialog";
 
 interface ModalButton {

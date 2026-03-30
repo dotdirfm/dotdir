@@ -1,4 +1,5 @@
 import { loadedExtensionsAtom, showExtensionsAtom } from "@/atoms";
+import { OverlayDialog } from "@/dialogs/OverlayDialog";
 import type { ExtensionInstallProgressEvent } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
@@ -20,12 +21,11 @@ import {
   searchVSCodeMarketplace,
 } from "@/features/marketplace/vscodeMarketplace";
 import { activeColorThemeAtom, activeIconThemeAtom, useUserSettings } from "@/features/settings/useUserSettings";
+import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { OverlayDialog } from "../dialogs/OverlayDialog";
-import styles from "../styles/extensions.module.css";
-import { cx } from "../utils/cssModules";
+import styles from "./ExtensionsPanel.module.css";
 
 /** Extract a message from Tauri invoke errors (plain {errno,message} objects) or Error instances. */
 function errMsg(err: unknown): string {

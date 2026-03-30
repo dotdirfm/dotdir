@@ -4,67 +4,6 @@
   overflow: hidden;
 }
 
-.command-line {
-  display: flex;
-  align-items: center;
-  background: #11131a;
-  padding: 0 4px;
-  height: 23px;
-  min-height: 0;
-  flex-shrink: 0;
-  font-family: Menlo, Monaco, "Courier New", monospace;
-  font-size: 13px;
-  color: #d7dae0;
-  overflow: hidden;
-}
-
-.command-line-prompt {
-  color: #8b9fc2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 40%;
-  flex-shrink: 0;
-  margin-right: 8px;
-  font-weight: 600;
-}
-
-.command-line-input {
-  flex: 1;
-  min-width: 0;
-  white-space: pre;
-  overflow: hidden;
-}
-
-.command-line-text {
-  color: #d7dae0;
-}
-
-.command-line-cursor {
-  display: inline-block;
-  width: 0;
-  overflow: visible;
-  height: 15px;
-  position: relative;
-  vertical-align: text-bottom;
-  pointer-events: none;
-}
-
-.command-line-cursor::after {
-  content: "";
-  position: absolute;
-  left: 0.5px;
-  top: 0;
-  width: 1px;
-  height: 100%;
-  background-color: #f5f7ff;
-}
-
-.command-line-selected {
-  background-color: rgba(100, 150, 255, 0.4);
-  color: #fff;
-}
-
 .terminal-background {
   z-index: 0;
   grid-row: 1;

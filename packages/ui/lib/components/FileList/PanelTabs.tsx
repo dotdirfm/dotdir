@@ -1,22 +1,8 @@
+import { PanelTab } from "@/entities/tab/model/types";
+import styles from "@/styles/panels.module.css";
+import { cx } from "@/utils/cssModules";
 import { basename } from "@/utils/path";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import styles from "../../styles/panels.module.css";
-import { cx } from "../../utils/cssModules";
-
-export type PanelTab =
-  | { id: string; type: "filelist"; path: string }
-  | {
-      id: string;
-      type: "preview";
-      path: string;
-      name: string;
-      size: number;
-      isTemp: boolean;
-      dirty?: boolean;
-      mode?: "viewer" | "editor";
-      langId?: string;
-      sourcePanel?: "left" | "right";
-    };
 
 interface PanelTabsProps {
   tabs: PanelTab[];

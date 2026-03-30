@@ -1,7 +1,7 @@
-import type { PanelTab } from "@/components/FileList/PanelTabs";
 import { OPPOSITE_PANEL, PANEL_SETTINGS_KEY, PANEL_SIDES } from "@/entities/panel/model/panelSide";
 import type { PanelSide } from "@/entities/panel/model/types";
 import { createFilelistTab, genTabId, leftActiveTabIdAtom, leftTabsAtom, rightActiveTabIdAtom, rightTabsAtom } from "@/entities/tab/model/tabsAtoms";
+import { PanelTab } from "@/entities/tab/model/types";
 import { useBridge } from "@/features/bridge/useBridge";
 import { DotDirUiState, PanelPersistedState, PersistedTab } from "@/features/ui-state/types";
 import { flushUiState, initUiState, updateUiState } from "@/features/ui-state/uiState";

@@ -1,8 +1,8 @@
 import { commandRegistry, type Command, type Keybinding } from "@/features/commands/commands";
 import { focusContext } from "@/focusContext";
+import { cx } from "@/utils/cssModules";
 import { useCallback, useEffect, useState } from "react";
-import styles from "../styles/action-bar.module.css";
-import { cx } from "../utils/cssModules";
+import styles from "./ActionBar.module.css";
 
 interface ActionBarItem {
   fKey: number;

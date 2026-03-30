@@ -1,6 +1,6 @@
 import { marked } from "marked";
 import { useEffect, useRef } from "react";
-import styles from "../styles/help-dialog.module.css";
+import styles from "./dialogs.module.css";
 import { OverlayDialog } from "./OverlayDialog";
 
 interface HelpDialogProps {
