@@ -417,14 +417,14 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
       getEnv: () => rpc("utils.getEnv", {}) as Promise<Record<string, string>>,
     },
 
-    theme: {
+    systemTheme: {
       get: () =>
         Promise.resolve(
           window.matchMedia("(prefers-color-scheme: dark)").matches
             ? "dark"
             : "light",
         ),
-      onChange(callback: (theme: string) => void): () => void {
+      onChange(callback: (theme: "light" | "dark") => void): () => void {
         const mq = window.matchMedia("(prefers-color-scheme: dark)");
         const handler = (e: MediaQueryListEvent) =>
           callback(e.matches ? "dark" : "light");

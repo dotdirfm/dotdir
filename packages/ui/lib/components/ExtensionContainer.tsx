@@ -290,8 +290,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       setDirty(dirty: boolean): void {
         onDirtyChangeRef.current?.(dirty);
       },
-      async getTheme(): Promise<string> {
-        return bridge.theme.get();
+      async getTheme(): Promise<"light" | "dark"> {
+        return bridge.systemTheme.get();
       },
       getColorTheme(): ColorThemeData | null {
         return getActiveColorThemeData();

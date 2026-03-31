@@ -41,6 +41,9 @@ export interface ColorThemeData {
   tokenColors?: unknown[];
 }
 
+export type SystemThemeKind = "light" | "dark";
+export type ThemePreference = SystemThemeKind | "system";
+
 export interface HostApi {
   readFile(path: string): Promise<ArrayBuffer>;
   readFileText(path: string): Promise<string>;
@@ -49,7 +52,7 @@ export interface HostApi {
   onFileChange(callback: () => void): () => void;
   writeFile(path: string, content: string): Promise<void>;
   setDirty?(dirty: boolean): void;
-  getTheme(): Promise<string>;
+  getTheme(): Promise<SystemThemeKind>;
   getColorTheme(): ColorThemeData | null;
   onThemeChange(callback: (theme: ColorThemeData) => void): () => void;
   onClose(): void;

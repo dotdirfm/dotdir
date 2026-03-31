@@ -1,4 +1,6 @@
 export type Unsubscribe = () => void;
+export type SystemThemeKind = "light" | "dark";
+export type ThemePreference = SystemThemeKind | "system";
 
 export type EntryKind =
   | "file"
@@ -195,9 +197,9 @@ export interface Bridge {
     getHomePath(): Promise<string>;
     getEnv(): Promise<Record<string, string>>;
   };
-  theme: {
-    get(): Promise<string>;
-    onChange(callback: (theme: string) => void): Unsubscribe;
+  systemTheme: {
+    get(): Promise<SystemThemeKind>;
+    onChange(callback: (theme: SystemThemeKind) => void): Unsubscribe;
   };
   extensions: {
     install: {

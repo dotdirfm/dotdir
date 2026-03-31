@@ -322,13 +322,13 @@ export const tauriBridge: Bridge = {
       return invoke<Record<string, string>>("get_env");
     },
   },
-  theme: {
-    async get(): Promise<string> {
+  systemTheme: {
+    async get(): Promise<"light" | "dark"> {
       return window.matchMedia("(prefers-color-scheme: dark)").matches
         ? "dark"
         : "light";
     },
-    onChange(callback: (theme: string) => void): () => void {
+    onChange(callback: (theme: "light" | "dark") => void): () => void {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
       const handler = (e: MediaQueryListEvent) =>
         callback(e.matches ? "dark" : "light");
