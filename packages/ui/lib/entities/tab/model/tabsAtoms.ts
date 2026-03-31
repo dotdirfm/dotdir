@@ -1,5 +1,6 @@
 import type { PanelSide } from "@/entities/panel/model/types";
 import { atom } from "jotai";
+import { dirname, join } from "@/utils/path";
 import type { FileListTab, PanelTab } from "./types";
 
 let nextTabId = 0;
@@ -8,7 +9,7 @@ export function genTabId(): string {
 }
 
 export function createFilelistTab(path: string): FileListTab {
-  return { id: genTabId(), type: "filelist", path, entries: [] };
+  return { id: genTabId(), type: "filelist", path, entries: [], selectedEntryNames: [] };
 }
 
 export function createPreviewTab(
@@ -63,3 +64,35 @@ export const activeTabIndexAtom = atom((get) => (get(activePanelSideAtom) === "l
 
 export const activeTabAtom = atom((get) => (get(activePanelSideAtom) === "left" ? get(leftActiveTabAtom) : get(rightActiveTabAtom)));
 export const inactiveTabAtom = atom((get) => (get(activePanelSideAtom) === "left" ? get(rightActiveTabAtom) : get(leftActiveTabAtom)));
+
+export const activePathAtom = atom((get) => {
+  const tab = get(activeTabAtom);
+  if (!tab) return "";
+  if (tab.type === "preview") {
+    return join(tab.path, tab.name);
+  }
+  if (!tab.activeEntryName) {
+    return tab.path;
+  }
+  if (tab.activeEntryName === "..") {
+    return dirname(tab.path);
+  }
+  const entry = tab.entries.find((item) => item.name === tab.activeEntryName);
+  return ((entry?.path as string | undefined) ?? join(tab.path, tab.activeEntryName));
+});
+
+export const activeSelectedPathsAtom = atom((get) => {
+  const tab = get(activeTabAtom);
+  if (!tab) return [] as string[];
+  if (tab.type === "preview") {
+    return [join(tab.path, tab.name)];
+  }
+  const names = tab.selectedEntryNames?.length ? tab.selectedEntryNames : tab.activeEntryName ? [tab.activeEntryName] : [];
+  return names.map((name) => {
+    if (name === "..") {
+      return dirname(tab.path);
+    }
+    const entry = tab.entries.find((item) => item.name === name);
+    return ((entry?.path as string | undefined) ?? join(tab.path, name));
+  });
+});

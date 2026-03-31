@@ -13,7 +13,7 @@ interface FileListTabPaneProps {
   selectionKey?: number;
   requestedActiveName?: string;
   requestedTopmostName?: string;
-  onStateChange?: (selectedName: string | undefined, topmostName: string | undefined) => void;
+  onStateChange?: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
   onActivatePanelFocus: () => void;
   onActivePanelChange: (panel: FileListPanelController) => void;
 }
@@ -34,6 +34,7 @@ export function FileListTabPane({
 }: FileListTabPaneProps) {
   const panel = useFileListPanel();
   const lastRequestedPathRef = useRef<string | null>(null);
+  const lastReportedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!path) return;
@@ -43,8 +44,29 @@ export function FileListTabPane({
   }, [path, panel.navigateTo]);
 
   useEffect(() => {
+    if (!visible) return;
+    const signature = [
+      panel.state.path,
+      panel.state.activeEntryName ?? "",
+      panel.state.topmostEntryName ?? "",
+      panel.state.selectedEntryNames?.join("\0") ?? "",
+      String(panel.state.entries.length),
+      panel.navigating ? "1" : "0",
+    ].join("|");
+    if (lastReportedRef.current === signature) return;
+    lastReportedRef.current = signature;
     onActivePanelChange(panel);
-  }, [panel, onActivePanelChange]);
+  }, [
+    visible,
+    panel,
+    panel.navigating,
+    panel.state.path,
+    panel.state.activeEntryName,
+    panel.state.topmostEntryName,
+    panel.state.selectedEntryNames,
+    panel.state.entries.length,
+    onActivePanelChange,
+  ]);
 
   return (
     <div

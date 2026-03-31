@@ -6,6 +6,7 @@
  */
 
 import { useBridge } from "@/features/bridge/useBridge";
+import { useCallback } from "react";
 import { getCachedIconUrl, loadIcons } from "./iconCache";
 import { useVscodeIconTheme } from "./vscodeIconTheme";
 
@@ -98,7 +99,7 @@ export interface ResolvedIcon {
 export function useResolveIcon() {
   const vscodeIconTheme = useVscodeIconTheme();
 
-  return (
+  return useCallback((
     name: string,
     isDirectory: boolean,
     isExpanded: boolean,
@@ -141,7 +142,7 @@ export function useResolveIcon() {
 
     // Fallback to default embedded icons
     return { path: "_default", url: fallbackUrl, fallbackUrl };
-  };
+  }, [vscodeIconTheme]);
 }
 
 /**
@@ -151,13 +152,13 @@ export function useResolveIcon() {
 export function useLoadIconsForPaths() {
   const vscodeIconTheme = useVscodeIconTheme();
   const bridge = useBridge();
-  return async (paths: string[]): Promise<void> => {
+  return useCallback(async (paths: string[]): Promise<void> => {
     if (currentThemeType === "vscode" && vscodeIconTheme.isLoaded()) {
       await vscodeIconTheme.preloadIcons(paths);
     } else {
       await loadIcons(bridge, paths);
     }
-  };
+  }, [bridge, vscodeIconTheme]);
 }
 
 /**
@@ -165,7 +166,7 @@ export function useLoadIconsForPaths() {
  */
 export function useGetCachedIcon() {
   const vscodeIconTheme = useVscodeIconTheme();
-  return (path: string): string | null => {
+  return useCallback((path: string): string | null => {
     // Handle default embedded icons
     if (path === "_default_folder") return DEFAULT_ICONS.folder;
     if (path === "_default_folder_open") return DEFAULT_ICONS.folderOpen;
@@ -175,5 +176,5 @@ export function useGetCachedIcon() {
       return vscodeIconTheme.getCachedIcon(path);
     }
     return getCachedIconUrl(path) ?? null;
-  };
+  }, [vscodeIconTheme]);
 }

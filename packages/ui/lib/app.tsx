@@ -397,18 +397,32 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   useWorkspacePersistenceProcess();
 
   const handlePanelStateChange = useCallback(
-    (side: "left" | "right", selectedName: string | undefined, topmostName: string | undefined) => {
+    (side: "left" | "right", selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => {
       const activeId = side === "left" ? leftActiveTabIdRef.current : rightActiveTabIdRef.current;
       const setTabs = side === "left" ? setLeftTabs : setRightTabs;
       const selectedRef = side === "left" ? leftSelectedNameRef : rightSelectedNameRef;
       selectedRef.current = selectedName;
-      setTabs((prev) =>
-        prev.map((tab) =>
-          tab.id === activeId && tab.type === "filelist"
-            ? { ...tab, activeEntryName: selectedName, topmostEntryName: topmostName, entries: tab.entries }
-            : tab,
-        ),
-      );
+      setTabs((prev) => {
+        const index = prev.findIndex((tab) => tab.id === activeId);
+        if (index < 0) return prev;
+        const tab = prev[index];
+        if (!tab || tab.type !== "filelist") return prev;
+        const currentSelected = tab.selectedEntryNames ?? [];
+        const sameSelected =
+          currentSelected.length === selectedNames.length && currentSelected.every((name, idx) => name === selectedNames[idx]);
+        if (tab.activeEntryName === selectedName && tab.topmostEntryName === topmostName && sameSelected) {
+          return prev;
+        }
+        const next = [...prev];
+        next[index] = {
+          ...tab,
+          activeEntryName: selectedName,
+          topmostEntryName: topmostName,
+          selectedEntryNames: selectedNames,
+          entries: tab.entries,
+        };
+        return next;
+      });
     },
     [setLeftTabs, setRightTabs],
   );
@@ -694,7 +708,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
                 selectionKey={selectionKey}
                 requestedActiveName={leftRequestedCursor}
                 requestedTopmostName={leftRequestedTopmostName}
-                onStateChange={(sel, top) => handlePanelStateChange("left", sel, top)}
+                onStateChange={(sel, top, selected) => handlePanelStateChange("left", sel, top, selected)}
                 onActivePanelChange={handleLeftPanelChange}
               />
               <PanelGroup
@@ -702,7 +716,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
                 selectionKey={selectionKey}
                 requestedActiveName={rightRequestedCursor}
                 requestedTopmostName={rightRequestedTopmostName}
-                onStateChange={(sel, top) => handlePanelStateChange("right", sel, top)}
+                onStateChange={(sel, top, selected) => handlePanelStateChange("right", sel, top, selected)}
                 onActivePanelChange={handleRightPanelChange}
               />
             </div>

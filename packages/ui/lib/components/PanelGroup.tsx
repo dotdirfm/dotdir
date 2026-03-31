@@ -30,7 +30,7 @@ interface PanelGroupProps {
   selectionKey?: number;
   requestedActiveName?: string;
   requestedTopmostName?: string;
-  onStateChange: (selectedName: string | undefined, topmostName: string | undefined) => void;
+  onStateChange: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
   onActivePanelChange: (panel: FileListPanelController) => void;
 }
 

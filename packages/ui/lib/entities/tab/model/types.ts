@@ -7,6 +7,7 @@ export type FileListTabState = {
   entries: FsNode[];
   topmostEntryName?: string;
   activeEntryName?: string;
+  selectedEntryNames?: string[];
 };
 
 export type FileListTab = FileListTabState & {
