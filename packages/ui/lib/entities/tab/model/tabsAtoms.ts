@@ -1,14 +1,14 @@
 import type { PanelSide } from "@/entities/panel/model/types";
 import { atom } from "jotai";
-import type { PanelTab } from "./types";
+import type { FileListTab, PanelTab } from "./types";
 
 let nextTabId = 0;
 export function genTabId(): string {
   return `tab-${++nextTabId}`;
 }
 
-export function createFilelistTab(path: string): PanelTab {
-  return { id: genTabId(), type: "filelist", path };
+export function createFilelistTab(path: string): FileListTab {
+  return { id: genTabId(), type: "filelist", path, entries: [] };
 }
 
 export function createPreviewTab(
@@ -60,5 +60,6 @@ export const rightActiveTabAtom = atom((get) => {
 export const activeTabsAtom = atom((get) => (get(activePanelSideAtom) === "left" ? get(leftTabsAtom) : get(rightTabsAtom)));
 export const activeTabIdAtom = atom((get) => (get(activePanelSideAtom) === "left" ? get(leftActiveTabIdAtom) : get(rightActiveTabIdAtom)));
 export const activeTabIndexAtom = atom((get) => (get(activePanelSideAtom) === "left" ? get(leftActiveIndexAtom) : get(rightActiveIndexAtom)));
+
 export const activeTabAtom = atom((get) => (get(activePanelSideAtom) === "left" ? get(leftActiveTabAtom) : get(rightActiveTabAtom)));
 export const inactiveTabAtom = atom((get) => (get(activePanelSideAtom) === "left" ? get(rightActiveTabAtom) : get(leftActiveTabAtom)));

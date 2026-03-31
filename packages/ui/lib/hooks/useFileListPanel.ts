@@ -8,6 +8,7 @@
 
 import { osThemeAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
+import { FileListTabState } from "@/entities/tab/model/types";
 import { Bridge, FsChangeType, FsEntry } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
@@ -17,6 +18,7 @@ import { languageRegistry } from "@/languageRegistry";
 import { buildContainerPath, isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, isFileExecutable, isRootPath, join } from "@/utils/path";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
+import { FsProviderEntry } from "@dotdirfm/extension-api";
 import type { LayeredResolver } from "fss-lang";
 import { FsNode } from "fss-lang";
 import { createFsNode } from "fss-lang/helpers";
@@ -107,39 +109,29 @@ function getAncestors(dirPath: string): string[] {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface PanelState {
-  currentPath: string;
-  parentNode?: FsNode;
-  entries: FsNode[];
-  /** Name of the entry to focus when navigating to a directory (e.g. the archive file when leaving a ZIP). */
-  requestedCursor?: string;
-}
-
-export interface PanelController extends PanelState {
-  navigateTo: (path: string, force?: boolean, cursorName?: string) => Promise<void>;
+export interface FileListPanelController {
+  state: FileListTabState;
+  navigateTo: (path: string) => Promise<void>;
   navigating: boolean;
   cancelNavigation: () => void;
   refresh: () => void;
   resolver: LayeredResolver;
 }
 
-export const emptyPanel: PanelState = {
-  currentPath: "",
-  parentNode: undefined,
-  entries: [],
-  requestedCursor: undefined,
-};
-
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-export function usePanel() {
+export function useFileListPanel() {
   const { showError } = useDialog();
   const bridge = useBridge();
   const theme = useAtomValue(osThemeAtom);
-  const [state, setState] = useState<PanelState>(emptyPanel);
   const [navigating, setNavigating] = useState(false);
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navAbortRef = useRef<AbortController | null>(null);
+
+  const [state, setState] = useState<FileListTabState>();
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const resolver = useMemo(() => createPanelResolver(theme), [theme]);
   const resolverRef = useRef<LayeredResolver>(resolver);
   resolverRef.current = resolver;
@@ -154,8 +146,8 @@ export function usePanel() {
   // When the OS theme changes, resolver is a new object — re-navigate to re-sync FSS layers.
   // currentPathRef is used instead of state to avoid a stale closure; skips mount (path is "").
   useEffect(() => {
-    if (currentPathRef.current) navigateTo(currentPathRef.current, true);
-  }, [resolver]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (currentPathRef.current) refresh();
+  }, [resolver]);
 
   const setupWatches = useCallback((dirPath: string) => {
     const observer = observerRef.current!;
@@ -169,9 +161,9 @@ export function usePanel() {
   }, []);
 
   const navigateTo = useCallback(
-    async (path: string, force = false, cursorName?: string) => {
+    async (path: string) => {
       // Skip if already navigating to this path
-      if (!force && currentPathRef.current === path && navAbortRef.current) {
+      if (currentPathRef.current === path && navAbortRef.current) {
         return;
       }
       navAbortRef.current?.abort();
@@ -183,6 +175,19 @@ export function usePanel() {
         const work = (async () => {
           currentPathRef.current = path;
 
+          const updateState = (entry: FsNode | undefined, entries: FsNode[]) => {
+            console.error("***", stateRef.current, entry, entries);
+            if (!stateRef.current) {
+              setState({ path, entry, entries });
+            } else if (stateRef.current.parent?.path === path) {
+              setState({ ...stateRef.current.parent, entries });
+            } else if (stateRef.current.path === dirname(path)) {
+              setState({ path, entry, parent: stateRef.current, entries });
+            } else {
+              setState({ path, entry, entries });
+            }
+          };
+
           if (isContainerPath(path)) {
             // ── Container path: delegate listing to the fsProvider extension ──
             const { containerFile: hostFile, innerPath } = parseContainerPath(path);
@@ -190,7 +195,7 @@ export function usePanel() {
             if (!providerMatch) {
               throw new Error(`No fsProvider registered for "${basename(hostFile)}"`);
             }
-            let entries: import("../features/extensions/extensionApi").FsProviderEntry[];
+            let entries: FsProviderEntry[];
             if (providerMatch.contribution.runtime === "backend" && bridge.fsProvider) {
               const wasmPath = join(providerMatch.extensionDirPath, providerMatch.contribution.entry);
               entries = await bridge.fsProvider.listEntries(wasmPath, hostFile, innerPath);
@@ -203,7 +208,7 @@ export function usePanel() {
             }
 
             const parent = buildParentChain(path);
-            const nodes: FsNode[] = entries.map((entry) => {
+            const nodes = entries.map((entry) => {
               const entryInner = (innerPath === "/" ? "" : innerPath) + "/" + entry.name;
               return createFsNode({
                 name: entry.name,
@@ -221,12 +226,7 @@ export function usePanel() {
                 parent,
               });
             });
-            setState({
-              currentPath: path,
-              parentNode: parent,
-              entries: nodes,
-              requestedCursor: cursorName,
-            });
+            updateState(parent, nodes);
             // No filesystem watches inside containers.
           } else {
             // ── Normal filesystem path ────────────────────────────────────────
@@ -235,14 +235,9 @@ export function usePanel() {
             const parent = buildParentChain(path);
             const rawEntries = await bridge.fs.entries(path);
             if (abort.signal.aborted) return;
-            const nodes: FsNode[] = rawEntries.map((entry) => entryToFsNode(entry, path, parent));
+            const nodes = rawEntries.map((entry) => entryToFsNode(entry, path, parent));
             if (abort.signal.aborted) return;
-            setState({
-              currentPath: path,
-              parentNode: parent,
-              entries: nodes,
-              requestedCursor: cursorName,
-            });
+            updateState(parent, nodes);
             setupWatches(path);
           }
         })();
@@ -356,12 +351,12 @@ export function usePanel() {
   navigateToRef.current = navigateTo;
 
   const refresh = useCallback(() => {
-    navigateToRef.current(currentPathRef.current, true);
+    navigateToRef.current(currentPathRef.current);
   }, []);
 
   return useMemo(
     () => ({
-      ...state,
+      state: state ?? { path: currentPathRef.current, entries: [] },
       navigateTo,
       navigating,
       cancelNavigation,

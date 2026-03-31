@@ -14,10 +14,9 @@ import {
 } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { showHiddenAtom } from "@/features/settings/useUserSettings";
-import type { PanelPersistedState } from "@/features/ui-state/types";
 import { getFileListHandlers } from "@/fileListHandlers";
 import { focusContext } from "@/focusContext";
-import { type PanelController } from "@/hooks/usePanel";
+import { type FileListPanelController } from "@/hooks/useFileListPanel";
 import { setActivePanelGroupHandlers } from "@/panelGroupHandlers";
 import styles from "@/styles/panels.module.css";
 import { cx } from "@/utils/cssModules";
@@ -28,25 +27,14 @@ import { FileListTabPane } from "./FileListTabPane";
 
 interface PanelGroupProps {
   side: PanelSide;
-  onRememberExpectedTerminalCwd: (path: string) => void;
   selectionKey?: number;
   requestedActiveName?: string;
   requestedTopmostName?: string;
-  initialPanelState?: PanelPersistedState;
   onStateChange: (selectedName: string | undefined, topmostName: string | undefined) => void;
-  onActivePanelChange: (panel: PanelController) => void;
+  onActivePanelChange: (panel: FileListPanelController) => void;
 }
 
-export function PanelGroup({
-  side,
-  onRememberExpectedTerminalCwd,
-  selectionKey,
-  requestedActiveName,
-  requestedTopmostName,
-  initialPanelState,
-  onStateChange,
-  onActivePanelChange,
-}: PanelGroupProps) {
+export function PanelGroup({ side, selectionKey, requestedActiveName, requestedTopmostName, onStateChange, onActivePanelChange }: PanelGroupProps) {
   const activePanel = useAtomValue(activePanelSideAtom);
   const setActivePanel = useSetAtom(activePanelSideAtom);
   const { showDialog } = useDialog();
@@ -56,8 +44,6 @@ export function PanelGroup({
   const [activeTabId, setActiveTabId] = useAtom(side === "left" ? leftActiveTabIdAtom : rightActiveTabIdAtom);
   const activeIndex = useAtomValue(side === "left" ? leftActiveIndexAtom : rightActiveIndexAtom);
   const activeTab = tabs[activeIndex];
-
-  const initialTabPersisted = initialPanelState?.tabs?.[activeIndex];
 
   const showHidden = useAtomValue(showHiddenAtom);
   const [activeFileListNavigating, setActiveFileListNavigating] = useState(false);
@@ -129,7 +115,7 @@ export function PanelGroup({
   }, [activeTab?.type]);
 
   const handleActiveFileListChange = useCallback(
-    (panel: PanelController) => {
+    (panel: FileListPanelController) => {
       setActiveFileListNavigating(panel.navigating);
       onActivePanelChange(panel);
     },
@@ -311,14 +297,9 @@ export function PanelGroup({
                 visible={isVisible}
                 focused={active && isVisible}
                 showHidden={showHidden}
-                onRememberExpectedTerminalCwd={onRememberExpectedTerminalCwd}
                 selectionKey={selectionKey}
-                requestedActiveName={
-                  isVisible ? (requestedActiveName ?? (initialTabPersisted?.type === "filelist" ? initialTabPersisted.selectedName : undefined)) : undefined
-                }
-                requestedTopmostName={
-                  isVisible ? (requestedTopmostName ?? (initialTabPersisted?.type === "filelist" ? initialTabPersisted.topmostName : undefined)) : undefined
-                }
+                requestedActiveName={isVisible ? requestedActiveName : undefined}
+                requestedTopmostName={isVisible ? requestedTopmostName : undefined}
                 onStateChange={isVisible ? onStateChange : undefined}
                 onActivatePanelFocus={activatePanelFocus}
                 onActivePanelChange={handleActiveFileListChange}

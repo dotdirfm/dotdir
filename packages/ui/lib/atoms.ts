@@ -14,9 +14,7 @@ export const terminalProfilesLoadedAtom = atom(false);
 export const osThemeAtom = atom<ThemeKind>("dark");
 
 export const panelsVisibleAtom = atom(true);
-export const promptActiveAtom = atom(true);
 export const terminalFocusRequestKeyAtom = atom(0);
-export const requestedTerminalCwdAtom = atom<string | null>(null);
 
 export const commandPaletteOpenAtom = atom(false);
 export const viewerFileAtom = atom<{ path: string; name: string; size: number; panel: PanelSide } | null>(null);

@@ -1,12 +1,20 @@
-type FileListTab = {
-  id: string;
-  type: "filelist";
+import { FsNode } from "fss-lang";
+
+export type FileListTabState = {
   path: string;
+  parent?: FileListTabState;
+  entry?: FsNode;
+  entries: FsNode[];
+  topmostEntryName?: string;
+  activeEntryName?: string;
 };
 
-type PreviewTab = {
+export type FileListTab = FileListTabState & {
   id: string;
-  type: "preview";
+  type: "filelist";
+};
+
+export type PreviewTabState = {
   path: string;
   name: string;
   size: number;
@@ -15,6 +23,11 @@ type PreviewTab = {
   mode?: "viewer" | "editor";
   langId?: string;
   sourcePanel?: "left" | "right";
+};
+
+export type PreviewTab = PreviewTabState & {
+  id: string;
+  type: "preview";
 };
 
 export type PanelTab = FileListTab | PreviewTab;

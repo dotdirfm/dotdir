@@ -20,11 +20,10 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
 
 interface UseExtensionHostOptions {
-  settingsLoaded: boolean;
   onRefreshPanels: () => void;
 }
 
-export function useExtensionHost({ settingsLoaded, onRefreshPanels }: UseExtensionHostOptions): void {
+export function useExtensionHost({ onRefreshPanels }: UseExtensionHostOptions): void {
   const bridge = useBridge();
   const extensionHost = useExtensionHostClient();
   const activeIconTheme = useAtomValue(activeIconThemeAtom);
@@ -114,9 +113,7 @@ export function useExtensionHost({ settingsLoaded, onRefreshPanels }: UseExtensi
     }
   }, [activeColorTheme]);
 
-  // Extension host lifecycle — gated on settings being loaded
   useEffect(() => {
-    if (!settingsLoaded) return;
     languageRegistry.initialize();
 
     const registerLanguages = async (exts: LoadedExtension[]) => {
@@ -258,5 +255,5 @@ export function useExtensionHost({ settingsLoaded, onRefreshPanels }: UseExtensi
       extensionContributionDisposersRef.current = [];
       extensionHost.dispose();
     };
-  }, [settingsLoaded, ensureActiveIconThemeFssLoaded, setLoadedExtensions, setResolvedProfiles, setTerminalProfilesLoaded, setThemesReady]);
+  }, [ensureActiveIconThemeFssLoaded, setLoadedExtensions, setResolvedProfiles, setTerminalProfilesLoaded, setThemesReady]);
 }

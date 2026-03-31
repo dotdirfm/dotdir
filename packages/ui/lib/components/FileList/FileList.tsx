@@ -1,5 +1,6 @@
 import { ActionQueue } from "@/actionQueue";
 import type { PanelSide } from "@/entities/panel/model/types";
+import { FileListTabState } from "@/entities/tab/model/types";
 import { commandRegistry } from "@/features/commands/commands";
 import { onIconThemeChange, useGetCachedIcon, useLoadIconsForPaths, useResolveIcon } from "@/features/file-icons/iconResolver";
 import { getFileOperationHandlers } from "@/features/file-ops/model/fileOperationHandlers";
@@ -7,6 +8,7 @@ import { setActiveFileListHandlers, setFileListHandlers } from "@/fileListHandle
 import { resolveEntryStyle } from "@/fss";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import type { ResolvedEntryStyle } from "@/types";
+import { binarySearch } from "@/utils/binarySearch";
 import { cx } from "@/utils/cssModules";
 import { dirname, join } from "@/utils/path";
 import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
@@ -15,15 +17,15 @@ import { FsNode } from "fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
+import { FileInfoFooter } from "./FileInfoFooter";
 import styles from "./FileList.module.css";
 
 const ROW_HEIGHT = 26;
 
 interface FileListProps {
   side: PanelSide;
-  currentPath: string;
-  parentNode?: FsNode;
-  entries: FsNode[];
+  state: FileListTabState;
+  showHidden: boolean;
   onNavigate: (path: string) => Promise<void>;
   selectionKey?: number;
   active: boolean;
@@ -57,22 +59,14 @@ function formatSize(sizeValue: unknown): string {
   return `${(size / (1024 * 1024 * 1024)).toFixed(1)} G`;
 }
 
-function formatDate(ms: number): string {
-  if (!ms) return "";
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
 export const FileList = memo(function FileList({
   side,
-  currentPath,
-  parentNode,
-  entries,
+  state,
+  showHidden,
   onNavigate,
   selectionKey,
   active,
@@ -81,6 +75,8 @@ export const FileList = memo(function FileList({
   requestedTopmostName,
   onStateChange,
 }: FileListProps) {
+  const entries = useMemo(() => (showHidden ? state.entries : state.entries.filter((e) => !e.meta.hidden)), [showHidden, state.entries]);
+
   const [actionQueue] = useState(() => new ActionQueue());
   const rootRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -97,15 +93,15 @@ export const FileList = memo(function FileList({
   selectedNamesRef.current = selectedNames;
   /** true = selecting, false = deselecting, undefined = no shift selection in progress */
   const prevSelectRef = useRef<boolean | undefined>(undefined);
-  const prevPathRef = useRef(currentPath);
+  const prevPathRef = useRef(state.path);
   const navStackRef = useRef<NavigationState[]>([]);
 
   const activeIndexRef = useRef(activeIndex);
   activeIndexRef.current = activeIndex;
   const topmostIndexRef = useRef(topmostIndex);
   topmostIndexRef.current = topmostIndex;
-  const currentPathRef = useRef(currentPath);
-  currentPathRef.current = currentPath;
+  const currentPathRef = useRef(state.path);
+  currentPathRef.current = state.path;
   const onNavigateRef = useRef(onNavigate);
   onNavigateRef.current = onNavigate;
 
@@ -132,7 +128,6 @@ export const FileList = memo(function FileList({
 
   const sorted = useMemo(() => {
     const withStyle = entries.map((entry) => {
-      entry = { ...entry, parent: parentNode };
       const style = resolveEntryStyle(resolver, entry);
       const isDir = entry.type === "folder";
       const resolved = resolveIcon(entry.name, isDir, false, false, entry.lang, style.icon);
@@ -149,12 +144,12 @@ export const FileList = memo(function FileList({
       return a.entry.name.localeCompare(b.entry.name);
     });
     return withStyle;
-  }, [entries, currentPath]);
+  }, [entries, state.path]);
 
   const displayEntries: DisplayEntry[] = useMemo(() => {
     const result: DisplayEntry[] = [];
-    if (parentNode) {
-      const expandedParentNode = { ...parentNode, stateFlags: 1 };
+    if (state.entry) {
+      const expandedParentNode = { ...state.entry, stateFlags: 1 };
       const style = resolveEntryStyle(resolver, expandedParentNode);
       const resolved = resolveIcon("..", true, true, false, "", style.icon);
       result.push({
@@ -166,7 +161,7 @@ export const FileList = memo(function FileList({
     }
     for (const item of sorted) result.push(item);
     return result;
-  }, [sorted, parentNode]);
+  }, [sorted, state.entry]);
 
   const displayEntriesRef = useRef(displayEntries);
   displayEntriesRef.current = displayEntries;
@@ -200,18 +195,18 @@ export const FileList = memo(function FileList({
 
   useEffect(() => {
     const prevPath = prevPathRef.current;
-    prevPathRef.current = currentPath;
+    prevPathRef.current = state.path;
 
-    if (prevPath === currentPath) {
+    if (prevPath === state.path) {
       setActiveIndex((i) => Math.min(i, displayEntries.length - 1));
       return;
     }
 
     // Navigating to parent - check if we have stored state
-    if (prevPath.startsWith(currentPath)) {
+    if (prevPath.startsWith(state.path)) {
       const stack = navStackRef.current;
       // Pop states until we find one for current path or stack is empty
-      while (stack.length > 0 && stack[stack.length - 1].path !== currentPath) {
+      while (stack.length > 0 && stack[stack.length - 1].path !== state.path) {
         stack.pop();
       }
       const savedState = stack.pop();
@@ -228,7 +223,7 @@ export const FileList = memo(function FileList({
       // Fallback: select the child folder we came from.
       // Strip the container-path separator (null byte) that may appear when prevPath
       // was a container root, e.g. "archive.zip\0" → "archive.zip".
-      const remainder = prevPath.slice(currentPath.length).replace(/^\//, "");
+      const remainder = prevPath.slice(state.path.length).replace(/^\//, "");
       // oxlint-disable-next-line no-control-regex
       const childName = remainder.split("/")[0].replace(/\0.*$/, "");
       if (childName) {
@@ -243,20 +238,22 @@ export const FileList = memo(function FileList({
 
     setActiveIndex(0);
     setTopmostIndex(0);
-  }, [currentPath, displayEntries]);
+  }, [state.path, displayEntries]);
 
   useEffect(() => {
     if (!requestedActiveName) return;
     const entries = displayEntriesRef.current;
-    const idx = entries.findIndex((d) => d.entry.name === requestedActiveName);
-    if (idx >= 0) setActiveIndex(idx);
+    let idx = binarySearch(entries, requestedActiveName, (item, target) => item.entry.name.localeCompare(target));
+    if (idx < 0) idx = ~idx;
+    setActiveIndex(idx);
   }, [requestedActiveName]);
 
   useEffect(() => {
     if (!requestedTopmostName) return;
     const entries = displayEntriesRef.current;
-    const idx = entries.findIndex((d) => d.entry.name === requestedTopmostName);
-    if (idx >= 0) setTopmostIndex(idx);
+    let idx = binarySearch(entries, requestedTopmostName, (item, target) => item.entry.name.localeCompare(target));
+    if (idx < 0) idx = ~idx;
+    setTopmostIndex(idx);
   }, [requestedTopmostName]);
 
   const onStateChangeRef = useRef(onStateChange);
@@ -333,7 +330,7 @@ export const FileList = memo(function FileList({
   useEffect(() => {
     setSelectedNames(new Set());
     prevSelectRef.current = undefined;
-  }, [currentPath, selectionKey]);
+  }, [state.path, selectionKey]);
 
   const navigateToEntry = useCallback(async (entry: FsNode): Promise<void> => {
     if (entry.name === "..") {
@@ -710,48 +707,6 @@ export const FileList = memo(function FileList({
   );
 
   const activeEntry = displayEntries[activeIndex];
-  const footerName = activeEntry?.entry.name ?? "";
-  const footerDate = activeEntry ? formatDate(Number(activeEntry.entry.meta.mtimeMs ?? 0)) : "";
-  const footerInfo = (() => {
-    if (!activeEntry) return "";
-    const entry = activeEntry.entry;
-    if (entry.name === "..") return "Up";
-    const kind: string = (entry.meta.entryKind as string | undefined) ?? (entry.type === "folder" ? "directory" : "file");
-    const nlink: number = (entry.meta.nlink as number | undefined) ?? 1;
-    switch (kind) {
-      case "directory":
-        return nlink > 1 ? `DIR [${nlink}]` : "DIR";
-      case "symlink":
-        return "";
-      case "block_device":
-        return "BLK DEV";
-      case "char_device":
-        return "CHR DEV";
-      case "named_pipe":
-        return "FIFO";
-      case "socket":
-        return "SOCK";
-      case "whiteout":
-        return "WHT";
-      case "door":
-        return "DOOR";
-      case "event_port":
-        return "EVT PORT";
-      case "unknown":
-        return "?";
-      default: {
-        const s = formatSize(entry.meta.size);
-        return nlink > 1 ? `${s} [${nlink}]` : s;
-      }
-    }
-  })();
-  const footerLink = (() => {
-    if (!activeEntry) return "";
-    const kind: string = (activeEntry.entry.meta.entryKind as string | undefined) ?? "";
-    if (kind !== "symlink") return "";
-    const target = activeEntry.entry.meta.linkTarget as string | undefined;
-    return `\u2192 ${target ?? "?"}`;
-  })();
 
   const totalFiles = useMemo(() => displayEntries.filter((d) => d.entry.type === "file").length, [displayEntries]);
   const totalSize = useMemo(
@@ -786,7 +741,7 @@ export const FileList = memo(function FileList({
       }}
     >
       <div className={styles["path-bar"]}>
-        <Breadcrumbs currentPath={currentPath} onNavigate={handleBreadcrumbNavigate} />
+        <Breadcrumbs currentPath={state.path} onNavigate={handleBreadcrumbNavigate} />
       </div>
       <div className={styles["file-list-body"]}>
         <ColumnsScroller
@@ -804,12 +759,7 @@ export const FileList = memo(function FileList({
           onColumnCountChanged={handleColumnCountChanged}
         />
       </div>
-      <div className={styles["file-info-footer"]}>
-        <span className={styles["file-info-name"]}>{footerName}</span>
-        {footerLink && <span className={styles["file-info-link"]}>{footerLink}</span>}
-        <span className={styles["file-info-size"]}>{footerInfo}</span>
-        <span className={styles["file-info-date"]}>{footerDate}</span>
-      </div>
+      <FileInfoFooter entry={activeEntry?.entry} />
       <div className={styles["panel-summary"]}>
         {selectionSummary
           ? `${selectionSummary.count} selected, ${formatSize(selectionSummary.size)}`

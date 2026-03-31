@@ -23,17 +23,11 @@ import { basename, dirname } from "@/utils/path";
 import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { RefObject, useEffect, useRef } from "react";
-
-interface PanelHandle {
-  currentPath: string;
-  navigateTo: (path: string, force?: boolean, cursorName?: string) => Promise<void>;
-  cancelNavigation: () => void;
-}
+import { useEffect, useRef } from "react";
 
 export interface BuiltInCommandDeps {
-  leftRef: RefObject<PanelHandle | undefined>;
-  rightRef: RefObject<PanelHandle | undefined>;
+  navigateTo: (path: string) => void;
+  cancelNavigation: () => void;
   onPreviewInOppositePanel: () => void;
   onEditInOppositePanel: () => void;
   openCurrentDirInOppositePanelCurrentTab: () => void;
@@ -76,9 +70,13 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const activePanelSideRef = useRef(activePanel);
   activePanelSideRef.current = activePanel;
 
-  const { leftRef, rightRef } = depsRef.current;
-  const panelRef = useRef(activePanelSideRef.current === "left" ? leftRef.current : rightRef.current);
-  panelRef.current = activePanelSideRef.current === "left" ? leftRef.current : rightRef.current;
+  const navigateToRef = useRef(deps.navigateTo);
+  navigateToRef.current = deps.navigateTo;
+  const cancelNavigationRef = useRef(deps.cancelNavigation);
+  cancelNavigationRef.current = deps.cancelNavigation;
+
+  // const panelRef = useRef(activePanelSideRef.current === "left" ? leftRef.current : rightRef.current);
+  // panelRef.current = activePanelSideRef.current === "left" ? leftRef.current : rightRef.current;
 
   const activeTab = useAtomValue(activeTabAtom);
   const activeTabRef = useRef(activeTab);
@@ -123,33 +121,30 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
     disposables.push(
       commandRegistry.registerCommand("dotdir.cancelNavigation", () => {
-        depsRef.current.leftRef.current?.cancelNavigation();
-        depsRef.current.rightRef.current?.cancelNavigation();
+        cancelNavigationRef.current?.();
       }),
     );
 
     disposables.push(
       commandRegistry.registerCommand("panel.goToParent", () => {
-        if (!panelRef.current) return;
         if (activeTabRef.current?.type !== "filelist") return;
         const currentPath = activeTabRef.current.path;
         if (isContainerPath(currentPath)) {
           const { containerFile, innerPath } = parseContainerPath(currentPath);
           if (innerPath === "/" || innerPath === "") {
-            void panelRef.current.navigateTo(dirname(containerFile), false, basename(containerFile));
+            void navigateToRef.current(dirname(containerFile));
             return;
           }
         }
         const parent = dirname(currentPath);
-        if (parent !== currentPath) void panelRef.current.navigateTo(parent);
+        if (parent !== currentPath) void navigateToRef.current(parent);
       }),
     );
 
     disposables.push(
       commandRegistry.registerCommand("panel.goHome", async () => {
-        if (!panelRef.current) return;
         const home = await bridge.utils.getHomePath();
-        void panelRef.current.navigateTo(home);
+        void navigateToRef.current(home);
       }),
     );
 
@@ -157,7 +152,9 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
     disposables.push(
       commandRegistry.registerCommand("panel.refresh", () => {
-        void panelRef.current?.navigateTo(panelRef.current.currentPath);
+        if (activeTabRef.current?.type !== "filelist") return;
+        const currentPath = activeTabRef.current.path;
+        void navigateToRef.current(currentPath);
       }),
     );
 
@@ -200,7 +197,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
     disposables.push(
       commandRegistry.registerCommand("panel.makeDir", () => {
-        if (!panelRef.current || activeTabRef.current?.type !== "filelist") return;
+        if (activeTabRef.current?.type !== "filelist") return;
         const currentPath = activeTabRef.current.path;
         const { showDialog } = depsRef.current;
         showDialog({
@@ -211,14 +208,14 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
             if (result.mode === "single") {
               const fullPath = join(result.name);
               if (bridge.fs.createDir) await bridge.fs.createDir(fullPath);
-              void panelRef.current?.navigateTo(fullPath);
+              void navigateToRef.current(fullPath);
               return;
             }
             for (const name of result.names) {
               const fullPath = join(name);
               if (bridge.fs.createDir) await bridge.fs.createDir(fullPath);
             }
-            void panelRef.current?.navigateTo(currentPath);
+            void navigateToRef.current(currentPath);
           },
           onCancel: () => {},
         });

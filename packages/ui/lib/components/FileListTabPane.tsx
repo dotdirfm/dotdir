@@ -1,5 +1,5 @@
 import { PanelSide } from "@/entities/panel/model/types";
-import { PanelController, usePanel } from "@/hooks/usePanel";
+import { FileListPanelController, useFileListPanel } from "@/hooks/useFileListPanel";
 import { useEffect, useRef } from "react";
 import { FileList } from "./FileList/FileList";
 
@@ -10,13 +10,12 @@ interface FileListTabPaneProps {
   visible: boolean;
   focused: boolean;
   showHidden: boolean;
-  onRememberExpectedTerminalCwd: (path: string) => void;
   selectionKey?: number;
   requestedActiveName?: string;
   requestedTopmostName?: string;
   onStateChange?: (selectedName: string | undefined, topmostName: string | undefined) => void;
   onActivatePanelFocus: () => void;
-  onActivePanelChange: (panel: PanelController) => void;
+  onActivePanelChange: (panel: FileListPanelController) => void;
 }
 
 export function FileListTabPane({
@@ -26,7 +25,6 @@ export function FileListTabPane({
   visible,
   focused,
   showHidden,
-  onRememberExpectedTerminalCwd,
   selectionKey,
   requestedActiveName,
   requestedTopmostName,
@@ -34,7 +32,7 @@ export function FileListTabPane({
   onActivatePanelFocus,
   onActivePanelChange,
 }: FileListTabPaneProps) {
-  const panel = usePanel();
+  const panel = useFileListPanel();
   const lastRequestedPathRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -45,11 +43,8 @@ export function FileListTabPane({
   }, [path, panel.navigateTo]);
 
   useEffect(() => {
-    if (!visible) return;
     onActivePanelChange(panel);
-  }, [visible, panel, panel.currentPath, panel.parentNode, panel.entries, panel.navigating, panel.requestedCursor, onActivePanelChange]);
-
-  const entries = showHidden ? panel.entries : panel.entries.filter((e) => !e.meta.hidden);
+  }, [panel, onActivePanelChange]);
 
   return (
     <div
@@ -66,12 +61,10 @@ export function FileListTabPane({
       <FileList
         key={tabId}
         side={side}
-        currentPath={panel.currentPath}
-        parentNode={panel.parentNode}
-        entries={entries}
+        state={panel.state}
+        showHidden={showHidden}
         onNavigate={(nextPath) => {
           onActivatePanelFocus();
-          onRememberExpectedTerminalCwd(nextPath);
           return panel.navigateTo(nextPath);
         }}
         selectionKey={selectionKey}

@@ -1,9 +1,8 @@
 export type PersistedTab =
-  | { type: "filelist"; path: string; selectedName?: string; topmostName?: string }
-  | { type: "preview"; path: string; name: string; size: number };
+  | { type: "filelist"; path: string; activeEntryName?: string; topmostEntryName?: string }
+  | { type: "preview"; path: string; };
 
 export interface PanelPersistedState {
-  currentPath: string;
   tabs?: PersistedTab[];
   activeTabIndex?: number;
 }

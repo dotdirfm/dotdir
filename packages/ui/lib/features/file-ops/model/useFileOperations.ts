@@ -14,6 +14,7 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { FsProviderExtensionApi } from "@/features/extensions/extensionApi";
 import { isExistingDirectory } from "@/features/navigation/lib/commandLineCd";
+import { FileListPanelController } from "@/hooks/useFileListPanel";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join } from "@/utils/path";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
@@ -22,12 +23,6 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef } from "react";
 
 export type { PanelSide };
-
-/** Minimal interface the hook needs from each panel. */
-export interface PanelHandle {
-  currentPath: string;
-  navigateTo(path: string, force?: boolean): void;
-}
 
 async function collectContainerFiles(
   listFn: (innerPath: string) => Promise<Array<{ name: string; kind: string }>>,
@@ -46,8 +41,8 @@ async function collectContainerFiles(
 }
 
 export function useFileOperations(
-  leftRef: RefObject<PanelHandle | undefined>,
-  rightRef: RefObject<PanelHandle | undefined>,
+  leftRef: RefObject<FileListPanelController | undefined>,
+  rightRef: RefObject<FileListPanelController | undefined>,
   setSelectionKey: Dispatch<SetStateAction<number>>,
 ) {
   const { showDialog, closeDialog, updateDialog } = useDialog();
@@ -93,8 +88,8 @@ export function useFileOperations(
 
   const refreshBoth = useCallback(() => {
     setSelectionKey((k) => k + 1);
-    leftRef.current?.navigateTo(leftRef.current.currentPath);
-    rightRef.current?.navigateTo(rightRef.current.currentPath);
+    leftRef.current?.refresh();
+    rightRef.current?.refresh();
   }, [setSelectionKey, leftRef, rightRef]);
 
   const handleMoveToTrash = useCallback(
