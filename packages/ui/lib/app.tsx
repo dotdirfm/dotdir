@@ -13,18 +13,11 @@ import { ExtensionsPanel } from "@/components/ExtensionsPanel/ExtensionsPanel";
 import { PanelGroup } from "@/components/PanelGroup";
 import { TerminalPanelBody, TerminalToolbar } from "@/components/Terminal";
 import { DialogHolder, useDialog } from "@/dialogs/dialogContext";
-import { OPPOSITE_PANEL } from "@/entities/panel/model/panelSide";
 import {
   activePanelSideAtom,
   activeTabAtom,
-  createFilelistTab,
-  createPreviewTab,
   leftActiveTabAtom,
-  leftActiveTabIdAtom,
-  leftTabsAtom,
   rightActiveTabAtom,
-  rightActiveTabIdAtom,
-  rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
@@ -77,22 +70,10 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const leftActiveTab = useAtomValue(leftActiveTabAtom);
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
 
-  const [activePanelSide, setActivePanelSide] = useAtom(activePanelSideAtom);
+  const [activePanelSide] = useAtom(activePanelSideAtom);
   const panelsVisible = useAtomValue(panelsVisibleAtom);
   const showExtensions = useAtomValue(showExtensionsAtom);
-  const [leftTabs, setLeftTabs] = useAtom(leftTabsAtom);
-  const [rightTabs, setRightTabs] = useAtom(rightTabsAtom);
-  const [leftActiveTabId, setLeftActiveTabId] = useAtom(leftActiveTabIdAtom);
-  const [rightActiveTabId, setRightActiveTabId] = useAtom(rightActiveTabIdAtom);
   const themesReady = useAtomValue(themesReadyAtom);
-  const leftTabsRef = useRef(leftTabs);
-  leftTabsRef.current = leftTabs;
-  const rightTabsRef = useRef(rightTabs);
-  rightTabsRef.current = rightTabs;
-  const leftActiveTabIdRef = useRef(leftActiveTabId);
-  leftActiveTabIdRef.current = leftActiveTabId;
-  const rightActiveTabIdRef = useRef(rightActiveTabId);
-  rightActiveTabIdRef.current = rightActiveTabId;
   const commandPalette = useCommandPalette();
   const setCommandLineOnExecute = useSetAtom(commandLineOnExecuteAtom);
   const commandLinePasteFnAtomValue = useAtomValue(commandLinePasteFnAtom);
@@ -245,119 +226,8 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   });
   const leftRequestedTopmostName = leftActiveTab?.type === "filelist" ? leftActiveTab.topmostEntryName : undefined;
   const rightRequestedTopmostName = rightActiveTab?.type === "filelist" ? rightActiveTab.topmostEntryName : undefined;
-  const leftSelectedName =
-    leftActiveTab?.type === "filelist" ? (leftActiveTab.selectedEntryNames?.[0] ?? leftActiveTab.activeEntryName) : undefined;
-  const rightSelectedName =
-    rightActiveTab?.type === "filelist" ? (rightActiveTab.selectedEntryNames?.[0] ?? rightActiveTab.activeEntryName) : undefined;
 
   useWorkspacePersistenceProcess();
-
-  const handleOpenCurrentFolderInOppositeCurrentTab = useCallback(() => {
-    const side = activePanelSideRef.current;
-    const opposite = OPPOSITE_PANEL[side];
-    const path = side === "left" ? leftFileListState.path : rightFileListState.path;
-    const activeTabId = (opposite === "left" ? leftActiveTabIdRef : rightActiveTabIdRef).current;
-    const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
-    setTabs((prev) => prev.map((t) => (t.id === activeTabId && t.type === "filelist" ? { ...t, path } : t)));
-    setActivePanelSide(opposite);
-  }, [leftFileListState.path, rightFileListState.path]);
-
-  const handleOpenCurrentFolderInOppositeNewTab = useCallback(() => {
-    const side = activePanelSideRef.current;
-    const opposite = OPPOSITE_PANEL[side];
-    const path = side === "left" ? leftFileListState.path : rightFileListState.path;
-    const newTab = createFilelistTab(path);
-    const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
-    const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
-    setTabs((prev) => [...prev, newTab]);
-    setActiveId(newTab.id);
-    setActivePanelSide(opposite);
-  }, [leftFileListState.path, rightFileListState.path]);
-
-  const handleOpenSelectedFolderInOppositeCurrentTab = useCallback(() => {
-    const side = activePanelSideRef.current;
-    const entries = side === "left" ? leftFileListState.entries : rightFileListState.entries;
-    const selectedName = side === "left" ? leftSelectedName : rightSelectedName;
-    const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
-    if (!entry || entry.type !== "folder") return;
-    const path = entry.path as string;
-    const opposite = OPPOSITE_PANEL[side];
-    const activeTabId = (opposite === "left" ? leftActiveTabIdRef : rightActiveTabIdRef).current;
-    const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
-    setTabs((prev) => prev.map((t) => (t.id === activeTabId && t.type === "filelist" ? { ...t, path } : t)));
-    setActivePanelSide(opposite);
-  }, [leftFileListState.entries, rightFileListState.entries, leftSelectedName, rightSelectedName]);
-
-  const handleOpenSelectedFolderInOppositeNewTab = useCallback(() => {
-    const side = activePanelSideRef.current;
-    const entries = side === "left" ? leftFileListState.entries : rightFileListState.entries;
-    const selectedName = side === "left" ? leftSelectedName : rightSelectedName;
-    const entry = selectedName ? entries.find((e) => e.name === selectedName) : undefined;
-    if (!entry || entry.type !== "folder") return;
-    const path = entry.path as string;
-    const opposite = OPPOSITE_PANEL[side];
-    const newTab = createFilelistTab(path);
-    const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
-    const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
-    setTabs((prev) => [...prev, newTab]);
-    setActiveId(newTab.id);
-    setActivePanelSide(opposite);
-  }, [leftFileListState.entries, rightFileListState.entries, leftSelectedName, rightSelectedName]);
-
-  const handlePreviewInOppositePanel = useCallback(() => {
-    const side = activePanelSideRef.current;
-    const entries = side === "left" ? leftFileListState.entries : rightFileListState.entries;
-    const selectedName = side === "left" ? leftSelectedName : rightSelectedName;
-    const entry = selectedName ? entries.find((e: FsNode) => e.name === selectedName) : undefined;
-    if (!entry || entry.type !== "file") return;
-    const path = entry.path as string;
-    const name = entry.name;
-    const size = Number(entry.meta.size);
-    const sourcePanel = side;
-    const opposite = OPPOSITE_PANEL[side];
-    const tabs = (opposite === "left" ? leftTabsRef : rightTabsRef).current;
-    const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
-    const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
-
-    const tempTab = tabs.find((t) => t.type === "preview" && t.isTemp);
-    if (tempTab && tempTab.type === "preview") {
-      setTabs((prev) => prev.map((t) => (t.id === tempTab.id ? { ...t, path, name, size, sourcePanel, mode: "viewer", dirty: false } : t)));
-      setActiveId(tempTab.id);
-    } else {
-      const newTab = createPreviewTab(path, name, size, sourcePanel, { mode: "viewer" });
-      setTabs((prev) => [...prev, newTab]);
-      setActiveId(newTab.id);
-    }
-    setActivePanelSide(opposite);
-  }, [leftFileListState.entries, rightFileListState.entries, leftSelectedName, rightSelectedName]);
-
-  const handleEditInOppositePanel = useCallback(() => {
-    const side = activePanelSideRef.current;
-    const entries = side === "left" ? leftFileListState.entries : rightFileListState.entries;
-    const selectedName = side === "left" ? leftSelectedName : rightSelectedName;
-    const entry = selectedName ? entries.find((e: FsNode) => e.name === selectedName) : undefined;
-    if (!entry || entry.type !== "file") return;
-    const path = entry.path as string;
-    const name = entry.name;
-    const size = Number(entry.meta.size);
-    const langId = typeof entry.lang === "string" && entry.lang ? entry.lang : "plaintext";
-    const sourcePanel = side;
-    const opposite = OPPOSITE_PANEL[side];
-    const tabs = (opposite === "left" ? leftTabsRef : rightTabsRef).current;
-    const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
-    const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
-
-    const tempTab = tabs.find((t) => t.type === "preview" && t.isTemp);
-    if (tempTab && tempTab.type === "preview") {
-      setTabs((prev) => prev.map((t) => (t.id === tempTab.id ? { ...t, path, name, size, sourcePanel, mode: "editor", langId, dirty: false } : t)));
-      setActiveId(tempTab.id);
-    } else {
-      const newTab = createPreviewTab(path, name, size, sourcePanel, { mode: "editor", langId });
-      setTabs((prev) => [...prev, newTab]);
-      setActiveId(newTab.id);
-    }
-    setActivePanelSide(opposite);
-  }, [leftFileListState.entries, rightFileListState.entries, leftSelectedName, rightSelectedName]);
 
   useEffect(() => {
     bridge.theme.get().then((t) => setTheme(t as ThemeKind));
@@ -376,12 +246,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   useBuiltInCommands({
     navigateTo: navigateTo ?? (() => {}),
     cancelNavigation: cancelNavigation ?? (() => {}),
-    onPreviewInOppositePanel: handlePreviewInOppositePanel,
-    onEditInOppositePanel: handleEditInOppositePanel,
-    openCurrentDirInOppositePanelCurrentTab: handleOpenCurrentFolderInOppositeCurrentTab,
-    openCurrentDirInOppositePanelNewTab: handleOpenCurrentFolderInOppositeNewTab,
-    openSelectedDirInOppositePanelCurrentTab: handleOpenSelectedFolderInOppositeCurrentTab,
-    openSelectedDirInOppositePanelNewTab: handleOpenSelectedFolderInOppositeNewTab,
     onOpenCreateFileConfirm: handleOpenCreateFileConfirm,
     showDialog,
     onViewFile: handleViewFile,

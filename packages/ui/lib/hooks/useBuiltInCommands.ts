@@ -9,7 +9,19 @@ import {
 } from "@/atoms";
 import type { DialogSpec } from "@/dialogs/dialogContext";
 import type { LanguageOption } from "@/dialogs/OpenCreateFileDialog";
-import { activePanelSideAtom, activeTabAtom } from "@/entities/tab/model/tabsAtoms";
+import { OPPOSITE_PANEL } from "@/entities/panel/model/panelSide";
+import {
+  activePanelSideAtom,
+  activeTabAtom,
+  createFilelistTab,
+  createPreviewTab,
+  leftActiveTabAtom,
+  leftActiveTabIdAtom,
+  leftTabsAtom,
+  rightActiveTabAtom,
+  rightActiveTabIdAtom,
+  rightTabsAtom,
+} from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
@@ -22,18 +34,13 @@ import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname } from "@/utils/path";
 import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { FsNode } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
 
 export interface BuiltInCommandDeps {
   navigateTo: (path: string) => void;
   cancelNavigation: () => void;
-  onPreviewInOppositePanel: () => void;
-  onEditInOppositePanel: () => void;
-  openCurrentDirInOppositePanelCurrentTab: () => void;
-  openCurrentDirInOppositePanelNewTab: () => void;
-  openSelectedDirInOppositePanelCurrentTab: () => void;
-  openSelectedDirInOppositePanelNewTab: () => void;
   onOpenCreateFileConfirm: (path: string, name: string, langId: string) => Promise<void>;
   showDialog: (spec: DialogSpec) => void;
   onViewFile: (filePath: string, fileName: string, fileSize: number) => void;
@@ -62,6 +69,12 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
   // Atom setters are stable (Jotai guarantee) — safe to capture in the effect.
   const [activePanel, setActivePanel] = useAtom(activePanelSideAtom);
+  const leftActiveTab = useAtomValue(leftActiveTabAtom);
+  const rightActiveTab = useAtomValue(rightActiveTabAtom);
+  const [leftTabs, setLeftTabs] = useAtom(leftTabsAtom);
+  const [rightTabs, setRightTabs] = useAtom(rightTabsAtom);
+  const [leftActiveTabId, setLeftActiveTabId] = useAtom(leftActiveTabIdAtom);
+  const [rightActiveTabId, setRightActiveTabId] = useAtom(rightActiveTabIdAtom);
   const setPanelsVisible = useSetAtom(panelsVisibleAtom);
   const setTerminalFocusRequestKey = useSetAtom(terminalFocusRequestKeyAtom);
   const setShowExtensions = useSetAtom(showExtensionsAtom);
@@ -71,6 +84,18 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
   const activePanelSideRef = useRef(activePanel);
   activePanelSideRef.current = activePanel;
+  const leftActiveTabRef = useRef(leftActiveTab);
+  leftActiveTabRef.current = leftActiveTab;
+  const rightActiveTabRef = useRef(rightActiveTab);
+  rightActiveTabRef.current = rightActiveTab;
+  const leftTabsRef = useRef(leftTabs);
+  leftTabsRef.current = leftTabs;
+  const rightTabsRef = useRef(rightTabs);
+  rightTabsRef.current = rightTabs;
+  const leftActiveTabIdRef = useRef(leftActiveTabId);
+  leftActiveTabIdRef.current = leftActiveTabId;
+  const rightActiveTabIdRef = useRef(rightActiveTabId);
+  rightActiveTabIdRef.current = rightActiveTabId;
 
   const navigateToRef = useRef(deps.navigateTo);
   navigateToRef.current = deps.navigateTo;
@@ -83,6 +108,18 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const activeTab = useAtomValue(activeTabAtom);
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
+
+  const getFileListStateForSide = (side: "left" | "right") => {
+    const tab = side === "left" ? leftActiveTabRef.current : rightActiveTabRef.current;
+    return tab?.type === "filelist" ? tab : null;
+  };
+
+  const getSelectedEntryForSide = (side: "left" | "right"): FsNode | undefined => {
+    const fileListTab = getFileListStateForSide(side);
+    if (!fileListTab) return undefined;
+    const selectedName = fileListTab.selectedEntryNames?.[0] ?? fileListTab.activeEntryName;
+    return selectedName ? fileListTab.entries.find((entry) => entry.name === selectedName) : undefined;
+  };
 
   useEffect(() => {
     const disposables: Array<() => void> = [];
@@ -162,16 +199,114 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
     disposables.push(commandRegistry.registerCommand("newTab", () => void getActivePanelGroupHandlers()?.newTab()));
     disposables.push(commandRegistry.registerCommand("closeTab", () => void getActivePanelGroupHandlers()?.closeActiveTab()));
-    disposables.push(commandRegistry.registerCommand("previewInOppositePanel", () => depsRef.current.onPreviewInOppositePanel()));
-    disposables.push(commandRegistry.registerCommand("editInOppositePanel", () => depsRef.current.onEditInOppositePanel()));
     disposables.push(
-      commandRegistry.registerCommand("openCurrentDirInOppositePanelCurrentTab", () => depsRef.current.openCurrentDirInOppositePanelCurrentTab()),
+      commandRegistry.registerCommand("openCurrentDirInOppositePanelCurrentTab", () => {
+        const side = activePanelSideRef.current;
+        const opposite = OPPOSITE_PANEL[side];
+        const fileListTab = getFileListStateForSide(side);
+        if (!fileListTab) return;
+        const path = fileListTab.path;
+        const activeOppositeTabId = (opposite === "left" ? leftActiveTabIdRef : rightActiveTabIdRef).current;
+        const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
+        setTabs((prev) => prev.map((tab) => (tab.id === activeOppositeTabId && tab.type === "filelist" ? { ...tab, path } : tab)));
+        setActivePanel(opposite);
+      }),
     );
-    disposables.push(commandRegistry.registerCommand("openCurrentDirInOppositePanelNewTab", () => depsRef.current.openCurrentDirInOppositePanelNewTab()));
     disposables.push(
-      commandRegistry.registerCommand("openSelectedDirInOppositePanelCurrentTab", () => depsRef.current.openSelectedDirInOppositePanelCurrentTab()),
+      commandRegistry.registerCommand("openCurrentDirInOppositePanelNewTab", () => {
+        const side = activePanelSideRef.current;
+        const opposite = OPPOSITE_PANEL[side];
+        const fileListTab = getFileListStateForSide(side);
+        if (!fileListTab) return;
+        const newTab = createFilelistTab(fileListTab.path);
+        const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
+        const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
+        setTabs((prev) => [...prev, newTab]);
+        setActiveId(newTab.id);
+        setActivePanel(opposite);
+      }),
     );
-    disposables.push(commandRegistry.registerCommand("openSelectedDirInOppositePanelNewTab", () => depsRef.current.openSelectedDirInOppositePanelNewTab()));
+    disposables.push(
+      commandRegistry.registerCommand("openSelectedDirInOppositePanelCurrentTab", () => {
+        const side = activePanelSideRef.current;
+        const entry = getSelectedEntryForSide(side);
+        if (!entry || entry.type !== "folder") return;
+        const opposite = OPPOSITE_PANEL[side];
+        const activeOppositeTabId = (opposite === "left" ? leftActiveTabIdRef : rightActiveTabIdRef).current;
+        const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
+        setTabs((prev) => prev.map((tab) => (tab.id === activeOppositeTabId && tab.type === "filelist" ? { ...tab, path: entry.path as string } : tab)));
+        setActivePanel(opposite);
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerCommand("openSelectedDirInOppositePanelNewTab", () => {
+        const side = activePanelSideRef.current;
+        const entry = getSelectedEntryForSide(side);
+        if (!entry || entry.type !== "folder") return;
+        const opposite = OPPOSITE_PANEL[side];
+        const newTab = createFilelistTab(entry.path as string);
+        const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
+        const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
+        setTabs((prev) => [...prev, newTab]);
+        setActiveId(newTab.id);
+        setActivePanel(opposite);
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerCommand("previewInOppositePanel", () => {
+        const side = activePanelSideRef.current;
+        const entry = getSelectedEntryForSide(side);
+        if (!entry || entry.type !== "file") return;
+        const opposite = OPPOSITE_PANEL[side];
+        const tabs = (opposite === "left" ? leftTabsRef : rightTabsRef).current;
+        const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
+        const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
+        const tempTab = tabs.find((tab) => tab.type === "preview" && tab.isTemp);
+        const path = entry.path as string;
+        const name = entry.name;
+        const size = Number(entry.meta.size);
+        if (tempTab && tempTab.type === "preview") {
+          setTabs((prev) =>
+            prev.map((tab) => (tab.id === tempTab.id ? { ...tab, path, name, size, sourcePanel: side, mode: "viewer", dirty: false } : tab)),
+          );
+          setActiveId(tempTab.id);
+        } else {
+          const newTab = createPreviewTab(path, name, size, side, { mode: "viewer" });
+          setTabs((prev) => [...prev, newTab]);
+          setActiveId(newTab.id);
+        }
+        setActivePanel(opposite);
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerCommand("editInOppositePanel", () => {
+        const side = activePanelSideRef.current;
+        const entry = getSelectedEntryForSide(side);
+        if (!entry || entry.type !== "file") return;
+        const opposite = OPPOSITE_PANEL[side];
+        const tabs = (opposite === "left" ? leftTabsRef : rightTabsRef).current;
+        const setTabs = opposite === "left" ? setLeftTabs : setRightTabs;
+        const setActiveId = opposite === "left" ? setLeftActiveTabId : setRightActiveTabId;
+        const tempTab = tabs.find((tab) => tab.type === "preview" && tab.isTemp);
+        const path = entry.path as string;
+        const name = entry.name;
+        const size = Number(entry.meta.size);
+        const langId = typeof entry.lang === "string" && entry.lang ? entry.lang : "plaintext";
+        if (tempTab && tempTab.type === "preview") {
+          setTabs((prev) =>
+            prev.map((tab) =>
+              tab.id === tempTab.id ? { ...tab, path, name, size, sourcePanel: side, mode: "editor", langId, dirty: false } : tab,
+            ),
+          );
+          setActiveId(tempTab.id);
+        } else {
+          const newTab = createPreviewTab(path, name, size, side, { mode: "editor", langId });
+          setTabs((prev) => [...prev, newTab]);
+          setActiveId(newTab.id);
+        }
+        setActivePanel(opposite);
+      }),
+    );
 
     disposables.push(
       commandRegistry.registerCommand("openCreateFile", () => {
@@ -300,5 +435,22 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     return () => {
       for (const d of disposables) d();
     };
-  }, [setActivePanel, setPanelsVisible, setShowExtensions, setViewerFile, setEditorFile, setCommandPaletteOpen, updateSettings]);
+  }, [
+    commandRegistry,
+    bridge,
+    cancelNavigationRef,
+    focusContext,
+    setActivePanel,
+    setPanelsVisible,
+    setShowExtensions,
+    setViewerFile,
+    setEditorFile,
+    setCommandPaletteOpen,
+    updateSettings,
+    setTerminalFocusRequestKey,
+    setLeftTabs,
+    setRightTabs,
+    setLeftActiveTabId,
+    setRightActiveTabId,
+  ]);
 }
