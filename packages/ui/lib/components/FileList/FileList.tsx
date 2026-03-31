@@ -598,6 +598,7 @@ export const FileList = memo(function FileList({
       ref={rootRef}
       className={cx(styles, "file-list", isTouchscreen || keyboardNavMode ? "no-hover" : null, active ? "active-panel" : "inactive-panel")}
       onMouseMoveCapture={clearKeyboardNav}
+      onWheelCapture={markKeyboardNav}
       onMouseDownCapture={() => {
         clearKeyboardNav();
         rootRef.current?.focus({ preventScroll: true });
