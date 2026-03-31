@@ -27,7 +27,6 @@ interface FileListProps {
   state: FileListTabState;
   showHidden: boolean;
   onNavigate: (path: string) => Promise<void>;
-  selectionKey?: number;
   active: boolean;
   resolver: LayeredResolver;
   requestedActiveName?: string;
@@ -82,7 +81,6 @@ export const FileList = memo(function FileList({
   state,
   showHidden,
   onNavigate,
-  selectionKey,
   active,
   resolver,
   requestedActiveName,
@@ -314,7 +312,7 @@ export const FileList = memo(function FileList({
   useEffect(() => {
     setSelectedNames(new Set());
     prevSelectRef.current = undefined;
-  }, [state.path, selectionKey]);
+  }, [state.path]);
 
   useEffect(() => {
     const nextSelected = state.selectedEntryNames ?? [];

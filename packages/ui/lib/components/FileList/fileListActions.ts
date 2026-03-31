@@ -1,6 +1,6 @@
 import type { ActionQueue } from "@/actionQueue";
 import { useCommandRegistry } from "@/features/commands/commands";
-import { getFileOperationHandlers } from "@/features/file-ops/model/fileOperationHandlers";
+import { useFileOperationHandlers } from "@/features/file-ops/model/fileOperationHandlers";
 import type { FsNode } from "fss-lang";
 import { useMemo } from "react";
 
@@ -33,6 +33,7 @@ function getSelectedOrActiveEntries({
 
 export function useFileListActionHandlers(deps: FileListActionDeps) {
   const commandRegistry = useCommandRegistry();
+  const ops = useFileOperationHandlers();
 
   return useMemo(() => ({
     execute: () =>
@@ -64,7 +65,6 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
       }),
     moveToTrash: () =>
       deps.actionQueue.enqueue(() => {
-        const ops = getFileOperationHandlers();
         if (!ops) return;
         const sourcePaths = getSelectedOrActiveEntries(deps).map((item) => item.entry.path as string);
         if (sourcePaths.length === 0) return;
@@ -72,7 +72,6 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
       }),
     permanentDelete: () =>
       deps.actionQueue.enqueue(() => {
-        const ops = getFileOperationHandlers();
         if (!ops) return;
         const sourcePaths = getSelectedOrActiveEntries(deps).map((item) => item.entry.path as string);
         if (sourcePaths.length === 0) return;
@@ -80,7 +79,6 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
       }),
     copy: () =>
       deps.actionQueue.enqueue(() => {
-        const ops = getFileOperationHandlers();
         if (!ops) return;
         const sourcePaths = getSelectedOrActiveEntries(deps).map((item) => item.entry.path as string);
         if (sourcePaths.length === 0) return;
@@ -88,7 +86,6 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
       }),
     move: () =>
       deps.actionQueue.enqueue(() => {
-        const ops = getFileOperationHandlers();
         if (!ops) return;
         const sourcePaths = getSelectedOrActiveEntries(deps).map((item) => item.entry.path as string);
         if (sourcePaths.length === 0) return;
@@ -96,7 +93,6 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
       }),
     rename: () =>
       deps.actionQueue.enqueue(() => {
-        const ops = getFileOperationHandlers();
         if (!ops) return;
         const [item] = getSelectedOrActiveEntries(deps);
         if (!item) return;
@@ -106,7 +102,6 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
       deps.actionQueue.enqueue(() => {
         const [item] = getSelectedOrActiveEntries(deps);
         if (!item) return;
-        const ops = getFileOperationHandlers();
         if (!ops) return;
         const name = item.entry.name;
         const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? name : JSON.stringify(name);
@@ -116,11 +111,10 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
       deps.actionQueue.enqueue(() => {
         const [item] = getSelectedOrActiveEntries(deps);
         if (!item) return;
-        const ops = getFileOperationHandlers();
         if (!ops) return;
         const path = ((item.entry.path as string) ?? "").split("\0")[0];
         const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
         ops.pasteToCommandLine(arg);
       }),
-  }), [commandRegistry, deps]);
+  }), [commandRegistry, deps, ops]);
 }

@@ -176,7 +176,6 @@ export function useFileListPanel() {
           currentPathRef.current = path;
 
           const updateState = (entry: FsNode | undefined, entries: FsNode[]) => {
-            console.error("***", stateRef.current, entry, entries);
             if (!stateRef.current) {
               setState({ path, entry, entries });
             } else if (stateRef.current.parent?.path === path) {

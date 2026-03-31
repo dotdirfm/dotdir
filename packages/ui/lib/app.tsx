@@ -33,7 +33,7 @@ import {
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useExtensionHost } from "@/features/extensions/useExtensionHost";
-import { setFileOperationHandlers } from "@/features/file-ops/model/fileOperationHandlers";
+import { FileOperationHandlersProvider } from "@/features/file-ops/model/fileOperationHandlers";
 import { useFileOperations } from "@/features/file-ops/model/useFileOperations";
 import { isExistingDirectory, parseCdCommand, resolveCdPath } from "@/features/navigation/lib/commandLineCd";
 import { showHiddenAtom, useUserSettings } from "@/features/settings/useUserSettings";
@@ -49,7 +49,7 @@ import { basename, normalizePath, resolveDotSegments } from "@/utils/path";
 import { editorRegistry, fsProviderRegistry, viewerRegistry } from "@/viewerEditorRegistry";
 import type { FsNode, ThemeKind } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import baseStyles from "./styles/base.module.css";
 import panelsStyles from "./styles/panels.module.css";
 import terminalStyles from "./styles/terminal.module.css";
@@ -104,7 +104,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   leftActiveTabIdRef.current = leftActiveTabId;
   const rightActiveTabIdRef = useRef(rightActiveTabId);
   rightActiveTabIdRef.current = rightActiveTabId;
-  const [selectionKey, setSelectionKey] = useState(0);
   const commandPalette = useCommandPalette();
   const setCommandLineOnExecute = useSetAtom(commandLineOnExecuteAtom);
   const commandLinePasteFnAtomValue = useAtomValue(commandLinePasteFnAtom);
@@ -228,18 +227,18 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     setCommandLineOnExecute(() => handleCommandLineExecute);
   }, [handleCommandLineExecute, setCommandLineOnExecute]);
 
-  const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } = useFileOperations(leftRef, rightRef, setSelectionKey);
-
-  useEffect(() => {
-    setFileOperationHandlers({
+  const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } = useFileOperations(leftRef, rightRef);
+  const fileOperationHandlers = useMemo(
+    () => ({
       moveToTrash: handleMoveToTrash,
       permanentDelete: handlePermanentDelete,
       copy: handleCopy,
       move: handleMove,
       rename: handleRename,
-      pasteToCommandLine: (text) => commandLinePasteRef.current(text),
-    });
-  }, [handleMoveToTrash, handlePermanentDelete, handleCopy, handleMove, handleRename]);
+      pasteToCommandLine: (text: string) => commandLinePasteRef.current(text),
+    }),
+    [handleMoveToTrash, handlePermanentDelete, handleCopy, handleMove, handleRename],
+  );
 
   // Set context for which panel is active
   useEffect(() => {
@@ -602,14 +601,12 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
             <div className={panelsStyles["side-by-side-panels"]}>
               <PanelGroup
                 side="left"
-                selectionKey={selectionKey}
                 requestedActiveName={leftRequestedCursor}
                 requestedTopmostName={leftRequestedTopmostName}
                 onActivePanelChange={handleLeftPanelChange}
               />
               <PanelGroup
                 side="right"
-                selectionKey={selectionKey}
                 requestedActiveName={rightRequestedCursor}
                 requestedTopmostName={rightRequestedTopmostName}
                 onActivePanelChange={handleRightPanelChange}
@@ -675,7 +672,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
 
   return (
     <div ref={rootRef} className={baseStyles["app"]} tabIndex={0}>
-      {body}
+      <FileOperationHandlersProvider handlers={fileOperationHandlers}>{body}</FileOperationHandlersProvider>
     </div>
   );
 });

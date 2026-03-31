@@ -8,7 +8,14 @@
 
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
-import { activePanelSideAtom, inactiveTabAtom } from "@/entities/tab/model/tabsAtoms";
+import {
+  activePanelSideAtom,
+  inactiveTabAtom,
+  leftActiveTabIdAtom,
+  leftTabsAtom,
+  rightActiveTabIdAtom,
+  rightTabsAtom,
+} from "@/entities/tab/model/tabsAtoms";
 import { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
@@ -18,8 +25,8 @@ import { FileListPanelController } from "@/hooks/useFileListPanel";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join } from "@/utils/path";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
-import { useAtomValue } from "jotai";
-import type { Dispatch, RefObject, SetStateAction } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
+import type { RefObject } from "react";
 import { useCallback, useEffect, useRef } from "react";
 
 export type { PanelSide };
@@ -43,7 +50,6 @@ async function collectContainerFiles(
 export function useFileOperations(
   leftRef: RefObject<FileListPanelController | undefined>,
   rightRef: RefObject<FileListPanelController | undefined>,
-  setSelectionKey: Dispatch<SetStateAction<number>>,
 ) {
   const { showDialog, closeDialog, updateDialog } = useDialog();
 
@@ -54,6 +60,10 @@ export function useFileOperations(
   const inactiveTab = useAtomValue(inactiveTabAtom);
   const inactiveTabRef = useRef(inactiveTab);
   inactiveTabRef.current = inactiveTab;
+  const leftActiveTabId = useAtomValue(leftActiveTabIdAtom);
+  const rightActiveTabId = useAtomValue(rightActiveTabIdAtom);
+  const setLeftTabs = useSetAtom(leftTabsAtom);
+  const setRightTabs = useSetAtom(rightTabsAtom);
 
   const bridge = useBridge();
   const activeCopyIdRef = useRef<number | null>(null);
@@ -86,11 +96,33 @@ export function useFileOperations(
     onCancel: () => void;
   } | null>(null);
 
+  const clearSelectionForActiveFileListTab = useCallback(
+    (side: PanelSide) => {
+      const activeTabId = side === "left" ? leftActiveTabId : rightActiveTabId;
+      const setTabs = side === "left" ? setLeftTabs : setRightTabs;
+      setTabs((prev) => {
+        const index = prev.findIndex((tab) => tab.id === activeTabId);
+        if (index < 0) return prev;
+        const tab = prev[index];
+        if (!tab || tab.type !== "filelist") return prev;
+        if ((tab.selectedEntryNames?.length ?? 0) === 0) return prev;
+        const next = [...prev];
+        next[index] = {
+          ...tab,
+          selectedEntryNames: [],
+        };
+        return next;
+      });
+    },
+    [leftActiveTabId, rightActiveTabId, setLeftTabs, setRightTabs],
+  );
+
   const refreshBoth = useCallback(() => {
-    setSelectionKey((k) => k + 1);
+    clearSelectionForActiveFileListTab("left");
+    clearSelectionForActiveFileListTab("right");
     leftRef.current?.refresh();
     rightRef.current?.refresh();
-  }, [setSelectionKey, leftRef, rightRef]);
+  }, [clearSelectionForActiveFileListTab, leftRef, rightRef]);
 
   const handleMoveToTrash = useCallback(
     (sourcePaths: string[], refresh: () => void) => {

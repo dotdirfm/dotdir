@@ -1,3 +1,5 @@
+import { createContext, createElement, type ReactNode, useContext } from "react";
+
 export interface FileOperationHandlers {
   moveToTrash(sourcePaths: string[], refresh: () => void): void;
   permanentDelete(sourcePaths: string[], refresh: () => void): void;
@@ -7,12 +9,18 @@ export interface FileOperationHandlers {
   pasteToCommandLine(text: string): void;
 }
 
-let current: FileOperationHandlers | null = null;
+const FileOperationHandlersContext = createContext<FileOperationHandlers | null>(null);
 
-export function setFileOperationHandlers(handlers: FileOperationHandlers): void {
-  current = handlers;
+export function FileOperationHandlersProvider({
+  handlers,
+  children,
+}: {
+  handlers: FileOperationHandlers;
+  children: ReactNode;
+}) {
+  return createElement(FileOperationHandlersContext.Provider, { value: handlers }, children);
 }
 
-export function getFileOperationHandlers(): FileOperationHandlers | null {
-  return current;
+export function useFileOperationHandlers(): FileOperationHandlers | null {
+  return useContext(FileOperationHandlersContext);
 }

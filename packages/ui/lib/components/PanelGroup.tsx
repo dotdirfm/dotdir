@@ -28,13 +28,12 @@ import { FileListTabPane } from "./FileListTabPane";
 
 interface PanelGroupProps {
   side: PanelSide;
-  selectionKey?: number;
   requestedActiveName?: string;
   requestedTopmostName?: string;
   onActivePanelChange: (panel: FileListPanelController) => void;
 }
 
-export function PanelGroup({ side, selectionKey, requestedActiveName, requestedTopmostName, onActivePanelChange }: PanelGroupProps) {
+export function PanelGroup({ side, requestedActiveName, requestedTopmostName, onActivePanelChange }: PanelGroupProps) {
   const focusContext = useFocusContext();
   const activePanel = useAtomValue(activePanelSideAtom);
   const setActivePanel = useSetAtom(activePanelSideAtom);
@@ -373,7 +372,6 @@ export function PanelGroup({ side, selectionKey, requestedActiveName, requestedT
                 visible={isVisible}
                 focused={active && isVisible}
                 showHidden={showHidden}
-                selectionKey={selectionKey}
                 requestedActiveName={isVisible ? requestedActiveName : undefined}
                 requestedTopmostName={isVisible ? requestedTopmostName : undefined}
                 onStateChange={isVisible ? handleFileListStateChange : undefined}

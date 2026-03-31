@@ -10,7 +10,6 @@ interface FileListTabPaneProps {
   visible: boolean;
   focused: boolean;
   showHidden: boolean;
-  selectionKey?: number;
   requestedActiveName?: string;
   requestedTopmostName?: string;
   onStateChange?: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
@@ -25,7 +24,6 @@ export function FileListTabPane({
   visible,
   focused,
   showHidden,
-  selectionKey,
   requestedActiveName,
   requestedTopmostName,
   onStateChange,
@@ -89,7 +87,6 @@ export function FileListTabPane({
           onActivatePanelFocus();
           return panel.navigateTo(nextPath);
         }}
-        selectionKey={selectionKey}
         active={focused}
         resolver={panel.resolver}
         requestedActiveName={focused ? requestedActiveName : undefined}
