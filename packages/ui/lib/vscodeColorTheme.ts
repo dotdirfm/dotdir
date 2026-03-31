@@ -45,6 +45,21 @@ const COLOR_MAPPING: Array<{ cssVar: string; keys: string[] }> = [
   { cssVar: "--action-bar-fg", keys: ["activityBar.foreground"] },
   { cssVar: "--action-bar-badge-bg", keys: ["activityBarBadge.background"] },
   { cssVar: "--action-bar-badge-fg", keys: ["activityBarBadge.foreground"] },
+  { cssVar: "--button-bg", keys: ["button.background"] },
+  { cssVar: "--button-fg", keys: ["button.foreground"] },
+  { cssVar: "--button-border", keys: ["button.border"] },
+  { cssVar: "--button-hover-bg", keys: ["button.hoverBackground"] },
+  { cssVar: "--input-bg", keys: ["input.background"] },
+  { cssVar: "--input-fg", keys: ["input.foreground"] },
+  { cssVar: "--input-border", keys: ["input.border"] },
+  { cssVar: "--input-hover-bg", keys: ["input.hoverBackground"] },
+  { cssVar: "--tab-bg", keys: ["tab.activeBackground"] },
+  { cssVar: "--tab-fg", keys: ["tab.activeForeground"] },
+  { cssVar: "--tab-border", keys: ["tab.activeBorder"] },
+  { cssVar: "--tab-inactive-bg", keys: ["tab.inactiveBackground"] },
+  { cssVar: "--tab-inactive-fg", keys: ["tab.inactiveForeground"] },
+  { cssVar: "--tab-inactive-border", keys: ["tab.border"] },
+  { cssVar: "--tab-border-top", keys: ["tab.activeBorderTop"] }
 ];
 
 async function loadThemeJson(bridge: Bridge, jsonPath: string, maxDepth = 3): Promise<VSCodeColorThemeJson> {

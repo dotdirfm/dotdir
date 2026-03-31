@@ -33,6 +33,22 @@
   min-height: 0;
   min-width: 0;
   padding-bottom: env(safe-area-inset-bottom);
+  button {
+    background: var(--button-bg);
+    color: var(--button-fg);
+    border: 1px solid var(--button-border);
+    &:hover {
+      background: var(--button-hover-bg);
+    }
+  }
+  input {
+    background: var(--input-bg);
+    color: var(--input-fg);
+    border: 1px solid var(--input-border);
+    &:hover {
+      background: var(--input-hover-bg);
+    }
+  }
 }
 
 .dotdir-root[data-theme="light"] {

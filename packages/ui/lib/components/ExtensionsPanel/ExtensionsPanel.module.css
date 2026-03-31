@@ -245,17 +245,10 @@
   align-items: center;
   gap: 6px;
   padding: 3px 12px;
-  border: 1px solid var(--border-active);
   border-radius: 3px;
-  background: var(--bg-secondary);
-  color: var(--fg);
   font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
-}
-
-.ext-btn:hover:not(:disabled) {
-  background: var(--entry-hover);
 }
 
 .ext-btn:disabled {
@@ -273,8 +266,8 @@
 }
 
 .ext-btn.install {
-  background: var(--border-active);
-  color: var(--fg);
+  /* background: var(--border-active);
+  color: var(--fg); */
 }
 
 .ext-btn.uninstall {

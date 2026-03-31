@@ -75,7 +75,7 @@
 
 .panel-tabs {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   flex-shrink: 0;
   height: 28px;
   background: var(--bg-tabs, var(--bg));
@@ -85,7 +85,7 @@
 
 .panel-tabs-list {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   flex: 1;
   min-width: 0;
   overflow-x: auto;
@@ -105,8 +105,9 @@
   font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
-  border-right: 1px solid var(--border);
-  color: var(--fg-muted, var(--fg));
+  background: var(--tab-inactive-bg);
+  color: var(--tab-inactive-fg, var(--fg-muted, var(--fg)));
+  border-right: 1px solid var(--tab-inactive-border, var(--border));
   flex-shrink: 0;
   max-width: 160px;
   min-width: 48px;
@@ -125,8 +126,18 @@
 }
 
 .panel-tab.active {
-  color: var(--fg);
-  background: var(--bg);
+  position: relative;
+  background: var(--tab-bg);
+  color: var(--tab-fg, var(--fg-muted, var(--fg)));
+  &::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--tab-border-top, var(--border-active));
+  }
 }
 
 .panel-tab.temp .panel-tab-label {
@@ -143,7 +154,7 @@
   color: inherit;
   opacity: 0.6;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1;
   border-radius: 2px;
 }

@@ -141,9 +141,8 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
             >
               <span className={styles["panel-tab-label"]}>{tabLabel(tab)}</span>
               {onCloseTab && (
-                <button
+                <a
                   tabIndex={-1}
-                  type="button"
                   className={styles["panel-tab-close"]}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -152,7 +151,7 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
                   aria-label="Close tab"
                 >
                   ×
-                </button>
+                </a>
               )}
             </div>,
           ];
