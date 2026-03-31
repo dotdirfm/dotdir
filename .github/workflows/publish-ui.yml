@@ -33,15 +33,6 @@ jobs:
         env:
           NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
 
-      - name: Build extension-api package
-        run: pnpm --filter @dotdirfm/extension-api build
-
-      - name: Pack extension-api package
-        run: npm pack --dry-run
-        working-directory: packages/extension-api
-        env:
-          NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
-
       - name: Check npm version
         id: version_check
         shell: bash
@@ -91,15 +82,6 @@ jobs:
           NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
 
       - run: pnpm install --frozen-lockfile
-        env:
-          NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
-
-      - name: Build UI package
-        run: pnpm --filter @dotdirfm/ui build
-
-      - name: Pack UI package
-        run: npm pack --dry-run
-        working-directory: packages/ui
         env:
           NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
 
