@@ -1,5 +1,6 @@
 import { TerminalProfile } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
+import { useFocusContext } from "@/focusContext";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useRef } from "react";
 import { formatHiddenCd, normalizeTerminalPath } from "./path";
@@ -76,6 +77,7 @@ export interface TerminalState {
 
 export function useTerminalState(): TerminalState {
   const bridge = useBridge();
+  const focusContext = useFocusContext();
   const sessions = useAtomValue(terminalSessionsAtom);
   const setSessions = useSetAtom(terminalSessionsAtom);
   const activeSessionId = useAtomValue(terminalActiveSessionIdAtom);
@@ -100,7 +102,7 @@ export function useTerminalState(): TerminalState {
 
   const createManagedSession = useCallback(
     (profile: TerminalProfile, cwd: string, sessionId = makeSessionId()): ManagedTerminalSession => {
-      const session = new TerminalSession(bridge, cwd, profile);
+      const session = new TerminalSession(bridge, cwd, profile, () => focusContext.is("terminal"));
       const managed: ManagedTerminalSession = {
         id: sessionId,
         session,
@@ -132,7 +134,7 @@ export function useTerminalState(): TerminalState {
       session.start().catch(() => {});
       return managed;
     },
-    [setSessions],
+    [focusContext, setSessions],
   );
 
   const setProfiles = useCallback(

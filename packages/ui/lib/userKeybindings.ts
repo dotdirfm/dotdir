@@ -4,12 +4,11 @@
  * Loads and watches user-defined keybindings from ~/.dotdir/keybindings.json
  */
 
-import { Bridge } from "@/features/bridge";
-import { commandRegistry, type Keybinding } from "@/features/commands/commands";
+import { useBridge } from "@/features/bridge/useBridge";
+import { type Keybinding, useCommandRegistry } from "@/features/commands/commands";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/jsoncFileWatcher";
 import { join } from "@/utils/path";
-
-let watcher: JsoncFileWatcher<Keybinding[]> | null = null;
+import { useEffect } from "react";
 
 function validateKeybindings(parsed: unknown): Keybinding[] | null {
   if (!Array.isArray(parsed)) {
@@ -31,23 +30,37 @@ function validateKeybindings(parsed: unknown): Keybinding[] | null {
     }));
 }
 
-export async function initUserKeybindings(bridge: Bridge): Promise<void> {
-  watcher = await createJsoncFileWatcher<Keybinding[]>(bridge, {
-    name: "userKeybindings",
-    getPath: async () => {
-      const homePath = await bridge.utils.getHomePath();
-      return join(homePath, ".dotdir", "keybindings.json");
-    },
-    validate: validateKeybindings,
-    defaultValue: [],
-    onLoad: (keybindings) => {
-      commandRegistry.setLayerKeybindings("user", keybindings);
-      console.log(`[userKeybindings] Applied ${keybindings.length} keybindings`);
-    },
-  });
-}
+export function useUserKeybindings(): void {
+  const bridge = useBridge();
+  const commandRegistry = useCommandRegistry();
 
-export async function disposeUserKeybindings(): Promise<void> {
-  await watcher?.dispose();
-  watcher = null;
+  useEffect(() => {
+    let watcher: JsoncFileWatcher<Keybinding[]> | null = null;
+    let cancelled = false;
+
+    void createJsoncFileWatcher<Keybinding[]>(bridge, {
+      name: "userKeybindings",
+      getPath: async () => {
+        const homePath = await bridge.utils.getHomePath();
+        return join(homePath, ".dotdir", "keybindings.json");
+      },
+      validate: validateKeybindings,
+      defaultValue: [],
+      onLoad: (keybindings) => {
+        commandRegistry.setLayerKeybindings("user", keybindings);
+        console.log(`[userKeybindings] Applied ${keybindings.length} keybindings`);
+      },
+    }).then((createdWatcher) => {
+      if (cancelled) {
+        void createdWatcher.dispose();
+        return;
+      }
+      watcher = createdWatcher;
+    });
+
+    return () => {
+      cancelled = true;
+      void watcher?.dispose();
+    };
+  }, [bridge, commandRegistry]);
 }

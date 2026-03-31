@@ -11,11 +11,11 @@ import type { DialogSpec } from "@/dialogs/dialogContext";
 import type { LanguageOption } from "@/dialogs/OpenCreateFileDialog";
 import { activePanelSideAtom, activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
-import { commandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
 import { useUserSettings } from "@/features/settings/useUserSettings";
 import { getActiveFileListHandlers } from "@/fileListHandlers";
-import { focusContext } from "@/focusContext";
+import { useFocusContext } from "@/focusContext";
 import { getActivePanelGroupHandlers } from "@/panelGroupHandlers";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/registerKeybindings";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
@@ -44,6 +44,8 @@ export interface BuiltInCommandDeps {
 
 export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const bridge = useBridge();
+  const commandRegistry = useCommandRegistry();
+  const focusContext = useFocusContext();
 
   // Updated every render so command handlers always see the latest callbacks.
   const depsRef = useRef(deps);

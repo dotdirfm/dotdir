@@ -13,7 +13,7 @@
  * 3. User (from ~/.dotdir/keybindings.json)
  */
 
-import { focusContext } from "@/focusContext";
+import { createContext, createElement, useContext, useRef, type ReactNode } from "react";
 
 export interface Command {
   id: string;
@@ -50,7 +50,7 @@ export type KeybindingLayer = "default" | "extension" | "user";
 type CommandHandler = (...args: unknown[]) => void | Promise<void>;
 type ContextGetter = () => Record<string, unknown>;
 
-class CommandRegistry {
+export class CommandRegistry {
   private contributions = new Map<string, CommandContribution>();
   private handlers = new Map<string, CommandHandler>();
   private keybindingLayers: Record<KeybindingLayer, Keybinding[]> = {
@@ -59,6 +59,7 @@ class CommandRegistry {
     user: [],
   };
   private contextGetter: ContextGetter = () => ({});
+  private focusLayerGetter: () => string = () => "panel";
   private contextValues: Record<string, unknown> = {};
   private listeners = new Set<() => void>();
 
@@ -138,6 +139,10 @@ class CommandRegistry {
     this.contextGetter = getter;
   }
 
+  setFocusLayerGetter(getter: (() => string) | null): void {
+    this.focusLayerGetter = getter ?? (() => "panel");
+  }
+
   async executeCommand(id: string, ...args: unknown[]): Promise<void> {
     const handler = this.handlers.get(id);
     if (!handler) {
@@ -145,7 +150,6 @@ class CommandRegistry {
       return;
     }
     console.log("[dotdir:command]", id, ...args);
-    console.log(focusContext.current);
     try {
       await handler(...args);
     } catch (err) {
@@ -197,7 +201,7 @@ class CommandRegistry {
   evaluateWhen(when: string | undefined): boolean {
     if (!when) return true;
     const userContext = this.contextGetter();
-    const currentFocus = focusContext.current;
+    const currentFocus = this.focusLayerGetter();
     const context: Record<string, unknown> = {
       ...userContext,
       ...this.contextValues,
@@ -380,7 +384,21 @@ class CommandRegistry {
   }
 }
 
-export const commandRegistry = new CommandRegistry();
+const CommandRegistryReactContext = createContext<CommandRegistry | null>(null);
+
+export function CommandRegistryProvider({ children }: { children: ReactNode }) {
+  const registryRef = useRef<CommandRegistry | null>(null);
+  if (!registryRef.current) {
+    registryRef.current = new CommandRegistry();
+  }
+  return createElement(CommandRegistryReactContext.Provider, { value: registryRef.current }, children);
+}
+
+export function useCommandRegistry(): CommandRegistry {
+  const value = useContext(CommandRegistryReactContext);
+  if (!value) throw new Error("useCommandRegistry must be used within CommandRegistryProvider");
+  return value;
+}
 
 export function formatKeybinding(binding: Keybinding): string {
   const isMac = navigator.platform.toUpperCase().includes("MAC");

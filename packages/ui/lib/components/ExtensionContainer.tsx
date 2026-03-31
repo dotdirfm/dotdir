@@ -7,12 +7,12 @@
 import { loadedExtensionsAtom } from "@/atoms";
 import { Bridge } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
-import { commandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
 import { getActiveFileListHandlers } from "@/fileListHandlers";
-import { focusContext } from "@/focusContext";
+import { useFocusContext } from "@/focusContext";
 import { readFileText as readFileTextFromFs } from "@/fs";
 import { getStyleHostElement } from "@/styleHost";
 import styles from "@/styles/viewers.module.css";
@@ -70,6 +70,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const { extensionDirPath, entry, kind, props, onClose, className, style, active } = containerProps;
 
   const bridge = useBridge();
+  const commandRegistry = useCommandRegistry();
+  const focusContext = useFocusContext();
   const resolveVfsUrl = useVfsUrlResolver();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -767,6 +769,7 @@ export function ViewerContainer({
   onExecuteCommand,
   onTabBackToPanel,
 }: ViewerContainerWrapperProps) {
+  const focusContext = useFocusContext();
   const containerRef = useRef<HTMLDivElement>(null);
   const focusPushedRef = useRef(false);
   const restoreFocusElRef = useRef<HTMLElement | null>(null);
@@ -972,6 +975,7 @@ interface EditorContainerWrapperProps {
 }
 
 export function EditorContainer({ extensionDirPath, entry, filePath, fileName, langId, inline, visible, onClose, onDirtyChange }: EditorContainerWrapperProps) {
+  const focusContext = useFocusContext();
   const loadedExtensions = useAtomValue(loadedExtensionsAtom);
 
   const languages = loadedExtensions.flatMap((e) => e.languages ?? []);

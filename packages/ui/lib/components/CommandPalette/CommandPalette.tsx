@@ -1,6 +1,6 @@
 import { commandPaletteOpenAtom } from "@/atoms";
 import { OverlayDialog } from "@/dialogs/OverlayDialog";
-import { commandRegistry, formatKeybinding, type Command as CommandType, type Keybinding } from "@/features/commands/commands";
+import { formatKeybinding, type Command as CommandType, type Keybinding, useCommandRegistry } from "@/features/commands/commands";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { Command } from "cmdk";
 import { useAtom } from "jotai";
@@ -19,6 +19,7 @@ interface CommandItem {
 }
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
+  const commandRegistry = useCommandRegistry();
   const inputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [commands, setCommands] = useState<CommandType[]>([]);

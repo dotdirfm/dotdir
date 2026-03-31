@@ -15,11 +15,12 @@ import {
 import { useBridge } from "@/features/bridge/useBridge";
 import { showHiddenAtom } from "@/features/settings/useUserSettings";
 import { getFileListHandlers } from "@/fileListHandlers";
-import { focusContext } from "@/focusContext";
+import { useFocusContext } from "@/focusContext";
 import { type FileListPanelController } from "@/hooks/useFileListPanel";
 import { setActivePanelGroupHandlers } from "@/panelGroupHandlers";
 import styles from "@/styles/panels.module.css";
 import { cx } from "@/utils/cssModules";
+import { dirname } from "@/utils/path";
 import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -30,11 +31,11 @@ interface PanelGroupProps {
   selectionKey?: number;
   requestedActiveName?: string;
   requestedTopmostName?: string;
-  onStateChange: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
   onActivePanelChange: (panel: FileListPanelController) => void;
 }
 
-export function PanelGroup({ side, selectionKey, requestedActiveName, requestedTopmostName, onStateChange, onActivePanelChange }: PanelGroupProps) {
+export function PanelGroup({ side, selectionKey, requestedActiveName, requestedTopmostName, onActivePanelChange }: PanelGroupProps) {
+  const focusContext = useFocusContext();
   const activePanel = useAtomValue(activePanelSideAtom);
   const setActivePanel = useSetAtom(activePanelSideAtom);
   const { showDialog } = useDialog();
@@ -116,10 +117,85 @@ export function PanelGroup({ side, selectionKey, requestedActiveName, requestedT
 
   const handleActiveFileListChange = useCallback(
     (panel: FileListPanelController) => {
+      setTabs((prev) => {
+        const index = prev.findIndex((tab) => tab.id === activeTabIdRef.current);
+        if (index < 0) return prev;
+        const tab = prev[index];
+        if (!tab || tab.type !== "filelist") return prev;
+
+        const { path, entry, entries } = panel.state;
+        if (tab.path === path && tab.entry === entry && tab.entries === entries) {
+          return prev;
+        }
+
+        const pathChanged = tab.path !== path;
+        let nextParent = tab.parent;
+        let nextActiveEntryName = tab.activeEntryName;
+        let nextTopmostEntryName = tab.topmostEntryName;
+        let nextSelectedEntryNames = tab.selectedEntryNames;
+
+        if (pathChanged) {
+          if (tab.parent?.path === path) {
+            nextParent = tab.parent.parent;
+            nextActiveEntryName = tab.parent.activeEntryName;
+            nextTopmostEntryName = tab.parent.topmostEntryName;
+            nextSelectedEntryNames = tab.parent.selectedEntryNames;
+          } else if (tab.path === dirname(path)) {
+            nextParent = tab;
+            nextActiveEntryName = undefined;
+            nextTopmostEntryName = undefined;
+            nextSelectedEntryNames = [];
+          } else {
+            nextParent = undefined;
+            nextActiveEntryName = undefined;
+            nextTopmostEntryName = undefined;
+            nextSelectedEntryNames = [];
+          }
+        }
+
+        const next = [...prev];
+        next[index] = {
+          ...tab,
+          path,
+          entry,
+          entries,
+          parent: nextParent,
+          activeEntryName: nextActiveEntryName,
+          topmostEntryName: nextTopmostEntryName,
+          selectedEntryNames: nextSelectedEntryNames,
+        };
+        return next;
+      });
       setActiveFileListNavigating(panel.navigating);
       onActivePanelChange(panel);
     },
-    [onActivePanelChange],
+    [onActivePanelChange, setTabs],
+  );
+
+  const handleFileListStateChange = useCallback(
+    (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => {
+      setTabs((prev) => {
+        const index = prev.findIndex((tab) => tab.id === activeTabIdRef.current);
+        if (index < 0) return prev;
+        const tab = prev[index];
+        if (!tab || tab.type !== "filelist") return prev;
+        const currentSelected = tab.selectedEntryNames ?? [];
+        const sameSelected =
+          currentSelected.length === selectedNames.length && currentSelected.every((name, idx) => name === selectedNames[idx]);
+        if (tab.activeEntryName === selectedName && tab.topmostEntryName === topmostName && sameSelected) {
+          return prev;
+        }
+        const next = [...prev];
+        next[index] = {
+          ...tab,
+          activeEntryName: selectedName,
+          topmostEntryName: topmostName,
+          selectedEntryNames: selectedNames,
+        };
+        return next;
+      });
+    },
+    [setTabs],
   );
 
   const handleNewTab = useCallback(() => {
@@ -300,7 +376,7 @@ export function PanelGroup({ side, selectionKey, requestedActiveName, requestedT
                 selectionKey={selectionKey}
                 requestedActiveName={isVisible ? requestedActiveName : undefined}
                 requestedTopmostName={isVisible ? requestedTopmostName : undefined}
-                onStateChange={isVisible ? onStateChange : undefined}
+                onStateChange={isVisible ? handleFileListStateChange : undefined}
                 onActivatePanelFocus={activatePanelFocus}
                 onActivePanelChange={handleActiveFileListChange}
               />

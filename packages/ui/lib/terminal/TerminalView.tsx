@@ -1,5 +1,5 @@
-import { commandRegistry } from "@/features/commands/commands";
-import { focusContext } from "@/focusContext";
+import { useCommandRegistry } from "@/features/commands/commands";
+import { useFocusContext } from "@/focusContext";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal, type IDisposable } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -24,6 +24,8 @@ function resolveTerminalTheme() {
 }
 
 export function TerminalView({ session, expanded = false, focusRequestKey = 0 }: TerminalViewProps) {
+  const commandRegistry = useCommandRegistry();
+  const focusContext = useFocusContext();
   const containerRef = useRef<HTMLDivElement>(null);
   const fitFrameRef = useRef<number | null>(null);
   const termRef = useRef<Terminal | null>(null);

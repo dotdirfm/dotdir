@@ -1,6 +1,6 @@
 import { cx } from "@/utils/cssModules";
 import { useEffect, useRef } from "react";
-import { focusContext, type FocusLayer } from "../focusContext";
+import { type FocusLayer, useFocusContext } from "../focusContext";
 import styles from "./dialogs.module.css";
 
 type Placement = "center" | "top";
@@ -35,6 +35,7 @@ export function OverlayDialog({
   initialFocusRef,
   focusLayer = "modal",
 }: OverlayDialogProps) {
+  const focusContext = useFocusContext();
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

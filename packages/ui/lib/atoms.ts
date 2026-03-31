@@ -12,6 +12,8 @@ export const resolvedProfilesAtom = atom<TerminalProfile[]>([]);
 export const terminalProfilesLoadedAtom = atom(false);
 
 export const osThemeAtom = atom<ThemeKind>("dark");
+export const iconThemeTypeAtom = atom<"fss" | "vscode" | "none">("fss");
+export const iconThemeVersionAtom = atom(0);
 
 export const panelsVisibleAtom = atom(true);
 export const terminalFocusRequestKeyAtom = atom(0);

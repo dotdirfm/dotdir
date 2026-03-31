@@ -7,8 +7,8 @@ import {
 } from "@/atoms";
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
-import { commandRegistry } from "@/features/commands/commands";
-import { focusContext } from "@/focusContext";
+import { useCommandRegistry } from "@/features/commands/commands";
+import { useFocusContext } from "@/focusContext";
 import { normalizeTerminalPath } from "@/terminal/path";
 import { useTerminalState } from "@/terminal/useTerminalState";
 import { normalizePath } from "@/utils/path";
@@ -27,6 +27,8 @@ export interface UseTerminalResult {
 
 export function useTerminal({ onNavigatePanel }: UseTerminalOptions): UseTerminalResult {
   const bridge = useBridge();
+  const commandRegistry = useCommandRegistry();
+  const focusContext = useFocusContext();
   const profiles = useAtomValue(resolvedProfilesAtom);
   const profilesLoaded = useAtomValue(terminalProfilesLoadedAtom);
 

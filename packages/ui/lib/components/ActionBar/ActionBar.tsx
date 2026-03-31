@@ -1,5 +1,5 @@
-import { commandRegistry, type Command, type Keybinding } from "@/features/commands/commands";
-import { focusContext } from "@/focusContext";
+import { type Command, type Keybinding, useCommandRegistry } from "@/features/commands/commands";
+import { useFocusContext } from "@/focusContext";
 import { cx } from "@/utils/cssModules";
 import { useCallback, useEffect, useState } from "react";
 import styles from "./ActionBar.module.css";
@@ -19,6 +19,8 @@ function getModifierPrefix(ctrl: boolean, shift: boolean, alt: boolean): string 
 }
 
 export function ActionBar() {
+  const commandRegistry = useCommandRegistry();
+  const focusContext = useFocusContext();
   const [items, setItems] = useState<ActionBarItem[]>([]);
   const [modifiers, setModifiers] = useState({
     ctrl: false,

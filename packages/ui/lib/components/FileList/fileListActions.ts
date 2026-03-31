@@ -1,13 +1,14 @@
 import type { ActionQueue } from "@/actionQueue";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { getFileOperationHandlers } from "@/features/file-ops/model/fileOperationHandlers";
-import { commandRegistry } from "@/features/commands/commands";
 import type { FsNode } from "fss-lang";
+import { useMemo } from "react";
 
 type DisplayEntry = {
   entry: FsNode;
 };
 
-type FileListActionContext = {
+type FileListActionDeps = {
   actionQueue: ActionQueue;
   getDisplayEntries: () => DisplayEntry[];
   getActiveIndex: () => number;
@@ -20,88 +21,90 @@ function getSelectedOrActiveEntries({
   getDisplayEntries,
   getActiveIndex,
   getSelectedNames,
-}: Pick<FileListActionContext, "getDisplayEntries" | "getActiveIndex" | "getSelectedNames">): DisplayEntry[] {
+}: Pick<FileListActionDeps, "getDisplayEntries" | "getActiveIndex" | "getSelectedNames">): DisplayEntry[] {
   const all = getDisplayEntries();
   const selected = getSelectedNames();
   if (selected.size > 0) {
-    return all.filter((item) => selected.has(item.entry.name));
+    return all.filter((item: DisplayEntry) => selected.has(item.entry.name));
   }
   const active = all[getActiveIndex()];
   return active ? [active] : [];
 }
 
-export function createFileListActionHandlers(ctx: FileListActionContext) {
-  return {
+export function useFileListActionHandlers(deps: FileListActionDeps) {
+  const commandRegistry = useCommandRegistry();
+
+  return useMemo(() => ({
     execute: () =>
-      ctx.actionQueue.enqueue(async () => {
-        const [item] = getSelectedOrActiveEntries(ctx);
+      deps.actionQueue.enqueue(async () => {
+        const [item] = getSelectedOrActiveEntries(deps);
         if (!item || item.entry.type !== "file") return;
         if (!(item.entry.meta as { executable?: boolean }).executable) return;
         void commandRegistry.executeCommand("terminal.execute", item.entry.path as string);
       }),
     open: () =>
-      ctx.actionQueue.enqueue(async () => {
-        const [item] = getSelectedOrActiveEntries(ctx);
-        if (item) await ctx.navigateToEntry(item.entry);
+      deps.actionQueue.enqueue(async () => {
+        const [item] = getSelectedOrActiveEntries(deps);
+        if (item) await deps.navigateToEntry(item.entry);
       }),
     viewFile: () =>
-      ctx.actionQueue.enqueue(() => {
-        const [item] = getSelectedOrActiveEntries(ctx);
+      deps.actionQueue.enqueue(() => {
+        const [item] = getSelectedOrActiveEntries(deps);
         if (item && item.entry.type === "file") {
           void commandRegistry.executeCommand("viewFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
         }
       }),
     editFile: () =>
-      ctx.actionQueue.enqueue(() => {
-        const [item] = getSelectedOrActiveEntries(ctx);
+      deps.actionQueue.enqueue(() => {
+        const [item] = getSelectedOrActiveEntries(deps);
         if (item && item.entry.type === "file") {
           const langId = typeof item.entry.lang === "string" && item.entry.lang ? item.entry.lang : "plaintext";
           void commandRegistry.executeCommand("editFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size), langId);
         }
       }),
     moveToTrash: () =>
-      ctx.actionQueue.enqueue(() => {
+      deps.actionQueue.enqueue(() => {
         const ops = getFileOperationHandlers();
         if (!ops) return;
-        const sourcePaths = getSelectedOrActiveEntries(ctx).map((item) => item.entry.path as string);
+        const sourcePaths = getSelectedOrActiveEntries(deps).map((item) => item.entry.path as string);
         if (sourcePaths.length === 0) return;
-        ops.moveToTrash(sourcePaths, ctx.refresh);
+        ops.moveToTrash(sourcePaths, deps.refresh);
       }),
     permanentDelete: () =>
-      ctx.actionQueue.enqueue(() => {
+      deps.actionQueue.enqueue(() => {
         const ops = getFileOperationHandlers();
         if (!ops) return;
-        const sourcePaths = getSelectedOrActiveEntries(ctx).map((item) => item.entry.path as string);
+        const sourcePaths = getSelectedOrActiveEntries(deps).map((item) => item.entry.path as string);
         if (sourcePaths.length === 0) return;
-        ops.permanentDelete(sourcePaths, ctx.refresh);
+        ops.permanentDelete(sourcePaths, deps.refresh);
       }),
     copy: () =>
-      ctx.actionQueue.enqueue(() => {
+      deps.actionQueue.enqueue(() => {
         const ops = getFileOperationHandlers();
         if (!ops) return;
-        const sourcePaths = getSelectedOrActiveEntries(ctx).map((item) => item.entry.path as string);
+        const sourcePaths = getSelectedOrActiveEntries(deps).map((item) => item.entry.path as string);
         if (sourcePaths.length === 0) return;
-        ops.copy(sourcePaths, ctx.refresh);
+        ops.copy(sourcePaths, deps.refresh);
       }),
     move: () =>
-      ctx.actionQueue.enqueue(() => {
+      deps.actionQueue.enqueue(() => {
         const ops = getFileOperationHandlers();
         if (!ops) return;
-        const sourcePaths = getSelectedOrActiveEntries(ctx).map((item) => item.entry.path as string);
+        const sourcePaths = getSelectedOrActiveEntries(deps).map((item) => item.entry.path as string);
         if (sourcePaths.length === 0) return;
-        ops.move(sourcePaths, ctx.refresh);
+        ops.move(sourcePaths, deps.refresh);
       }),
     rename: () =>
-      ctx.actionQueue.enqueue(() => {
+      deps.actionQueue.enqueue(() => {
         const ops = getFileOperationHandlers();
         if (!ops) return;
-        const [item] = getSelectedOrActiveEntries(ctx);
+        const [item] = getSelectedOrActiveEntries(deps);
         if (!item) return;
-        ops.rename(item.entry.path as string, item.entry.name, ctx.refresh);
+        ops.rename(item.entry.path as string, item.entry.name, deps.refresh);
       }),
     pasteFilename: () =>
-      ctx.actionQueue.enqueue(() => {
-        const [item] = getSelectedOrActiveEntries(ctx);
+      deps.actionQueue.enqueue(() => {
+        const [item] = getSelectedOrActiveEntries(deps);
         if (!item) return;
         const ops = getFileOperationHandlers();
         if (!ops) return;
@@ -110,8 +113,8 @@ export function createFileListActionHandlers(ctx: FileListActionContext) {
         ops.pasteToCommandLine(arg);
       }),
     pastePath: () =>
-      ctx.actionQueue.enqueue(() => {
-        const [item] = getSelectedOrActiveEntries(ctx);
+      deps.actionQueue.enqueue(() => {
+        const [item] = getSelectedOrActiveEntries(deps);
         if (!item) return;
         const ops = getFileOperationHandlers();
         if (!ops) return;
@@ -119,5 +122,5 @@ export function createFileListActionHandlers(ctx: FileListActionContext) {
         const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
         ops.pasteToCommandLine(arg);
       }),
-  };
+  }), [commandRegistry, deps]);
 }

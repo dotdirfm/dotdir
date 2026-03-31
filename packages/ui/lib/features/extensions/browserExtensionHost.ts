@@ -1,7 +1,8 @@
-import { commandRegistry } from "@/features/commands/commands";
+import { type CommandRegistry, useCommandRegistry } from "@/features/commands/commands";
 import type { LoadedExtension } from "@/features/extensions/extensions";
 import { join, normalizePath } from "@/utils/path";
 import { resolveVfsUrl } from "@/utils/vfs";
+import { useEffect, useRef } from "react";
 
 export type BrowserDisposable = { dispose: () => void };
 
@@ -112,9 +113,11 @@ async function loadBrowserModule(scriptUrl: string): Promise<BrowserExtensionMod
   }
 }
 
-export class BrowserExtensionHost {
+class BrowserExtensionHostImpl {
   private active = new Map<string, ActiveActivation>();
   private queue: Promise<void> = Promise.resolve();
+
+  constructor(private readonly commandRegistry: CommandRegistry) {}
 
   private dotdir = {
     commands: {
@@ -122,7 +125,7 @@ export class BrowserExtensionHost {
         commandId: string,
         handler: (...args: unknown[]) => void | Promise<void>,
       ): BrowserDisposable => {
-        return { dispose: commandRegistry.registerCommand(commandId, handler) };
+        return { dispose: this.commandRegistry.registerCommand(commandId, handler) };
       },
     },
   };
@@ -201,4 +204,21 @@ export class BrowserExtensionHost {
     this.active.clear();
     await Promise.all(entries.map(([key, active]) => this.deactivateOne(key, active)));
   }
+}
+
+export function useBrowserExtensionHost(): BrowserExtensionHostImpl {
+  const commandRegistry = useCommandRegistry();
+  const hostRef = useRef<BrowserExtensionHostImpl | null>(null);
+
+  if (!hostRef.current) {
+    hostRef.current = new BrowserExtensionHostImpl(commandRegistry);
+  }
+
+  useEffect(() => {
+    return () => {
+      void hostRef.current?.dispose();
+    };
+  }, []);
+
+  return hostRef.current;
 }

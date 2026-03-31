@@ -1,10 +1,12 @@
+import { createContext, createElement, useContext, useRef, type ReactNode } from "react";
+
 export type FocusLayer =
-  | "panel" // File panels (default)
-  | "commandPalette" // Command palette overlay
-  | "modal" // Modal dialogs
-  | "terminal" // Terminal has focus
-  | "editor" // File editor has focus
-  | "viewer"; // File viewer has focus
+  | "panel"
+  | "commandPalette"
+  | "modal"
+  | "terminal"
+  | "editor"
+  | "viewer";
 
 type FocusChangeCallback = (layer: FocusLayer) => void;
 type FocusStateChangeCallback = (state: FocusState) => void;
@@ -27,7 +29,7 @@ export type FocusState = {
   stack: FocusStackEntry[];
 };
 
-class FocusContextManager {
+export class FocusContextManager {
   private stack: FocusStackEntry[] = [{ layer: "panel" }];
   private listeners = new Set<FocusChangeCallback>();
   private stateListeners = new Set<FocusStateChangeCallback>();
@@ -155,4 +157,18 @@ class FocusContextManager {
   }
 }
 
-export const focusContext = new FocusContextManager();
+const FocusContextReact = createContext<FocusContextManager | null>(null);
+
+export function FocusProvider({ children }: { children: ReactNode }) {
+  const managerRef = useRef<FocusContextManager | null>(null);
+  if (!managerRef.current) {
+    managerRef.current = new FocusContextManager();
+  }
+  return createElement(FocusContextReact.Provider, { value: managerRef.current }, children);
+}
+
+export function useFocusContext(): FocusContextManager {
+  const value = useContext(FocusContextReact);
+  if (!value) throw new Error("useFocusContext must be used within FocusProvider");
+  return value;
+}

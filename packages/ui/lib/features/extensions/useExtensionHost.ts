@@ -1,6 +1,6 @@
 import { loadedExtensionsAtom, osThemeAtom, resolvedProfilesAtom, terminalProfilesLoadedAtom, themesReadyAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
-import { commandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
 import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
@@ -25,6 +25,7 @@ interface UseExtensionHostOptions {
 
 export function useExtensionHost({ onRefreshPanels }: UseExtensionHostOptions): void {
   const bridge = useBridge();
+  const commandRegistry = useCommandRegistry();
   const extensionHost = useExtensionHostClient();
   const activeIconTheme = useAtomValue(activeIconThemeAtom);
   const activeColorTheme = useAtomValue(activeColorThemeAtom);

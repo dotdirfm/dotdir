@@ -3,7 +3,8 @@ import { DialogProvider } from "@/dialogs/dialogContext";
 import { Bridge } from "@/features/bridge";
 import { BridgeProvider } from "@/features/bridge/useBridge";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
-import { commandRegistry } from "@/features/commands/commands";
+import { CommandRegistryProvider, useCommandRegistry } from "@/features/commands/commands";
+import { FocusProvider } from "@/focusContext";
 import { Provider as JotaiProvider } from "jotai";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { App, type AppHandle } from "./app";
@@ -46,13 +47,25 @@ export type DotDirHandle = {
   focus(): void;
 };
 
+function DotDirContent({ widget, appRef }: { widget: React.ReactNode; appRef: React.RefObject<AppHandle | null> }) {
+  const commandRegistry = useCommandRegistry();
+
+  useEffect(() => {
+    return commandRegistry.registerContributions(builtInCommandContributions);
+  }, [commandRegistry]);
+
+  return (
+    <ErrorBoundary>
+      <DialogProvider>
+        <App ref={appRef} widget={widget} />
+      </DialogProvider>
+    </ErrorBoundary>
+  );
+}
+
 export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ bridge, widget, resolveVfsUrl = defaultResolveVfsUrl }, ref) {
   const rootRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<AppHandle>(null);
-
-  useEffect(() => {
-    commandRegistry.registerContributions(builtInCommandContributions);
-  }, []);
 
   useEffect(() => pushVfsUrlResolver(resolveVfsUrl), [resolveVfsUrl]);
 
@@ -82,11 +95,11 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
       <VfsUrlResolverContext.Provider value={resolveVfsUrl}>
         <JotaiProvider>
           <BridgeProvider bridge={bridge}>
-            <ErrorBoundary>
-              <DialogProvider>
-                <App ref={appRef} widget={widget} />
-              </DialogProvider>
-            </ErrorBoundary>
+            <CommandRegistryProvider>
+              <FocusProvider>
+                <DotDirContent widget={widget} appRef={appRef} />
+              </FocusProvider>
+            </CommandRegistryProvider>
           </BridgeProvider>
         </JotaiProvider>
       </VfsUrlResolverContext.Provider>

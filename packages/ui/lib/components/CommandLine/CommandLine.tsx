@@ -1,5 +1,5 @@
 import { commandLineCwdAtom, commandLineOnExecuteAtom, commandLinePasteFnAtom, panelsVisibleAtom } from "@/atoms";
-import { commandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { registerCommandLineKeybindings } from "@/registerKeybindings";
 import terminalStyles from "@/styles/terminal.module.css";
 import { useAtomValue, useSetAtom } from "jotai";
@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import commandLineStyles from "./CommandLine.module.css";
 
 export function CommandLine() {
+  const commandRegistry = useCommandRegistry();
   const cwd = useAtomValue(commandLineCwdAtom);
   const visible = useAtomValue(panelsVisibleAtom);
   const onExecute = useAtomValue(commandLineOnExecuteAtom);

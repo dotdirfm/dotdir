@@ -1,8 +1,8 @@
 import { ActionQueue } from "@/actionQueue";
 import type { PanelSide } from "@/entities/panel/model/types";
 import { FileListTabState } from "@/entities/tab/model/types";
-import { commandRegistry } from "@/features/commands/commands";
-import { onIconThemeChange, useGetCachedIcon, useLoadIconsForPaths, useResolveIcon } from "@/features/file-icons/iconResolver";
+import { useCommandRegistry } from "@/features/commands/commands";
+import { useGetCachedIcon, useIconThemeVersion, useLoadIconsForPaths, useResolveIcon } from "@/features/file-icons/iconResolver";
 import { setActiveFileListHandlers, setFileListHandlers } from "@/fileListHandlers";
 import { resolveEntryStyle } from "@/fss";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -18,7 +18,7 @@ import { Breadcrumbs } from "./Breadcrumbs";
 import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
 import { FileInfoFooter } from "./FileInfoFooter";
 import styles from "./FileList.module.css";
-import { createFileListActionHandlers } from "./fileListActions";
+import { useFileListActionHandlers } from "./fileListActions";
 
 const ROW_HEIGHT = 26;
 
@@ -33,12 +33,6 @@ interface FileListProps {
   requestedActiveName?: string;
   requestedTopmostName?: string;
   onStateChange?: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
-}
-
-interface NavigationState {
-  path: string;
-  selectedName: string;
-  topmostName: string;
 }
 
 interface DisplayEntry {
@@ -95,6 +89,7 @@ export const FileList = memo(function FileList({
   requestedTopmostName,
   onStateChange,
 }: FileListProps) {
+  const commandRegistry = useCommandRegistry();
   const entries = useMemo(() => (showHidden ? state.entries : state.entries.filter((e) => !e.meta.hidden)), [showHidden, state.entries]);
 
   const [actionQueue] = useState(() => new ActionQueue());
@@ -114,8 +109,6 @@ export const FileList = memo(function FileList({
   /** true = selecting, false = deselecting, undefined = no shift selection in progress */
   const prevSelectRef = useRef<boolean | undefined>(undefined);
   const prevPathRef = useRef(state.path);
-  const navStackRef = useRef<NavigationState[]>([]);
-
   const activeIndexRef = useRef(activeIndex);
   activeIndexRef.current = activeIndex;
   const topmostIndexRef = useRef(topmostIndex);
@@ -196,6 +189,7 @@ export const FileList = memo(function FileList({
   const neededIconsKey = useMemo(() => neededIcons.join("\0"), [neededIcons]);
 
   const loadIconsForPaths = useLoadIconsForPaths();
+  const iconThemeVersion = useIconThemeVersion();
 
   useEffect(() => {
     let cancelled = false;
@@ -207,13 +201,6 @@ export const FileList = memo(function FileList({
     };
   }, [loadIconsForPaths, neededIcons, neededIconsKey]);
 
-  // Re-render when icon theme changes
-  useEffect(() => {
-    return onIconThemeChange(() => {
-      setIconsVersion((n) => n + 1);
-    });
-  }, []);
-
   useEffect(() => {
     const prevPath = prevPathRef.current;
     prevPathRef.current = state.path;
@@ -223,37 +210,15 @@ export const FileList = memo(function FileList({
       return;
     }
 
-    // Navigating to parent - check if we have stored state
-    if (prevPath.startsWith(state.path)) {
-      const stack = navStackRef.current;
-      // Pop states until we find one for current path or stack is empty
-      while (stack.length > 0 && stack[stack.length - 1].path !== state.path) {
-        stack.pop();
-      }
-      const savedState = stack.pop();
-
-      if (savedState) {
-        // Restore from stack
-        const selectedIdx = displayEntries.findIndex((d) => d.entry.name === savedState.selectedName);
-        const topmostIdx = displayEntries.findIndex((d) => d.entry.name === savedState.topmostName);
-        setActiveIndex(selectedIdx >= 0 ? selectedIdx : 0);
-        setTopmostIndex(topmostIdx >= 0 ? topmostIdx : 0);
+    if (state.activeEntryName) {
+      const idx = displayEntries.findIndex((d) => d.entry.name === state.activeEntryName);
+      if (idx >= 0) {
+        setActiveIndex(idx);
+        const topmostIdx = state.topmostEntryName
+          ? displayEntries.findIndex((d) => d.entry.name === state.topmostEntryName)
+          : -1;
+        setTopmostIndex(topmostIdx >= 0 ? topmostIdx : Math.max(0, idx - 5));
         return;
-      }
-
-      // Fallback: select the child folder we came from.
-      // Strip the container-path separator (null byte) that may appear when prevPath
-      // was a container root, e.g. "archive.zip\0" → "archive.zip".
-      const remainder = prevPath.slice(state.path.length).replace(/^\//, "");
-      // oxlint-disable-next-line no-control-regex
-      const childName = remainder.split("/")[0].replace(/\0.*$/, "");
-      if (childName) {
-        const idx = displayEntries.findIndex((d) => d.entry.name === childName);
-        if (idx >= 0) {
-          setActiveIndex(idx);
-          setTopmostIndex(Math.max(0, idx - 5)); // Show some context above
-          return;
-        }
       }
     }
 
@@ -360,16 +325,6 @@ export const FileList = memo(function FileList({
     if (entry.name === "..") {
       await onNavigateRef.current(dirname(currentPathRef.current));
     } else if (entry.type === "folder") {
-      // Save current state to navigation stack before entering folder
-      const selectedName = displayEntriesRef.current[activeIndexRef.current]?.entry.name;
-      const topmostName = displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
-      if (selectedName) {
-        navStackRef.current.push({
-          path: currentPathRef.current,
-          selectedName,
-          topmostName: topmostName ?? selectedName,
-        });
-      }
       await onNavigateRef.current(join(currentPathRef.current, entry.name));
     } else if (entry.type === "file") {
       void commandRegistry.executeCommand("viewFile", entry.path as string, entry.name, Number(entry.meta.size));
@@ -421,17 +376,18 @@ export const FileList = memo(function FileList({
     };
   }, [active, updateSelectionContext]);
 
+  const fileActions = useFileListActionHandlers({
+    actionQueue,
+    getDisplayEntries: () => displayEntriesRef.current,
+    getActiveIndex: () => activeIndexRef.current,
+    getSelectedNames: () => selectedNamesRef.current,
+    navigateToEntry,
+    refresh: () => onNavigateRef.current(currentPathRef.current),
+  });
+
   // Publish handlers to the module-level registry when this panel is active.
   // Commands are registered once in useBuiltInCommands and read from here at call time.
   useEffect(() => {
-    const fileActions = createFileListActionHandlers({
-      actionQueue,
-      getDisplayEntries: () => displayEntriesRef.current,
-      getActiveIndex: () => activeIndexRef.current,
-      getSelectedNames: () => selectedNamesRef.current,
-      navigateToEntry,
-      refresh: () => onNavigateRef.current(currentPathRef.current),
-    });
     const handlers = {
       focus: () => {
         rootRef.current?.focus({ preventScroll: true });
@@ -612,7 +568,7 @@ export const FileList = memo(function FileList({
         </div>
       );
     },
-    [navigateToEntry, iconsVersion, clearKeyboardNav],
+    [navigateToEntry, iconsVersion, iconThemeVersion, clearKeyboardNav],
   );
 
   const activeEntry = displayEntries[activeIndex];

@@ -5,8 +5,10 @@
  * supporting both FSS-based and VS Code icon themes.
  */
 
+import { iconThemeTypeAtom, iconThemeVersionAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCallback } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
 import { getCachedIconUrl, loadIcons } from "./iconCache";
 import { useVscodeIconTheme } from "./vscodeIconTheme";
 
@@ -35,26 +37,25 @@ const DEFAULT_ICONS = {
     ),
 };
 
-let currentThemeType: IconThemeType = "fss";
-let themeChangeListeners: (() => void)[] = [];
-
 export function useSetIconTheme() {
   const vscodeIconTheme = useVscodeIconTheme();
+  const setThemeType = useSetAtom(iconThemeTypeAtom);
+  const bumpThemeVersion = useSetAtom(iconThemeVersionAtom);
   return {
     setIconTheme: async (type: IconThemeType, path?: string): Promise<void> => {
-      currentThemeType = type;
-
       if (type === "vscode" && path) {
         try {
           await vscodeIconTheme.load(path);
-          notifyThemeChange();
+          setThemeType(type);
+          bumpThemeVersion((v) => v + 1);
         } catch {
-          currentThemeType = "none";
-          notifyThemeChange();
+          setThemeType("none");
+          bumpThemeVersion((v) => v + 1);
         }
       } else {
         vscodeIconTheme.clear();
-        notifyThemeChange();
+        setThemeType(type);
+        bumpThemeVersion((v) => v + 1);
       }
     },
   };
@@ -62,28 +63,21 @@ export function useSetIconTheme() {
 
 export function useSetIconThemeKind() {
   const vscodeIconTheme = useVscodeIconTheme();
+  const bumpThemeVersion = useSetAtom(iconThemeVersionAtom);
   return {
     setIconThemeKind: (kind: "dark" | "light"): void => {
       vscodeIconTheme.setTheme(kind);
+      bumpThemeVersion((v) => v + 1);
     },
   };
 }
 
-export function getIconThemeType(): IconThemeType {
-  return currentThemeType;
+export function useIconThemeType(): IconThemeType {
+  return useAtomValue(iconThemeTypeAtom);
 }
 
-export function onIconThemeChange(listener: () => void): () => void {
-  themeChangeListeners.push(listener);
-  return () => {
-    themeChangeListeners = themeChangeListeners.filter((l) => l !== listener);
-  };
-}
-
-function notifyThemeChange(): void {
-  for (const listener of themeChangeListeners) {
-    listener();
-  }
+export function useIconThemeVersion(): number {
+  return useAtomValue(iconThemeVersionAtom);
 }
 
 export interface ResolvedIcon {
@@ -98,6 +92,7 @@ export interface ResolvedIcon {
  */
 export function useResolveIcon() {
   const vscodeIconTheme = useVscodeIconTheme();
+  const themeType = useIconThemeType();
 
   return useCallback((
     name: string,
@@ -113,7 +108,7 @@ export function useResolveIcon() {
         : DEFAULT_ICONS.folder
       : DEFAULT_ICONS.file;
 
-    if (currentThemeType === "vscode" && vscodeIconTheme.isLoaded()) {
+    if (themeType === "vscode" && vscodeIconTheme.isLoaded()) {
       const iconPath = vscodeIconTheme.resolveIcon(
         name,
         isDirectory,
@@ -132,7 +127,7 @@ export function useResolveIcon() {
       return { path: "_default", url: fallbackUrl, fallbackUrl };
     }
 
-    if (currentThemeType === "fss" && fssIconPath) {
+    if (themeType === "fss" && fssIconPath) {
       return {
         path: fssIconPath,
         url: getCachedIconUrl(fssIconPath) ?? null,
@@ -142,7 +137,7 @@ export function useResolveIcon() {
 
     // Fallback to default embedded icons
     return { path: "_default", url: fallbackUrl, fallbackUrl };
-  }, [vscodeIconTheme]);
+  }, [themeType, vscodeIconTheme]);
 }
 
 /**
@@ -152,13 +147,14 @@ export function useResolveIcon() {
 export function useLoadIconsForPaths() {
   const vscodeIconTheme = useVscodeIconTheme();
   const bridge = useBridge();
+  const themeType = useIconThemeType();
   return useCallback(async (paths: string[]): Promise<void> => {
-    if (currentThemeType === "vscode" && vscodeIconTheme.isLoaded()) {
+    if (themeType === "vscode" && vscodeIconTheme.isLoaded()) {
       await vscodeIconTheme.preloadIcons(paths);
     } else {
       await loadIcons(bridge, paths);
     }
-  }, [bridge, vscodeIconTheme]);
+  }, [bridge, themeType, vscodeIconTheme]);
 }
 
 /**
@@ -166,15 +162,16 @@ export function useLoadIconsForPaths() {
  */
 export function useGetCachedIcon() {
   const vscodeIconTheme = useVscodeIconTheme();
+  const themeType = useIconThemeType();
   return useCallback((path: string): string | null => {
     // Handle default embedded icons
     if (path === "_default_folder") return DEFAULT_ICONS.folder;
     if (path === "_default_folder_open") return DEFAULT_ICONS.folderOpen;
     if (path === "_default_file") return DEFAULT_ICONS.file;
 
-    if (currentThemeType === "vscode" && vscodeIconTheme.isLoaded()) {
+    if (themeType === "vscode" && vscodeIconTheme.isLoaded()) {
       return vscodeIconTheme.getCachedIcon(path);
     }
     return getCachedIconUrl(path) ?? null;
-  }, [vscodeIconTheme]);
+  }, [themeType, vscodeIconTheme]);
 }

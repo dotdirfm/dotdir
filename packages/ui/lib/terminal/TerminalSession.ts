@@ -1,5 +1,4 @@
 import { Bridge, PtyLaunchInfo, TerminalProfile } from "@/features/bridge";
-import { focusContext } from "@/focusContext";
 import { formatHiddenCd, normalizeTerminalPath } from "./path";
 import type { TerminalCapabilities, TerminalSessionEvent, TerminalSessionStatus } from "./types";
 
@@ -26,7 +25,12 @@ export class TerminalSession {
   /** While true, xterm OSC hooks must not mutate session state (replay buffer re-written to the terminal). */
   private oscHooksSuppressed = false;
 
-  constructor(private bridge: Bridge, initialCwd: string, profile: TerminalProfile) {
+  constructor(
+    private bridge: Bridge,
+    initialCwd: string,
+    profile: TerminalProfile,
+    private readonly isTerminalFocused: () => boolean,
+  ) {
     const normalizedInitialCwd = normalizeTerminalPath(initialCwd);
     this.initialCwd = normalizedInitialCwd;
     this.profile = profile;
@@ -164,7 +168,7 @@ export class TerminalSession {
   async syncToCwd(nextCwd: string): Promise<void> {
     const normalizedNextCwd = normalizeTerminalPath(nextCwd);
     if (this.ptyId === null || normalizedNextCwd === this.currentCwd) return;
-    if (this.capabilities.commandRunning || (this.inputBuffer.length > 0 && focusContext.is("terminal"))) {
+    if (this.capabilities.commandRunning || (this.inputBuffer.length > 0 && this.isTerminalFocused())) {
       this.pendingCwdSync = normalizedNextCwd;
       return;
     }
@@ -292,7 +296,7 @@ export class TerminalSession {
   private flushPendingCwdSync(): void {
     const nextCwd = this.pendingCwdSync;
     if (!nextCwd) return;
-    if (this.ptyId === null || this.capabilities.commandRunning || (this.inputBuffer.length > 0 && focusContext.is("terminal"))) {
+    if (this.ptyId === null || this.capabilities.commandRunning || (this.inputBuffer.length > 0 && this.isTerminalFocused())) {
       return;
     }
     this.pendingCwdSync = null;
