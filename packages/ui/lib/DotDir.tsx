@@ -5,6 +5,7 @@ import { BridgeProvider } from "@/features/bridge/useBridge";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { CommandRegistryProvider, useCommandRegistry } from "@/features/commands/commands";
 import { FocusProvider } from "@/focusContext";
+import { PanelControllersProvider } from "@/panelControllers";
 import { Provider as JotaiProvider } from "jotai";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { App, type AppHandle } from "./app";
@@ -97,7 +98,9 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
           <BridgeProvider bridge={bridge}>
             <CommandRegistryProvider>
               <FocusProvider>
-                <DotDirContent widget={widget} appRef={appRef} />
+                <PanelControllersProvider>
+                  <DotDirContent widget={widget} appRef={appRef} />
+                </PanelControllersProvider>
               </FocusProvider>
             </CommandRegistryProvider>
           </BridgeProvider>

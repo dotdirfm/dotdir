@@ -21,12 +21,11 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { FsProviderExtensionApi } from "@/features/extensions/extensionApi";
 import { isExistingDirectory } from "@/features/navigation/lib/commandLineCd";
-import { FileListPanelController } from "@/hooks/useFileListPanel";
+import { usePanelControllerRegistry } from "@/panelControllers";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join } from "@/utils/path";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import { useAtomValue, useSetAtom } from "jotai";
-import type { RefObject } from "react";
 import { useCallback, useEffect, useRef } from "react";
 
 export type { PanelSide };
@@ -47,11 +46,9 @@ async function collectContainerFiles(
   return results;
 }
 
-export function useFileOperations(
-  leftRef: RefObject<FileListPanelController | undefined>,
-  rightRef: RefObject<FileListPanelController | undefined>,
-) {
+export function useFileOperations() {
   const { showDialog, closeDialog, updateDialog } = useDialog();
+  const { refreshAll } = usePanelControllerRegistry();
 
   const activePanel = useAtomValue(activePanelSideAtom);
   const activePanelRef = useRef<PanelSide>(activePanel);
@@ -120,9 +117,8 @@ export function useFileOperations(
   const refreshBoth = useCallback(() => {
     clearSelectionForActiveFileListTab("left");
     clearSelectionForActiveFileListTab("right");
-    leftRef.current?.refresh();
-    rightRef.current?.refresh();
-  }, [clearSelectionForActiveFileListTab, leftRef, rightRef]);
+    refreshAll();
+  }, [clearSelectionForActiveFileListTab, refreshAll]);
 
   const handleMoveToTrash = useCallback(
     (sourcePaths: string[], refresh: () => void) => {

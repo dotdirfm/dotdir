@@ -17,6 +17,7 @@ import { showHiddenAtom } from "@/features/settings/useUserSettings";
 import { getFileListHandlers } from "@/fileListHandlers";
 import { useFocusContext } from "@/focusContext";
 import { type FileListPanelController } from "@/hooks/useFileListPanel";
+import { usePanelControllerRegistry } from "@/panelControllers";
 import { setActivePanelGroupHandlers } from "@/panelGroupHandlers";
 import styles from "@/styles/panels.module.css";
 import { cx } from "@/utils/cssModules";
@@ -30,11 +31,11 @@ interface PanelGroupProps {
   side: PanelSide;
   requestedActiveName?: string;
   requestedTopmostName?: string;
-  onActivePanelChange: (panel: FileListPanelController) => void;
 }
 
-export function PanelGroup({ side, requestedActiveName, requestedTopmostName, onActivePanelChange }: PanelGroupProps) {
+export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: PanelGroupProps) {
   const focusContext = useFocusContext();
+  const { registerPanel } = usePanelControllerRegistry();
   const activePanel = useAtomValue(activePanelSideAtom);
   const setActivePanel = useSetAtom(activePanelSideAtom);
   const { showDialog } = useDialog();
@@ -166,9 +167,9 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName, on
         return next;
       });
       setActiveFileListNavigating(panel.navigating);
-      onActivePanelChange(panel);
+      registerPanel(side, panel);
     },
-    [onActivePanelChange, setTabs],
+    [registerPanel, setTabs, side],
   );
 
   const handleFileListStateChange = useCallback(
