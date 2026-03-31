@@ -5,7 +5,7 @@
  * to .dir's CSS custom properties.
  */
 
-import { Bridge } from "@/features/bridge";
+import { Bridge, SystemThemeKind } from "@/features/bridge";
 import { readFileText } from "@/fs";
 import { getStyleHostElement } from "@/styleHost";
 import { dirname, join } from "@/utils/path";
@@ -69,7 +69,7 @@ async function loadThemeJson(bridge: Bridge, jsonPath: string, maxDepth = 3): Pr
 }
 
 export interface ActiveColorThemeData {
-  kind: "dark" | "light";
+  kind: SystemThemeKind;
   colors?: Record<string, string>;
   tokenColors?: unknown[];
 }
@@ -133,7 +133,7 @@ export function clearColorTheme(): void {
 /**
  * Determine whether a uiTheme string means light or dark mode.
  */
-export function uiThemeToKind(uiTheme: string): "dark" | "light" {
+export function uiThemeToKind(uiTheme: string): SystemThemeKind {
   if (uiTheme === "vs" || uiTheme === "hc-light") return "light";
   return "dark";
 }

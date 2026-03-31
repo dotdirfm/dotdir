@@ -1,7 +1,6 @@
 import type { PanelSide } from "@/entities/panel/model/types";
-import { TerminalProfile } from "@/features/bridge";
+import { SystemThemeKind, TerminalProfile } from "@/features/bridge";
 import type { LoadedExtension } from "@/features/extensions/extensions";
-import type { ThemeKind } from "fss-lang";
 import { atom } from "jotai";
 
 export const showExtensionsAtom = atom(false);
@@ -11,7 +10,7 @@ export const themesReadyAtom = atom(false);
 export const resolvedProfilesAtom = atom<TerminalProfile[]>([]);
 export const terminalProfilesLoadedAtom = atom(false);
 
-export const osThemeAtom = atom<ThemeKind>("dark");
+export const systemThemeAtom = atom<SystemThemeKind>("dark");
 export const iconThemeTypeAtom = atom<"fss" | "vscode" | "none">("fss");
 export const iconThemeVersionAtom = atom(0);
 

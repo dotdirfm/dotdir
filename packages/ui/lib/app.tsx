@@ -1,4 +1,4 @@
-import { commandLineOnExecuteAtom, commandLinePasteFnAtom, osThemeAtom, panelsVisibleAtom, showExtensionsAtom, themesReadyAtom } from "@/atoms";
+import { commandLineOnExecuteAtom, commandLinePasteFnAtom, panelsVisibleAtom, showExtensionsAtom, systemThemeAtom, themesReadyAtom } from "@/atoms";
 import { ActionBar } from "@/components/ActionBar/ActionBar";
 import { CommandLine } from "@/components/CommandLine/CommandLine";
 import { CommandPalette, useCommandPalette } from "@/components/CommandPalette/CommandPalette";
@@ -16,11 +16,12 @@ import { showHiddenAtom } from "@/features/settings/useUserSettings";
 import { useFocusContext } from "@/focusContext";
 import { useBuiltInCommands } from "@/hooks/useBuiltInCommands";
 import { useCommandLineExecute } from "@/hooks/useCommandLineExecute";
+import { useSystemTheme } from "@/hooks/useSystemTheme";
 import { useTerminal } from "@/hooks/useTerminal";
 import { useViewerEditorState } from "@/hooks/useViewerEditorState";
 import { useActivePanelNavigation } from "@/panelControllers";
 import { useWorkspacePersistenceProcess, useWorkspaceRestoreProcess } from "@/processes/workspace-session/model/useWorkspaceSessionProcess";
-import type { FsNode, ThemeKind } from "fss-lang";
+import type { FsNode } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import baseStyles from "./styles/base.module.css";
@@ -46,7 +47,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     [],
   );
   const bridge = useBridge();
-  const setTheme = useSetAtom(osThemeAtom);
+  const setTheme = useSetAtom(systemThemeAtom);
   const { dialog, showDialog } = useDialog();
   const showHidden = useAtomValue(showHiddenAtom);
 
@@ -57,6 +58,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const panelsVisible = useAtomValue(panelsVisibleAtom);
   const showExtensions = useAtomValue(showExtensionsAtom);
   const themesReady = useAtomValue(themesReadyAtom);
+  const systemTheme = useSystemTheme();
   const commandPalette = useCommandPalette();
   const setCommandLineOnExecute = useSetAtom(commandLineOnExecuteAtom);
   const commandLinePasteFnAtomValue = useAtomValue(commandLinePasteFnAtom);
@@ -118,9 +120,8 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   useWorkspacePersistenceProcess();
 
   useEffect(() => {
-    bridge.systemTheme.get().then((t) => setTheme(t as ThemeKind));
-    return bridge.systemTheme.onChange((t) => setTheme(t as ThemeKind));
-  }, []);
+    setTheme(systemTheme);
+  }, [setTheme, systemTheme]);
 
   useExtensionHost({
     onRefreshPanels: () => {

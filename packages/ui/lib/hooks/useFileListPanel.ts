@@ -6,7 +6,7 @@
  * refreshes or navigates up automatically.
  */
 
-import { osThemeAtom } from "@/atoms";
+import { systemThemeAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import { FileListTabState } from "@/entities/tab/model/types";
 import { Bridge, FsChangeType, FsEntry } from "@/features/bridge";
@@ -123,7 +123,7 @@ export interface FileListPanelController {
 export function useFileListPanel() {
   const { showError } = useDialog();
   const bridge = useBridge();
-  const theme = useAtomValue(osThemeAtom);
+  const theme = useAtomValue(systemThemeAtom);
   const [navigating, setNavigating] = useState(false);
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navAbortRef = useRef<AbortController | null>(null);

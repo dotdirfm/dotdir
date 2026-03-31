@@ -1,4 +1,4 @@
-import { loadedExtensionsAtom, osThemeAtom, resolvedProfilesAtom, terminalProfilesLoadedAtom, themesReadyAtom } from "@/atoms";
+import { loadedExtensionsAtom, resolvedProfilesAtom, systemThemeAtom, terminalProfilesLoadedAtom, themesReadyAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
@@ -29,7 +29,7 @@ export function useExtensionHost({ onRefreshPanels }: UseExtensionHostOptions): 
   const extensionHost = useExtensionHostClient();
   const activeIconTheme = useAtomValue(activeIconThemeAtom);
   const activeColorTheme = useAtomValue(activeColorThemeAtom);
-  const osTheme = useAtomValue(osThemeAtom);
+  const systemTheme = useAtomValue(systemThemeAtom);
   const setLoadedExtensions = useSetAtom(loadedExtensionsAtom);
   const setThemesReady = useSetAtom(themesReadyAtom);
   const setResolvedProfiles = useSetAtom(resolvedProfilesAtom);
@@ -55,12 +55,10 @@ export function useExtensionHost({ onRefreshPanels }: UseExtensionHostOptions): 
     const colorThemeMatch = activeColorTheme ? findColorTheme(latestExtensionsRef.current, activeColorTheme) : null;
     const effectiveKind = colorThemeMatch
       ? uiThemeToKind(colorThemeMatch.theme.uiTheme)
-      : osTheme === "light" || osTheme === "high-contrast-light"
-        ? "light"
-        : "dark";
+      : systemTheme;
     getStyleHostElement().dataset.theme = effectiveKind;
     setIconThemeKind(effectiveKind);
-  }, [osTheme, activeColorTheme]);
+  }, [systemTheme, activeColorTheme]);
 
   const ensureActiveIconThemeFssLoaded = useCallback(
     async (exts: LoadedExtension[], themeId: string | undefined): Promise<void> => {
