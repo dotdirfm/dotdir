@@ -21,40 +21,70 @@ export function useWorkspaceRestoreProcess() {
   const [uiStateLoaded, setUiStateLoaded] = useState(false);
 
   useEffect(() => {
-    initUiState(bridge).then((state) => {
+    initUiState(bridge).then(async (state) => {
+      const home = await bridge.utils.getHomePath();
+
       const setTabsForPanel = (
         panelState: PanelPersistedState | undefined,
         setTabs: Dispatch<SetStateAction<PanelTab[]>>,
         setActiveTabId: Dispatch<SetStateAction<string>>,
       ) => {
-        if (panelState?.tabs) {
-          const tabs: PanelTab[] = panelState.tabs
-            .map((t) => {
-              if (t.type === "filelist")
-                return {
-                  id: genTabId(),
-                  type: "filelist",
-                  path: t.path,
-                  entries: [] as FsNode[],
-                  topmostEntryName: t.topmostEntryName,
-                  activeEntryName: t.activeEntryName,
-                };
-              if (t.type === "preview") {
-                return {
-                  id: genTabId(),
-                  type: "preview" as const,
-                  isTemp: false,
-                  path: dirname(t.path),
-                  name: basename(t.path),
-                };
-              }
-              return null;
-            })
-            .filter((t): t is PanelTab => t !== null);
-          setTabs(tabs);
-          const activeTabId = tabs[panelState.activeTabIndex ?? 0]?.id;
-          if (activeTabId) setActiveTabId(activeTabId);
+        if (!panelState?.tabs?.length) {
+          const fallbackTab: PanelTab = {
+            id: genTabId(),
+            type: "filelist",
+            path: home,
+            entries: [] as FsNode[],
+            selectedEntryNames: [],
+          };
+          setTabs([fallbackTab]);
+          setActiveTabId(fallbackTab.id);
+          return;
         }
+
+        const tabs: PanelTab[] = [];
+        for (const t of panelState.tabs) {
+          if (t.type === "filelist") {
+            tabs.push({
+              id: genTabId(),
+              type: "filelist",
+              path: t.path || home,
+              entries: [] as FsNode[],
+              topmostEntryName: t.topmostEntryName,
+              activeEntryName: t.activeEntryName,
+              selectedEntryNames: [],
+            });
+            continue;
+          }
+
+          if (t.type === "preview") {
+            tabs.push({
+              id: genTabId(),
+              type: "preview",
+              isTemp: false,
+              path: dirname(t.path),
+              name: basename(t.path),
+              size: 0,
+            });
+          }
+        }
+
+        if (!tabs.length) {
+          const fallbackTab: PanelTab = {
+            id: genTabId(),
+            type: "filelist",
+            path: home,
+            entries: [] as FsNode[],
+            selectedEntryNames: [],
+          };
+          setTabs([fallbackTab]);
+          setActiveTabId(fallbackTab.id);
+          return;
+        }
+
+        setTabs(tabs);
+        const activeTabId = tabs[panelState.activeTabIndex ?? 0]?.id ?? tabs[0]?.id;
+        if (activeTabId) setActiveTabId(activeTabId);
       };
 
       setTabsForPanel(state.leftPanel, setLeftTabs, setLeftActiveTabId);
