@@ -34,6 +34,7 @@ interface PanelGroupProps {
 }
 
 export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: PanelGroupProps) {
+  const bridge = useBridge();
   const focusContext = useFocusContext();
   const { registerPanel } = usePanelControllerRegistry();
   const activePanel = useAtomValue(activePanelSideAtom);
@@ -67,11 +68,11 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
       setTabs(next);
       return;
     }
-    const home = await useBridge().utils.getHomePath();
+    const home = await bridge.utils.getHomePath();
     const newTab = createFilelistTab(home);
     setTabs([newTab]);
     setActiveTabId(newTab.id);
-  }, []);
+  }, [bridge, setActiveTabId, setTabs]);
   const handleCloseTab = useCallback(
     async (id: string) => {
       const tab = tabsRef.current.find((t) => t.id === id);
@@ -262,6 +263,11 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
               langId={langId}
               inline
               visible={isVisible}
+              onInteract={() => {
+                setActivePanel(side);
+                setActiveTabId(tab.id);
+                focusContext.request("editor");
+              }}
               onClose={() => handleCloseTab(tab.id)}
               onDirtyChange={(dirty) => {
                 setTabs((prev) =>
@@ -305,6 +311,11 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
               inline
               visible={isVisible}
               inlineFocusMode={tab.isTemp ? "viewer-first" : "panel-first"}
+              onInteract={() => {
+                setActivePanel(side);
+                setActiveTabId(tab.id);
+                focusContext.request("viewer");
+              }}
               onClose={() => handleCloseTab(tab.id)}
               onTabBackToPanel={
                 quickViewSourcePanel

@@ -41,6 +41,7 @@ interface ViewerContainerProps extends ExtensionContainerProps {
   onExecuteCommand?: (command: string, args?: unknown) => Promise<unknown>;
   inlineFocusMode?: "panel-first" | "viewer-first";
   onTabBackToPanel?: () => void;
+  onInteract?: () => void;
 }
 
 interface EditorContainerProps extends ExtensionContainerProps {
@@ -48,6 +49,7 @@ interface EditorContainerProps extends ExtensionContainerProps {
   props: EditorProps;
   onClose: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onInteract?: () => void;
 }
 
 export type ContainerProps = ViewerContainerProps | EditorContainerProps;
@@ -78,6 +80,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const [loading, setLoading] = useState(true);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const onInteractRef = useRef(containerProps.onInteract);
+  onInteractRef.current = containerProps.onInteract;
   const isInlineViewer = kind === "viewer" && !!(props as ViewerProps).inline;
   const inlineFocusMode = containerProps.kind === "viewer" ? (containerProps.inlineFocusMode ?? "panel-first") : "panel-first";
   const shouldAutoFocusIframe = kind === "viewer" && !isInlineViewer;
@@ -721,6 +725,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
             display: loading ? "none" : "block",
             background: "transparent",
           }}
+          onFocus={() => onInteractRef.current?.()}
+          onMouseDown={() => onInteractRef.current?.()}
           title={`${kind} extension`}
         />
       )}
@@ -742,6 +748,7 @@ interface ViewerContainerWrapperProps {
   onClose: () => void;
   onExecuteCommand?: (command: string, args?: unknown) => Promise<unknown>;
   onTabBackToPanel?: () => void;
+  onInteract?: () => void;
 }
 
 function focusIframeWithin(root: HTMLElement | null): void {
@@ -768,6 +775,7 @@ export function ViewerContainer({
   onClose,
   onExecuteCommand,
   onTabBackToPanel,
+  onInteract,
 }: ViewerContainerWrapperProps) {
   const focusContext = useFocusContext();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -934,6 +942,7 @@ export function ViewerContainer({
       onExecuteCommand={onExecuteCommand}
       inlineFocusMode={inlineFocusMode}
       onTabBackToPanel={onTabBackToPanel}
+      onInteract={onInteract}
       style={{ width: "100%", height: "100%" }}
     />
   );
@@ -972,9 +981,10 @@ interface EditorContainerWrapperProps {
   onDirtyChange?: (dirty: boolean) => void;
   languages?: EditorProps["languages"];
   grammars?: EditorProps["grammars"];
+  onInteract?: () => void;
 }
 
-export function EditorContainer({ extensionDirPath, entry, filePath, fileName, langId, inline, visible, onClose, onDirtyChange }: EditorContainerWrapperProps) {
+export function EditorContainer({ extensionDirPath, entry, filePath, fileName, langId, inline, visible, onClose, onDirtyChange, onInteract }: EditorContainerWrapperProps) {
   const focusContext = useFocusContext();
   const loadedExtensions = useAtomValue(loadedExtensionsAtom);
 
@@ -1177,13 +1187,14 @@ export function EditorContainer({ extensionDirPath, entry, filePath, fileName, l
         <ExtensionContainer
           kind="editor"
           extensionDirPath={extensionDirPath}
-          entry={entry}
-          props={editorProps}
-          active={isVisible}
-          onClose={handleClose}
-          onDirtyChange={onDirtyChange}
-          style={{ width: "100%", height: "100%" }}
-        />
+        entry={entry}
+        props={editorProps}
+        active={isVisible}
+        onClose={handleClose}
+        onDirtyChange={onDirtyChange}
+        onInteract={onInteract}
+        style={{ width: "100%", height: "100%" }}
+      />
       </div>
     </>
   );
