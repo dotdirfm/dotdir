@@ -211,7 +211,6 @@
   font-family: monospace;
   flex-shrink: 0;
   text-align: right;
-  min-width: 70px;
 }
 
 .file-info-footer {
