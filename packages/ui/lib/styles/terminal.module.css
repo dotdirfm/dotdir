@@ -70,10 +70,10 @@
   min-width: 0;
   max-width: 180px;
   padding: 2px 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--button-border);
   border-radius: 3px;
-  background: var(--bg);
-  color: var(--fg-secondary);
+  background: var(--button-bg);
+  color: var(--button-fg);
   font-size: 12px;
   cursor: pointer;
 }
@@ -120,7 +120,10 @@
 
 .terminal-tab-close {
   flex-shrink: 0;
-  color: var(--fg-muted);
+  opacity: 0.6;
+  &:hover {
+    opacity: 1;
+  }
 }
 
 .terminal-profile-picker {

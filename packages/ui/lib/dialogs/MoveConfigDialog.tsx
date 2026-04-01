@@ -32,7 +32,7 @@ export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: M
       <div className={styles["modal-dialog-header"]}>
         Move {itemCount} item{itemCount !== 1 ? "s" : ""}
       </div>
-      <form onSubmit={handleSubmit}>
+      <form className={styles["modal-dialog-form"]} onSubmit={handleSubmit}>
         <div className={styles["modal-dialog-body"]}>
           <div className={styles["copy-config-field"]}>
             <label htmlFor="move-dest">

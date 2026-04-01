@@ -1,0 +1,59 @@
+.key-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 12px;
+  user-select: none;
+  overflow: hidden;
+}
+
+.key-bar-item {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 100%;
+  cursor: pointer;
+  min-width: 0;
+  padding: 0 6px;
+  background: var(--key-bar-bg);
+  border: 1px solid var(--key-bar-border);
+  transition: background 0.1s;
+}
+
+.key-bar-item:hover:not(.disabled) {
+  background: var(--entry-hover);
+}
+
+.key-bar-item:active:not(.disabled) {
+  background: var(--border);
+}
+
+.key-bar-item.disabled {
+  cursor: default;
+}
+
+.key-bar-item.disabled .key-bar-key,
+.key-bar-item.disabled .key-bar-label {
+  opacity: 0.35;
+}
+
+.key-bar-key {
+  color: var(--key-bar-badge-fg);
+  background: var(--key-bar-badge-bg);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.key-bar-label {
+  color: var(--key-bar-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

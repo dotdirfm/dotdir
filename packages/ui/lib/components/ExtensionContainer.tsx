@@ -11,7 +11,7 @@ import { useCommandRegistry } from "@/features/commands/commands";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
-import { getActiveFileListHandlers } from "@/fileListHandlers";
+import { useGetActiveFileListHandlers } from "@/fileListHandlers";
 import { useFocusContext } from "@/focusContext";
 import { readFileText as readFileTextFromFs } from "@/fs";
 import { getStyleHostElement } from "@/styleHost";
@@ -778,6 +778,7 @@ export function ViewerContainer({
   onInteract,
 }: ViewerContainerWrapperProps) {
   const focusContext = useFocusContext();
+  const getActiveFileListHandlers = useGetActiveFileListHandlers();
   const containerRef = useRef<HTMLDivElement>(null);
   const focusPushedRef = useRef(false);
   const restoreFocusElRef = useRef<HTMLElement | null>(null);
@@ -809,7 +810,7 @@ export function ViewerContainer({
       }
     };
     requestAnimationFrame(() => attemptFocus());
-  }, []);
+  }, [focusContext, getActiveFileListHandlers]);
   const handleClose = useCallback(() => {
     onClose();
     restorePanelFocus();
@@ -986,6 +987,7 @@ interface EditorContainerWrapperProps {
 
 export function EditorContainer({ extensionDirPath, entry, filePath, fileName, langId, inline, visible, onClose, onDirtyChange, onInteract }: EditorContainerWrapperProps) {
   const focusContext = useFocusContext();
+  const getActiveFileListHandlers = useGetActiveFileListHandlers();
   const loadedExtensions = useAtomValue(loadedExtensionsAtom);
 
   const languages = loadedExtensions.flatMap((e) => e.languages ?? []);
@@ -1027,7 +1029,7 @@ export function EditorContainer({ extensionDirPath, entry, filePath, fileName, l
       }
     };
     requestAnimationFrame(() => attemptFocus());
-  }, []);
+  }, [focusContext, getActiveFileListHandlers]);
   const handleClose = useCallback(() => {
     onClose();
     restorePanelFocus();

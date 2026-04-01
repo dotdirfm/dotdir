@@ -49,7 +49,7 @@ export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: C
       <div className={styles["modal-dialog-header"]}>
         Copy {itemCount} item{itemCount !== 1 ? "s" : ""}
       </div>
-      <form onSubmit={handleSubmit}>
+      <form className={styles["modal-dialog-form"]} onSubmit={handleSubmit}>
         <div className={styles["modal-dialog-body"]}>
           <div className={styles["copy-config-field"]}>
             <label htmlFor="copy-dest">
