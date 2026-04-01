@@ -33,6 +33,13 @@
   flex-direction: column;
 }
 
+.modal-dialog-form {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
 .modal-dialog-header {
   padding: 8px 12px;
   font-size: 12px;
@@ -49,14 +56,19 @@
 }
 
 .modal-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 16px 12px;
   font-size: 13px;
   line-height: 1.4;
   word-break: break-word;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .modal-dialog-buttons {
   display: flex;
+  flex-shrink: 0;
   justify-content: flex-end;
   gap: 8px;
   padding: 8px 12px;

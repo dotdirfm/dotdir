@@ -1,5 +1,5 @@
 import { EditorContainer, ViewerContainer } from "@/components/ExtensionContainer";
-import { PanelTabs } from "@/components/FileList/PanelTabs";
+import { PanelTabs } from "@/components/PanelTabs/PanelTabs";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
 import {
@@ -19,13 +19,13 @@ import { useFocusContext } from "@/focusContext";
 import { type FileListPanelController } from "@/hooks/useFileListPanel";
 import { usePanelControllerRegistry } from "@/panelControllers";
 import { setActivePanelGroupHandlers } from "@/panelGroupHandlers";
-import styles from "@/styles/panels.module.css";
 import { cx } from "@/utils/cssModules";
 import { dirname } from "@/utils/path";
 import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileListTabPane } from "./FileListTabPane";
+import { FileListTabPane } from "../FileListTabPane";
+import styles from "./PanelGroup.module.css";
 
 interface PanelGroupProps {
   side: PanelSide;

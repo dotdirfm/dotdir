@@ -46,14 +46,23 @@ export interface BuiltInCommandDeps {
   onEditFile: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
   onRequestCloseEditor: () => void;
   onExecuteInTerminal: (cmd: string) => Promise<void>;
+  onPasteToCommandLine: (text: string) => void;
 }
 
 export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const bridge = useBridge();
+  const bridgeRef = useRef(bridge);
+  bridgeRef.current = bridge;
   const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
+  const focusContextRef = useRef(focusContext);
+  focusContextRef.current = focusContext;
   const getFileListHandlers = useGetFileListHandlers();
   const { showDialog } = useDialog();
+  const showDialogRef = useRef(showDialog);
+  showDialogRef.current = showDialog;
+  const getFileListHandlersRef = useRef(getFileListHandlers);
+  getFileListHandlersRef.current = getFileListHandlers;
 
   // Updated every render so command handlers always see the latest callbacks.
   const depsRef = useRef(deps);
@@ -124,7 +133,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
   useEffect(() => {
     const disposables: Array<() => void> = [];
-    const getActiveFileListHandlers = () => getFileListHandlers(activePanelSideRef.current);
+    const getActiveFileListHandlers = () => getFileListHandlersRef.current(activePanelSideRef.current);
 
     // ── View ──────────────────────────────────────────────────────────────────
 
@@ -140,7 +149,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         setPanelsVisible((v) => {
           const next = !v;
           if (next) {
-            focusContext.request("panel");
+            focusContextRef.current.request("panel");
           } else {
             setTerminalFocusRequestKey((k) => k + 1);
           }
@@ -184,7 +193,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
     disposables.push(
       commandRegistry.registerCommand("filelist.goHome", async () => {
-        const home = await bridge.utils.getHomePath();
+        const home = await bridgeRef.current.utils.getHomePath();
         void navigateToRef.current(home);
       }),
     );
@@ -320,7 +329,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
             return true;
           })
           .map((l) => ({ id: l.id, label: l.aliases?.[0] ?? l.id }));
-        showDialog({
+        showDialogRef.current({
           type: "openCreateFile",
           currentPath,
           languages,
@@ -334,20 +343,20 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       commandRegistry.registerCommand("list.makeDir", () => {
         if (activeTabRef.current?.type !== "filelist") return;
         const currentPath = activeTabRef.current.path;
-        showDialog({
+        showDialogRef.current({
           type: "makeFolder",
           currentPath,
           onConfirm: async (result) => {
             const join = (name: string) => (currentPath ? `${currentPath.replace(/\/?$/, "")}/${name}` : name);
             if (result.mode === "single") {
               const fullPath = join(result.name);
-              if (bridge.fs.createDir) await bridge.fs.createDir(fullPath);
+              if (bridgeRef.current.fs.createDir) await bridgeRef.current.fs.createDir(fullPath);
               void navigateToRef.current(fullPath);
               return;
             }
             for (const name of result.names) {
               const fullPath = join(name);
-              if (bridge.fs.createDir) await bridge.fs.createDir(fullPath);
+              if (bridgeRef.current.fs.createDir) await bridgeRef.current.fs.createDir(fullPath);
             }
             void navigateToRef.current(currentPath);
           },
@@ -421,8 +430,24 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     disposables.push(commandRegistry.registerCommand("list.copy", () => getActiveFileListHandlers()?.copy()));
     disposables.push(commandRegistry.registerCommand("list.move", () => getActiveFileListHandlers()?.move()));
     disposables.push(commandRegistry.registerCommand("list.rename", () => getActiveFileListHandlers()?.rename()));
-    disposables.push(commandRegistry.registerCommand("list.pasteFilename", () => getActiveFileListHandlers()?.pasteFilename()));
-    disposables.push(commandRegistry.registerCommand("list.pastePath", () => getActiveFileListHandlers()?.pastePath()));
+    disposables.push(commandRegistry.registerCommand("pasteFilename", () => getActiveFileListHandlers()?.pasteFilename()));
+    disposables.push(commandRegistry.registerCommand("pastePath", () => getActiveFileListHandlers()?.pastePath()));
+    disposables.push(
+      commandRegistry.registerCommand("pasteLeftPanelPath", () => {
+        const path = leftActiveTabRef.current?.type === "filelist" ? leftActiveTabRef.current.path : "";
+        if (!path) return;
+        const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
+        depsRef.current.onPasteToCommandLine(arg);
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerCommand("pasteRightPanelPath", () => {
+        const path = rightActiveTabRef.current?.type === "filelist" ? rightActiveTabRef.current.path : "";
+        if (!path) return;
+        const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
+        depsRef.current.onPasteToCommandLine(arg);
+      }),
+    );
 
     // ── Keybindings ───────────────────────────────────────────────────────────
 
@@ -434,9 +459,6 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     };
   }, [
     commandRegistry,
-    bridge,
-    cancelNavigationRef,
-    focusContext,
     setActivePanel,
     setPanelsVisible,
     setShowExtensions,
@@ -449,7 +471,5 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     setRightTabs,
     setLeftActiveTabId,
     setRightActiveTabId,
-    getFileListHandlers,
-    showDialog,
   ]);
 }

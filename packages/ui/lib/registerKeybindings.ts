@@ -18,7 +18,7 @@ const appBuiltInKeybindings: Keybinding[] = [
 
   // Navigation commands
   { command: "switchPanel", key: "tab", when: "focusPanel && !dialogOpen" },
-  { command: "dotdir.cancelNavigation", key: "escape", when: "focusPanel" },
+  { command: "dotdir.cancelNavigation", key: "escape", when: "focusPanel && !commandLineHasText" },
   { command: "filelist.goToParent", key: "alt+pageup", when: "focusPanel" },
   { command: "filelist.goHome", key: "ctrl+home", mac: "cmd+home" },
 
@@ -97,8 +97,10 @@ const fileListKeybindings: Keybinding[] = [
   { command: "list.rename", key: "shift+f6", when: "focusPanel" },
 
   // Command line paste helpers
-  { command: "list.pasteFilename", key: "ctrl+enter", when: "focusPanel" },
-  { command: "list.pastePath", key: "ctrl+f", when: "focusPanel" },
+  { command: "pasteFilename", key: "ctrl+enter", when: "focusPanel" },
+  { command: "pastePath", key: "ctrl+f", when: "focusPanel" },
+  { command: "pasteLeftPanelPath", key: "ctrl+[", when: "focusPanel" },
+  { command: "pasteRightPanelPath", key: "ctrl+]", when: "focusPanel" },
 ];
 
 export function registerAppBuiltInKeybindings(registry: CommandRegistryLike): Disposable[] {

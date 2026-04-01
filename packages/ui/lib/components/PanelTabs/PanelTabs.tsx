@@ -1,8 +1,9 @@
+import { ActionBar } from "@/components/ActionBar/ActionBar";
 import { PanelTab } from "@/entities/tab/model/types";
-import styles from "@/styles/panels.module.css";
 import { cx } from "@/utils/cssModules";
 import { basename } from "@/utils/path";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import panelTabsStyles from "./PanelTabs.module.css";
 
 interface PanelTabsProps {
   tabs: PanelTab[];
@@ -56,7 +57,7 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
     e.dataTransfer.setData("text/plain", String(index));
     e.dataTransfer.setDragImage(new Image(), 0, 0);
     requestAnimationFrame(() => {
-      (e.target as HTMLElement).classList.add(styles["panel-tab-dragging"]);
+      (e.target as HTMLElement).classList.add(panelTabsStyles["panel-tab-dragging"]);
     });
   }, []);
 
@@ -93,7 +94,7 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
   }, []);
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
-    (e.target as HTMLElement).classList.remove(styles["panel-tab-dragging"]);
+    (e.target as HTMLElement).classList.remove(panelTabsStyles["panel-tab-dragging"]);
     dragFromRef.current = null;
     setDropIndex(null);
   }, []);
@@ -107,9 +108,9 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
   }, []);
 
   return (
-    <div className={styles["panel-tabs"]}>
+    <div className={panelTabsStyles["panel-tabs"]}>
       <div
-        className={styles["panel-tabs-list"]}
+        className={panelTabsStyles["panel-tabs-list"]}
         ref={listRef}
         onWheel={handleWheel}
         onDragOver={handleListDragOver}
@@ -122,13 +123,13 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
           const isActive = tab.id === activeTabId;
           const showDropBefore = dropIndex === i;
           return [
-            showDropBefore ? <div key={`drop-${i}`} className={styles["panel-tab-drop-indicator"]} aria-hidden /> : null,
+            showDropBefore ? <div key={`drop-${i}`} className={panelTabsStyles["panel-tab-drop-indicator"]} aria-hidden /> : null,
             <div
               key={tab.id}
               ref={(el) => {
                 tabRefs.current[i] = el;
               }}
-              className={cx(styles, "panel-tab", isActive && "active", isTemp && "temp")}
+              className={cx(panelTabsStyles, "panel-tab", isActive && "active", isTemp && "temp")}
               onClick={() => onSelectTab(tab.id)}
               onDoubleClick={(e) => {
                 e.preventDefault();
@@ -139,11 +140,11 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
               onDragStart={(e) => handleDragStart(e, i)}
               onDragEnd={handleDragEnd}
             >
-              <span className={styles["panel-tab-label"]}>{tabLabel(tab)}</span>
+              <span className={panelTabsStyles["panel-tab-label"]}>{tabLabel(tab)}</span>
               {onCloseTab && (
                 <a
                   tabIndex={-1}
-                  className={styles["panel-tab-close"]}
+                  className={panelTabsStyles["panel-tab-close"]}
                   onClick={(e) => {
                     e.stopPropagation();
                     onCloseTab(tab.id);
@@ -156,11 +157,13 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
             </div>,
           ];
         })}
-        {dropIndex === tabs.length ? <div key="drop-end" className={styles["panel-tab-drop-indicator"]} aria-hidden /> : null}
+        {dropIndex === tabs.length ? <div key="drop-end" className={panelTabsStyles["panel-tab-drop-indicator"]} aria-hidden /> : null}
       </div>
-      <button type="button" className={styles["panel-tab-new"]} onClick={onNewTab} aria-label="New tab" title="New tab">
-        +
-      </button>
+      <ActionBar>
+        <a className={panelTabsStyles["panel-tab-new"]} onClick={onNewTab} aria-label="New tab" title="New tab">
+          +
+        </a>
+      </ActionBar>
     </div>
   );
 });

@@ -1,9 +1,9 @@
 import { commandLineOnExecuteAtom, commandLinePasteFnAtom, panelsVisibleAtom, showExtensionsAtom, systemThemeAtom, themesReadyAtom } from "@/atoms";
-import { ActionBar } from "@/components/ActionBar/ActionBar";
 import { CommandLine } from "@/components/CommandLine/CommandLine";
 import { CommandPalette, useCommandPalette } from "@/components/CommandPalette/CommandPalette";
 import { ExtensionsPanel } from "@/components/ExtensionsPanel/ExtensionsPanel";
-import { PanelGroup } from "@/components/PanelGroup";
+import { KeyBar } from "@/components/KeyBar/KeyBar";
+import { PanelGroup } from "@/components/PanelGroup/PanelGroup";
 import { TerminalPanelBody, TerminalToolbar } from "@/components/Terminal";
 import { DialogHolder, useDialog } from "@/dialogs/dialogContext";
 import { activePanelSideAtom, leftActiveTabAtom, rightActiveTabAtom } from "@/entities/tab/model/tabsAtoms";
@@ -148,6 +148,7 @@ const AppContent = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     onEditFile: handleEditFile,
     onRequestCloseEditor: requestCloseEditor,
     onExecuteInTerminal: (cmd) => terminal.writeToTerminal(cmd),
+    onPasteToCommandLine: (text) => commandLinePasteRef.current(text),
   });
 
   useEffect(() => {
@@ -211,7 +212,7 @@ const AppContent = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
         </div>
         <TerminalToolbar />
         <div className={baseStyles["status-bar"]}>
-          <ActionBar />
+          <KeyBar />
           {widget}
         </div>
         {viewerEditorOverlays}

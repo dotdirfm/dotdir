@@ -64,8 +64,10 @@ export const builtInCommandContributions: CommandContribution[] = [
   { command: "list.copy", title: "Copy", shortTitle: "Copy", category: "File List" },
   { command: "list.move", title: "Move", shortTitle: "Move", category: "File List" },
   { command: "list.rename", title: "Rename", shortTitle: "Rename", category: "File List" },
-  { command: "list.pasteFilename", title: "Paste Filename to Command Line", category: "File List" },
-  { command: "list.pastePath", title: "Paste Path to Command Line", category: "File List" },
+  { command: "pasteFilename", title: "Paste Filename to Command Line", category: "File List" },
+  { command: "pastePath", title: "Paste Path to Command Line", category: "File List" },
+  { command: "pasteLeftPanelPath", title: "Paste Left Panel Path to Command Line", category: "File List" },
+  { command: "pasteRightPanelPath", title: "Paste Right Panel Path to Command Line", category: "File List" },
 
   // ── Command Line ──────────────────────────────────────────────────────────
   { command: "commandLine.execute", title: "Execute Command Line", category: "Command Line" },
