@@ -3,7 +3,7 @@ import type { PanelSide } from "@/entities/panel/model/types";
 import { FileListTabState } from "@/entities/tab/model/types";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useGetCachedIcon, useIconThemeVersion, useLoadIconsForPaths, useResolveIcon } from "@/features/file-icons/iconResolver";
-import { setActiveFileListHandlers, setFileListHandlers } from "@/fileListHandlers";
+import { useRegisterFileListHandlers } from "@/fileListHandlers";
 import { resolveEntryStyle } from "@/fss";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import type { ResolvedEntryStyle } from "@/types";
@@ -24,6 +24,7 @@ const ROW_HEIGHT = 26;
 
 interface FileListProps {
   side: PanelSide;
+  tabId: string;
   state: FileListTabState;
   showHidden: boolean;
   onNavigate: (path: string) => Promise<void>;
@@ -78,6 +79,7 @@ function getRequestedIndex(entries: DisplayEntry[], requestedName: string, compa
 
 export const FileList = memo(function FileList({
   side,
+  tabId,
   state,
   showHidden,
   onNavigate,
@@ -88,6 +90,7 @@ export const FileList = memo(function FileList({
   onStateChange,
 }: FileListProps) {
   const commandRegistry = useCommandRegistry();
+  const registerFileListHandlers = useRegisterFileListHandlers();
   const entries = useMemo(() => (showHidden ? state.entries : state.entries.filter((e) => !e.meta.hidden)), [showHidden, state.entries]);
 
   const [actionQueue] = useState(() => new ActionQueue());
@@ -383,8 +386,6 @@ export const FileList = memo(function FileList({
     refresh: () => onNavigateRef.current(currentPathRef.current),
   });
 
-  // Publish handlers to the module-level registry when this panel is active.
-  // Commands are registered once in useBuiltInCommands and read from here at call time.
   useEffect(() => {
     const handlers = {
       focus: () => {
@@ -481,17 +482,8 @@ export const FileList = memo(function FileList({
         }),
       ...fileActions,
     };
-    if (active) {
-      setFileListHandlers(side, handlers);
-      setActiveFileListHandlers(handlers);
-    }
-    return () => {
-      if (active) {
-        setFileListHandlers(side, null);
-        setActiveFileListHandlers(null);
-      }
-    };
-  }, [active, side, markKeyboardNav, navigateToEntry, applySelection]);
+    return registerFileListHandlers(side, tabId, handlers);
+  }, [applySelection, fileActions, markKeyboardNav, registerFileListHandlers, side, tabId]);
 
   const columnCountRef = useRef(columnCount);
   columnCountRef.current = columnCount;

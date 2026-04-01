@@ -1,3 +1,4 @@
+import { useDialog } from "@/dialogs/dialogContext";
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { isExistingDirectory, parseCdCommand, resolveCdPath } from "@/features/navigation/lib/commandLineCd";
@@ -8,20 +9,12 @@ import { normalizePath, resolveDotSegments } from "@/utils/path";
 import { useAtomValue } from "jotai";
 import { useCallback, useRef } from "react";
 
-type MessageDialogSpec = {
-  type: "message";
-  title: string;
-  message: string;
-  variant?: "default" | "error";
-};
-
 type UseCommandLineExecuteArgs = {
   activeCwd: string;
   runCommand: (cmd: string, cwd: string) => Promise<void> | void;
-  showDialog: (dialog: MessageDialogSpec) => void;
 };
 
-export function useCommandLineExecute({ activeCwd, runCommand, showDialog }: UseCommandLineExecuteArgs) {
+export function useCommandLineExecute({ activeCwd, runCommand }: UseCommandLineExecuteArgs) {
   const bridge = useBridge();
   const { settings, updateSettings } = useUserSettings();
   const settingsRef = useRef(settings);
@@ -34,6 +27,7 @@ export function useCommandLineExecute({ activeCwd, runCommand, showDialog }: Use
   const runCommandRef = useRef(runCommand);
   runCommandRef.current = runCommand;
   const { activePanelSide, getPanel } = useActivePanelNavigation();
+  const { showDialog } = useDialog();
 
   return useCallback(
     async (cmd: string) => {

@@ -14,7 +14,7 @@ import {
 } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { showHiddenAtom } from "@/features/settings/useUserSettings";
-import { getFileListHandlers } from "@/fileListHandlers";
+import { useGetFileListHandlers } from "@/fileListHandlers";
 import { useFocusContext } from "@/focusContext";
 import { type FileListPanelController } from "@/hooks/useFileListPanel";
 import { usePanelControllerRegistry } from "@/panelControllers";
@@ -37,6 +37,7 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
   const bridge = useBridge();
   const focusContext = useFocusContext();
   const { registerPanel } = usePanelControllerRegistry();
+  const getFileListHandlers = useGetFileListHandlers();
   const activePanel = useAtomValue(activePanelSideAtom);
   const setActivePanel = useSetAtom(activePanelSideAtom);
   const { showDialog } = useDialog();
@@ -213,7 +214,7 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
     requestAnimationFrame(() => {
       getFileListHandlers(side)?.focus();
     });
-  }, [setActivePanel, side]);
+  }, [focusContext, getFileListHandlers, setActivePanel, side]);
 
   useEffect(() => {
     if (!active) return;
@@ -355,7 +356,7 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
         </div>
       );
     },
-    [activeTabId, handleCloseTab, setActivePanel, setTabs],
+    [activeTabId, focusContext, getFileListHandlers, handleCloseTab, setActivePanel, setTabs],
   );
 
   return (

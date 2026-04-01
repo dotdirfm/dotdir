@@ -13,6 +13,7 @@ import { useExtensionHost } from "@/features/extensions/useExtensionHost";
 import { FileOperationHandlersProvider } from "@/features/file-ops/model/fileOperationHandlers";
 import { useFileOperations } from "@/features/file-ops/model/useFileOperations";
 import { showHiddenAtom } from "@/features/settings/useUserSettings";
+import { FileListHandlersProvider } from "@/fileListHandlers";
 import { useFocusContext } from "@/focusContext";
 import { useBuiltInCommands } from "@/hooks/useBuiltInCommands";
 import { useCommandLineExecute } from "@/hooks/useCommandLineExecute";
@@ -21,19 +22,19 @@ import { useTerminal } from "@/hooks/useTerminal";
 import { useViewerEditorState } from "@/hooks/useViewerEditorState";
 import { useActivePanelNavigation } from "@/panelControllers";
 import { useWorkspacePersistenceProcess, useWorkspaceRestoreProcess } from "@/processes/workspace-session/model/useWorkspaceSessionProcess";
+import baseStyles from "@/styles/base.module.css";
+import panelsStyles from "@/styles/panels.module.css";
+import terminalStyles from "@/styles/terminal.module.css";
+import { cx } from "@/utils/cssModules";
 import type { FsNode } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
-import baseStyles from "./styles/base.module.css";
-import panelsStyles from "./styles/panels.module.css";
-import terminalStyles from "./styles/terminal.module.css";
-import { cx } from "./utils/cssModules";
 
 export type AppHandle = {
   focus(): void;
 };
 
-export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function App({ widget }, ref) {
+const AppContent = forwardRef<AppHandle, { widget: React.ReactNode }>(function AppContent({ widget }, ref) {
   const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -133,7 +134,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const handleCommandLineExecute = useCommandLineExecute({
     activeCwd: terminal.activeCwd,
     runCommand: terminal.runCommand,
-    showDialog,
   });
 
   useEffect(() => {
@@ -144,7 +144,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     navigateTo: navigateTo ?? (() => {}),
     cancelNavigation: cancelNavigation ?? (() => {}),
     onOpenCreateFileConfirm: handleOpenCreateFileConfirm,
-    showDialog,
     onViewFile: handleViewFile,
     onEditFile: handleEditFile,
     onRequestCloseEditor: requestCloseEditor,
@@ -227,5 +226,13 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     <div ref={rootRef} className={baseStyles["app"]} tabIndex={0}>
       <FileOperationHandlersProvider handlers={fileOperationHandlers}>{body}</FileOperationHandlersProvider>
     </div>
+  );
+});
+
+export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function App(props, ref) {
+  return (
+    <FileListHandlersProvider>
+      <AppContent {...props} ref={ref} />
+    </FileListHandlersProvider>
   );
 });

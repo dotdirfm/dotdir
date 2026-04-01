@@ -1,4 +1,5 @@
 import { PanelSide } from "@/entities/panel/model/types";
+import { useClearVisibleFileListTab, useSetVisibleFileListTab } from "@/fileListHandlers";
 import { FileListPanelController, useFileListPanel } from "@/hooks/useFileListPanel";
 import { useEffect, useRef } from "react";
 import { FileList } from "./FileList/FileList";
@@ -31,6 +32,8 @@ export function FileListTabPane({
   onActivePanelChange,
 }: FileListTabPaneProps) {
   const panel = useFileListPanel();
+  const clearVisibleFileListTab = useClearVisibleFileListTab();
+  const setVisibleFileListTab = useSetVisibleFileListTab();
   const lastRequestedPathRef = useRef<string | null>(null);
   const lastReportedRef = useRef<string | null>(null);
 
@@ -40,6 +43,14 @@ export function FileListTabPane({
     lastRequestedPathRef.current = path;
     void panel.navigateTo(path);
   }, [path, panel.navigateTo]);
+
+  useEffect(() => {
+    if (!visible) return;
+    setVisibleFileListTab(side, tabId);
+    return () => {
+      clearVisibleFileListTab(side, tabId);
+    };
+  }, [clearVisibleFileListTab, setVisibleFileListTab, side, tabId, visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -81,6 +92,7 @@ export function FileListTabPane({
       <FileList
         key={tabId}
         side={side}
+        tabId={tabId}
         state={panel.state}
         showHidden={showHidden}
         onNavigate={(nextPath) => {
