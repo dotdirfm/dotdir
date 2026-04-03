@@ -32,8 +32,8 @@ import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
-import { useCommandLine } from "../features/command-line/useCommandLine";
-import { useTerminal } from "../features/terminal/useTerminal";
+import { useCommandLine } from "@/features/command-line/useCommandLine";
+import { useTerminal } from "@/features/terminal/useTerminal";
 
 export interface BuiltInCommandDeps {
   onOpenCreateFileConfirm: (path: string, name: string, langId: string) => Promise<void>;
