@@ -1,6 +1,6 @@
 import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
-import type { FileListPanelController} from "@/hooks/useFileListPanel";
+import type { FileListPanelController } from "@/hooks/useFileListPanel";
 import { useFileListPanel } from "@/hooks/useFileListPanel";
 import { usePanelControllerRegistry } from "@/panelControllers";
 import { useEffect, useMemo, useRef } from "react";
@@ -116,7 +116,7 @@ export function FileListTabPane({
         }}
         active={focused}
         resolver={panel.resolver}
-        onStateChange={focused && pathsInSync ? onStateChange : undefined}
+        onStateChange={pathsInSync ? onStateChange : undefined}
       />
     </div>
   );

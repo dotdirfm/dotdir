@@ -11,8 +11,7 @@ import { binarySearch } from "@/utils/binarySearch";
 import { cx } from "@/utils/cssModules";
 import { dirname, join } from "@/utils/path";
 import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
-import type { LayeredResolver } from "fss-lang";
-import type { FsNode } from "fss-lang";
+import type { FsNode, LayeredResolver } from "fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
@@ -86,7 +85,7 @@ export const FileList = memo(function FileList({
   const rootRef = useRef<HTMLDivElement>(null);
   const [maxItemsPerColumn, setMaxItemsPerColumn] = useState(1);
   const [columnCount, setColumnCount] = useState(1);
-  const [, setIconsVersion] = useState(0);
+  const [iconsVersion, setIconsVersion] = useState(0);
   const [keyboardNavMode, setKeyboardNavMode] = useState(false);
   const keyboardNavModeRef = useRef(keyboardNavMode);
   keyboardNavModeRef.current = keyboardNavMode;
@@ -400,6 +399,7 @@ export const FileList = memo(function FileList({
 
   const renderItem = useCallback(
     (index: number, isActive: boolean, isSelected: boolean) => {
+      void iconsVersion;
       const item = displayEntriesRef.current[index];
       if (!item) return null;
       const { entry, style, iconPath, iconFallbackUrl } = item;
@@ -410,9 +410,19 @@ export const FileList = memo(function FileList({
         <div
           className={cx(styles, "entry", isActive && "selected", isSelected && "marked")}
           style={{ height: ROW_HEIGHT, opacity: style.opacity }}
-          onMouseDown={(e) => {
+          onPointerDown={(e) => {
             e.stopPropagation();
             clearKeyboardNav();
+            if (isTouchscreen) {
+              lastClickTimeRef.current = 0;
+              actionQueue.enqueue(() => emitCursorChange(index, topmostIndexRef.current, selectedNamesRef.current));
+              if (isExecutable) {
+                actionQueue.enqueue(() => commandRegistry.executeCommand("terminal.execute", entry.path as string));
+              } else {
+                actionQueue.enqueue(() => navigateToEntry(entry));
+              }
+              return;
+            }
             const now = Date.now();
             if (now - lastClickTimeRef.current < 300) {
               lastClickTimeRef.current = 0;
@@ -447,7 +457,7 @@ export const FileList = memo(function FileList({
         </div>
       );
     },
-    [navigateToEntry, clearKeyboardNav, actionQueue, commandRegistry, emitCursorChange, getIconUrl],
+    [navigateToEntry, clearKeyboardNav, actionQueue, commandRegistry, emitCursorChange, getIconUrl, iconsVersion, isTouchscreen],
   );
 
   const activeEntry = displayEntries[activeIndex];
@@ -480,7 +490,7 @@ export const FileList = memo(function FileList({
       className={cx(styles, "file-list", isTouchscreen || keyboardNavMode ? "no-hover" : null, active ? "active-panel" : "inactive-panel")}
       onMouseMoveCapture={clearKeyboardNav}
       onWheelCapture={markKeyboardNav}
-      onMouseDownCapture={() => {
+      onPointerDownCapture={() => {
         clearKeyboardNav();
         rootRef.current?.focus({ preventScroll: true });
       }}

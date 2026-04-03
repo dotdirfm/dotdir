@@ -399,7 +399,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
   );
 
   return (
-    <div className={cx(styles, "panel", active && "active")} onMouseDown={activatePanelFocus} onClick={activatePanelFocus}>
+    <div className={cx(styles, "panel", active && "active")} onPointerDownCapture={activatePanelFocus}>
       {activeFileListNavigating && <div className={styles["panel-progress"]} />}
       <PanelTabs
         tabs={tabs}
