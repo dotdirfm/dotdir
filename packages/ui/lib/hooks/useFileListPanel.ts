@@ -177,7 +177,11 @@ export function useFileListPanel() {
       const abort = new AbortController();
       navAbortRef.current = abort;
 
-      navTimerRef.current = setTimeout(() => setNavigating(true), 300);
+      navTimerRef.current = setTimeout(() => {
+        if (navAbortRef.current === abort && !abort.signal.aborted) {
+          setNavigating(true);
+        }
+      }, 300);
       try {
         const work = (async () => {
           currentPathRef.current = path;

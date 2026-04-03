@@ -15,7 +15,9 @@
 
 .overlay-backdrop-top {
   align-items: flex-start;
-  padding-top: 15vh;
+  box-sizing: border-box;
+  padding-top: clamp(12px, 8vh, 64px);
+  padding-bottom: clamp(12px, 4vh, 32px);
 }
 
 .modal-dialog {

@@ -47,6 +47,7 @@ export function CommandPalette() {
   const selectedIndexRef = useRef(0);
   const hoverSelectionEnabledRef = useRef(true);
   const lastPointerPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const lastHoverSelectionPointerRef = useRef<{ x: number; y: number } | null>(null);
   selectedIndexRef.current = selectedIndex;
 
   useEffect(() => {
@@ -131,6 +132,7 @@ export function CommandPalette() {
     setKeyboardNavigationActive(false);
     hoverSelectionEnabledRef.current = true;
     lastPointerPositionRef.current = null;
+    lastHoverSelectionPointerRef.current = null;
   }, [setOpen]);
 
   const paletteStateRef = useRef({
@@ -173,6 +175,7 @@ export function CommandPalette() {
       setSelectedIndex(0);
       setKeyboardNavigationActive(false);
       lastPointerPositionRef.current = null;
+      lastHoverSelectionPointerRef.current = null;
     }
   }, [open]);
 
@@ -194,6 +197,7 @@ export function CommandPalette() {
         setKeyboardNavigationActive(true);
         hoverSelectionEnabledRef.current = false;
         lastPointerPositionRef.current = null;
+        lastHoverSelectionPointerRef.current = null;
         setSelectedIndex((current) => {
           if (orderedItemsRef.current.length === 0) return 0;
           return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current + 1));
@@ -203,6 +207,7 @@ export function CommandPalette() {
         setKeyboardNavigationActive(true);
         hoverSelectionEnabledRef.current = false;
         lastPointerPositionRef.current = null;
+        lastHoverSelectionPointerRef.current = null;
         setSelectedIndex((current) => {
           if (orderedItemsRef.current.length === 0) return 0;
           return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current - 1));
@@ -212,6 +217,7 @@ export function CommandPalette() {
         setKeyboardNavigationActive(true);
         hoverSelectionEnabledRef.current = false;
         lastPointerPositionRef.current = null;
+        lastHoverSelectionPointerRef.current = null;
         setSelectedIndex((current) => {
           if (orderedItemsRef.current.length === 0) return 0;
           return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current + PAGE_STEP));
@@ -221,6 +227,7 @@ export function CommandPalette() {
         setKeyboardNavigationActive(true);
         hoverSelectionEnabledRef.current = false;
         lastPointerPositionRef.current = null;
+        lastHoverSelectionPointerRef.current = null;
         setSelectedIndex((current) => {
           if (orderedItemsRef.current.length === 0) return 0;
           return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current - PAGE_STEP));
@@ -230,6 +237,7 @@ export function CommandPalette() {
         setKeyboardNavigationActive(true);
         hoverSelectionEnabledRef.current = false;
         lastPointerPositionRef.current = null;
+        lastHoverSelectionPointerRef.current = null;
         setSelectedIndex(() => {
           if (orderedItemsRef.current.length === 0) return 0;
           return 0;
@@ -239,6 +247,7 @@ export function CommandPalette() {
         setKeyboardNavigationActive(true);
         hoverSelectionEnabledRef.current = false;
         lastPointerPositionRef.current = null;
+        lastHoverSelectionPointerRef.current = null;
         setSelectedIndex(() => {
           if (orderedItemsRef.current.length === 0) return 0;
           return orderedItemsRef.current.length - 1;
@@ -320,44 +329,50 @@ export function CommandPalette() {
             if (prev.x === next.x && prev.y === next.y) return;
             setKeyboardNavigationActive(false);
             hoverSelectionEnabledRef.current = true;
+            lastHoverSelectionPointerRef.current = null;
           }}
         >
           {filteredItems.length === 0 ? (
             <div className={paletteStyles["command-palette-empty"]}>No results found.</div>
           ) : (
             groupedItems.map(([category, categoryItems]) => (
-              <div key={category}>
+              <section key={category}>
                 <div className={paletteStyles["command-palette-group-heading"]}>{category}</div>
-                {categoryItems.map(({ command, keybinding, filteredIndex }) => {
-                  const renderedIndex = orderedItems.findIndex((item) => item.filteredIndex === filteredIndex);
-                  const isSelected = renderedIndex === selectedIndex;
-                  return (
-                    <button
-                      key={command.id}
-                      type="button"
-                      data-command-index={renderedIndex}
-                      className={paletteStyles["command-palette-item"]}
-                      data-selected={isSelected ? "true" : "false"}
-                      onMouseMove={() => {
-                        if (!hoverSelectionEnabledRef.current) return;
-                        if (selectedIndexRef.current === renderedIndex) return;
-                        setSelectedIndex(renderedIndex);
-                      }}
-                      onClick={() => {
-                        setSelectedIndex(renderedIndex);
-                        executePaletteCommand(command.id);
-                      }}
-                    >
-                      <span className={paletteStyles["command-item-title"]}>{command.title}</span>
-                      {keybinding && (
-                        <span className={paletteStyles["command-item-keybinding"]}>
-                          {formatKeybinding(keybinding)}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                <ul className={paletteStyles["command-palette-group-list"]}>
+                  {categoryItems.map(({ command, keybinding, filteredIndex }) => {
+                    const renderedIndex = orderedItems.findIndex((item) => item.filteredIndex === filteredIndex);
+                    const isSelected = renderedIndex === selectedIndex;
+                    return (
+                      <li
+                        key={command.id}
+                        data-command-index={renderedIndex}
+                        className={paletteStyles["command-palette-item"]}
+                        data-selected={isSelected ? "true" : "false"}
+                        onMouseMove={(event) => {
+                          if (!hoverSelectionEnabledRef.current) return;
+                          const next = { x: event.clientX, y: event.clientY };
+                          const prev = lastHoverSelectionPointerRef.current;
+                          if (prev && prev.x === next.x && prev.y === next.y) return;
+                          lastHoverSelectionPointerRef.current = next;
+                          if (selectedIndexRef.current === renderedIndex) return;
+                          setSelectedIndex(renderedIndex);
+                        }}
+                        onClick={() => {
+                          setSelectedIndex(renderedIndex);
+                          executePaletteCommand(command.id);
+                        }}
+                      >
+                        <span className={paletteStyles["command-item-title"]}>{command.title}</span>
+                        {keybinding && (
+                          <span className={paletteStyles["command-item-keybinding"]}>
+                            {formatKeybinding(keybinding)}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
             ))
           )}
         </div>
