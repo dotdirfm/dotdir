@@ -33,7 +33,17 @@ Key directories:
 Linux users may also need the usual Tauri WebKit/system packages, such as:
 
 ```bash
-sudo apt install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+sudo apt update
+sudo apt install \
+  libwebkit2gtk-4.1-dev \
+  build-essential \
+  curl \
+  wget \
+  file \
+  libxdo-dev \
+  libssl-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev
 ```
 
 ## Install
