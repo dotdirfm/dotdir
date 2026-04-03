@@ -1,4 +1,4 @@
-import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
+import { useDialogButtonNav } from "@/dialogs/useDialogButtonNav";
 import { cx } from "@/utils/cssModules";
 import { useRef } from "react";
 import { SmartLabel } from "./dialogHotkeys";

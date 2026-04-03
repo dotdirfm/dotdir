@@ -13,6 +13,12 @@ import {
   uninstallExtension,
 } from "@/features/extensions/extensions";
 import {
+  type OpenVsxExtension,
+  getOpenVsxDownloadUrl,
+  getOpenVsxIconUrl,
+  searchOpenVsxMarketplace,
+} from "@/features/marketplace/openVsxMarketplace";
+import {
   type VSCodeExtension,
   getVSCodeDownloadUrl,
   getVSCodeIconUrl,
@@ -35,7 +41,7 @@ function errMsg(err: unknown): string {
 }
 
 type Tab = "marketplace" | "installed";
-type MarketplaceSource = "dotdir" | "vscode";
+type MarketplaceSource = "dotdir" | "open-vsx" | "vscode";
 type InstallPhase = "download" | "extract" | "write" | "finalize";
 type BusyState = { kind: "install"; phase: InstallPhase } | { kind: "uninstall" };
 
@@ -48,9 +54,10 @@ export function ExtensionsPanel() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const extensionHost = useExtensionHostClient();
   const [tab, setTab] = useState<Tab>("marketplace");
-  const [marketplaceSource, setMarketplaceSource] = useState<MarketplaceSource>("dotdir");
+  const [marketplaceSource, setMarketplaceSource] = useState<MarketplaceSource>("open-vsx");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MarketplaceExtension[]>([]);
+  const [openVsxResults, setOpenVsxResults] = useState<OpenVsxExtension[]>([]);
   const [vscodeResults, setVscodeResults] = useState<VSCodeExtension[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyByKey, setBusyByKey] = useState<Record<string, BusyState>>({});
@@ -69,13 +76,28 @@ export function ExtensionsPanel() {
         const data = await searchVSCodeMarketplace(q);
         setVscodeResults(data.extensions);
         setResults([]);
+        setOpenVsxResults([]);
+      } else if (source === "open-vsx") {
+        const data = await searchOpenVsxMarketplace(q);
+        setOpenVsxResults(data.extensions);
+        setResults([]);
+        setVscodeResults([]);
       } else {
         const data = await searchMarketplace(q);
         setResults(data.extensions);
+        setOpenVsxResults([]);
         setVscodeResults([]);
       }
     } catch {
-      setError(`Could not reach ${source === "vscode" ? "VS Code" : ".dir"} marketplace`);
+      setError(
+        `Could not reach ${
+          source === "vscode"
+            ? "VS Code"
+            : source === "open-vsx"
+              ? "Open VSX"
+              : ".dir"
+        } marketplace`,
+      );
     }
     setLoading(false);
   }, []);
@@ -131,6 +153,7 @@ export function ExtensionsPanel() {
       key: string,
       request:
         | { source: "dotdir-marketplace"; publisher: string; name: string; version: string }
+        | { source: "open-vsx-marketplace"; publisher: string; name: string; downloadUrl: string }
         | { source: "vscode-marketplace"; publisher: string; name: string; downloadUrl: string },
     ) => {
       setBusyByKey((current) => ({
@@ -159,6 +182,29 @@ export function ExtensionsPanel() {
         source: "vscode-marketplace",
         publisher: ext.publisher.publisherName,
         name: ext.extensionName,
+        downloadUrl,
+      });
+      return;
+    } catch (err) {
+      setError(`Install failed: ${errMsg(err)}`);
+      setBusyByKey((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+
+  const handleOpenVsxInstall = async (ext: OpenVsxExtension) => {
+    const downloadUrl = getOpenVsxDownloadUrl(ext);
+    if (!downloadUrl) return;
+    const key = `${ext.namespace}.${ext.name}`;
+    setError("");
+    try {
+      await runBridgeInstall(key, {
+        source: "open-vsx-marketplace",
+        publisher: ext.namespace,
+        name: ext.name,
         downloadUrl,
       });
       return;
@@ -272,6 +318,15 @@ export function ExtensionsPanel() {
               .dir
             </button>
             <button
+              className={cx(styles, "ext-source-btn", marketplaceSource === "open-vsx" && "active")}
+              onClick={() => {
+                setMarketplaceSource("open-vsx");
+                setQuery("");
+              }}
+            >
+              Open VSX
+            </button>
+            <button
               className={cx(styles, "ext-source-btn", marketplaceSource === "vscode" && "active")}
               onClick={() => {
                 setMarketplaceSource("vscode");
@@ -330,6 +385,57 @@ export function ExtensionsPanel() {
                       </button>
                     ) : (
                       <button className={cx(styles, "ext-btn", "install")} disabled={isBusy || !ext.latest_version} onClick={() => handleInstall(ext)}>
+                        {isBusy ? (
+                          <>
+                            <span className={styles["ext-spinner"]} aria-hidden="true" />
+                            {installLabel}
+                          </>
+                        ) : (
+                          "Install"
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          ))}
+
+        {tab === "marketplace" &&
+          marketplaceSource === "open-vsx" &&
+          (loading ? (
+            <div className={styles["ext-empty"]}>Searching...</div>
+          ) : openVsxResults.length === 0 ? (
+            <div className={styles["ext-empty"]}>No extensions found</div>
+          ) : (
+            openVsxResults.map((ext) => {
+              const key = `${ext.namespace}.${ext.name}`;
+              const isInstalled = installedSet.has(key);
+              const busy = busyByKey[key];
+              const isBusy = busy?.kind === "install";
+              const installLabel = busy?.kind === "install" && busy.phase === "finalize" ? "Finalizing..." : "Installing...";
+              const iconUrl = getOpenVsxIconUrl(ext);
+              return (
+                <div key={key} className={styles["ext-item"]}>
+                  <div className={styles["ext-icon"]}>
+                    {iconUrl ? <img src={iconUrl} width={36} height={36} alt="" /> : (ext.displayName[0]?.toUpperCase() ?? "?")}
+                  </div>
+                  <div className={styles["ext-info"]}>
+                    <div className={styles["ext-name"]}>{ext.displayName}</div>
+                    <div className={styles["ext-publisher"]}>{ext.namespace}</div>
+                    <div className={styles["ext-desc"]}>{ext.description}</div>
+                    <div className={styles["ext-meta"]}>
+                      <span>v{ext.version}</span>
+                      <span>↓ {ext.downloadCount.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className={styles["ext-actions"]}>
+                    {isInstalled ? (
+                      <button className={cx(styles, "ext-btn", "installed")} disabled>
+                        Installed
+                      </button>
+                    ) : (
+                      <button className={cx(styles, "ext-btn", "install")} disabled={isBusy || !ext.version} onClick={() => handleOpenVsxInstall(ext)}>
                         {isBusy ? (
                           <>
                             <span className={styles["ext-spinner"]} aria-hidden="true" />

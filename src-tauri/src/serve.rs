@@ -15,13 +15,28 @@ use axum::{
     Router,
 };
 use crate::pty;
-use crate::extensions_install::{self, ExtensionInstallEvent, ExtensionInstallRequest};
+use crate::extensions_install::ExtensionInstallRequest;
+use crate::runtime_ops::{
+    RuntimeState, cancel_copy_job, cancel_delete_job, cancel_extension_install_job,
+    cancel_move_job, fsp_list_entries as backend_fsp_list_entries,
+    fsp_load as backend_fsp_load, fsp_read_file_range as backend_fsp_read_file_range,
+    fs_close as backend_fs_close, fs_entries as backend_fs_entries,
+    fs_create_dir as backend_fs_create_dir, fs_exists as backend_fs_exists,
+    fs_open as backend_fs_open, fs_read as backend_fs_read,
+    fs_read_file as backend_fs_read_file, fs_stat as backend_fs_stat,
+    fs_unwatch as backend_fs_unwatch, fs_watch as backend_fs_watch,
+    fs_write_binary as backend_fs_write_binary, fs_write_text as backend_fs_write_text,
+    get_env as backend_get_env, get_home_path as backend_get_home_path,
+    move_to_trash as backend_move_to_trash, rename_item as backend_rename_item,
+    pty_close as backend_pty_close, pty_resize as backend_pty_resize,
+    pty_spawn as backend_pty_spawn, pty_write as backend_pty_write,
+    resolve_copy_conflict, resolve_move_conflict, start_copy_job, start_delete_job,
+    start_extension_install_job, start_move_job,
+};
 use dotdir_core::{
-    copy::{self, CancelToken, ConflictResolution, CopyEvent, CopyOptions},
-    delete::{self, DeleteEvent},
-    move_op::{self, MoveOptions},
+    copy::{ConflictResolution, CopyOptions},
+    move_op::MoveOptions,
     error::FsError,
-    ops::{self, FdTable},
     watch::{EventCallback, FsWatcher},
 };
 use futures::{SinkExt, StreamExt};
@@ -29,12 +44,8 @@ use log::debug;
 use rust_embed::RustEmbed;
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
     path::PathBuf,
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc,
-    },
+    sync::Arc,
 };
 
 use tokio::sync::mpsc;
@@ -45,40 +56,8 @@ use crate::FsEntry;
 #[folder = "../dist"]
 struct EmbeddedAssets;
 
-// ── Per-connection session ──────────────────────────────────────────
-
-struct CopyJobHandle {
-    cancel_token: CancelToken,
-    conflict_tx: std::sync::mpsc::SyncSender<ConflictResolution>,
-}
-
-struct MoveJobHandle {
-    cancel_token: CancelToken,
-    conflict_tx: std::sync::mpsc::SyncSender<ConflictResolution>,
-}
-
-struct DeleteJobHandle {
-    cancel_token: CancelToken,
-}
-
-struct ExtensionInstallJobHandle {
-    cancel_token: CancelToken,
-}
-
 struct Session {
-    fdt: FdTable,
-    watcher: FsWatcher,
-    ptys: std::sync::Mutex<HashMap<u32, pty::PtyHandle>>,
-    next_pty_id: AtomicU32,
-    copy_jobs: std::sync::Mutex<HashMap<u32, CopyJobHandle>>,
-    next_copy_id: AtomicU32,
-    move_jobs: std::sync::Mutex<HashMap<u32, MoveJobHandle>>,
-    next_move_id: AtomicU32,
-    delete_jobs: std::sync::Mutex<HashMap<u32, DeleteJobHandle>>,
-    next_delete_id: AtomicU32,
-    extension_install_jobs: std::sync::Mutex<HashMap<u32, ExtensionInstallJobHandle>>,
-    next_extension_install_id: AtomicU32,
-    fsp_manager: crate::fsprovider::FsProviderManager,
+    runtime: RuntimeState,
 }
 
 // ── WebSocket handler ───────────────────────────────────────────────
@@ -109,19 +88,7 @@ async fn handle_socket(socket: WebSocket) {
     };
 
     let session = Arc::new(Session {
-        fdt: FdTable::new(),
-        watcher,
-        ptys: std::sync::Mutex::new(HashMap::new()),
-        next_pty_id: AtomicU32::new(0),
-        copy_jobs: std::sync::Mutex::new(HashMap::new()),
-        next_copy_id: AtomicU32::new(0),
-        move_jobs: std::sync::Mutex::new(HashMap::new()),
-        next_move_id: AtomicU32::new(0),
-        delete_jobs: std::sync::Mutex::new(HashMap::new()),
-        next_delete_id: AtomicU32::new(0),
-        extension_install_jobs: std::sync::Mutex::new(HashMap::new()),
-        next_extension_install_id: AtomicU32::new(0),
-        fsp_manager: crate::fsprovider::FsProviderManager::new(),
+        runtime: RuntimeState::new(watcher),
     });
 
     let write_task = tokio::spawn(async move {
@@ -167,47 +134,28 @@ async fn process_message(
     if method == "extensions.install.start" {
         let request: ExtensionInstallRequest =
             serde_json::from_value(params["request"].clone()).ok()?;
-        let install_id = session
-            .next_extension_install_id
-            .fetch_add(1, Ordering::Relaxed);
-        let cancel_token = CancelToken::new();
-
-        session.extension_install_jobs.lock().unwrap().insert(
-            install_id,
-            ExtensionInstallJobHandle {
-                cancel_token: cancel_token.clone(),
-            },
-        );
-
         let tx_install = tx.clone();
         let session_ref = session.clone();
-        std::thread::spawn(move || {
-            let tx_progress = tx_install.clone();
-            let emit_progress = move |event: ExtensionInstallEvent| {
+        let install_id = start_extension_install_job(
+            &session.runtime,
+            request,
+            move |event, install_id| {
                 let payload = json!({
                     "jsonrpc": "2.0",
                     "method": "extensions.install.progress",
                     "params": { "installId": install_id, "event": event }
                 });
-                let _ = tx_progress.send(Message::Text(payload.to_string()));
-            };
-
-            let result = extensions_install::install_extension(request, cancel_token, emit_progress);
-            if let Err(message) = result {
-                let payload = json!({
-                    "jsonrpc": "2.0",
-                    "method": "extensions.install.progress",
-                    "params": { "installId": install_id, "event": { "kind": "error", "message": message } }
-                });
                 let _ = tx_install.send(Message::Text(payload.to_string()));
-            }
-
-            session_ref
-                .extension_install_jobs
-                .lock()
-                .unwrap()
-                .remove(&install_id);
-        });
+            },
+            move |install_id| {
+                session_ref
+                    .runtime
+                    .extension_install_jobs
+                    .lock()
+                    .unwrap()
+                    .remove(&install_id);
+            },
+        );
 
         return Some(Message::Text(
             json!({ "jsonrpc": "2.0", "id": id, "result": install_id }).to_string(),
@@ -216,9 +164,7 @@ async fn process_message(
 
     if method == "extensions.install.cancel" {
         let install_id = params["installId"].as_u64()? as u32;
-        if let Some(job) = session.extension_install_jobs.lock().unwrap().get(&install_id) {
-            job.cancel_token.cancel();
-        }
+        cancel_extension_install_job(&session.runtime, install_id);
         return Some(Message::Text(
             json!({ "jsonrpc": "2.0", "id": id, "result": Value::Null }).to_string(),
         ));
@@ -231,10 +177,11 @@ async fn process_message(
         let id_num = id.as_u64()? as u32;
 
         let session = session.clone();
-        let data =
-            tokio::task::spawn_blocking(move || ops::pread(fd, offset, length, &session.fdt))
-                .await
-                .unwrap();
+        let data = tokio::task::spawn_blocking(move || {
+            backend_fs_read(&session.runtime, fd, offset, length)
+        })
+        .await
+        .unwrap();
 
         return Some(match data {
             Ok(bytes) => {
@@ -251,7 +198,7 @@ async fn process_message(
     if method == "fs.readFile" {
         let path = params["path"].as_str()?.to_string();
         let id_num = id.as_u64()? as u32;
-        let data = tokio::task::spawn_blocking(move || ops::read_file(&path))
+        let data = tokio::task::spawn_blocking(move || backend_fs_read_file(&path))
             .await
             .unwrap();
 
@@ -326,22 +273,18 @@ fn handle_pty_spawn(
         })
         .unwrap_or_default();
 
-    let handle = match pty::spawn(cwd, shell_path, cols, rows, &spawn_args) {
-        Ok(h) => h,
-        Err(e) => return rpc_error(id, &FsError::Io(e)),
+    let (result, reader) = match backend_pty_spawn(
+        &session.runtime,
+        cwd,
+        shell_path,
+        &spawn_args,
+        cols,
+        rows,
+    ) {
+        Ok(pair) => pair,
+        Err(e) => return rpc_error(id, &e),
     };
-
-    let pty_id = session
-        .next_pty_id
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let reader = handle.reader.clone();
-    let result = json!({
-        "ptyId": pty_id,
-        "cwd": handle.cwd,
-        "shell": handle.shell,
-    });
-
-    session.ptys.lock().unwrap().insert(pty_id, handle);
+    let pty_id = result.pty_id;
 
     // Start reader thread that sends pty data as binary frames
     let tx_pty = tx.clone();
@@ -408,75 +351,25 @@ fn handle_copy_start(
     };
     let options: CopyOptions = serde_json::from_value(params["options"].clone()).unwrap_or_default();
 
-    let copy_id = session.next_copy_id.fetch_add(1, Ordering::Relaxed);
-    let cancel_token = CancelToken::new();
-    let (conflict_tx, conflict_rx) = std::sync::mpsc::sync_channel::<ConflictResolution>(0);
-
-    session.copy_jobs.lock().unwrap().insert(
-        copy_id,
-        CopyJobHandle {
-            cancel_token: cancel_token.clone(),
-            conflict_tx,
-        },
-    );
-
-    let source_paths: Vec<PathBuf> = sources.iter().map(PathBuf::from).collect();
-    let dest_path = PathBuf::from(&dest_dir);
     let tx_copy = tx.clone();
     let session_ref = session.clone();
-
-    std::thread::spawn(move || {
-        let tx_progress = tx_copy.clone();
-        let emit_progress = move |event: CopyEvent| {
+    let copy_id = start_copy_job(
+        &session.runtime,
+        sources,
+        dest_dir,
+        options,
+        move |event, copy_id| {
             let payload = json!({
                 "jsonrpc": "2.0",
                 "method": "copy.progress",
                 "params": { "copyId": copy_id, "event": event }
             });
-            let _ = tx_progress.send(Message::Text(payload.to_string()));
-        };
-
-        let tx_conflict = tx_copy.clone();
-        let on_conflict = |src: &std::path::Path, dest: &std::path::Path| -> ConflictResolution {
-            let src_meta = std::fs::metadata(src).ok();
-            let dest_meta = std::fs::metadata(dest).ok();
-            let payload = json!({
-                "jsonrpc": "2.0",
-                "method": "copy.progress",
-                "params": {
-                    "copyId": copy_id,
-                    "event": {
-                        "kind": "conflict",
-                        "src": src.to_string_lossy(),
-                        "dest": dest.to_string_lossy(),
-                        "srcSize": src_meta.as_ref().map(|m| m.len()).unwrap_or(0),
-                        "srcMtimeMs": src_meta.as_ref().map(|m| serve_mtime_ms(m)).unwrap_or(0.0),
-                        "destSize": dest_meta.as_ref().map(|m| m.len()).unwrap_or(0),
-                        "destMtimeMs": dest_meta.as_ref().map(|m| serve_mtime_ms(m)).unwrap_or(0.0),
-                    }
-                }
-            });
-            let _ = tx_conflict.send(Message::Text(payload.to_string()));
-            conflict_rx.recv().unwrap_or(ConflictResolution::Cancel)
-        };
-
-        let result = copy::copy_tree(
-            &source_paths,
-            &dest_path,
-            &options,
-            &cancel_token,
-            &emit_progress,
-            &on_conflict,
-        );
-
-        if let Err(e) = result {
-            emit_progress(CopyEvent::Error {
-                message: e.to_string(),
-            });
-        }
-
-        session_ref.copy_jobs.lock().unwrap().remove(&copy_id);
-    });
+            let _ = tx_copy.send(Message::Text(payload.to_string()));
+        },
+        move |copy_id| {
+            session_ref.runtime.copy_jobs.lock().unwrap().remove(&copy_id);
+        },
+    );
 
     Message::Text(json!({ "jsonrpc": "2.0", "id": id, "result": copy_id }).to_string())
 }
@@ -497,85 +390,27 @@ fn handle_move_start(
     };
     let options: MoveOptions = serde_json::from_value(params["options"].clone()).unwrap_or_default();
 
-    let move_id = session.next_move_id.fetch_add(1, Ordering::Relaxed);
-    let cancel_token = CancelToken::new();
-    let (conflict_tx, conflict_rx) = std::sync::mpsc::sync_channel::<ConflictResolution>(0);
-
-    session.move_jobs.lock().unwrap().insert(
-        move_id,
-        MoveJobHandle {
-            cancel_token: cancel_token.clone(),
-            conflict_tx,
-        },
-    );
-
-    let source_paths: Vec<PathBuf> = sources.iter().map(PathBuf::from).collect();
-    let dest_path = PathBuf::from(&dest_dir);
     let tx_move = tx.clone();
     let session_ref = session.clone();
-
-    std::thread::spawn(move || {
-        let tx_progress = tx_move.clone();
-        let emit_progress = move |event: CopyEvent| {
+    let move_id = start_move_job(
+        &session.runtime,
+        sources,
+        dest_dir,
+        options,
+        move |event, move_id| {
             let payload = json!({
                 "jsonrpc": "2.0",
                 "method": "move.progress",
                 "params": { "moveId": move_id, "event": event }
             });
-            let _ = tx_progress.send(Message::Text(payload.to_string()));
-        };
-
-        let tx_conflict = tx_move.clone();
-        let on_conflict = |src: &std::path::Path, dest: &std::path::Path| -> ConflictResolution {
-            let src_meta = std::fs::metadata(src).ok();
-            let dest_meta = std::fs::metadata(dest).ok();
-            let payload = json!({
-                "jsonrpc": "2.0",
-                "method": "move.progress",
-                "params": {
-                    "moveId": move_id,
-                    "event": {
-                        "kind": "conflict",
-                        "src": src.to_string_lossy(),
-                        "dest": dest.to_string_lossy(),
-                        "srcSize": src_meta.as_ref().map(|m| m.len()).unwrap_or(0),
-                        "srcMtimeMs": src_meta.as_ref().map(|m| serve_mtime_ms(m)).unwrap_or(0.0),
-                        "destSize": dest_meta.as_ref().map(|m| m.len()).unwrap_or(0),
-                        "destMtimeMs": dest_meta.as_ref().map(|m| serve_mtime_ms(m)).unwrap_or(0.0),
-                    }
-                }
-            });
-            let _ = tx_conflict.send(Message::Text(payload.to_string()));
-            conflict_rx.recv().unwrap_or(ConflictResolution::Cancel)
-        };
-
-        let result = move_op::move_tree(
-            &source_paths,
-            &dest_path,
-            &options,
-            &cancel_token,
-            &emit_progress,
-            &on_conflict,
-        );
-
-        if let Err(e) = result {
-            emit_progress(CopyEvent::Error {
-                message: e.to_string(),
-            });
-        }
-
-        session_ref.move_jobs.lock().unwrap().remove(&move_id);
-    });
+            let _ = tx_move.send(Message::Text(payload.to_string()));
+        },
+        move |move_id| {
+            session_ref.runtime.move_jobs.lock().unwrap().remove(&move_id);
+        },
+    );
 
     Message::Text(json!({ "jsonrpc": "2.0", "id": id, "result": move_id }).to_string())
-}
-
-fn serve_mtime_ms(meta: &std::fs::Metadata) -> f64 {
-    meta.modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_secs_f64() * 1000.0)
-        .unwrap_or(0.0)
 }
 
 fn handle_delete_start(
@@ -589,34 +424,23 @@ fn handle_delete_start(
         Err(_) => return rpc_error(id, &FsError::InvalidInput),
     };
 
-    let delete_id = session.next_delete_id.fetch_add(1, Ordering::Relaxed);
-    let cancel_token = CancelToken::new();
-
-    session.delete_jobs.lock().unwrap().insert(
-        delete_id,
-        DeleteJobHandle { cancel_token: cancel_token.clone() },
-    );
-
-    let source_paths: Vec<std::path::PathBuf> = paths.iter().map(std::path::PathBuf::from).collect();
     let tx_del = tx.clone();
     let session_ref = session.clone();
-
-    std::thread::spawn(move || {
-        let tx_progress = tx_del.clone();
-        let emit_progress = move |event: DeleteEvent| {
+    let delete_id = start_delete_job(
+        &session.runtime,
+        paths,
+        move |event, delete_id| {
             let payload = json!({
                 "jsonrpc": "2.0",
                 "method": "delete.progress",
                 "params": { "deleteId": delete_id, "event": event }
             });
-            let _ = tx_progress.send(Message::Text(payload.to_string()));
-        };
-
-        delete::delete_recursive(&source_paths, &cancel_token, &emit_progress)
-            .unwrap_or_else(|e| emit_progress(DeleteEvent::Error { message: e.to_string() }));
-
-        session_ref.delete_jobs.lock().unwrap().remove(&delete_id);
-    });
+            let _ = tx_del.send(Message::Text(payload.to_string()));
+        },
+        move |delete_id| {
+            session_ref.runtime.delete_jobs.lock().unwrap().remove(&delete_id);
+        },
+    );
 
     Message::Text(json!({ "jsonrpc": "2.0", "id": id, "result": delete_id }).to_string())
 }
@@ -637,23 +461,23 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
         "fs.entries" => {
             let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
             debug!("[ws] fs.entries {:?}", path);
-            let entries: Vec<FsEntry> = ops::entries(path)?.into_iter().map(FsEntry::from).collect();
+            let entries: Vec<FsEntry> = backend_fs_entries(path)?.into_iter().map(FsEntry::from).collect();
             debug!("[ws] fs.entries {:?} → {} entries", path, entries.len());
             Ok(serde_json::to_value(entries).unwrap())
         }
         "fs.stat" => {
             let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
-            let s = ops::stat(path)?;
+            let s = backend_fs_stat(path)?;
             Ok(json!({ "size": s.size, "mtimeMs": s.mtime_ms }))
         }
         "fs.exists" => {
             let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
-            Ok(json!(ops::exists(path)))
+            Ok(json!(backend_fs_exists(path)))
         }
         "fs.writeFile" => {
             let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
             let data = params["data"].as_str().ok_or(FsError::InvalidInput)?;
-            ops::write_text(path, data)?;
+            backend_fs_write_text(path, data)?;
             Ok(Value::Null)
         }
         "fs.writeBinary" => {
@@ -662,65 +486,56 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
             let bytes: Vec<u8> = arr.iter()
                 .map(|v| v.as_u64().unwrap_or(0) as u8)
                 .collect();
-            ops::write_bytes(path, &bytes)?;
+            backend_fs_write_binary(path, &bytes)?;
             Ok(Value::Null)
         }
         "fs.createDir" => {
             let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
-            std::fs::create_dir_all(path).map_err(FsError::Io)?;
+            backend_fs_create_dir(path)?;
             Ok(Value::Null)
         }
         "fs.open" => {
             let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
-            Ok(json!(ops::open(path, &session.fdt)?))
+            Ok(json!(backend_fs_open(&session.runtime, path)?))
         }
         "fs.close" => {
             let fd = params["handle"].as_i64().ok_or(FsError::InvalidInput)? as i32;
-            ops::close(fd, &session.fdt);
+            backend_fs_close(&session.runtime, fd);
             Ok(Value::Null)
         }
         "fs.watch" => {
             let watch_id = params["watchId"].as_str().ok_or(FsError::InvalidInput)?;
             let path = params["path"].as_str().ok_or(FsError::InvalidInput)?;
             debug!("[ws] fs.watch id={} path={:?}", watch_id, path);
-            Ok(json!(session.watcher.add(watch_id, path)))
+            Ok(json!(backend_fs_watch(&session.runtime, watch_id, path)))
         }
         "fs.unwatch" => {
             let watch_id = params["watchId"].as_str().ok_or(FsError::InvalidInput)?;
             debug!("[ws] fs.unwatch id={}", watch_id);
-            session.watcher.remove(watch_id);
+            backend_fs_unwatch(&session.runtime, watch_id);
             Ok(Value::Null)
         }
         "pty.write" => {
             let pty_id = params["ptyId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
             let data = params["data"].as_str().ok_or(FsError::InvalidInput)?;
-            let ptys = session.ptys.lock().unwrap();
-            let handle = ptys.get(&pty_id).ok_or(FsError::BadFd)?;
-            pty::write_all(&handle.writer, data.as_bytes()).map_err(FsError::Io)?;
+            backend_pty_write(&session.runtime, pty_id, data.as_bytes())?;
             Ok(Value::Null)
         }
         "pty.resize" => {
             let pty_id = params["ptyId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
             let cols = params["cols"].as_u64().ok_or(FsError::InvalidInput)? as u16;
             let rows = params["rows"].as_u64().ok_or(FsError::InvalidInput)? as u16;
-            let ptys = session.ptys.lock().unwrap();
-            let handle = ptys.get(&pty_id).ok_or(FsError::BadFd)?;
-            pty::resize(handle.master.as_ref(), cols, rows).map_err(FsError::Io)?;
+            backend_pty_resize(&session.runtime, pty_id, cols, rows)?;
             Ok(Value::Null)
         }
         "pty.close" => {
             let pty_id = params["ptyId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
-            if let Some(mut handle) = session.ptys.lock().unwrap().remove(&pty_id) {
-                pty::close(&mut handle);
-            }
+            backend_pty_close(&session.runtime, pty_id);
             Ok(Value::Null)
         }
         "copy.cancel" => {
             let copy_id = params["copyId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
-            if let Some(job) = session.copy_jobs.lock().unwrap().get(&copy_id) {
-                job.cancel_token.cancel();
-                let _ = job.conflict_tx.try_send(ConflictResolution::Cancel);
-            }
+            cancel_copy_job(&session.runtime, copy_id);
             Ok(Value::Null)
         }
         "copy.resolveConflict" => {
@@ -728,17 +543,12 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
             let resolution: ConflictResolution =
                 serde_json::from_value(params["resolution"].clone())
                     .map_err(|_| FsError::InvalidInput)?;
-            if let Some(job) = session.copy_jobs.lock().unwrap().get(&copy_id) {
-                let _ = job.conflict_tx.send(resolution);
-            }
+            resolve_copy_conflict(&session.runtime, copy_id, resolution);
             Ok(Value::Null)
         }
         "move.cancel" => {
             let move_id = params["moveId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
-            if let Some(job) = session.move_jobs.lock().unwrap().get(&move_id) {
-                job.cancel_token.cancel();
-                let _ = job.conflict_tx.try_send(ConflictResolution::Cancel);
-            }
+            cancel_move_job(&session.runtime, move_id);
             Ok(Value::Null)
         }
         "move.resolveConflict" => {
@@ -746,43 +556,32 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
             let resolution: ConflictResolution =
                 serde_json::from_value(params["resolution"].clone())
                     .map_err(|_| FsError::InvalidInput)?;
-            if let Some(job) = session.move_jobs.lock().unwrap().get(&move_id) {
-                let _ = job.conflict_tx.send(resolution);
-            }
+            resolve_move_conflict(&session.runtime, move_id, resolution);
             Ok(Value::Null)
         }
         "fs.rename" => {
             let source = params["source"].as_str().ok_or(FsError::InvalidInput)?;
             let new_name = params["newName"].as_str().ok_or(FsError::InvalidInput)?;
-            move_op::rename_item(std::path::Path::new(source), new_name)?;
+            backend_rename_item(source, new_name)?;
             Ok(Value::Null)
         }
         "fs.moveToTrash" => {
             let paths = params["paths"].as_array().ok_or(FsError::InvalidInput)?;
-            let canonical: Vec<std::path::PathBuf> = paths
+            let paths: Vec<String> = paths
                 .iter()
-                .map(|v| {
-                    let s = v.as_str().ok_or(FsError::InvalidInput)?;
-                    std::path::Path::new(s)
-                        .canonicalize()
-                        .map_err(FsError::from_io)
-                })
+                .map(|v| v.as_str().map(str::to_owned).ok_or(FsError::InvalidInput))
                 .collect::<Result<Vec<_>, _>>()?;
-            trash::delete_all(&canonical).map_err(|e| {
-                FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
-            })?;
+            backend_move_to_trash(&paths)?;
             Ok(Value::Null)
         }
         "delete.cancel" => {
             let delete_id = params["deleteId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
-            if let Some(job) = session.delete_jobs.lock().unwrap().get(&delete_id) {
-                job.cancel_token.cancel();
-            }
+            cancel_delete_job(&session.runtime, delete_id);
             Ok(Value::Null)
         }
         "fsp.load" => {
             let wasm_path = params["wasmPath"].as_str().ok_or(FsError::InvalidInput)?;
-            session.fsp_manager.load(wasm_path)
+            backend_fsp_load(&session.runtime, wasm_path)
                 .map_err(|e| FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
             Ok(Value::Null)
         }
@@ -790,8 +589,7 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
             let wasm_path = params["wasmPath"].as_str().ok_or(FsError::InvalidInput)?;
             let container_path = params["containerPath"].as_str().ok_or(FsError::InvalidInput)?;
             let inner_path = params["innerPath"].as_str().ok_or(FsError::InvalidInput)?;
-            let entries = session.fsp_manager
-                .list_entries(wasm_path, container_path, inner_path)
+            let entries = backend_fsp_list_entries(&session.runtime, wasm_path, container_path, inner_path)
                 .map_err(|e| FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
             Ok(serde_json::to_value(entries).unwrap())
         }
@@ -801,22 +599,20 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
             let inner_path = params["innerPath"].as_str().ok_or(FsError::InvalidInput)?;
             let offset = params["offset"].as_u64().ok_or(FsError::InvalidInput)?;
             let length = params["length"].as_u64().ok_or(FsError::InvalidInput)? as usize;
-            let bytes = session.fsp_manager
-                .read_file_range(wasm_path, container_path, inner_path, offset, length)
+            let bytes = backend_fsp_read_file_range(
+                &session.runtime,
+                wasm_path,
+                container_path,
+                inner_path,
+                offset,
+                length,
+            )
                 .map_err(|e| FsError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
             Ok(serde_json::to_value(bytes).unwrap())
         }
         "ping" => Ok(Value::Null),
-        "utils.getHomePath" => Ok(json!(
-            dirs::home_dir()
-                .map(|p| p.to_string_lossy().into_owned())
-                .unwrap_or_default()
-        )),
-        "utils.getEnv" => {
-            let mut env: std::collections::HashMap<String, String> = std::env::vars().collect();
-            env.insert("__platform__".to_string(), std::env::consts::OS.to_string());
-            Ok(serde_json::to_value(env).unwrap())
-        }
+        "utils.getHomePath" => Ok(json!(backend_get_home_path())),
+        "utils.getEnv" => Ok(serde_json::to_value(backend_get_env()).unwrap()),
         _ => Err(FsError::InvalidInput),
     }
 }

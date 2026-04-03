@@ -54,7 +54,7 @@ export function KeyBar() {
     }
 
     setItems(newItems);
-  }, [modifiers]);
+  }, [commandRegistry, modifiers]);
 
   useEffect(() => {
     updateItems();
@@ -64,7 +64,7 @@ export function KeyBar() {
       offCommands();
       offFocus();
     };
-  }, [updateItems]);
+  }, [commandRegistry, focusContext, updateItems]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -96,13 +96,13 @@ export function KeyBar() {
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, []);
+  }, [commandRegistry]);
 
   const handleClick = useCallback((item: KeyBarItem) => {
     if (item.command) {
       commandRegistry.executeCommand(item.command.id);
     }
-  }, []);
+  }, [commandRegistry]);
 
   return (
     <div className={styles["key-bar"]}>

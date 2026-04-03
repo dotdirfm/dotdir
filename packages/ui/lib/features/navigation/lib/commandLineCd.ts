@@ -6,7 +6,7 @@
  * - `cd:name` — navigate to folder saved under alias `name`
  */
 
-import { Bridge } from "@/features/bridge";
+import type { Bridge } from "@/features/bridge";
 import { normalizeTerminalPath } from "@/terminal/path";
 import { join, normalizePath, resolveDotSegments } from "@/utils/path";
 

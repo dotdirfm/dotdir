@@ -3,18 +3,30 @@ import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { isExistingDirectory, parseCdCommand, resolveCdPath } from "@/features/navigation/lib/commandLineCd";
 import { useUserSettings } from "@/features/settings/useUserSettings";
+import { useTerminal } from "@/features/terminal/useTerminal";
 import { useActivePanelNavigation } from "@/panelControllers";
 import { normalizeTerminalPath } from "@/terminal/path";
 import { normalizePath, resolveDotSegments } from "@/utils/path";
 import { useAtomValue } from "jotai";
-import { useCallback, useRef } from "react";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
 
-type UseCommandLineExecuteArgs = {
-  activeCwd: string;
-  runCommand: (cmd: string, cwd: string) => Promise<void> | void;
+type CommandLineContextValue = {
+  execute: (cmd: string) => Promise<void>;
+  paste: (text: string) => void;
+  setPasteHandler: (handler: ((text: string) => void) | null) => void;
 };
 
-export function useCommandLineExecute({ activeCwd, runCommand }: UseCommandLineExecuteArgs) {
+const CommandLineContext = createContext<CommandLineContextValue | null>(null);
+
+function useProvideCommandLine(): CommandLineContextValue {
   const bridge = useBridge();
   const { settings, updateSettings } = useUserSettings();
   const settingsRef = useRef(settings);
@@ -22,14 +34,24 @@ export function useCommandLineExecute({ activeCwd, runCommand }: UseCommandLineE
   const activeTab = useAtomValue(activeTabAtom);
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
+  const { activeCwd, runCommand } = useTerminal();
   const activeCwdRef = useRef(activeCwd);
   activeCwdRef.current = activeCwd;
   const runCommandRef = useRef(runCommand);
   runCommandRef.current = runCommand;
   const { activePanelSide, getPanel } = useActivePanelNavigation();
   const { showDialog } = useDialog();
+  const pasteHandlerRef = useRef<((text: string) => void) | null>(null);
 
-  return useCallback(
+  const setPasteHandler = useCallback((handler: ((text: string) => void) | null) => {
+    pasteHandlerRef.current = handler;
+  }, []);
+
+  const paste = useCallback((text: string) => {
+    pasteHandlerRef.current?.(text);
+  }, []);
+
+  const execute = useCallback(
     async (cmd: string) => {
       const parsed = parseCdCommand(cmd);
       if (!parsed) {
@@ -103,4 +125,35 @@ export function useCommandLineExecute({ activeCwd, runCommand }: UseCommandLineE
     },
     [activePanelSide, bridge, getPanel, showDialog, updateSettings],
   );
+
+  return useMemo(
+    () => ({
+      execute,
+      paste,
+      setPasteHandler,
+    }),
+    [execute, paste, setPasteHandler],
+  );
+}
+
+export function CommandLineProvider({ children }: { children: ReactNode }) {
+  const value = useProvideCommandLine();
+  return createElement(CommandLineContext.Provider, { value }, children);
+}
+
+export function useCommandLine() {
+  const value = useContext(CommandLineContext);
+  if (!value) throw new Error("useCommandLine must be used within CommandLineProvider");
+  return {
+    execute: value.execute,
+    paste: value.paste,
+  };
+}
+
+export function useCommandLineRegistration() {
+  const value = useContext(CommandLineContext);
+  if (!value) throw new Error("useCommandLineRegistration must be used within CommandLineProvider");
+  return {
+    setPasteHandler: value.setPasteHandler,
+  };
 }

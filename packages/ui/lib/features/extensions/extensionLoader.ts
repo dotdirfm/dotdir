@@ -4,8 +4,8 @@
  * the extension renders into a provided mount root.
  */
 
-import { Bridge } from "@/features/bridge";
-import { readFileText } from "@/fs";
+import type { Bridge } from "@/features/bridge";
+import { readFileText } from "@/features/file-system/fs";
 import { join, normalizePath } from "@/utils/path";
 
 /** Normalize entry to a relative path (e.g. "./viewer.js" -> "viewer.js"). */

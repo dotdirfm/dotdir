@@ -29,9 +29,18 @@ interface RustFsChangeEvent {
 }
 
 interface RustPtySpawnResult {
-  pty_id: number;
+  ptyId: number;
   cwd: string;
   shell: string;
+}
+
+interface RustPtyDataEvent {
+  ptyId: number;
+  data: number[];
+}
+
+interface RustPtyExitEvent {
+  ptyId: number;
 }
 
 export const tauriBridge: Bridge = {
@@ -265,7 +274,7 @@ export const tauriBridge: Bridge = {
             : null,
       });
       return {
-        ptyId: raw.pty_id,
+        ptyId: raw.ptyId,
         cwd: normalizePath(raw.cwd),
         shell: raw.shell,
       };
@@ -293,8 +302,8 @@ export const tauriBridge: Bridge = {
     },
     onData(callback: (ptyId: number, data: Uint8Array) => void): () => void {
       let unlisten: UnlistenFn | null = null;
-      listen<{ pty_id: number; data: number[] }>("pty:data", (event) => {
-        callback(event.payload.pty_id, new Uint8Array(event.payload.data));
+      listen<RustPtyDataEvent>("pty:data", (event) => {
+        callback(event.payload.ptyId, new Uint8Array(event.payload.data));
       }).then((fn) => {
         unlisten = fn;
       });
@@ -304,8 +313,8 @@ export const tauriBridge: Bridge = {
     },
     onExit(callback: (ptyId: number) => void): () => void {
       let unlisten: UnlistenFn | null = null;
-      listen<{ pty_id: number }>("pty:exit", (event) => {
-        callback(event.payload.pty_id);
+      listen<RustPtyExitEvent>("pty:exit", (event) => {
+        callback(event.payload.ptyId);
       }).then((fn) => {
         unlisten = fn;
       });

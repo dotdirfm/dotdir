@@ -1,4 +1,4 @@
-import { FsNode } from "fss-lang";
+import type { FsNode } from "fss-lang";
 
 export type FileListTabState = {
   path: string;

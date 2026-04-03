@@ -1,11 +1,11 @@
 import { useBridge } from "@/features/bridge/useBridge";
-import { DotDirSettings } from "@/features/settings/types";
+import type { DotDirSettings } from "@/features/settings/types";
 import { initUserSettings, onSettingsChange, updateSettings as updateUserSettings } from "@/features/settings/userSettings";
 import { atom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect } from "react";
 
 const settingsAtom = atom<DotDirSettings>({});
-const settingsReadyAtom = atom(false);
+export const settingsReadyAtom = atom(false);
 
 export const showHiddenAtom = atom(get => get(settingsAtom).showHidden ?? false);
 export const activeIconThemeAtom = atom(get => get(settingsAtom).iconTheme);
@@ -35,7 +35,7 @@ export function useUserSettings() {
       setSettings((prev) => ({ ...prev, ...partial }));
       updateUserSettings(bridge, partial);
     },
-    [setSettings],
+    [bridge, setSettings],
   );
 
   return { settings, ready, updateSettings };

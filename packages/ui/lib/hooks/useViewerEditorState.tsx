@@ -1,65 +1,46 @@
 import { editorFileAtom, viewerFileAtom } from "@/atoms";
-import { EditorContainer, ViewerContainer } from "@/components/ExtensionContainer";
+import { useDialog } from "@/dialogs/dialogContext";
 import { ModalDialog } from "@/dialogs/ModalDialog";
-import type { PanelSide } from "@/entities/panel/model/types";
-import { leftActiveTabAtom, rightActiveTabAtom } from "@/entities/tab/model/tabsAtoms";
-import type { Bridge } from "@/features/bridge";
+import { activePanelSideAtom, leftActiveTabAtom, leftActiveTabIdAtom, leftTabsAtom, rightActiveTabAtom, rightActiveTabIdAtom, rightTabsAtom } from "@/entities/tab/model/tabsAtoms";
+import { useBridge } from "@/features/bridge/useBridge";
+import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
+import { showHiddenAtom } from "@/features/settings/useUserSettings";
+import { useActivePanelNavigation } from "@/panelControllers";
 import { CONTAINER_SEP } from "@/utils/containerPath";
 import { isMediaFile } from "@/utils/mediaFiles";
 import { basename } from "@/utils/path";
 import { editorRegistry, fsProviderRegistry, viewerRegistry } from "@/viewerEditorRegistry";
-import type { FsNode } from "fss-lang";
-import { useAtom, useAtomValue } from "jotai";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-
-type MessageDialogSpec = {
-  type: "message";
-  title: string;
-  message: string;
-  variant?: "default" | "error";
-  buttons?: Array<{
-    label: string;
-    default?: boolean;
-    onClick?: () => void;
-  }>;
-};
-
-type UseViewerEditorStateArgs = {
-  bridge: Bridge;
-  showHidden: boolean;
-  leftFileListState: { entries: FsNode[] };
-  rightFileListState: { entries: FsNode[] };
-  activePanelSideRef: React.RefObject<PanelSide>;
-  navigateTo: (path: string) => Promise<void> | void;
-  showDialog: (dialog: MessageDialogSpec) => void;
-};
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type UseViewerEditorStateResult = {
   handleViewFile: (filePath: string, fileName: string, fileSize: number) => void;
   handleEditFile: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
   handleOpenCreateFileConfirm: (filePath: string, fileName: string, langId: string) => Promise<void>;
   requestCloseEditor: () => void;
-  leftRequestedCursor: string | undefined;
-  rightRequestedCursor: string | undefined;
   overlays: ReactNode;
 };
 
-export function useViewerEditorState({
-  bridge,
-  showHidden,
-  leftFileListState,
-  rightFileListState,
-  activePanelSideRef,
-  navigateTo,
-  showDialog,
-}: UseViewerEditorStateArgs): UseViewerEditorStateResult {
+export function useViewerEditorState(): UseViewerEditorStateResult {
+  const bridge = useBridge();
+  const { navigateTo } = useActivePanelNavigation();
   const [viewerFile, setViewerFile] = useAtom(viewerFileAtom);
   const [editorFile, setEditorFile] = useAtom(editorFileAtom);
+  const setLeftTabs = useSetAtom(leftTabsAtom);
+  const setRightTabs = useSetAtom(rightTabsAtom);
+  const leftActiveTabId = useAtomValue(leftActiveTabIdAtom);
+  const rightActiveTabId = useAtomValue(rightActiveTabIdAtom);
   const leftActiveTab = useAtomValue(leftActiveTabAtom);
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
   const [viewerExt, setViewerExt] = useState<{ dirPath: string; entry: string } | null>(null);
   const [editorExt, setEditorExt] = useState<{ dirPath: string; entry: string } | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
+  const showHidden = useAtomValue(showHiddenAtom);
+  const { showDialog } = useDialog();
+
+  const [activePanelSide] = useAtom(activePanelSideAtom);
+  const activePanelSideRef = useRef(activePanelSide);
+  activePanelSideRef.current = activePanelSide;
 
   const handleViewFile = useCallback(
     (filePath: string, fileName: string, fileSize: number) => {
@@ -121,7 +102,13 @@ export function useViewerEditorState({
     });
   }, [editorDirty, editorFile, setEditorFile, showDialog]);
 
-  const viewerPanelEntries: FsNode[] = viewerFile ? (viewerFile.panel === "left" ? leftFileListState.entries : rightFileListState.entries) : [];
+  const viewerPanelEntries = useMemo(() => {
+    if (!viewerFile) return [];
+    if (viewerFile.panel === "left") {
+      return leftActiveTab?.type === "filelist" ? leftActiveTab.entries : [];
+    }
+    return rightActiveTab?.type === "filelist" ? rightActiveTab.entries : [];
+  }, [leftActiveTab, rightActiveTab, viewerFile]);
 
   const matchesPatterns = useCallback((name: string, patterns: string[]) => {
     return patterns.some((pattern) => {
@@ -190,7 +177,7 @@ export function useViewerEditorState({
         entry: viewerResolved.contribution.entry,
       };
     });
-  }, [viewerResolved?.contribution.entry, viewerResolved?.extensionDirPath]);
+  }, [viewerResolved]);
 
   useEffect(() => {
     if (!editorResolved) return;
@@ -201,12 +188,30 @@ export function useViewerEditorState({
         entry: editorResolved.contribution.entry,
       };
     });
-  }, [editorResolved?.contribution.entry, editorResolved?.extensionDirPath]);
+  }, [editorResolved]);
 
-  const viewerActiveName = viewerFile && isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
-  const leftRequestedCursor = viewerFile?.panel === "left" ? viewerActiveName : leftActiveTab?.type === "filelist" ? leftActiveTab.activeEntryName : undefined;
-  const rightRequestedCursor =
-    viewerFile?.panel === "right" ? viewerActiveName : rightActiveTab?.type === "filelist" ? rightActiveTab.activeEntryName : undefined;
+  useEffect(() => {
+    if (!viewerFile) return;
+    const viewerActiveName = isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
+    if (!viewerActiveName) return;
+    const viewerPanel = viewerFile.panel;
+
+    const updateTabs = viewerPanel === "left" ? setLeftTabs : setRightTabs;
+    const activeTabId = viewerPanel === "left" ? leftActiveTabId : rightActiveTabId;
+
+    updateTabs((prev) => {
+      const index = prev.findIndex((tab) => tab.id === activeTabId);
+      if (index < 0) return prev;
+      const tab = prev[index];
+      if (!tab || tab.type !== "filelist" || tab.activeEntryName === viewerActiveName) return prev;
+      const next = [...prev];
+      next[index] = {
+        ...tab,
+        activeEntryName: viewerActiveName,
+      };
+      return next;
+    });
+  }, [leftActiveTabId, rightActiveTabId, setLeftTabs, setRightTabs, viewerFile]);
 
   const overlays = useMemo(
     () => (
@@ -251,17 +256,7 @@ export function useViewerEditorState({
         )}
       </>
     ),
-    [
-      editorExt,
-      editorFile,
-      editorResolved,
-      handleExecuteCommand,
-      requestCloseEditor,
-      setViewerFile,
-      viewerExt,
-      viewerFile,
-      viewerResolved,
-    ],
+    [editorExt, editorFile, editorResolved, handleExecuteCommand, requestCloseEditor, setViewerFile, viewerExt, viewerFile, viewerResolved],
   );
 
   return {
@@ -269,8 +264,6 @@ export function useViewerEditorState({
     handleEditFile,
     handleOpenCreateFileConfirm,
     requestCloseEditor,
-    leftRequestedCursor,
-    rightRequestedCursor,
     overlays,
   };
 }

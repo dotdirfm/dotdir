@@ -1,4 +1,4 @@
-import { CwdEscapeMode, TerminalProfile } from "@/features/bridge";
+import type { CwdEscapeMode, TerminalProfile } from "@/features/bridge";
 import { normalizePath } from "@/utils/path";
 
 export function normalizeTerminalPath(raw: string): string {

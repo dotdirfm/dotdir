@@ -4,11 +4,12 @@
  * Parses VS Code icon theme JSON format and provides icon resolution.
  */
 
-import { Bridge } from "@/features/bridge";
+import type { Bridge } from "@/features/bridge";
 import { bridgeAtom } from "@/features/bridge/useBridge";
-import { readFileBuffer, readFileText } from "@/fs";
+import { readFileBuffer, readFileText } from "@/features/file-system/fs";
 import { dirname, join } from "@/utils/path";
 import { atom, useAtomValue } from "jotai";
+import { parse as parseJsonc } from "jsonc-parser";
 
 export interface VSCodeIconDefinition {
   iconPath: string;
@@ -70,7 +71,7 @@ export class VSCodeIconThemeResolver {
 
   async load(jsonPath: string): Promise<void> {
     const text = await readFileText(this.bridge, jsonPath);
-    const json: VSCodeIconThemeJson = JSON.parse(text);
+    const json: VSCodeIconThemeJson = parseJsonc(text, undefined, { allowTrailingComma: true });
 
     this.theme = {
       json,

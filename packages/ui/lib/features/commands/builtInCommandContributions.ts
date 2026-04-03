@@ -29,6 +29,7 @@ export const builtInCommandContributions: CommandContribution[] = [
   { command: "editFile", title: "Edit File", shortTitle: "Edit", category: "File" },
 
   // ── Application ───────────────────────────────────────────────────────────
+  { command: "dotdir.restartExtensionHost", title: "Restart Extension Host", category: "Application" },
   { command: "dotdir.exit", title: "Exit", shortTitle: "Quit", category: "Application" },
 
   // ── Terminal ──────────────────────────────────────────────────────────────

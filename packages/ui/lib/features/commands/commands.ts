@@ -52,7 +52,7 @@ type ContextGetter = () => Record<string, unknown>;
 
 export class CommandRegistry {
   private contributions = new Map<string, CommandContribution>();
-  private handlers = new Map<string, CommandHandler>();
+  private handlers = new Map<string, CommandHandler[]>();
   private keybindingLayers: Record<KeybindingLayer, Keybinding[]> = {
     default: [],
     extension: [],
@@ -106,10 +106,22 @@ export class CommandRegistry {
   }
 
   registerCommand(id: string, handler: CommandHandler): () => void {
-    this.handlers.set(id, handler);
+    const handlers = this.handlers.get(id);
+    if (handlers) {
+      handlers.push(handler);
+    } else {
+      this.handlers.set(id, [handler]);
+    }
     this.notifyListeners();
     return () => {
-      this.handlers.delete(id);
+      const registered = this.handlers.get(id);
+      if (!registered) return;
+      const idx = registered.indexOf(handler);
+      if (idx < 0) return;
+      registered.splice(idx, 1);
+      if (registered.length === 0) {
+        this.handlers.delete(id);
+      }
       this.notifyListeners();
     };
   }
@@ -144,16 +156,18 @@ export class CommandRegistry {
   }
 
   async executeCommand(id: string, ...args: unknown[]): Promise<void> {
-    const handler = this.handlers.get(id);
-    if (!handler) {
+    const handlers = this.handlers.get(id);
+    if (!handlers || handlers.length === 0) {
       console.warn(`Command not found: ${id}`);
       return;
     }
     console.log("[dotdir:command]", id, ...args);
-    try {
-      await handler(...args);
-    } catch (err) {
-      console.error(`Command ${id} failed:`, err);
+    for (const handler of [...handlers]) {
+      try {
+        await handler(...args);
+      } catch (err) {
+        console.error(`Command ${id} failed:`, err);
+      }
     }
   }
 

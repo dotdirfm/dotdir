@@ -5,8 +5,8 @@
  * to .dir's CSS custom properties.
  */
 
-import { Bridge, SystemThemeKind } from "@/features/bridge";
-import { readFileText } from "@/fs";
+import type { Bridge, SystemThemeKind } from "@/features/bridge";
+import { readFileText } from "@/features/file-system/fs";
 import { getStyleHostElement } from "@/styleHost";
 import { dirname, join } from "@/utils/path";
 import { parse as parseJsonc } from "jsonc-parser";
@@ -53,6 +53,20 @@ const COLOR_MAPPING: Array<{ cssVar: string; keys: string[] }> = [
   { cssVar: "--input-fg", keys: ["input.foreground"] },
   { cssVar: "--input-border", keys: ["input.border"] },
   { cssVar: "--input-hover-bg", keys: ["input.hoverBackground"] },
+  { cssVar: "--command-palette-bg", keys: ["quickInput.background"] },
+  { cssVar: "--command-palette-border", keys: ["widget.border", "quickInput.background"] },
+  { cssVar: "--command-palette-input-bg", keys: ["quickInput.background", "input.background"] },
+  { cssVar: "--command-palette-input-fg", keys: ["quickInput.foreground", "input.foreground"] },
+  { cssVar: "--command-palette-input-border", keys: ["input.border", "widget.border"] },
+  { cssVar: "--command-palette-group-fg", keys: ["pickerGroup.foreground", "descriptionForeground"] },
+  { cssVar: "--command-palette-item-fg", keys: ["quickInput.foreground", "foreground"] },
+  { cssVar: "--command-palette-item-hover-bg", keys: ["list.hoverBackground"] },
+  { cssVar: "--command-palette-item-selected-bg", keys: ["list.hoverBackground", "list.activeSelectionBackground"] },
+  { cssVar: "--command-palette-item-selected-fg", keys: ["quickInputList.focusForeground", "list.activeSelectionForeground"] },
+  { cssVar: "--command-palette-keybinding-bg", keys: ["badge.background", "button.secondaryBackground"] },
+  { cssVar: "--command-palette-keybinding-fg", keys: ["badge.foreground", "button.secondaryForeground"] },
+  { cssVar: "--command-palette-keybinding-selected-bg", keys: ["badge.background", "button.secondaryBackground"] },
+  { cssVar: "--command-palette-keybinding-selected-fg", keys: ["badge.foreground", "button.secondaryForeground"] },
   { cssVar: "--tab-bg", keys: ["tab.activeBackground"] },
   { cssVar: "--tab-fg", keys: ["tab.activeForeground"] },
   { cssVar: "--tab-border", keys: ["tab.activeBorder"] },

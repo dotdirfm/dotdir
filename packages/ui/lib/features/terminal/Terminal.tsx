@@ -1,14 +1,14 @@
 import { panelsVisibleAtom, resolvedProfilesAtom, terminalFocusRequestKeyAtom, terminalProfilesLoadedAtom } from "@/atoms";
+import { useTerminal } from "@/features/terminal/useTerminal";
 import styles from "@/styles/terminal.module.css";
 import { TerminalView } from "@/terminal/TerminalView";
-import { useTerminalState } from "@/terminal/useTerminalState";
 import { cx } from "@/utils/cssModules";
 import { useAtomValue } from "jotai";
 
 export function TerminalToolbar() {
   const profiles = useAtomValue(resolvedProfilesAtom);
   const profilesLoaded = useAtomValue(terminalProfilesLoadedAtom);
-  const { sessions, activeSessionId, activeSession, activate, createSession, closeSession, switchActiveProfile } = useTerminalState();
+  const { sessions, activeSessionId, activeSession, activate, createSession, closeSession, switchActiveProfile } = useTerminal();
   const activeProfileId = activeSession?.profileId ?? null;
   const activeProfileShell = activeSession ? (profiles.find((p) => p.id === activeSession.profileId)?.shell ?? null) : null;
   const activeError = activeSession?.error ?? null;
@@ -69,8 +69,8 @@ export function TerminalToolbar() {
   );
 }
 
-export function TerminalPanelBody() {
-  const { activeSession } = useTerminalState();
+export function Terminal() {
+  const { activeSession } = useTerminal();
   const panelsVisible = useAtomValue(panelsVisibleAtom);
   const focusRequestKey = useAtomValue(terminalFocusRequestKeyAtom);
 

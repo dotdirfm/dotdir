@@ -1,9 +1,5 @@
-let styleHostElement: HTMLElement | null = null;
-
-export function setStyleHostElement(element: HTMLElement | null): void {
-  styleHostElement = element;
-}
+const STYLE_HOST_SELECTOR = "[data-dotdir-style-host='true']";
 
 export function getStyleHostElement(): HTMLElement {
-  return styleHostElement ?? document.documentElement;
+  return (document.querySelector(STYLE_HOST_SELECTOR) as HTMLElement | null) ?? document.documentElement;
 }

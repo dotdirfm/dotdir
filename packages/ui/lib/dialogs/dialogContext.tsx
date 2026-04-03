@@ -1,5 +1,6 @@
 import type { ConflictResolution, CopyOptions, MoveOptions } from "@/features/bridge";
-import React, { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { useCommandRegistry } from "@/features/commands/commands";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ConflictDialog } from "./ConflictDialog";
 import { CopyConfigDialog } from "./CopyConfigDialog";
 import { CopyProgressDialog } from "./CopyProgressDialog";
@@ -136,7 +137,15 @@ interface DialogContextValue {
 const DialogContext = createContext<DialogContextValue | null>(null);
 
 export function DialogProvider({ children }: { children: ReactNode }) {
+  const commandRegistry = useCommandRegistry();
   const [dialog, setDialog] = useState<DialogSpec | null>(null);
+
+  useEffect(() => {
+    commandRegistry.setContext("dialogOpen", dialog !== null);
+    return () => {
+      commandRegistry.setContext("dialogOpen", false);
+    };
+  }, [commandRegistry, dialog]);
 
   const showDialog = useCallback((spec: DialogSpec) => {
     setDialog(spec);
@@ -167,7 +176,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const value = useMemo(() => ({ dialog, showDialog, closeDialog, updateDialog, showError }), [dialog, showDialog, closeDialog, updateDialog]);
+  const value = useMemo(() => ({ dialog, showDialog, closeDialog, updateDialog, showError }), [dialog, showDialog, closeDialog, updateDialog, showError]);
 
   return <DialogContext.Provider value={value}>{children}</DialogContext.Provider>;
 }

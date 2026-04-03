@@ -114,6 +114,7 @@ interface ExtensionShellIntegration {
 
 interface ExtensionContributions {
   iconTheme?: ExtensionIconTheme;
+  iconThemes?: ExtensionIconTheme[];
   themes?: ExtensionColorTheme[];
   languages?: ExtensionLanguage[];
   grammars?: ExtensionGrammar[];
@@ -344,11 +345,23 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
 
     let iconThemeFssPath: string | undefined;
     let iconThemeBasePath: string | undefined;
+    let vscodeIconThemePath: string | undefined;
+    let vscodeIconThemeId: string | undefined;
     if (manifest.contributes?.iconTheme?.path) {
-      const fssPath = join(extDir, manifest.contributes.iconTheme.path);
-      // Lazy: don't read FSS contents for all extensions.
-      iconThemeFssPath = fssPath;
-      iconThemeBasePath = dirname(fssPath);
+      const themePath = join(extDir, manifest.contributes.iconTheme.path);
+      if (themePath.endsWith(".json")) {
+        vscodeIconThemePath = themePath;
+        vscodeIconThemeId = manifest.contributes.iconTheme.id;
+      } else {
+        iconThemeFssPath = themePath;
+        iconThemeBasePath = dirname(themePath);
+      }
+    }
+
+    if (manifest.contributes?.iconThemes?.length && !vscodeIconThemePath) {
+      const firstTheme = manifest.contributes.iconThemes[0];
+      vscodeIconThemePath = join(extDir, firstTheme.path);
+      vscodeIconThemeId = firstTheme.id;
     }
 
     const languages = manifest.contributes?.languages;
@@ -411,6 +424,8 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
       dirPath: extDir,
       iconThemeFssPath,
       iconThemeBasePath,
+      vscodeIconThemePath,
+      vscodeIconThemeId,
       colorThemes,
       languages,
       grammarRefs,

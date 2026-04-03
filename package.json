@@ -9,10 +9,10 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "serve": "pnpm tauri dev serve",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
+    "lint": "eslint . --cache",
+    "lint:fix": "eslint . --cache --fix",
+    "fmt": "eslint . --cache --fix",
+    "fmt:check": "eslint . --cache --fix-dry-run"
   },
   "dependencies": {
     "@dotdirfm/ui": "workspace:*",
@@ -23,13 +23,17 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.2.4",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
-    "oxfmt": "^0.42.0",
-    "oxlint": "^1.57.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
     "typescript": "~6.0.2",
+    "typescript-eslint": "^8.58.0",
     "vite": "^8.0.3"
   },
   "packageManager": "pnpm@10.30.3"

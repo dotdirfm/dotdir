@@ -1,16 +1,15 @@
 import { commandPaletteOpenAtom } from "@/atoms";
 import { OverlayDialog } from "@/dialogs/OverlayDialog";
-import { formatKeybinding, type Command as CommandType, type Keybinding, useCommandRegistry } from "@/features/commands/commands";
+import {
+  formatKeybinding,
+  useCommandRegistry,
+  type Command as CommandType,
+  type Keybinding,
+} from "@/features/commands/commands";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { Command } from "cmdk";
 import { useAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import paletteStyles from "./command-palette.module.css";
-
-interface CommandPaletteProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
 
 interface CommandItem {
   command: CommandType;
@@ -18,21 +17,44 @@ interface CommandItem {
   displayTitle: string;
 }
 
-export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
+interface OrderedCommandItem extends CommandItem {
+  filteredIndex: number;
+}
+
+const PAGE_STEP = 10;
+const RECENT_COMMAND_LIMIT = 8;
+
+function fuzzyMatch(haystack: string, needle: string): boolean {
+  const query = needle.trim().toLowerCase();
+  if (!query) return true;
+  const text = haystack.toLowerCase();
+  return text.includes(query);
+}
+
+export function CommandPalette() {
+  const [open, setOpen] = useAtom(commandPaletteOpenAtom);
   const commandRegistry = useCommandRegistry();
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const [commands, setCommands] = useState<CommandType[]>([]);
   const [keybindings, setKeybindings] = useState<Keybinding[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [keyboardNavigationActive, setKeyboardNavigationActive] = useState(false);
+  const [recentCommandIds, setRecentCommandIds] = useState<string[]>([]);
+  const filteredItemsRef = useRef<CommandItem[]>([]);
+  const orderedItemsRef = useRef<OrderedCommandItem[]>([]);
+  const selectedIndexRef = useRef(0);
+  const hoverSelectionEnabledRef = useRef(true);
+  const lastPointerPositionRef = useRef<{ x: number; y: number } | null>(null);
+  selectedIndexRef.current = selectedIndex;
 
-  // Focus search input when palette opens
   useEffect(() => {
-    if (open) {
-      const t = requestAnimationFrame(() => {
-        inputRef.current?.focus();
-      });
-      return () => cancelAnimationFrame(t);
-    }
+    if (!open) return;
+    const t = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(t);
   }, [open]);
 
   useEffect(() => {
@@ -43,7 +65,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     updateCommands();
     if (!open) return;
     return commandRegistry.onChange(updateCommands);
-  }, [open]);
+  }, [open, commandRegistry]);
 
   const items = useMemo<CommandItem[]>(() => {
     return commands.map((cmd) => {
@@ -53,32 +75,217 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     });
   }, [commands, keybindings]);
 
+  const filteredItems = useMemo(() => {
+    return items
+      .filter((item) =>
+        fuzzyMatch(
+          `${item.command.title}\n${item.command.category ?? ""}\n${item.command.id}\n${item.displayTitle}`,
+          search,
+        ),
+      )
+      .sort((a, b) => {
+        const categoryCompare = (a.command.category ?? "General").localeCompare(
+          b.command.category ?? "General",
+        );
+        if (categoryCompare !== 0) return categoryCompare;
+        return a.command.title.localeCompare(b.command.title);
+      });
+  }, [items, search]);
+
   const groupedItems = useMemo(() => {
-    const groups = new Map<string, CommandItem[]>();
-    for (const item of items) {
+    const recentById = new Map(
+      recentCommandIds
+        .map((commandId) => {
+          const filteredIndex = filteredItems.findIndex((item) => item.command.id === commandId);
+          if (filteredIndex < 0) return null;
+          return [commandId, { ...filteredItems[filteredIndex], filteredIndex }] as const;
+        })
+        .filter((item): item is readonly [string, OrderedCommandItem] => item !== null),
+    );
+    const groups = new Map<string, OrderedCommandItem[]>();
+    filteredItems.forEach((item, filteredIndex) => {
+      if (recentById.has(item.command.id)) return;
       const category = item.command.category ?? "General";
       if (!groups.has(category)) groups.set(category, []);
-      groups.get(category)!.push(item);
+      groups.get(category)!.push({ ...item, filteredIndex });
+    });
+    const orderedGroups = Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    const recentItems = recentCommandIds
+      .map((commandId) => recentById.get(commandId))
+      .filter((item): item is OrderedCommandItem => item != null);
+    if (recentItems.length > 0) {
+      orderedGroups.unshift(["Recent", recentItems]);
     }
-    return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [items]);
+    return orderedGroups;
+  }, [filteredItems, recentCommandIds]);
 
-  const handleSelect = useCallback(
-    (commandId: string) => {
-      onOpenChange(false);
-      setSearch("");
-      commandRegistry.executeCommand(commandId);
-    },
-    [onOpenChange],
+  const orderedItems = useMemo(
+    () => groupedItems.flatMap(([, categoryItems]) => categoryItems),
+    [groupedItems],
   );
 
+  const closePalette = useCallback(() => {
+    setOpen(false);
+    setSearch("");
+    setSelectedIndex(0);
+    setKeyboardNavigationActive(false);
+    hoverSelectionEnabledRef.current = true;
+    lastPointerPositionRef.current = null;
+  }, [setOpen]);
+
+  const paletteStateRef = useRef({
+    closePalette,
+    commandRegistry,
+  });
+  paletteStateRef.current = {
+    closePalette,
+    commandRegistry,
+  };
+
   useEffect(() => {
-    if (!open) setSearch("");
+    setSelectedIndex((current) => {
+      if (orderedItems.length === 0) return 0;
+      return Math.min(current, orderedItems.length - 1);
+    });
+  }, [orderedItems.length]);
+
+  filteredItemsRef.current = filteredItems;
+  orderedItemsRef.current = orderedItems;
+
+  const executePaletteCommand = useCallback(
+    (commandId: string) => {
+      setRecentCommandIds((current) => {
+        const next = [commandId, ...current.filter((id) => id !== commandId)];
+        return next.slice(0, RECENT_COMMAND_LIMIT);
+      });
+      closePalette();
+      void commandRegistry.executeCommand(commandId);
+    },
+    [closePalette, commandRegistry],
+  );
+
+  const executePaletteCommandRef = useRef(executePaletteCommand);
+  executePaletteCommandRef.current = executePaletteCommand;
+
+  useEffect(() => {
+    if (!open) {
+      setSearch("");
+      setSelectedIndex(0);
+      setKeyboardNavigationActive(false);
+      lastPointerPositionRef.current = null;
+    }
   }, [open]);
 
-  // Stop all keyboard events from propagating to panels
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    e.stopPropagation();
+  useEffect(() => {
+    if (!open) return;
+    const selectedEl = listRef.current?.querySelector<HTMLElement>(
+      `[data-command-index="${selectedIndex}"]`,
+    );
+    selectedEl?.scrollIntoView({ block: "nearest" });
+  }, [open, selectedIndex]);
+
+  useEffect(() => {
+    if (!open) return;
+    const disposables = [
+      commandRegistry.registerCommand("commandPalette.close", () => {
+        paletteStateRef.current.closePalette();
+      }),
+      commandRegistry.registerCommand("commandPalette.selectNext", () => {
+        setKeyboardNavigationActive(true);
+        hoverSelectionEnabledRef.current = false;
+        lastPointerPositionRef.current = null;
+        setSelectedIndex((current) => {
+          if (orderedItemsRef.current.length === 0) return 0;
+          return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current + 1));
+        });
+      }),
+      commandRegistry.registerCommand("commandPalette.selectPrevious", () => {
+        setKeyboardNavigationActive(true);
+        hoverSelectionEnabledRef.current = false;
+        lastPointerPositionRef.current = null;
+        setSelectedIndex((current) => {
+          if (orderedItemsRef.current.length === 0) return 0;
+          return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current - 1));
+        });
+      }),
+      commandRegistry.registerCommand("commandPalette.selectPageDown", () => {
+        setKeyboardNavigationActive(true);
+        hoverSelectionEnabledRef.current = false;
+        lastPointerPositionRef.current = null;
+        setSelectedIndex((current) => {
+          if (orderedItemsRef.current.length === 0) return 0;
+          return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current + PAGE_STEP));
+        });
+      }),
+      commandRegistry.registerCommand("commandPalette.selectPageUp", () => {
+        setKeyboardNavigationActive(true);
+        hoverSelectionEnabledRef.current = false;
+        lastPointerPositionRef.current = null;
+        setSelectedIndex((current) => {
+          if (orderedItemsRef.current.length === 0) return 0;
+          return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current - PAGE_STEP));
+        });
+      }),
+      commandRegistry.registerCommand("commandPalette.selectFirst", () => {
+        setKeyboardNavigationActive(true);
+        hoverSelectionEnabledRef.current = false;
+        lastPointerPositionRef.current = null;
+        setSelectedIndex(() => {
+          if (orderedItemsRef.current.length === 0) return 0;
+          return 0;
+        });
+      }),
+      commandRegistry.registerCommand("commandPalette.selectLast", () => {
+        setKeyboardNavigationActive(true);
+        hoverSelectionEnabledRef.current = false;
+        lastPointerPositionRef.current = null;
+        setSelectedIndex(() => {
+          if (orderedItemsRef.current.length === 0) return 0;
+          return orderedItemsRef.current.length - 1;
+        });
+      }),
+      commandRegistry.registerCommand("commandPalette.execute", () => {
+        const selected = orderedItemsRef.current[selectedIndexRef.current];
+        if (!selected) return;
+        executePaletteCommandRef.current(selected.command.id);
+      }),
+    ];
+    return () => {
+      disposables.forEach((dispose) => dispose());
+    };
+  }, [commandRegistry, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const disposables = [
+      commandRegistry.registerKeybinding({ command: "commandPalette.close", key: "escape", when: "focusCommandPalette" }),
+      commandRegistry.registerKeybinding({ command: "commandPalette.selectNext", key: "down", when: "focusCommandPalette" }),
+      commandRegistry.registerKeybinding({ command: "commandPalette.selectPrevious", key: "up", when: "focusCommandPalette" }),
+      commandRegistry.registerKeybinding({ command: "commandPalette.selectPageDown", key: "pagedown", when: "focusCommandPalette" }),
+      commandRegistry.registerKeybinding({ command: "commandPalette.selectPageUp", key: "pageup", when: "focusCommandPalette" }),
+      commandRegistry.registerKeybinding({ command: "commandPalette.selectFirst", key: "home", when: "focusCommandPalette" }),
+      commandRegistry.registerKeybinding({ command: "commandPalette.selectLast", key: "end", when: "focusCommandPalette" }),
+      commandRegistry.registerKeybinding({ command: "commandPalette.execute", key: "enter", when: "focusCommandPalette" }),
+    ];
+    return () => {
+      disposables.forEach((dispose) => dispose());
+    };
+  }, [commandRegistry, open]);
+
+  const allowCommandRouting = useCallback((event: KeyboardEvent) => {
+    const key = event.key.toLowerCase();
+    if ((event.ctrlKey || event.metaKey) && key === "p") return true;
+    if (event.ctrlKey || event.metaKey || event.altKey) return false;
+    return (
+      key === "escape" ||
+      key === "enter" ||
+      key === "arrowup" ||
+      key === "arrowdown" ||
+      key === "home" ||
+      key === "end" ||
+      key === "pageup" ||
+      key === "pagedown"
+    );
   }, []);
 
   if (!open) return null;
@@ -86,56 +293,75 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   return (
     <OverlayDialog
       className={paletteStyles["command-palette-dialog"]}
-      onClose={() => onOpenChange(false)}
+      onClose={closePalette}
       initialFocusRef={inputRef}
       placement="top"
       focusLayer="commandPalette"
+      allowCommandRouting={allowCommandRouting}
     >
-      <Command className={paletteStyles["command-palette"]} onKeyDown={handleKeyDown} shouldFilter={true}>
-        <Command.Input ref={inputRef} value={search} onValueChange={setSearch} placeholder="Type a command or search..." {...INPUT_NO_ASSIST} />
-        <Command.List>
-          <Command.Empty>No results found.</Command.Empty>
-          {groupedItems.map(([category, categoryItems]) => (
-            <Command.Group key={category} heading={category}>
-              {categoryItems.map(({ command, keybinding, displayTitle }) => (
-                <Command.Item key={command.id} value={displayTitle} onSelect={() => handleSelect(command.id)}>
-                  <span className={paletteStyles["command-item-title"]}>{command.title}</span>
-                  {keybinding && <span className={paletteStyles["command-item-keybinding"]}>{formatKeybinding(keybinding)}</span>}
-                </Command.Item>
-              ))}
-            </Command.Group>
-          ))}
-        </Command.List>
-      </Command>
+      <div className={paletteStyles["command-palette"]}>
+        <input
+          ref={inputRef}
+          className={paletteStyles["command-palette-input"]}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Type a command or search..."
+          {...INPUT_NO_ASSIST}
+        />
+        <div
+          ref={listRef}
+          className={paletteStyles["command-palette-list"]}
+          data-keyboard-nav={keyboardNavigationActive ? "true" : "false"}
+          onMouseMove={(event) => {
+            const prev = lastPointerPositionRef.current;
+            const next = { x: event.clientX, y: event.clientY };
+            lastPointerPositionRef.current = next;
+            if (!prev) return;
+            if (prev.x === next.x && prev.y === next.y) return;
+            setKeyboardNavigationActive(false);
+            hoverSelectionEnabledRef.current = true;
+          }}
+        >
+          {filteredItems.length === 0 ? (
+            <div className={paletteStyles["command-palette-empty"]}>No results found.</div>
+          ) : (
+            groupedItems.map(([category, categoryItems]) => (
+              <div key={category}>
+                <div className={paletteStyles["command-palette-group-heading"]}>{category}</div>
+                {categoryItems.map(({ command, keybinding, filteredIndex }) => {
+                  const renderedIndex = orderedItems.findIndex((item) => item.filteredIndex === filteredIndex);
+                  const isSelected = renderedIndex === selectedIndex;
+                  return (
+                    <button
+                      key={command.id}
+                      type="button"
+                      data-command-index={renderedIndex}
+                      className={paletteStyles["command-palette-item"]}
+                      data-selected={isSelected ? "true" : "false"}
+                      onMouseMove={() => {
+                        if (!hoverSelectionEnabledRef.current) return;
+                        if (selectedIndexRef.current === renderedIndex) return;
+                        setSelectedIndex(renderedIndex);
+                      }}
+                      onClick={() => {
+                        setSelectedIndex(renderedIndex);
+                        executePaletteCommand(command.id);
+                      }}
+                    >
+                      <span className={paletteStyles["command-item-title"]}>{command.title}</span>
+                      {keybinding && (
+                        <span className={paletteStyles["command-item-keybinding"]}>
+                          {formatKeybinding(keybinding)}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </OverlayDialog>
   );
-}
-
-export function useCommandPalette() {
-  const [open, setOpen] = useAtom(commandPaletteOpenAtom);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Escape closes palette
-      if (open && e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        setOpen(false);
-        return;
-      }
-
-      // When palette is already open, Ctrl/Cmd+P (and Ctrl/Cmd+Shift+P) should close it.
-      if (open && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        e.stopPropagation();
-        setOpen((o) => !o);
-        return;
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [open]);
-
-  return { open, setOpen };
 }

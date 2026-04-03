@@ -6,11 +6,10 @@
  * and notifies listeners when extensions finish loading.
  */
 
-import { Bridge } from "@/features/bridge";
-import { bridgeAtom } from "@/features/bridge/useBridge";
-import { readFileText } from "@/fs";
+import type { Bridge } from "@/features/bridge";
+import { useBridge } from "@/features/bridge/useBridge";
+import { readFileText } from "@/features/file-system/fs";
 import { normalizePath } from "@/utils/path";
-import { atom, useAtomValue } from "jotai";
 import worker2 from "./extensionHost.worker.ts?worker&inline";
 import type { LoadedExtension } from "./extensions";
 
@@ -39,7 +38,7 @@ export class ExtensionHostClient {
 
   /** Start the extension host worker. Non-blocking — extensions load in background. */
   async start(): Promise<void> {
-    if (this.starting) return;
+    if (this.worker || this.starting) return;
     this.starting = true;
     try {
       if (!this.homePath) {
@@ -172,14 +171,19 @@ export class ExtensionHostClient {
   }
 }
 
-export const extensionHostClientAtom = atom((get) => {
-  const bridge = get(bridgeAtom);
-  if (!bridge) {
-    throw new Error("Bridge not initialized.");
+let sharedBridge: Bridge | null = null;
+let sharedClient: ExtensionHostClient | null = null;
+
+function getSharedExtensionHostClient(bridge: Bridge): ExtensionHostClient {
+  if (!sharedClient || sharedBridge !== bridge) {
+    sharedClient?.dispose();
+    sharedBridge = bridge;
+    sharedClient = new ExtensionHostClient(bridge);
   }
-  return new ExtensionHostClient(bridge);
-});
+  return sharedClient;
+}
 
 export function useExtensionHostClient(): ExtensionHostClient {
-  return useAtomValue(extensionHostClientAtom);
+  const bridge = useBridge();
+  return getSharedExtensionHostClient(bridge);
 }

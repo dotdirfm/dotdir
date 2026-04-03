@@ -1,10 +1,10 @@
 import { activePanelSideAtom, genTabId, leftActiveIndexAtom, leftActiveTabIdAtom, leftTabsAtom, rightActiveIndexAtom, rightActiveTabIdAtom, rightTabsAtom } from "@/entities/tab/model/tabsAtoms";
-import { PanelTab } from "@/entities/tab/model/types";
+import type { PanelTab } from "@/entities/tab/model/types";
 import { useBridge } from "@/features/bridge/useBridge";
-import { DotDirUiState, PanelPersistedState, PersistedTab } from "@/features/ui-state/types";
+import type { DotDirUiState, PanelPersistedState, PersistedTab } from "@/features/ui-state/types";
 import { flushUiState, initUiState, updateUiState } from "@/features/ui-state/uiState";
 import { basename, dirname, join } from "@/utils/path";
-import { FsNode } from "fss-lang";
+import type { FsNode } from "fss-lang";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -92,7 +92,7 @@ export function useWorkspaceRestoreProcess() {
       uiStateRef.current = state;
       setUiStateLoaded(true);
     });
-  }, []);
+  }, [bridge, setLeftActiveTabId, setLeftTabs, setRightActiveTabId, setRightTabs]);
 
   return {
     uiStateLoaded,
@@ -143,7 +143,7 @@ export function useWorkspacePersistenceProcess() {
     updateUiState(bridge, state);
     flushUiState(bridge);
     pendingPanelStateRef.current = {};
-  }, [buildPersistedTabs]);
+  }, [activePanelSide, bridge, buildPersistedTabs, leftActiveIndex, leftTabs, rightActiveIndex, rightTabs]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {

@@ -1,0 +1,150 @@
+import type { PanelSide } from "@/entities/panel/model/types";
+import { useCommandRegistry } from "@/features/commands/commands";
+import { OPPOSITE_PANEL } from "@/entities/panel/model/panelSide";
+import { createFilelistTab, createPreviewTab } from "@/entities/tab/model/tabsAtoms";
+import type { PanelTab } from "@/entities/tab/model/types";
+import type { FsNode } from "fss-lang";
+import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
+
+interface UsePanelCommandsArgs {
+  active: boolean;
+  side: PanelSide;
+  activeTabRef: RefObject<PanelTab | null>;
+  leftTabsRef: RefObject<PanelTab[]>;
+  rightTabsRef: RefObject<PanelTab[]>;
+  leftActiveTabIdRef: RefObject<string>;
+  rightActiveTabIdRef: RefObject<string>;
+  setLeftTabs: Dispatch<SetStateAction<PanelTab[]>>;
+  setRightTabs: Dispatch<SetStateAction<PanelTab[]>>;
+  setLeftActiveTabId: Dispatch<SetStateAction<string>>;
+  setRightActiveTabId: Dispatch<SetStateAction<string>>;
+  setActivePanel: Dispatch<SetStateAction<PanelSide>>;
+  handleNewTab: () => void;
+  handleCloseActiveTab: () => Promise<void>;
+}
+
+export function usePanelCommands(args: UsePanelCommandsArgs): void {
+  const commandRegistry = useCommandRegistry();
+  const argsRef = useRef(args);
+  argsRef.current = args;
+
+  useEffect(() => {
+    if (!args.active) return;
+
+    const disposables = [commandRegistry.registerCommand("newTab", () => argsRef.current.handleNewTab()), commandRegistry.registerCommand("closeTab", () => void argsRef.current.handleCloseActiveTab())];
+
+    const register = (id: string, fn: () => void | Promise<void>) => {
+      disposables.push(commandRegistry.registerCommand(id, fn));
+    };
+
+    register("openCurrentDirInOppositePanelCurrentTab", () => {
+      const opposite = OPPOSITE_PANEL[argsRef.current.side];
+      const fileListTab = argsRef.current.activeTabRef.current?.type === "filelist" ? argsRef.current.activeTabRef.current : null;
+      if (!fileListTab) return;
+      const path = fileListTab.path;
+      const activeOppositeTabIdRef = opposite === "left" ? argsRef.current.leftActiveTabIdRef : argsRef.current.rightActiveTabIdRef;
+      const setOppositeTabs = opposite === "left" ? argsRef.current.setLeftTabs : argsRef.current.setRightTabs;
+      setOppositeTabs((prev) =>
+        prev.map((tab) => (tab.id === activeOppositeTabIdRef.current && tab.type === "filelist" ? { ...tab, path } : tab)),
+      );
+      argsRef.current.setActivePanel(opposite);
+    });
+
+    register("openCurrentDirInOppositePanelNewTab", () => {
+      const opposite = OPPOSITE_PANEL[argsRef.current.side];
+      const fileListTab = argsRef.current.activeTabRef.current?.type === "filelist" ? argsRef.current.activeTabRef.current : null;
+      if (!fileListTab) return;
+      const newTab = createFilelistTab(fileListTab.path);
+      const setOppositeTabs = opposite === "left" ? argsRef.current.setLeftTabs : argsRef.current.setRightTabs;
+      const setOppositeActiveTabId = opposite === "left" ? argsRef.current.setLeftActiveTabId : argsRef.current.setRightActiveTabId;
+      setOppositeTabs((prev) => [...prev, newTab as PanelTab]);
+      setOppositeActiveTabId(newTab.id);
+      argsRef.current.setActivePanel(opposite);
+    });
+
+    register("openSelectedDirInOppositePanelCurrentTab", () => {
+      const entry = getSelectedEntry(argsRef.current.activeTabRef.current);
+      if (!entry || entry.type !== "folder") return;
+      const opposite = OPPOSITE_PANEL[argsRef.current.side];
+      const activeOppositeTabIdRef = opposite === "left" ? argsRef.current.leftActiveTabIdRef : argsRef.current.rightActiveTabIdRef;
+      const setOppositeTabs = opposite === "left" ? argsRef.current.setLeftTabs : argsRef.current.setRightTabs;
+      setOppositeTabs((prev) =>
+        prev.map((tab) => (tab.id === activeOppositeTabIdRef.current && tab.type === "filelist" ? { ...tab, path: entry.path as string } : tab)),
+      );
+      argsRef.current.setActivePanel(opposite);
+    });
+
+    register("openSelectedDirInOppositePanelNewTab", () => {
+      const entry = getSelectedEntry(argsRef.current.activeTabRef.current);
+      if (!entry || entry.type !== "folder") return;
+      const opposite = OPPOSITE_PANEL[argsRef.current.side];
+      const newTab = createFilelistTab(entry.path as string);
+      const setOppositeTabs = opposite === "left" ? argsRef.current.setLeftTabs : argsRef.current.setRightTabs;
+      const setOppositeActiveTabId = opposite === "left" ? argsRef.current.setLeftActiveTabId : argsRef.current.setRightActiveTabId;
+      setOppositeTabs((prev) => [...prev, newTab as PanelTab]);
+      setOppositeActiveTabId(newTab.id);
+      argsRef.current.setActivePanel(opposite);
+    });
+
+    register("previewInOppositePanel", () => {
+      const side = argsRef.current.side;
+      const entry = getSelectedEntry(argsRef.current.activeTabRef.current);
+      if (!entry || entry.type !== "file") return;
+      const opposite = OPPOSITE_PANEL[side];
+      const tabs = (opposite === "left" ? argsRef.current.leftTabsRef : argsRef.current.rightTabsRef).current;
+      const setOppositeTabs = opposite === "left" ? argsRef.current.setLeftTabs : argsRef.current.setRightTabs;
+      const setOppositeActiveTabId = opposite === "left" ? argsRef.current.setLeftActiveTabId : argsRef.current.setRightActiveTabId;
+      const tempTab = tabs.find((tab) => tab.type === "preview" && tab.isTemp);
+      const path = entry.path as string;
+      const name = entry.name;
+      const size = Number(entry.meta.size);
+      if (tempTab && tempTab.type === "preview") {
+        setOppositeTabs((prev) =>
+          prev.map((tab) => (tab.id === tempTab.id ? { ...tab, path, name, size, sourcePanel: side, mode: "viewer", dirty: false } : tab)),
+        );
+        setOppositeActiveTabId(tempTab.id);
+      } else {
+        const newTab = createPreviewTab(path, name, size, side, { mode: "viewer" });
+        setOppositeTabs((prev) => [...prev, newTab as PanelTab]);
+        setOppositeActiveTabId(newTab.id);
+      }
+      argsRef.current.setActivePanel(opposite);
+    });
+
+    register("editInOppositePanel", () => {
+      const side = argsRef.current.side;
+      const entry = getSelectedEntry(argsRef.current.activeTabRef.current);
+      if (!entry || entry.type !== "file") return;
+      const opposite = OPPOSITE_PANEL[side];
+      const tabs = (opposite === "left" ? argsRef.current.leftTabsRef : argsRef.current.rightTabsRef).current;
+      const setOppositeTabs = opposite === "left" ? argsRef.current.setLeftTabs : argsRef.current.setRightTabs;
+      const setOppositeActiveTabId = opposite === "left" ? argsRef.current.setLeftActiveTabId : argsRef.current.setRightActiveTabId;
+      const tempTab = tabs.find((tab) => tab.type === "preview" && tab.isTemp);
+      const path = entry.path as string;
+      const name = entry.name;
+      const size = Number(entry.meta.size);
+      const langId = typeof entry.lang === "string" && entry.lang ? entry.lang : "plaintext";
+      if (tempTab && tempTab.type === "preview") {
+        setOppositeTabs((prev) =>
+          prev.map((tab) => (tab.id === tempTab.id ? { ...tab, path, name, size, sourcePanel: side, mode: "editor", langId, dirty: false } : tab)),
+        );
+        setOppositeActiveTabId(tempTab.id);
+      } else {
+        const newTab = createPreviewTab(path, name, size, side, { mode: "editor", langId });
+        setOppositeTabs((prev) => [...prev, newTab as PanelTab]);
+        setOppositeActiveTabId(newTab.id);
+      }
+      argsRef.current.setActivePanel(opposite);
+    });
+
+    return () => {
+      for (const dispose of disposables) dispose();
+    };
+  }, [args.active, commandRegistry]);
+}
+
+function getSelectedEntry(tab: PanelTab | null | undefined): FsNode | undefined {
+  if (!tab || tab.type !== "filelist") return undefined;
+  const selectedName = tab.selectedEntryNames?.[0] ?? tab.activeEntryName;
+  return selectedName ? tab.entries?.find((entry) => entry.name === selectedName) : undefined;
+}

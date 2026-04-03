@@ -1,4 +1,4 @@
-import { languageRegistry } from "@/languageRegistry";
+import { useLanguageRegistry } from "@/languageRegistry";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useEffect, useRef, useState } from "react";
@@ -19,6 +19,7 @@ export interface OpenCreateFileDialogProps {
 }
 
 export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCancel }: OpenCreateFileDialogProps) {
+  const languageRegistry = useLanguageRegistry();
   const inputRef = useRef<HTMLInputElement>(null);
   const [filename, setFilename] = useState("");
   const [langId, setLangId] = useState("plaintext");
@@ -29,7 +30,7 @@ export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCanc
     if (userTouchedLanguage || !filename.trim()) return;
     const suggested = languageRegistry.getLanguageForFilename(filename.trim());
     setLangId(suggested);
-  }, [filename, userTouchedLanguage]);
+  }, [filename, languageRegistry, userTouchedLanguage]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

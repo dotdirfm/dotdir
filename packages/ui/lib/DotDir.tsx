@@ -1,23 +1,26 @@
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DialogProvider } from "@/dialogs/dialogContext";
-import { Bridge } from "@/features/bridge";
+import type { Bridge } from "@/features/bridge";
 import { BridgeProvider } from "@/features/bridge/useBridge";
+import { CommandLineProvider } from "@/features/command-line/useCommandLine";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { CommandRegistryProvider, useCommandRegistry } from "@/features/commands/commands";
+import { FileSystemWatchRegistryProvider } from "@/features/file-system/fs";
+import { TerminalProvider } from "@/features/terminal/useTerminal";
 import { FocusProvider } from "@/focusContext";
+import { FssProvider } from "@/fss";
+import { LanguageRegistryProvider } from "@/languageRegistry";
 import { PanelControllersProvider } from "@/panelControllers";
 import { Provider as JotaiProvider } from "jotai";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { App, type AppHandle } from "./app";
-import { setStyleHostElement } from "./styleHost";
-import baseStyles from "./styles/base.module.css";
 import {
   defaultResolveVfsUrl,
-  pushVfsUrlResolver,
-  VfsUrlResolverContext,
+  VfsUrlResolverProvider,
   type VfsUrlKind,
   type VfsUrlResolver,
-} from "./utils/vfs";
+} from "./features/file-system/vfs";
+import baseStyles from "./styles/base.module.css";
 
 export type {
   Bridge,
@@ -58,7 +61,9 @@ function DotDirContent({ widget, appRef }: { widget: React.ReactNode; appRef: Re
   return (
     <ErrorBoundary>
       <DialogProvider>
-        <App ref={appRef} widget={widget} />
+        <CommandLineProvider>
+          <App ref={appRef} widget={widget} />
+        </CommandLineProvider>
       </DialogProvider>
     </ErrorBoundary>
   );
@@ -67,19 +72,6 @@ function DotDirContent({ widget, appRef }: { widget: React.ReactNode; appRef: Re
 export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ bridge, widget, resolveVfsUrl = defaultResolveVfsUrl }, ref) {
   const rootRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<AppHandle>(null);
-
-  useEffect(() => pushVfsUrlResolver(resolveVfsUrl), [resolveVfsUrl]);
-
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    setStyleHostElement(root);
-    return () => {
-      if (rootRef.current === root) {
-        setStyleHostElement(null);
-      }
-    };
-  }, []);
 
   useImperativeHandle(
     ref,
@@ -92,20 +84,28 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
   );
 
   return (
-    <div ref={rootRef} className={baseStyles["dotdir-root"]}>
-      <VfsUrlResolverContext.Provider value={resolveVfsUrl}>
+    <div ref={rootRef} className={baseStyles["dotdir-root"]} data-dotdir-style-host="true">
+      <VfsUrlResolverProvider resolveVfsUrl={resolveVfsUrl}>
         <JotaiProvider>
           <BridgeProvider bridge={bridge}>
-            <CommandRegistryProvider>
-              <FocusProvider>
-                <PanelControllersProvider>
-                  <DotDirContent widget={widget} appRef={appRef} />
-                </PanelControllersProvider>
-              </FocusProvider>
-            </CommandRegistryProvider>
+            <FileSystemWatchRegistryProvider>
+              <CommandRegistryProvider>
+                <FocusProvider>
+                  <LanguageRegistryProvider>
+                    <FssProvider>
+                      <PanelControllersProvider>
+                        <TerminalProvider>
+                          <DotDirContent widget={widget} appRef={appRef} />
+                        </TerminalProvider>
+                      </PanelControllersProvider>
+                    </FssProvider>
+                  </LanguageRegistryProvider>
+                </FocusProvider>
+              </CommandRegistryProvider>
+            </FileSystemWatchRegistryProvider>
           </BridgeProvider>
         </JotaiProvider>
-      </VfsUrlResolverContext.Provider>
+      </VfsUrlResolverProvider>
     </div>
   );
 });

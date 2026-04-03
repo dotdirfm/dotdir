@@ -14,6 +14,7 @@ export interface OverlayDialogProps {
   placement?: Placement;
   initialFocusRef?: React.RefObject<HTMLElement | null>;
   focusLayer?: FocusLayer;
+  allowCommandRouting?: boolean | ((event: KeyboardEvent) => boolean);
 }
 
 const FOCUSABLE =
@@ -34,6 +35,7 @@ export function OverlayDialog({
   placement = "center",
   initialFocusRef,
   focusLayer = "modal",
+  allowCommandRouting = false,
 }: OverlayDialogProps) {
   const focusContext = useFocusContext();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -60,9 +62,9 @@ export function OverlayDialog({
         const tag = el.tagName?.toLowerCase();
         return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
       },
-      allowCommandRouting: false,
+      allowCommandRouting,
     });
-  }, [focusLayer, initialFocusRef]);
+  }, [allowCommandRouting, focusContext, focusLayer, initialFocusRef]);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -74,14 +76,14 @@ export function OverlayDialog({
       cancelAnimationFrame(frame);
       focusContext.pop(focusLayer);
       requestAnimationFrame(() => {
-        if (focusContext.current === "panel") {
+        if (focusContext.is("panel")) {
           focusContext.focusCurrent();
           return;
         }
         previous?.focus?.();
       });
     };
-  }, [focusLayer, initialFocusRef]);
+  }, [focusContext, focusLayer, initialFocusRef]);
 
   const handleKeyDownCapture: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
     onKeyDown?.(e);

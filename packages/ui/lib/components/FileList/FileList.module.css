@@ -169,8 +169,8 @@
 }
 
 .file-list.inactive-panel .entry.selected {
-  background: initial;
-  color: initial;
+  background: transparent;
+  color: inherit;
 }
 
 .entry.marked::before {

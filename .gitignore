@@ -9,6 +9,8 @@ lerna-debug.log*
 
 .pnpm-store
 
+.eslintcache
+
 node_modules
 dist
 dist-web

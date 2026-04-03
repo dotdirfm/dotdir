@@ -2,10 +2,11 @@
  * Language Registry (host-only)
  *
  * Manages language and grammar metadata from extension contributions.
- * Used for language detection (filename → langId) when opening files.
- * Syntax highlighting and tokenization are handled inside editor extensions (e.g. Monaco).
+ * Used for language detection (filename -> langId) when opening files.
+ * Syntax highlighting and tokenization are handled inside editor extensions.
  */
 
+import { createContext, createElement, useContext, useRef, type ReactNode } from "react";
 import { detectLang as detectLangFallback } from "./utils/langDetect";
 
 export interface LanguageContribution {
@@ -27,18 +28,14 @@ export interface GrammarData {
   content: object;
 }
 
-class LanguageRegistry {
+export class LanguageRegistry {
   private grammarContents = new Map<string, object>();
   private languageToScope = new Map<string, string>();
-
-  // Extension-based language detection
   private extToLang = new Map<string, string>();
   private filenameToLang = new Map<string, string>();
 
-  /** No-op for compatibility; host does not run Monaco. */
   async initialize(): Promise<void> {}
 
-  /** Register a language contributed by an extension. */
   registerLanguage(lang: LanguageContribution): void {
     if (lang.extensions) {
       for (const ext of lang.extensions) {
@@ -53,7 +50,6 @@ class LanguageRegistry {
     }
   }
 
-  /** Store grammar metadata (for hasGrammar); tokenization is done in editor extensions. */
   registerGrammar(data: GrammarData): void {
     const { contribution, content } = data;
     this.grammarContents.set(contribution.scopeName, content);
@@ -62,7 +58,6 @@ class LanguageRegistry {
     }
   }
 
-  /** No-op; tokenization is handled inside editor extensions. */
   async activateGrammars(): Promise<void> {}
 
   clear(): void {
@@ -93,4 +88,20 @@ class LanguageRegistry {
   }
 }
 
-export const languageRegistry = new LanguageRegistry();
+const LanguageRegistryContext = createContext<LanguageRegistry | null>(null);
+
+export function LanguageRegistryProvider({ children }: { children: ReactNode }) {
+  const registryRef = useRef<LanguageRegistry | null>(null);
+  if (!registryRef.current) {
+    registryRef.current = new LanguageRegistry();
+  }
+  return createElement(LanguageRegistryContext.Provider, { value: registryRef.current }, children);
+}
+
+export function useLanguageRegistry(): LanguageRegistry {
+  const value = useContext(LanguageRegistryContext);
+  if (!value) {
+    throw new Error("useLanguageRegistry must be used within LanguageRegistryProvider");
+  }
+  return value;
+}

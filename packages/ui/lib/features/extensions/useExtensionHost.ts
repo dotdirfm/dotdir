@@ -6,10 +6,11 @@ import { executeMountedExtensionCommand } from "@/features/extensions/extensionC
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { type LoadedExtension, findColorTheme } from "@/features/extensions/extensions";
 import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
-import { activeColorThemeAtom, activeIconThemeAtom } from "@/features/settings/useUserSettings";
-import { readFileText } from "@/fs";
-import { setExtensionLayers } from "@/fss";
-import { languageRegistry } from "@/languageRegistry";
+import { readFileText } from "@/features/file-system/fs";
+import { activeColorThemeAtom, activeIconThemeAtom, settingsReadyAtom } from "@/features/settings/useUserSettings";
+import { useClearExtensionFssLayers, useSetExtensionFssLayers } from "@/fss";
+import { useLanguageRegistry } from "@/languageRegistry";
+import { useActivePanelNavigation } from "@/panelControllers";
 import { registerExtensionKeybindings } from "@/registerKeybindings";
 import { getStyleHostElement } from "@/styleHost";
 import { resolveShellProfiles } from "@/terminal/shellProfiles";
@@ -19,17 +20,27 @@ import { clearColorTheme, loadAndApplyColorTheme, uiThemeToKind } from "@/vscode
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
 
-interface UseExtensionHostOptions {
-  onRefreshPanels: () => void;
-}
-
-export function useExtensionHost({ onRefreshPanels }: UseExtensionHostOptions): void {
+export function useExtensionHost(): void {
   const bridge = useBridge();
+  const bridgeRef = useRef(bridge);
+  bridgeRef.current = bridge;
   const commandRegistry = useCommandRegistry();
+  const commandRegistryRef = useRef(commandRegistry);
+  commandRegistryRef.current = commandRegistry;
   const extensionHost = useExtensionHostClient();
+  const extensionHostRef = useRef(extensionHost);
+  extensionHostRef.current = extensionHost;
+  const setExtensionFssLayers = useSetExtensionFssLayers();
+  const clearExtensionFssLayers = useClearExtensionFssLayers();
+  const languageRegistry = useLanguageRegistry();
+  const languageRegistryRef = useRef(languageRegistry);
+  languageRegistryRef.current = languageRegistry;
+  const { refreshAll } = useActivePanelNavigation();
   const activeIconTheme = useAtomValue(activeIconThemeAtom);
   const activeColorTheme = useAtomValue(activeColorThemeAtom);
+  const settingsReady = useAtomValue(settingsReadyAtom);
   const systemTheme = useAtomValue(systemThemeAtom);
+  const themesReady = useAtomValue(themesReadyAtom);
   const setLoadedExtensions = useSetAtom(loadedExtensionsAtom);
   const setThemesReady = useSetAtom(themesReadyAtom);
   const setResolvedProfiles = useSetAtom(resolvedProfilesAtom);
@@ -42,13 +53,51 @@ export function useExtensionHost({ onRefreshPanels }: UseExtensionHostOptions): 
   activeIconThemeRef.current = activeIconTheme;
   const activeColorThemeRef = useRef(activeColorTheme);
   activeColorThemeRef.current = activeColorTheme;
-  const onNavigatePanelsRef = useRef(onRefreshPanels);
-  onNavigatePanelsRef.current = onRefreshPanels;
+  const settingsReadyRef = useRef(settingsReady);
+  settingsReadyRef.current = settingsReady;
+  const refreshPanelsRef = useRef(refreshAll);
+  refreshPanelsRef.current = refreshAll;
+  const setIconThemeRef = useRef(setIconTheme);
+  setIconThemeRef.current = setIconTheme;
+  const setIconThemeKindRef = useRef(setIconThemeKind);
+  setIconThemeKindRef.current = setIconThemeKind;
 
   // Internal refs — never exposed outside this hook
   const latestExtensionsRef = useRef<LoadedExtension[]>([]);
+  const extensionsLoadedRef = useRef(false);
   const extensionContributionDisposersRef = useRef<(() => void)[]>([]);
   const themesReadyRef = useRef(false);
+
+  const clearExtensionCommandRegistrations = useCallback(() => {
+    for (const d of extensionContributionDisposersRef.current) {
+      try {
+        d();
+      } catch {
+        /* ignore */
+      }
+    }
+    extensionContributionDisposersRef.current = [];
+  }, []);
+
+  const resetExtensionRuntimeState = useCallback(() => {
+    latestExtensionsRef.current = [];
+    themesReadyRef.current = false;
+    clearExtensionCommandRegistrations();
+    languageRegistryRef.current.clear();
+    populateRegistries([]);
+    clearExtensionFssLayers();
+    clearFsProviderCache();
+    setLoadedExtensions([]);
+    setResolvedProfiles([]);
+    setTerminalProfilesLoaded(false);
+    setThemesReady(false);
+  }, [clearExtensionCommandRegistrations, clearExtensionFssLayers, setLoadedExtensions, setResolvedProfiles, setTerminalProfilesLoaded, setThemesReady]);
+
+  const restartExtensionHost = useCallback(async () => {
+    resetExtensionRuntimeState();
+    extensionsLoadedRef.current = false;
+    await extensionHostRef.current.restart();
+  }, [resetExtensionRuntimeState]);
 
   // OS theme + active color theme → keep iconThemeKind in sync
   useEffect(() => {
@@ -57,7 +106,7 @@ export function useExtensionHost({ onRefreshPanels }: UseExtensionHostOptions): 
       ? uiThemeToKind(colorThemeMatch.theme.uiTheme)
       : systemTheme;
     getStyleHostElement().dataset.theme = effectiveKind;
-    setIconThemeKind(effectiveKind);
+    setIconThemeKindRef.current(effectiveKind);
   }, [systemTheme, activeColorTheme]);
 
   const ensureActiveIconThemeFssLoaded = useCallback(
@@ -67,93 +116,45 @@ export function useExtensionHost({ onRefreshPanels }: UseExtensionHostOptions): 
       if (!ext?.iconThemeFssPath) return;
       if (ext.iconThemeFss) return;
       try {
-        ext.iconThemeFss = await readFileText(bridge, ext.iconThemeFssPath);
+        ext.iconThemeFss = await readFileText(bridgeRef.current, ext.iconThemeFssPath);
         if (!ext.iconThemeBasePath) ext.iconThemeBasePath = dirname(ext.iconThemeFssPath);
       } catch {
         // Ignore; resolver will fall back
       }
     },
-    [bridge],
+    [],
   );
 
-  // Apply icon theme when activeIconTheme changes (user-triggered, not initial load)
-  useEffect(() => {
-    if (!themesReadyRef.current) return;
-    void (async () => {
-      const exts = latestExtensionsRef.current;
-      await ensureActiveIconThemeFssLoaded(exts, activeIconTheme);
-      setExtensionLayers(exts, activeIconTheme);
-      if (!activeIconTheme) {
-        setIconTheme("fss");
-      } else {
-        const ext = exts.find((e) => `${e.ref.publisher}.${e.ref.name}` === activeIconTheme);
-        if (ext?.vscodeIconThemePath) {
-          setIconTheme("vscode", ext.vscodeIconThemePath);
-        } else if (ext?.iconThemeFssPath) {
-          setIconTheme("fss");
-        } else {
-          setIconTheme("none");
-        }
-      }
-      onNavigatePanelsRef.current();
-    })();
-  }, [activeIconTheme, ensureActiveIconThemeFssLoaded]);
-
-  // Apply color theme when activeColorTheme changes (user-triggered, not initial load)
-  useEffect(() => {
-    if (!themesReadyRef.current) return;
-    if (!activeColorTheme) {
-      clearColorTheme();
-    } else {
-      const match = findColorTheme(latestExtensionsRef.current, activeColorTheme);
-      if (match) {
-        loadAndApplyColorTheme(bridge, match.theme.jsonPath, match.theme.uiTheme).catch(() => clearColorTheme());
-      }
-    }
-  }, [activeColorTheme]);
-
-  useEffect(() => {
-    languageRegistry.initialize();
-
-    const registerLanguages = async (exts: LoadedExtension[]) => {
-      languageRegistry.clear();
-      for (const ext of exts) {
-        if (ext.languages) {
-          for (const lang of ext.languages) {
-            languageRegistry.registerLanguage(lang);
-          }
-        }
-      }
-      await languageRegistry.activateGrammars();
-    };
-
-    const updateIconTheme = async (exts: LoadedExtension[], themeId: string | undefined): Promise<void> => {
+  const applyInitialThemes = useCallback(async () => {
+    const exts = latestExtensionsRef.current;
+    await ensureActiveIconThemeFssLoaded(exts, activeIconThemeRef.current);
+    setExtensionFssLayers(exts, activeIconThemeRef.current);
+    const updateIconTheme = async (extensions: LoadedExtension[], themeId: string | undefined): Promise<void> => {
       if (!themeId) {
-        await setIconTheme("fss");
+        await setIconThemeRef.current("fss");
         return;
       }
-      const ext = exts.find((e) => `${e.ref.publisher}.${e.ref.name}` === themeId);
+      const ext = extensions.find((e) => `${e.ref.publisher}.${e.ref.name}` === themeId);
       if (ext?.vscodeIconThemePath) {
-        await setIconTheme("vscode", ext.vscodeIconThemePath);
+        await setIconThemeRef.current("vscode", ext.vscodeIconThemePath);
       } else if (ext?.iconThemeFssPath) {
-        await setIconTheme("fss");
+        await setIconThemeRef.current("fss");
       } else {
-        await setIconTheme("none");
+        await setIconThemeRef.current("none");
       }
     };
-
-    const updateColorTheme = async (exts: LoadedExtension[], themeKey: string | undefined): Promise<void> => {
+    const updateColorTheme = async (extensions: LoadedExtension[], themeKey: string | undefined): Promise<void> => {
       if (!themeKey) {
         clearColorTheme();
         return;
       }
-      const match = findColorTheme(exts, themeKey);
+      const match = findColorTheme(extensions, themeKey);
       if (match) {
         const kind = uiThemeToKind(match.theme.uiTheme);
         getStyleHostElement().dataset.theme = kind;
-        setIconThemeKind(kind);
+        setIconThemeKindRef.current(kind);
         try {
-          await loadAndApplyColorTheme(bridge, match.theme.jsonPath, match.theme.uiTheme);
+          await loadAndApplyColorTheme(bridgeRef.current, match.theme.jsonPath, match.theme.uiTheme);
         } catch (err) {
           console.warn("[ExtHost] Failed to load color theme:", themeKey, err);
           clearColorTheme();
@@ -162,64 +163,128 @@ export function useExtensionHost({ onRefreshPanels }: UseExtensionHostOptions): 
         clearColorTheme();
       }
     };
+    await Promise.all([
+      updateIconTheme(exts, activeIconThemeRef.current),
+      updateColorTheme(exts, activeColorThemeRef.current),
+    ]);
+    setThemesReady(true);
+    themesReadyRef.current = true;
+    refreshPanelsRef.current();
+  }, [ensureActiveIconThemeFssLoaded, setExtensionFssLayers, setThemesReady]);
 
-    const registerExtensionCommands = (exts: LoadedExtension[]) => {
-      for (const d of extensionContributionDisposersRef.current) {
-        try {
-          d();
-        } catch {
-          /* ignore */
+  // Apply icon theme when activeIconTheme changes (user-triggered, not initial load)
+  useEffect(() => {
+    if (!themesReady) return;
+    void (async () => {
+      const exts = latestExtensionsRef.current;
+      await ensureActiveIconThemeFssLoaded(exts, activeIconTheme);
+      setExtensionFssLayers(exts, activeIconTheme);
+      if (!activeIconTheme) {
+        await setIconThemeRef.current("fss");
+      } else {
+        const ext = exts.find((e) => `${e.ref.publisher}.${e.ref.name}` === activeIconTheme);
+        if (ext?.vscodeIconThemePath) {
+          await setIconThemeRef.current("vscode", ext.vscodeIconThemePath);
+        } else if (ext?.iconThemeFssPath) {
+          await setIconThemeRef.current("fss");
+        } else {
+          await setIconThemeRef.current("none");
         }
       }
-      extensionContributionDisposersRef.current = [];
+      refreshPanelsRef.current();
+    })();
+  }, [activeIconTheme, ensureActiveIconThemeFssLoaded, setExtensionFssLayers, themesReady]);
+
+  // Apply color theme when activeColorTheme changes (user-triggered, not initial load)
+  useEffect(() => {
+    if (!themesReady) return;
+    if (!activeColorTheme) {
+      clearColorTheme();
+    } else {
+      const match = findColorTheme(latestExtensionsRef.current, activeColorTheme);
+      if (match) {
+        loadAndApplyColorTheme(bridgeRef.current, match.theme.jsonPath, match.theme.uiTheme).catch(() => clearColorTheme());
+      }
+    }
+  }, [activeColorTheme, themesReady]);
+
+  useEffect(() => {
+    if (!settingsReady) return;
+    if (!extensionsLoadedRef.current) return;
+    if (themesReadyRef.current) return;
+    void applyInitialThemes();
+  }, [applyInitialThemes, settingsReady]);
+
+  useEffect(() => {
+    return commandRegistryRef.current.registerCommand("dotdir.restartExtensionHost", restartExtensionHost);
+  }, [restartExtensionHost]);
+
+  useEffect(() => {
+    languageRegistryRef.current.initialize();
+
+    const registerLanguages = async (exts: LoadedExtension[]) => {
+      languageRegistryRef.current.clear();
+      for (const ext of exts) {
+        if (ext.languages) {
+          for (const lang of ext.languages) {
+            languageRegistryRef.current.registerLanguage(lang);
+          }
+        }
+      }
+      await languageRegistryRef.current.activateGrammars();
+    };
+
+    const registerExtensionCommands = (exts: LoadedExtension[]) => {
+      clearExtensionCommandRegistrations();
 
       for (const ext of exts) {
         if (ext.commands) {
-          const disposeContributions = commandRegistry.registerContributions(ext.commands);
+          const disposeContributions = commandRegistryRef.current.registerContributions(ext.commands);
           extensionContributionDisposersRef.current.push(disposeContributions);
           for (const cmd of ext.commands) {
-            const disposeCmd = commandRegistry.registerCommand(cmd.command, async (...args: unknown[]) => {
+            const disposeCmd = commandRegistryRef.current.registerCommand(cmd.command, async (...args: unknown[]) => {
               const handled = await executeMountedExtensionCommand(cmd.command, args);
               if (handled) return;
-              await extensionHost.executeCommand(cmd.command, args);
+              await extensionHostRef.current.executeCommand(cmd.command, args);
             });
             extensionContributionDisposersRef.current.push(disposeCmd);
           }
         }
         if (ext.keybindings?.length) {
-          extensionContributionDisposersRef.current.push(...registerExtensionKeybindings(commandRegistry, ext.keybindings));
+          extensionContributionDisposersRef.current.push(...registerExtensionKeybindings(commandRegistryRef.current, ext.keybindings));
         }
       }
     };
 
-    const unsub = extensionHost.onLoaded((exts) => {
+    const unsub = extensionHostRef.current.onLoaded((exts) => {
       void (async () => {
+        extensionsLoadedRef.current = true;
         latestExtensionsRef.current = exts;
         setLoadedExtensions(exts);
         populateRegistries(exts);
         clearFsProviderCache();
 
         // Pre-compile backend WASM providers so first navigation is fast.
-        if (bridge.fsProvider) {
+        if (bridgeRef.current.fsProvider) {
           for (const ext of exts) {
             for (const p of ext.fsProviders ?? []) {
               if (p.runtime === "backend") {
                 const wasmPath = join(ext.dirPath, p.entry);
-                bridge.fsProvider!.load(wasmPath).catch(() => {});
+                bridgeRef.current.fsProvider!.load(wasmPath).catch(() => {});
               }
             }
           }
         }
 
         // Resolve shell profiles from extension contributions.
-        bridge.utils
+        bridgeRef.current.utils
           .getEnv()
           .then((env) =>
-            resolveShellProfiles(bridge, exts, env).then(({ profiles, shellScripts }) => {
+            resolveShellProfiles(bridgeRef.current, exts, env).then(({ profiles, shellScripts }) => {
               setResolvedProfiles(profiles);
               setTerminalProfilesLoaded(true);
-              if (bridge.pty.setShellIntegrations && Object.keys(shellScripts).length > 0) {
-                bridge.pty.setShellIntegrations(shellScripts).catch(() => {});
+              if (bridgeRef.current.pty.setShellIntegrations && Object.keys(shellScripts).length > 0) {
+                bridgeRef.current.pty.setShellIntegrations(shellScripts).catch(() => {});
               }
             }),
           )
@@ -227,32 +292,20 @@ export function useExtensionHost({ onRefreshPanels }: UseExtensionHostOptions): 
             setTerminalProfilesLoaded(true);
           });
 
-        await ensureActiveIconThemeFssLoaded(exts, activeIconThemeRef.current);
-        setExtensionLayers(exts, activeIconThemeRef.current);
-
         registerLanguages(exts);
         registerExtensionCommands(exts);
-
-        Promise.all([updateIconTheme(exts, activeIconThemeRef.current), updateColorTheme(exts, activeColorThemeRef.current)]).then(() => {
-          setThemesReady(true);
-          themesReadyRef.current = true;
-          onNavigatePanelsRef.current();
-        });
+        if (!settingsReadyRef.current) return;
+        await applyInitialThemes();
       })();
     });
-    extensionHost.start();
+    void extensionHostRef.current.start();
 
     return () => {
       unsub();
-      for (const d of extensionContributionDisposersRef.current) {
-        try {
-          d();
-        } catch {
-          /* ignore */
-        }
-      }
-      extensionContributionDisposersRef.current = [];
-      extensionHost.dispose();
+      clearExtensionCommandRegistrations();
+      extensionHostRef.current.dispose();
     };
-  }, [ensureActiveIconThemeFssLoaded, setLoadedExtensions, setResolvedProfiles, setTerminalProfilesLoaded, setThemesReady]);
+  // This lifecycle is intentionally registered once; mutable refs keep callbacks current.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 }

@@ -149,18 +149,18 @@ export function startSignIn(opts: {
     const codeChallenge = await generateCodeChallenge(codeVerifier);
     const state = generateState();
 
-    let unlisten: (() => void) | undefined;
+    const authListener = { unlisten: undefined as (() => void) | undefined };
 
     const timeoutId = setTimeout(() => {
-      unlisten?.();
+      authListener.unlisten?.();
       opts.onEnd();
       opts.onError("Sign-in timed out. Please try again.");
     }, 5 * 60 * 1000);
 
     // Register callback listener BEFORE opening the browser to avoid any race.
-    unlisten = await listen<string>("auth:callback", async (event) => {
+    authListener.unlisten = await listen<string>("auth:callback", async (event) => {
       clearTimeout(timeoutId);
-      unlisten?.();
+      authListener.unlisten?.();
       try {
         const url = new URL(event.payload);
         if (url.searchParams.get("state") !== state) {
@@ -220,7 +220,7 @@ export function startSignIn(opts: {
       await openUrl(`${DOTDIR_BASE}/oauth/consent?${params}`);
     } catch (err) {
       clearTimeout(timeoutId);
-      unlisten?.();
+      authListener.unlisten?.();
       opts.onEnd();
       opts.onError(err instanceof Error ? err.message : String(err));
     }

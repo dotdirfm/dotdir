@@ -3,32 +3,43 @@ import {
   panelsVisibleAtom,
   resolvedProfilesAtom,
   terminalFocusRequestKeyAtom,
-  terminalProfilesLoadedAtom
+  terminalProfilesLoadedAtom,
 } from "@/atoms";
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { useTerminalState, type TerminalState } from "@/features/terminal/useTerminalState";
 import { useFocusContext } from "@/focusContext";
+import { useActivePanelNavigation } from "@/panelControllers";
 import { normalizeTerminalPath } from "@/terminal/path";
-import { useTerminalState } from "@/terminal/useTerminalState";
 import { normalizePath } from "@/utils/path";
 import { useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useRef } from "react";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
 
-interface UseTerminalOptions {
-  onNavigatePanel: (path: string) => void;
-}
-
-export interface UseTerminalResult {
+export interface TerminalController {
   activeCwd: string;
   writeToTerminal: (data: string) => Promise<void>;
   runCommand: (cmd: string, cwd: string) => Promise<void>;
 }
 
-export function useTerminal({ onNavigatePanel }: UseTerminalOptions): UseTerminalResult {
+type TerminalContextValue = TerminalController & TerminalState;
+
+const TerminalContext = createContext<TerminalContextValue | null>(null);
+
+function useProvideTerminal(): TerminalContextValue {
   const bridge = useBridge();
   const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
+  const { navigateTo } = useActivePanelNavigation();
   const profiles = useAtomValue(resolvedProfilesAtom);
   const profilesLoaded = useAtomValue(terminalProfilesLoadedAtom);
 
@@ -37,17 +48,26 @@ export function useTerminal({ onNavigatePanel }: UseTerminalOptions): UseTermina
   const setTerminalFocusRequestKey = useSetAtom(terminalFocusRequestKeyAtom);
   const setCommandLineCwd = useSetAtom(commandLineCwdAtom);
 
-  const { activeSession, activeSessionId, setProfiles, setCurrentCwd, restartAll, dispose, writeToActiveSession, executeCommandInCwd } = useTerminalState();
+  const terminalState = useTerminalState();
+  const {
+    activeSession,
+    activeSessionId,
+    setProfiles,
+    setCurrentCwd,
+    restartAll,
+    dispose,
+    writeToActiveSession,
+    executeCommandInCwd,
+  } = terminalState;
 
   const activeTab = useAtomValue(activeTabAtom);
-
-  const activePanelCwd = activeTab?.path ?? '';
+  const activePanelCwd = activeTab?.path ?? "";
   const activePanelCwdRef = useRef(activePanelCwd);
   activePanelCwdRef.current = activePanelCwd;
 
-  const onNavigatePanelRef = useRef(onNavigatePanel);
-  onNavigatePanelRef.current = onNavigatePanel;
-  // Subscribe to active session command-start / command-finish events
+  const onNavigatePanelRef = useRef(navigateTo);
+  onNavigatePanelRef.current = navigateTo;
+
   useEffect(() => {
     if (!activeSession) {
       commandRegistry.setContext("terminalCommandRunning", false);
@@ -62,68 +82,56 @@ export function useTerminal({ onNavigatePanel }: UseTerminalOptions): UseTermina
       } else if (event.type === "command-finish") {
         commandRegistry.setContext("terminalCommandRunning", false);
       } else if (event.type === "capabilities") {
-        const r = event.capabilities.commandRunning;
-        commandRegistry.setContext("terminalCommandRunning", r);
+        commandRegistry.setContext("terminalCommandRunning", event.capabilities.commandRunning);
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessionId]);
+  }, [activeSession, activeSessionId, commandRegistry]);
 
-  // Initialize sessions from profiles
   useEffect(() => {
     if (profilesLoaded && profiles.length > 0) {
       setProfiles(profiles, activePanelCwdRef.current);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profilesLoaded, profiles]);
+  }, [profilesLoaded, profiles, setProfiles]);
 
-  // Dispose all sessions on unmount
   useEffect(() => {
     return () => {
       dispose();
     };
   }, [dispose]);
 
-  // Keep service cwd in sync with active panel
   useEffect(() => {
     setCurrentCwd(activePanelCwd);
   }, [activePanelCwd, setCurrentCwd]);
 
-  // Restart sessions on reconnect
   useEffect(() => {
     if (!bridge.onReconnect) return;
     return bridge.onReconnect(() => restartAll());
-  }, [restartAll]);
+  }, [bridge, restartAll]);
 
-  // Forward terminal cwd changes to the active panel
   useEffect(() => {
     if (activeSession?.cwd && activeSession.cwdUserInitiated) {
       const normalized = normalizePath(activeSession.cwd);
       const normalizedTermPath = normalizeTerminalPath(normalized);
       if (normalizedTermPath === normalizeTerminalPath(activePanelCwdRef.current)) return;
-      onNavigatePanelRef.current(normalizedTermPath);
+      void onNavigatePanelRef.current(normalizedTermPath);
     }
   }, [activeSession]);
 
-  // Sync commandLineCwd atom
   const activeCwd = activePanelCwd;
   useEffect(() => {
     setCommandLineCwd(activeCwd);
   }, [activeCwd, setCommandLineCwd]);
 
-  // Restore panel focus when panels become visible again
   useEffect(() => {
     if (!panelsVisible) return;
     const frame = requestAnimationFrame(() => {
       focusContext.request("panel");
     });
     return () => cancelAnimationFrame(frame);
-  }, [panelsVisible]);
+  }, [focusContext, panelsVisible]);
 
   const writeToTerminal = useCallback(
-    (data: string): Promise<void> => {
-      return writeToActiveSession(data);
-    },
+    (data: string): Promise<void> => writeToActiveSession(data),
     [writeToActiveSession],
   );
 
@@ -134,8 +142,27 @@ export function useTerminal({ onNavigatePanel }: UseTerminalOptions): UseTermina
       setTerminalFocusRequestKey((k) => k + 1);
       await executeCommandInCwd(cmd, cwd);
     },
-    [setPanelsVisible, setTerminalFocusRequestKey, executeCommandInCwd],
+    [executeCommandInCwd, focusContext, setPanelsVisible, setTerminalFocusRequestKey],
   );
 
-  return { activeCwd, writeToTerminal, runCommand };
+  return useMemo(
+    () => ({
+      ...terminalState,
+      activeCwd,
+      writeToTerminal,
+      runCommand,
+    }),
+    [activeCwd, runCommand, terminalState, writeToTerminal],
+  );
+}
+
+export function TerminalProvider({ children }: { children: ReactNode }) {
+  const value = useProvideTerminal();
+  return createElement(TerminalContext.Provider, { value }, children);
+}
+
+export function useTerminal(): TerminalContextValue {
+  const value = useContext(TerminalContext);
+  if (!value) throw new Error("useTerminal must be used within TerminalProvider");
+  return value;
 }

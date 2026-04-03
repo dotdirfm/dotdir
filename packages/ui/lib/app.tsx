@@ -1,24 +1,20 @@
-import { commandLineOnExecuteAtom, commandLinePasteFnAtom, panelsVisibleAtom, showExtensionsAtom, systemThemeAtom, themesReadyAtom } from "@/atoms";
-import { CommandLine } from "@/components/CommandLine/CommandLine";
-import { CommandPalette, useCommandPalette } from "@/components/CommandPalette/CommandPalette";
-import { ExtensionsPanel } from "@/components/ExtensionsPanel/ExtensionsPanel";
+import { panelsVisibleAtom, showExtensionsAtom, systemThemeAtom, themesReadyAtom } from "@/atoms";
+import { CommandPalette } from "@/components/CommandPalette/CommandPalette";
 import { KeyBar } from "@/components/KeyBar/KeyBar";
 import { PanelGroup } from "@/components/PanelGroup/PanelGroup";
-import { TerminalPanelBody, TerminalToolbar } from "@/components/Terminal";
 import { DialogHolder, useDialog } from "@/dialogs/dialogContext";
-import { activePanelSideAtom, leftActiveTabAtom, rightActiveTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
+import { CommandLine } from "@/features/command-line/CommandLine/CommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { ExtensionsPanel } from "@/features/extensions/ExtensionsPanel/ExtensionsPanel";
 import { useExtensionHost } from "@/features/extensions/useExtensionHost";
 import { FileOperationHandlersProvider } from "@/features/file-ops/model/fileOperationHandlers";
 import { useFileOperations } from "@/features/file-ops/model/useFileOperations";
-import { showHiddenAtom } from "@/features/settings/useUserSettings";
-import { FileListHandlersProvider } from "@/fileListHandlers";
+import { Terminal, TerminalToolbar } from "@/features/terminal/Terminal";
 import { useFocusContext } from "@/focusContext";
 import { useBuiltInCommands } from "@/hooks/useBuiltInCommands";
-import { useCommandLineExecute } from "@/hooks/useCommandLineExecute";
+import { useCommandRouting } from "@/hooks/useCommandRouting";
 import { useSystemTheme } from "@/hooks/useSystemTheme";
-import { useTerminal } from "@/hooks/useTerminal";
 import { useViewerEditorState } from "@/hooks/useViewerEditorState";
 import { useActivePanelNavigation } from "@/panelControllers";
 import { useWorkspacePersistenceProcess, useWorkspaceRestoreProcess } from "@/processes/workspace-session/model/useWorkspaceSessionProcess";
@@ -26,15 +22,14 @@ import baseStyles from "@/styles/base.module.css";
 import panelsStyles from "@/styles/panels.module.css";
 import terminalStyles from "@/styles/terminal.module.css";
 import { cx } from "@/utils/cssModules";
-import type { FsNode } from "fss-lang";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 
 export type AppHandle = {
   focus(): void;
 };
 
-const AppContent = forwardRef<AppHandle, { widget: React.ReactNode }>(function AppContent({ widget }, ref) {
+export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function App({ widget }, ref) {
   const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -45,26 +40,16 @@ const AppContent = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
         focusContext.request("panel");
       },
     }),
-    [],
+    [focusContext],
   );
   const bridge = useBridge();
   const setTheme = useSetAtom(systemThemeAtom);
-  const { dialog, showDialog } = useDialog();
-  const showHidden = useAtomValue(showHiddenAtom);
+  useDialog();
 
-  const leftActiveTab = useAtomValue(leftActiveTabAtom);
-  const rightActiveTab = useAtomValue(rightActiveTabAtom);
-
-  const [activePanelSide] = useAtom(activePanelSideAtom);
   const panelsVisible = useAtomValue(panelsVisibleAtom);
   const showExtensions = useAtomValue(showExtensionsAtom);
   const themesReady = useAtomValue(themesReadyAtom);
   const systemTheme = useSystemTheme();
-  const commandPalette = useCommandPalette();
-  const setCommandLineOnExecute = useSetAtom(commandLineOnExecuteAtom);
-  const commandLinePasteFnAtomValue = useAtomValue(commandLinePasteFnAtom);
-  const commandLinePasteRef = useRef<(text: string) => void>(() => {});
-  if (commandLinePasteFnAtomValue) commandLinePasteRef.current = commandLinePasteFnAtomValue;
 
   const { uiStateLoaded } = useWorkspaceRestoreProcess();
 
@@ -73,15 +58,9 @@ const AppContent = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     return () => {
       commandRegistry.setFocusLayerGetter(null);
     };
-  }, [focusContext]);
+  }, [commandRegistry, focusContext]);
 
-  const activePanelSideRef = useRef(activePanelSide);
-  activePanelSideRef.current = activePanelSide;
-
-  const { navigateTo, cancelNavigation, refreshAll } = useActivePanelNavigation();
-  const leftFileListState = leftActiveTab?.type === "filelist" ? leftActiveTab : { path: "", entries: [] as FsNode[] };
-  const rightFileListState = rightActiveTab?.type === "filelist" ? rightActiveTab : { path: "", entries: [] as FsNode[] };
-
+  const { refreshAll } = useActivePanelNavigation();
   const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } = useFileOperations();
   const fileOperationHandlers = useMemo(
     () => ({
@@ -90,33 +69,17 @@ const AppContent = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
       copy: handleCopy,
       move: handleMove,
       rename: handleRename,
-      pasteToCommandLine: (text: string) => commandLinePasteRef.current(text),
     }),
     [handleMoveToTrash, handlePermanentDelete, handleCopy, handleMove, handleRename],
   );
-
-  // Set context for which panel is active
-  useEffect(() => {
-    commandRegistry.setContext("leftPanelActive", activePanelSide === "left");
-    commandRegistry.setContext("rightPanelActive", activePanelSide === "right");
-  }, [activePanelSide]);
-
-  // Set context when a dialog is open (e.g. so Tab doesn't switch panel)
-  useEffect(() => {
-    commandRegistry.setContext("dialogOpen", dialog !== null);
-  }, [dialog]);
 
   const {
     handleViewFile,
     handleEditFile,
     handleOpenCreateFileConfirm,
     requestCloseEditor,
-    leftRequestedCursor,
-    rightRequestedCursor,
     overlays: viewerEditorOverlays,
-  } = useViewerEditorState({ bridge, showHidden, leftFileListState, rightFileListState, activePanelSideRef, navigateTo, showDialog });
-  const leftRequestedTopmostName = leftActiveTab?.type === "filelist" ? leftActiveTab.topmostEntryName : undefined;
-  const rightRequestedTopmostName = rightActiveTab?.type === "filelist" ? rightActiveTab.topmostEntryName : undefined;
+  } = useViewerEditorState();
 
   useWorkspacePersistenceProcess();
 
@@ -124,31 +87,13 @@ const AppContent = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     setTheme(systemTheme);
   }, [setTheme, systemTheme]);
 
-  useExtensionHost({
-    onRefreshPanels: () => {
-      refreshAll();
-    },
-  });
-
-  const terminal = useTerminal({ onNavigatePanel: navigateTo });
-  const handleCommandLineExecute = useCommandLineExecute({
-    activeCwd: terminal.activeCwd,
-    runCommand: terminal.runCommand,
-  });
-
-  useEffect(() => {
-    setCommandLineOnExecute(() => handleCommandLineExecute);
-  }, [handleCommandLineExecute, setCommandLineOnExecute]);
+  useExtensionHost();
 
   useBuiltInCommands({
-    navigateTo: navigateTo ?? (() => {}),
-    cancelNavigation: cancelNavigation ?? (() => {}),
     onOpenCreateFileConfirm: handleOpenCreateFileConfirm,
     onViewFile: handleViewFile,
     onEditFile: handleEditFile,
     onRequestCloseEditor: requestCloseEditor,
-    onExecuteInTerminal: (cmd) => terminal.writeToTerminal(cmd),
-    onPasteToCommandLine: (text) => commandLinePasteRef.current(text),
   });
 
   useEffect(() => {
@@ -167,21 +112,9 @@ const AppContent = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
         return node instanceof Node ? root.contains(node) : false;
       },
     });
-  }, []);
+  }, [focusContext]);
 
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const shouldRoute = focusContext.shouldRouteCommandEvent(event, root);
-      if (!shouldRoute) return;
-      commandRegistry.handleKeyboardEvent(event);
-    };
-
-    root.addEventListener("keydown", handleKeyDown, true);
-    return () => root.removeEventListener("keydown", handleKeyDown, true);
-  }, []);
+  useCommandRouting(rootRef);
 
   useEffect(() => {
     if (bridge.onReconnect) {
@@ -200,12 +133,12 @@ const AppContent = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
       <>
         <div className={terminalStyles["terminal-and-panels"]}>
           <div inert={panelsVisible} className={cx(terminalStyles, "terminal-background", panelsVisible && "hidden")}>
-            <TerminalPanelBody />
+            <Terminal />
           </div>
           <div inert={!panelsVisible} className={cx(panelsStyles, "panels-overlay", !panelsVisible && "hidden")}>
             <div className={panelsStyles["side-by-side-panels"]}>
-              <PanelGroup side="left" requestedActiveName={leftRequestedCursor} requestedTopmostName={leftRequestedTopmostName} />
-              <PanelGroup side="right" requestedActiveName={rightRequestedCursor} requestedTopmostName={rightRequestedTopmostName} />
+              <PanelGroup side="left" />
+              <PanelGroup side="right" />
             </div>
             <CommandLine />
           </div>
@@ -218,7 +151,7 @@ const AppContent = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
         {viewerEditorOverlays}
         {showExtensions && <ExtensionsPanel />}
         <DialogHolder />
-        <CommandPalette open={commandPalette.open} onOpenChange={commandPalette.setOpen} />
+        <CommandPalette />
       </>
     );
   }
@@ -227,13 +160,5 @@ const AppContent = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     <div ref={rootRef} className={baseStyles["app"]} tabIndex={0}>
       <FileOperationHandlersProvider handlers={fileOperationHandlers}>{body}</FileOperationHandlersProvider>
     </div>
-  );
-});
-
-export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function App(props, ref) {
-  return (
-    <FileListHandlersProvider>
-      <AppContent {...props} ref={ref} />
-    </FileListHandlersProvider>
   );
 });

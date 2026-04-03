@@ -34,7 +34,6 @@ export function HelpDialog({ content, onClose }: HelpDialogProps) {
         // tabIndex makes the div focusable so the browser scrolls it with keyboard.
         tabIndex={0}
         // Content is internal static strings — not user-provided.
-        // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{ __html: html }}
       />
       <div className={styles["help-dialog-buttons"]}>

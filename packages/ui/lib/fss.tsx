@@ -1,9 +1,11 @@
-import { Bridge } from "@/features/bridge";
+import type { Bridge } from "@/features/bridge";
 import type { LoadedExtension } from "@/features/extensions/extensions";
-import { readFileText } from "@/fs";
+import { readFileText } from "@/features/file-system/fs";
 import type { ResolvedEntryStyle } from "@/types";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
-import { createLayer, FsNode, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from "fss-lang";
+import type { FsNode} from "fss-lang";
+import { createLayer, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from "fss-lang";
+import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 const defaultFss = `
 folder { font-weight: bold; }
@@ -16,7 +18,13 @@ folder { font-weight: bold; }
 
 const baseLayer = createLayer(defaultFss, "/", LayerPriority.GLOBAL);
 
-let extensionLayers: StyleLayer[] = [];
+type FssContextValue = {
+  extensionLayers: StyleLayer[];
+  setExtensionLayers: (extensions: LoadedExtension[], activeIconTheme?: string) => void;
+  clearExtensionLayers: () => void;
+};
+
+const FssContext = createContext<FssContextValue | null>(null);
 
 /**
  * Resolve relative url() paths in FSS source against a base directory.
@@ -26,18 +34,17 @@ let extensionLayers: StyleLayer[] = [];
  */
 function resolveIconUrls(source: string, basePath: string): string {
   return source.replace(/url\(([^)]+)\)/g, (_match, rawUrl: string) => {
-    const url = rawUrl.trim();
+    const url = rawUrl.trim().replace(/^['"]|['"]$/g, "");
     if (url.startsWith("/") || /^[A-Za-z]:/.test(url)) return _match;
     const cleaned = url.replace(/^\.\//, "");
     return `url(${join(basePath, cleaned)})`;
   });
 }
 
-export function setExtensionLayers(extensions: LoadedExtension[], activeIconTheme?: string): void {
+function buildExtensionLayers(extensions: LoadedExtension[], activeIconTheme?: string): StyleLayer[] {
   const withFss = extensions.filter(
     (ext): ext is LoadedExtension & { iconThemeFss: string; iconThemeBasePath: string } => ext.iconThemeFss != null && ext.iconThemeBasePath != null,
   );
-  // If no active icon theme is selected, do not include any extension-specific icon layers.
   const filtered = activeIconTheme ? withFss.filter((ext) => `${ext.ref.publisher}.${ext.ref.name}` === activeIconTheme) : [];
   console.log("[FSS] setExtensionLayers", {
     total: extensions.length,
@@ -45,13 +52,56 @@ export function setExtensionLayers(extensions: LoadedExtension[], activeIconThem
     activeIconTheme: activeIconTheme ?? "(all)",
     layersAdded: filtered.map((e) => `${e.ref.publisher}.${e.ref.name}`),
   });
-  extensionLayers = filtered.map((ext) => createLayer(resolveIconUrls(ext.iconThemeFss, normalizePath(ext.iconThemeBasePath)), "/", LayerPriority.USER));
+  return filtered.map((ext) => createLayer(resolveIconUrls(ext.iconThemeFss, normalizePath(ext.iconThemeBasePath)), "/", LayerPriority.USER));
+}
+
+export function FssProvider({ children }: { children: ReactNode }) {
+  const [extensionLayers, setExtensionLayersState] = useState<StyleLayer[]>([]);
+  const setExtensionLayers = useCallback((extensions: LoadedExtension[], activeIconTheme?: string) => {
+    setExtensionLayersState(buildExtensionLayers(extensions, activeIconTheme));
+  }, []);
+  const clearExtensionLayers = useCallback(() => {
+    setExtensionLayersState([]);
+  }, []);
+
+  const value = useMemo<FssContextValue>(
+    () => ({
+      extensionLayers,
+      setExtensionLayers,
+      clearExtensionLayers,
+    }),
+    [clearExtensionLayers, extensionLayers, setExtensionLayers],
+  );
+
+  return createElement(FssContext.Provider, { value }, children);
+}
+
+function useFssContext(): FssContextValue {
+  const value = useContext(FssContext);
+  if (!value) throw new Error("useFssContext must be used within FssProvider");
+  return value;
+}
+
+export function useExtensionFssLayers(): StyleLayer[] {
+  return useFssContext().extensionLayers;
+}
+
+export function useSetExtensionFssLayers(): FssContextValue["setExtensionLayers"] {
+  return useFssContext().setExtensionLayers;
+}
+
+export function useClearExtensionFssLayers(): FssContextValue["clearExtensionLayers"] {
+  return useFssContext().clearExtensionLayers;
 }
 
 const fssSourceCache = new Map<string, string | null>();
+const resolvedLayersCache = new Map<StyleLayer[], Map<string, StyleLayer[]>>();
 
 export function invalidateFssCache(dirPath: string): void {
   fssSourceCache.delete(dirPath);
+  // Directory-specific invalidation affects every resolved ancestor chain that
+  // may include this path, so keep it simple and flush the derived layer cache.
+  resolvedLayersCache.clear();
 }
 
 export function createPanelResolver(theme: ThemeKind = "dark"): LayeredResolver {
@@ -61,9 +111,10 @@ export function createPanelResolver(theme: ThemeKind = "dark"): LayeredResolver 
   return resolver;
 }
 
-export async function syncLayers(bridge: Bridge, resolver: LayeredResolver, dirPath: string): Promise<void> {
+export async function syncLayers(bridge: Bridge, resolver: LayeredResolver, dirPath: string, extensionLayers: StyleLayer[]): Promise<void> {
+  const normalizedDirPath = normalizePath(dirPath);
   const ancestors: string[] = [];
-  let cur = dirPath;
+  let cur = normalizedDirPath;
   while (true) {
     ancestors.push(cur);
     const parent = dirname(cur);
@@ -83,14 +134,24 @@ export async function syncLayers(bridge: Bridge, resolver: LayeredResolver, dirP
     }
   }
 
-  const layers: StyleLayer[] = [baseLayer, ...extensionLayers];
-  for (const p of ancestors) {
-    const source = fssSourceCache.get(p);
-    if (source != null) {
-      const depth = p === "/" ? 0 : p.split("/").filter(Boolean).length;
-      const fssDir = join(p, ".dotdir");
-      layers.push(createLayer(resolveIconUrls(source, fssDir), p, LayerPriority.nestedPriority(depth)));
+  let cacheForExtensionLayers = resolvedLayersCache.get(extensionLayers);
+  if (!cacheForExtensionLayers) {
+    cacheForExtensionLayers = new Map<string, StyleLayer[]>();
+    resolvedLayersCache.set(extensionLayers, cacheForExtensionLayers);
+  }
+
+  let layers = cacheForExtensionLayers.get(normalizedDirPath);
+  if (!layers) {
+    layers = [baseLayer, ...extensionLayers];
+    for (const p of ancestors) {
+      const source = fssSourceCache.get(p);
+      if (source != null) {
+        const depth = p === "/" ? 0 : p.split("/").filter(Boolean).length;
+        const fssDir = join(p, ".dotdir");
+        layers.push(createLayer(resolveIconUrls(source, fssDir), p, LayerPriority.nestedPriority(depth)));
+      }
     }
+    cacheForExtensionLayers.set(normalizedDirPath, layers);
   }
 
   resolver.setLayers(layers);
@@ -99,7 +160,7 @@ export async function syncLayers(bridge: Bridge, resolver: LayeredResolver, dirP
 function parseIconName(icon: string | undefined): string | null {
   if (!icon) return null;
   const match = /^url\(([^)]+)\)$/.exec(String(icon));
-  return match ? match[1] : null;
+  return match ? match[1].trim().replace(/^['"]|['"]$/g, "") : null;
 }
 
 export function resolveEntryStyle(resolver: LayeredResolver, node: FsNode): ResolvedEntryStyle {

@@ -1,4 +1,3 @@
-import { EditorContainer, ViewerContainer } from "@/components/ExtensionContainer";
 import { PanelTabs } from "@/components/PanelTabs/PanelTabs";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
@@ -13,36 +12,47 @@ import {
   rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
+import { useCommandRegistry } from "@/features/commands/commands";
+import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
 import { showHiddenAtom } from "@/features/settings/useUserSettings";
-import { useGetFileListHandlers } from "@/fileListHandlers";
 import { useFocusContext } from "@/focusContext";
 import { type FileListPanelController } from "@/hooks/useFileListPanel";
 import { usePanelControllerRegistry } from "@/panelControllers";
-import { setActivePanelGroupHandlers } from "@/panelGroupHandlers";
 import { cx } from "@/utils/cssModules";
-import { dirname } from "@/utils/path";
+import { basename, dirname } from "@/utils/path";
 import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FileListTabPane } from "../FileListTabPane";
 import styles from "./PanelGroup.module.css";
+import { usePanelCommands } from "./usePanelCommands";
 
 interface PanelGroupProps {
   side: PanelSide;
-  requestedActiveName?: string;
-  requestedTopmostName?: string;
 }
 
-export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: PanelGroupProps) {
+export function PanelGroup({ side }: PanelGroupProps) {
   const bridge = useBridge();
+  const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
-  const { registerPanel } = usePanelControllerRegistry();
-  const getFileListHandlers = useGetFileListHandlers();
+  const { focusFileList, registerPanel } = usePanelControllerRegistry();
   const activePanel = useAtomValue(activePanelSideAtom);
   const setActivePanel = useSetAtom(activePanelSideAtom);
   const { showDialog } = useDialog();
   const active = activePanel === side;
+  const activeContextKey = side === "left" ? "leftPanelActive" : "rightPanelActive";
 
+  useEffect(() => {
+    commandRegistry.setContext(activeContextKey, active);
+    return () => {
+      commandRegistry.setContext(activeContextKey, false);
+    };
+  }, [active, activeContextKey, commandRegistry]);
+
+  const [leftTabs, setLeftTabs] = useAtom(leftTabsAtom);
+  const [rightTabs, setRightTabs] = useAtom(rightTabsAtom);
+  const [leftActiveTabId, setLeftActiveTabId] = useAtom(leftActiveTabIdAtom);
+  const [rightActiveTabId, setRightActiveTabId] = useAtom(rightActiveTabIdAtom);
   const [tabs, setTabs] = useAtom(side === "left" ? leftTabsAtom : rightTabsAtom);
   const [activeTabId, setActiveTabId] = useAtom(side === "left" ? leftActiveTabIdAtom : rightActiveTabIdAtom);
   const activeIndex = useAtomValue(side === "left" ? leftActiveIndexAtom : rightActiveIndexAtom);
@@ -53,13 +63,23 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
 
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+  const leftTabsRef = useRef(leftTabs);
+  leftTabsRef.current = leftTabs;
+  const rightTabsRef = useRef(rightTabs);
+  rightTabsRef.current = rightTabs;
   const activeTabIdRef = useRef(activeTabId);
   activeTabIdRef.current = activeTabId;
+  const leftActiveTabIdRef = useRef(leftActiveTabId);
+  leftActiveTabIdRef.current = leftActiveTabId;
+  const rightActiveTabIdRef = useRef(rightActiveTabId);
+  rightActiveTabIdRef.current = rightActiveTabId;
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
 
   const handleSelectTab = useCallback((id: string) => setActiveTabId(id), [setActiveTabId]);
   const handlePinTab = useCallback((id: string) => {
     setTabs((prev) => prev.map((t) => (t.id === id && t.type === "preview" && t.isTemp ? { ...t, isTemp: false } : t)));
-  }, []);
+  }, [setTabs]);
   const closeTabNow = useCallback(async (id: string) => {
     const currentTabs = tabsRef.current;
     if (currentTabs.length > 1) {
@@ -109,7 +129,7 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
       next.splice(toIndex, 0, moved);
       return next;
     });
-  }, []);
+  }, [setTabs]);
 
   useEffect(() => {
     if (activeTab?.type !== "filelist") {
@@ -142,8 +162,16 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
             nextActiveEntryName = tab.parent.activeEntryName;
             nextTopmostEntryName = tab.parent.topmostEntryName;
             nextSelectedEntryNames = tab.parent.selectedEntryNames;
+          } else if (dirname(tab.path) === path) {
+            nextParent = undefined;
+            nextActiveEntryName = basename(tab.path);
+            nextTopmostEntryName = undefined;
+            nextSelectedEntryNames = [];
           } else if (tab.path === dirname(path)) {
-            nextParent = tab;
+            nextParent = {
+              ...tab,
+              activeEntryName: basename(path),
+            };
             nextActiveEntryName = undefined;
             nextTopmostEntryName = undefined;
             nextSelectedEntryNames = [];
@@ -210,17 +238,28 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
   const activatePanelFocus = useCallback(() => {
     setActivePanel(side);
     focusContext.request("panel");
-    getFileListHandlers(side)?.focus();
+    focusFileList(side);
     requestAnimationFrame(() => {
-      getFileListHandlers(side)?.focus();
+      focusFileList(side);
     });
-  }, [focusContext, getFileListHandlers, setActivePanel, side]);
+  }, [focusContext, focusFileList, setActivePanel, side]);
 
-  useEffect(() => {
-    if (!active) return;
-    setActivePanelGroupHandlers({ newTab: handleNewTab, closeActiveTab: () => handleCloseTab(activeTabIdRef.current) });
-    return () => setActivePanelGroupHandlers(null);
-  }, [active, handleNewTab, handleCloseTab]);
+  usePanelCommands({
+    active,
+    side,
+    activeTabRef,
+    leftTabsRef,
+    rightTabsRef,
+    leftActiveTabIdRef,
+    rightActiveTabIdRef,
+    setLeftTabs,
+    setRightTabs,
+    setLeftActiveTabId,
+    setRightActiveTabId,
+    setActivePanel,
+    handleNewTab,
+    handleCloseActiveTab: () => handleCloseTab(activeTabIdRef.current),
+  });
 
   const renderPreviewTab = useCallback(
     (tab: Extract<(typeof tabs)[number], { type: "preview" }>) => {
@@ -329,9 +368,9 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
                       }
                       setActivePanel(quickViewSourcePanel);
                       focusContext.request("panel");
-                      getFileListHandlers(quickViewSourcePanel)?.focus();
+                      focusFileList(quickViewSourcePanel);
                       requestAnimationFrame(() => {
-                        getFileListHandlers(quickViewSourcePanel)?.focus();
+                        focusFileList(quickViewSourcePanel);
                       });
                     }
                   : undefined
@@ -356,7 +395,7 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
         </div>
       );
     },
-    [activeTabId, focusContext, getFileListHandlers, handleCloseTab, setActivePanel, setTabs],
+    [activeTabId, focusContext, focusFileList, handleCloseTab, setActivePanel, setActiveTabId, setTabs, side],
   );
 
   return (
@@ -385,8 +424,11 @@ export function PanelGroup({ side, requestedActiveName, requestedTopmostName }: 
                 visible={isVisible}
                 focused={active && isVisible}
                 showHidden={showHidden}
-                requestedActiveName={isVisible ? requestedActiveName : undefined}
-                requestedTopmostName={isVisible ? requestedTopmostName : undefined}
+                tabState={{
+                  activeEntryName: tab.activeEntryName,
+                  topmostEntryName: tab.topmostEntryName,
+                  selectedEntryNames: tab.selectedEntryNames,
+                }}
                 onStateChange={isVisible ? handleFileListStateChange : undefined}
                 onActivatePanelFocus={activatePanelFocus}
                 onActivePanelChange={handleActiveFileListChange}

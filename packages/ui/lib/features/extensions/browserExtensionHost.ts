@@ -1,8 +1,8 @@
 import { type CommandRegistry, useCommandRegistry } from "@/features/commands/commands";
 import type { LoadedExtension } from "@/features/extensions/extensions";
+import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import { join, normalizePath } from "@/utils/path";
-import { resolveVfsUrl } from "@/utils/vfs";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 export type BrowserDisposable = { dispose: () => void };
 
@@ -32,6 +32,11 @@ interface ActiveActivation {
   ctx: BrowserExtensionContext;
   deactivate?: BrowserExtensionModule["deactivate"];
   // Cache keybindings disposables are stored inside ctx.subscriptions by extension code.
+}
+
+export interface BrowserExtensionHost {
+  reconcile: (extensions: LoadedExtension[]) => Promise<void>;
+  dispose: () => Promise<void>;
 }
 
 function extActivationKey(ext: LoadedExtension): string {
@@ -113,112 +118,107 @@ async function loadBrowserModule(scriptUrl: string): Promise<BrowserExtensionMod
   }
 }
 
-class BrowserExtensionHostImpl {
-  private active = new Map<string, ActiveActivation>();
-  private queue: Promise<void> = Promise.resolve();
-
-  constructor(private readonly commandRegistry: CommandRegistry) {}
-
-  private dotdir = {
+function createDotdirApi(commandRegistry: CommandRegistry) {
+  return {
     commands: {
       registerCommand: (
         commandId: string,
         handler: (...args: unknown[]) => void | Promise<void>,
       ): BrowserDisposable => {
-        return { dispose: this.commandRegistry.registerCommand(commandId, handler) };
+        return { dispose: commandRegistry.registerCommand(commandId, handler) };
       },
     },
   };
-
-  async reconcile(extensions: LoadedExtension[]): Promise<void> {
-    this.queue = this.queue
-      .then(async () => {
-        const nextKeys = new Set(extensions.map(extActivationKey));
-
-        // Deactivate removed extensions first.
-        for (const [key, active] of Array.from(this.active.entries())) {
-          if (nextKeys.has(key)) continue;
-          await this.deactivateOne(key, active);
-        }
-
-        // Activate new extensions.
-        for (const ext of extensions) {
-          const key = extActivationKey(ext);
-          if (this.active.has(key)) continue;
-          if (!ext.manifest.browser) continue;
-          await this.activateOne(ext);
-        }
-      })
-      .catch((err) => {
-        console.error("[BrowserExtensionHost] reconcile failed:", err);
-      });
-
-    return this.queue;
-  }
-
-  private async activateOne(ext: LoadedExtension): Promise<void> {
-    const key = extActivationKey(ext);
-    const scriptRel = ext.manifest.browser!;
-    const absScriptPath = join(ext.dirPath, normalizePath(scriptRel).replace(/^\//, ""));
-    const scriptUrl = resolveVfsUrl(absScriptPath);
-
-    const module = await loadBrowserModule(scriptUrl);
-    const activateFn = module.activate ?? module.default?.activate;
-    const deactivateFn = module.deactivate ?? module.default?.deactivate;
-
-    if (typeof activateFn !== "function") {
-      console.warn(`[BrowserExtensionHost] ${key} has a browser entry but no activate() export`);
-      return;
-    }
-
-    const ctx: BrowserExtensionContext = { subscriptions: [], dotdir: this.dotdir as any };
-
-    // Also expose a VS Code-like global (some extensions may rely on it).
-    (globalThis as any).dotdir = this.dotdir;
-
-    await activateFn(ctx);
-
-    this.active.set(key, { module, ctx, deactivate: deactivateFn });
-  }
-
-  private async deactivateOne(key: string, active: ActiveActivation): Promise<void> {
-    try {
-      if (active.deactivate) await active.deactivate(active.ctx);
-    } catch (err) {
-      console.error(`[BrowserExtensionHost] ${key} deactivate() failed:`, err);
-    }
-
-    for (const d of active.ctx.subscriptions) {
-      try {
-        d.dispose();
-      } catch {
-        // ignore
-      }
-    }
-
-    this.active.delete(key);
-  }
-
-  async dispose(): Promise<void> {
-    const entries = Array.from(this.active.entries());
-    this.active.clear();
-    await Promise.all(entries.map(([key, active]) => this.deactivateOne(key, active)));
-  }
 }
 
-export function useBrowserExtensionHost(): BrowserExtensionHostImpl {
+export function useBrowserExtensionHost(): BrowserExtensionHost {
   const commandRegistry = useCommandRegistry();
-  const hostRef = useRef<BrowserExtensionHostImpl | null>(null);
+  const resolveVfsUrl = useVfsUrlResolver();
+  const activeRef = useRef(new Map<string, ActiveActivation>());
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const host = useMemo(() => {
+    const dotdir = createDotdirApi(commandRegistry);
 
-  if (!hostRef.current) {
-    hostRef.current = new BrowserExtensionHostImpl(commandRegistry);
-  }
+    const deactivateOne = async (key: string, active: ActiveActivation): Promise<void> => {
+      try {
+        if (active.deactivate) await active.deactivate(active.ctx);
+      } catch (err) {
+        console.error(`[BrowserExtensionHost] ${key} deactivate() failed:`, err);
+      }
+
+      for (const d of active.ctx.subscriptions) {
+        try {
+          d.dispose();
+        } catch {
+          // ignore
+        }
+      }
+
+      activeRef.current.delete(key);
+    };
+
+    const activateOne = async (ext: LoadedExtension): Promise<void> => {
+      const key = extActivationKey(ext);
+      const scriptRel = ext.manifest.browser!;
+      const absScriptPath = join(ext.dirPath, normalizePath(scriptRel).replace(/^\//, ""));
+      const scriptUrl = resolveVfsUrl(absScriptPath);
+
+      const module = await loadBrowserModule(scriptUrl);
+      const activateFn = module.activate ?? module.default?.activate;
+      const deactivateFn = module.deactivate ?? module.default?.deactivate;
+
+      if (typeof activateFn !== "function") {
+        console.warn(`[BrowserExtensionHost] ${key} has a browser entry but no activate() export`);
+        return;
+      }
+
+      const ctx: BrowserExtensionContext = { subscriptions: [], dotdir: dotdir as any };
+
+      // Also expose a VS Code-like global (some extensions may rely on it).
+      (globalThis as any).dotdir = dotdir;
+
+      await activateFn(ctx);
+
+      activeRef.current.set(key, { module, ctx, deactivate: deactivateFn });
+    };
+
+    return {
+      async reconcile(extensions: LoadedExtension[]): Promise<void> {
+        queueRef.current = queueRef.current
+          .then(async () => {
+            const nextKeys = new Set(extensions.map(extActivationKey));
+
+            for (const [key, active] of Array.from(activeRef.current.entries())) {
+              if (nextKeys.has(key)) continue;
+              await deactivateOne(key, active);
+            }
+
+            for (const ext of extensions) {
+              const key = extActivationKey(ext);
+              if (activeRef.current.has(key)) continue;
+              if (!ext.manifest.browser) continue;
+              await activateOne(ext);
+            }
+          })
+          .catch((err) => {
+            console.error("[BrowserExtensionHost] reconcile failed:", err);
+          });
+
+        return queueRef.current;
+      },
+      async dispose(): Promise<void> {
+        const entries = Array.from(activeRef.current.entries());
+        activeRef.current.clear();
+        await Promise.all(entries.map(([key, active]) => deactivateOne(key, active)));
+      },
+    };
+  }, [commandRegistry, resolveVfsUrl]);
 
   useEffect(() => {
     return () => {
-      void hostRef.current?.dispose();
+      void host.dispose();
     };
-  }, []);
+  }, [host]);
 
-  return hostRef.current;
+  return host;
 }

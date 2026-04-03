@@ -30,9 +30,12 @@ export type FocusState = {
 };
 
 export class FocusContextManager {
+  // Focus is modeled as a stack so temporary surfaces like modals or the command
+  // palette can override the current layer and then restore the previous target.
   private stack: FocusStackEntry[] = [{ layer: "panel" }];
   private listeners = new Set<FocusChangeCallback>();
   private stateListeners = new Set<FocusStateChangeCallback>();
+  // Adapters bridge abstract focus layers to concrete DOM focus/containment logic.
   private adapters = new Map<FocusLayer, FocusAdapter>();
 
   get current(): FocusLayer {
@@ -47,6 +50,7 @@ export class FocusContextManager {
   }
 
   push(layer: FocusLayer): void {
+    // Remember where this layer should return when it is later dismissed.
     this.stack.push({ layer, restoreTo: this.current });
     this.notify();
   }
@@ -61,6 +65,7 @@ export class FocusContextManager {
   }
 
   set(layer: FocusLayer): void {
+    // `set` replaces the full stack and is used for explicit mode switches.
     if (this.stack.length === 1 && this.stack[0]?.layer === layer) return;
     this.stack = [{ layer }];
     this.notify();
@@ -78,11 +83,15 @@ export class FocusContextManager {
   }
 
   request(layer: FocusLayer): void {
+    // A focus request both changes logical focus state and asks the owning UI
+    // surface to move DOM focus immediately.
     this.set(layer);
     this.focusCurrent();
   }
 
   restore(): void {
+    // Restores to the layer remembered by the top-most stack entry, falling back
+    // to the panel when there is no explicit restore target.
     const restoreTo = this.stack[this.stack.length - 1]?.restoreTo ?? "panel";
     this.set(restoreTo);
     this.focusCurrent();
@@ -110,6 +119,9 @@ export class FocusContextManager {
   }
 
   shouldRouteCommandEvent(event: KeyboardEvent, root: HTMLElement): boolean {
+    // Command routing is intentionally conservative: only route events that
+    // originate inside the app, avoid editable controls/dialogs by default,
+    // and then allow the active layer to further opt in/out via its adapter.
     const target = event.target as Node | null;
     if (!target || !root.contains(target)) return false;
 
@@ -150,6 +162,7 @@ export class FocusContextManager {
   }
 
   private notify(): void {
+    // Notify both legacy "current layer" listeners and richer state listeners.
     const current = this.current;
     for (const cb of this.listeners) cb(current);
     const state = this.state;

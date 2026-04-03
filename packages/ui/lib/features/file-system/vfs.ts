@@ -1,10 +1,14 @@
-import { createContext, useContext } from "react";
+import {
+  createContext,
+  createElement,
+  useContext,
+  type ReactNode,
+} from "react";
 
 export type VfsUrlKind = "file" | "extension-directory";
 export type VfsUrlResolver = (absPath: string, kind?: VfsUrlKind) => string;
 
-const resolverStack: VfsUrlResolver[] = [];
-export const VfsUrlResolverContext = createContext<VfsUrlResolver | null>(null);
+const VfsUrlResolverContext = createContext<VfsUrlResolver | null>(null);
 
 function encodePathPreservingSlashes(path: string): string {
   // Encode each segment but keep '/' separators.
@@ -57,23 +61,24 @@ export const defaultResolveVfsUrl: VfsUrlResolver = (absPath, kind = "file") => 
   return `${origin}/vfs/${encodePathPreservingSlashes(withoutLeading)}`;
 };
 
-function getVfsUrlResolver(): VfsUrlResolver {
-  return resolverStack[resolverStack.length - 1] ?? defaultResolveVfsUrl;
+export function VfsUrlResolverProvider({
+  children,
+  resolveVfsUrl,
+}: {
+  children: ReactNode;
+  resolveVfsUrl: VfsUrlResolver;
+}) {
+  return createElement(
+    VfsUrlResolverContext.Provider,
+    { value: resolveVfsUrl },
+    children,
+  );
 }
 
-export function pushVfsUrlResolver(resolver: VfsUrlResolver): () => void {
-  resolverStack.push(resolver);
-  return () => {
-    const idx = resolverStack.lastIndexOf(resolver);
-    if (idx >= 0) resolverStack.splice(idx, 1);
-  };
-}
-
-export function resolveVfsUrl(absPath: string, kind: VfsUrlKind = "file"): string {
-  return getVfsUrlResolver()(absPath, kind);
-}
-
-export function resolveExtensionDirVfsUrl(absPath: string): string {
+export function resolveExtensionDirVfsUrl(
+  absPath: string,
+  resolveVfsUrl: VfsUrlResolver = defaultResolveVfsUrl,
+): string {
   return resolveVfsUrl(absPath, "extension-directory");
 }
 

@@ -1,7 +1,9 @@
-import { PanelSide } from "@/entities/panel/model/types";
-import { useClearVisibleFileListTab, useSetVisibleFileListTab } from "@/fileListHandlers";
-import { FileListPanelController, useFileListPanel } from "@/hooks/useFileListPanel";
-import { useEffect, useRef } from "react";
+import type { PanelSide } from "@/entities/panel/model/types";
+import type { FileListTabState } from "@/entities/tab/model/types";
+import type { FileListPanelController} from "@/hooks/useFileListPanel";
+import { useFileListPanel } from "@/hooks/useFileListPanel";
+import { usePanelControllerRegistry } from "@/panelControllers";
+import { useEffect, useMemo, useRef } from "react";
 import { FileList } from "./FileList/FileList";
 
 interface FileListTabPaneProps {
@@ -11,8 +13,7 @@ interface FileListTabPaneProps {
   visible: boolean;
   focused: boolean;
   showHidden: boolean;
-  requestedActiveName?: string;
-  requestedTopmostName?: string;
+  tabState: Pick<FileListTabState, "activeEntryName" | "topmostEntryName" | "selectedEntryNames">;
   onStateChange?: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
   onActivatePanelFocus: () => void;
   onActivePanelChange: (panel: FileListPanelController) => void;
@@ -25,24 +26,24 @@ export function FileListTabPane({
   visible,
   focused,
   showHidden,
-  requestedActiveName,
-  requestedTopmostName,
+  tabState,
   onStateChange,
   onActivatePanelFocus,
   onActivePanelChange,
 }: FileListTabPaneProps) {
   const panel = useFileListPanel();
-  const clearVisibleFileListTab = useClearVisibleFileListTab();
-  const setVisibleFileListTab = useSetVisibleFileListTab();
+  const { clearVisibleFileListTab, setVisibleFileListTab } = usePanelControllerRegistry();
   const lastRequestedPathRef = useRef<string | null>(null);
   const lastReportedRef = useRef<string | null>(null);
+  const lastSyncedStateRef = useRef<FileListTabState | null>(null);
+  const pathsInSync = panel.state.path === path;
 
   useEffect(() => {
     if (!path) return;
     if (lastRequestedPathRef.current === path) return;
     lastRequestedPathRef.current = path;
     void panel.navigateTo(path);
-  }, [path, panel.navigateTo]);
+  }, [path, panel]);
 
   useEffect(() => {
     if (!visible) return;
@@ -77,6 +78,20 @@ export function FileListTabPane({
     onActivePanelChange,
   ]);
 
+  const fileListState = useMemo(
+    () => ({
+      ...panel.state,
+      activeEntryName: pathsInSync ? tabState.activeEntryName : panel.state.activeEntryName,
+      topmostEntryName: pathsInSync ? tabState.topmostEntryName : panel.state.topmostEntryName,
+      selectedEntryNames: pathsInSync ? tabState.selectedEntryNames : panel.state.selectedEntryNames,
+    }),
+    [panel.state, pathsInSync, tabState.activeEntryName, tabState.topmostEntryName, tabState.selectedEntryNames],
+  );
+  if (pathsInSync) {
+    lastSyncedStateRef.current = fileListState;
+  }
+  const renderedState = pathsInSync ? fileListState : (lastSyncedStateRef.current ?? fileListState);
+
   return (
     <div
       inert={!visible}
@@ -93,7 +108,7 @@ export function FileListTabPane({
         key={tabId}
         side={side}
         tabId={tabId}
-        state={panel.state}
+        state={renderedState}
         showHidden={showHidden}
         onNavigate={(nextPath) => {
           onActivatePanelFocus();
@@ -101,9 +116,7 @@ export function FileListTabPane({
         }}
         active={focused}
         resolver={panel.resolver}
-        requestedActiveName={focused ? requestedActiveName : undefined}
-        requestedTopmostName={focused ? requestedTopmostName : undefined}
-        onStateChange={focused ? onStateChange : undefined}
+        onStateChange={focused && pathsInSync ? onStateChange : undefined}
       />
     </div>
   );

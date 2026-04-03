@@ -6,7 +6,6 @@ export interface FileOperationHandlers {
   copy(sourcePaths: string[], refresh: () => void): void;
   move(sourcePaths: string[], refresh: () => void): void;
   rename(sourcePath: string, currentName: string, refresh: () => void): void;
-  pasteToCommandLine(text: string): void;
 }
 
 const FileOperationHandlersContext = createContext<FileOperationHandlers | null>(null);

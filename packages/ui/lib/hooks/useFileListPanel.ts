@@ -8,19 +8,19 @@
 
 import { systemThemeAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
-import { FileListTabState } from "@/entities/tab/model/types";
-import { Bridge, FsChangeType, FsEntry } from "@/features/bridge";
+import type { FileListTabState } from "@/entities/tab/model/types";
+import type { Bridge, FsChangeType, FsEntry } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
-import { FileSystemObserver, type FileSystemChangeRecord, type HandleMeta } from "@/fs";
-import { createPanelResolver, invalidateFssCache, syncLayers } from "@/fss";
-import { languageRegistry } from "@/languageRegistry";
+import { FileSystemObserver, useFileSystemWatchRegistry, type FileSystemChangeRecord, type HandleMeta } from "@/features/file-system/fs";
+import { createPanelResolver, invalidateFssCache, syncLayers, useExtensionFssLayers } from "@/fss";
+import { useLanguageRegistry } from "@/languageRegistry";
 import { buildContainerPath, isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, isFileExecutable, isRootPath, join } from "@/utils/path";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
-import { FsProviderEntry } from "@dotdirfm/extension-api";
+import type { FsProviderEntry } from "@dotdirfm/extension-api";
 import type { LayeredResolver } from "fss-lang";
-import { FsNode } from "fss-lang";
+import type { FsNode } from "fss-lang";
 import { createFsNode } from "fss-lang/helpers";
 import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -56,7 +56,7 @@ function isDirectoryEntry(entry: FsEntry): boolean {
   return entry.kind === "directory" || (entry.kind === "symlink" && (entry.mode & 0o170000) === 0o040000);
 }
 
-function entryToFsNode(entry: FsEntry, dirPath: string, parent?: FsNode): FsNode {
+function entryToFsNode(entry: FsEntry, dirPath: string, languageRegistry: ReturnType<typeof useLanguageRegistry>, parent?: FsNode): FsNode {
   const isDir = isDirectoryEntry(entry);
   const meta: HandleMeta = {
     size: entry.size,
@@ -123,6 +123,9 @@ export interface FileListPanelController {
 export function useFileListPanel() {
   const { showError } = useDialog();
   const bridge = useBridge();
+  const watchRegistry = useFileSystemWatchRegistry();
+  const extensionLayers = useExtensionFssLayers();
+  const languageRegistry = useLanguageRegistry();
   const theme = useAtomValue(systemThemeAtom);
   const [navigating, setNavigating] = useState(false);
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -143,14 +146,18 @@ export function useFileListPanel() {
   const showErrorRef = useRef(showError);
   showErrorRef.current = showError;
 
-  // When the OS theme changes, resolver is a new object — re-navigate to re-sync FSS layers.
-  // currentPathRef is used instead of state to avoid a stale closure; skips mount (path is "").
+  // When the OS theme changes or extension icon layers update, re-navigate to
+  // re-sync resolver layers for the current path. currentPathRef is used
+  // instead of state to avoid a stale closure; skips mount (path is "").
   useEffect(() => {
-    if (currentPathRef.current) refresh();
-  }, [resolver]);
+    if (currentPathRef.current) {
+      refreshRef.current();
+    }
+  }, [resolver, extensionLayers]);
 
   const setupWatches = useCallback((dirPath: string) => {
-    const observer = observerRef.current!;
+    const observer = observerRef.current;
+    if (!observer) return;
     const ancestors = getAncestors(dirPath);
     const paths: string[] = [];
     for (const ancestor of ancestors) {
@@ -160,10 +167,10 @@ export function useFileListPanel() {
     observer.sync(paths);
   }, []);
 
-  const navigateTo = useCallback(
-    async (path: string) => {
+  const performNavigate = useCallback(
+    async (path: string, force: boolean) => {
       // Skip if already navigating to this path
-      if (currentPathRef.current === path && navAbortRef.current) {
+      if (!force && currentPathRef.current === path && navAbortRef.current) {
         return;
       }
       navAbortRef.current?.abort();
@@ -190,6 +197,10 @@ export function useFileListPanel() {
           if (isContainerPath(path)) {
             // ── Container path: delegate listing to the fsProvider extension ──
             const { containerFile: hostFile, innerPath } = parseContainerPath(path);
+            // Container tabs still need resolver layers so icon/theme extensions
+            // and host-directory .dotdir rules apply after tab cloning/remounts.
+            await syncLayers(bridge, resolverRef.current!, dirname(hostFile), extensionLayers);
+            if (abort.signal.aborted) return;
             const providerMatch = fsProviderRegistry.resolve(basename(hostFile));
             if (!providerMatch) {
               throw new Error(`No fsProvider registered for "${basename(hostFile)}"`);
@@ -229,12 +240,12 @@ export function useFileListPanel() {
             // No filesystem watches inside containers.
           } else {
             // ── Normal filesystem path ────────────────────────────────────────
-            await syncLayers(bridge, resolverRef.current!, path);
+            await syncLayers(bridge, resolverRef.current!, path, extensionLayers);
             if (abort.signal.aborted) return;
             const parent = buildParentChain(path);
             const rawEntries = await bridge.fs.entries(path);
             if (abort.signal.aborted) return;
-            const nodes = rawEntries.map((entry) => entryToFsNode(entry, path, parent));
+            const nodes = rawEntries.map((entry) => entryToFsNode(entry, path, languageRegistry, parent));
             if (abort.signal.aborted) return;
             updateState(parent, nodes);
             setupWatches(path);
@@ -261,8 +272,17 @@ export function useFileListPanel() {
         setNavigating(false);
       }
     },
-    [setupWatches],
+    [bridge, extensionLayers, languageRegistry, setupWatches],
   );
+
+  const navigateTo = useCallback(
+    async (path: string) => performNavigate(path, false),
+    [performNavigate],
+  );
+
+  const refresh = useCallback(() => {
+    void performNavigate(currentPathRef.current, true);
+  }, [performNavigate]);
 
   const cancelNavigation = useCallback(() => {
     navAbortRef.current?.abort();
@@ -329,12 +349,12 @@ export function useFileListPanel() {
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
           debounceRef.current = null;
-          navigateToRef.current(currentPathRef.current);
+          refreshRef.current();
         }, 100);
       }
     };
 
-    observerRef.current = new FileSystemObserver(bridge, handleRecords);
+    observerRef.current = new FileSystemObserver(watchRegistry, handleRecords);
 
     return () => {
       observerRef.current?.disconnect();
@@ -344,14 +364,12 @@ export function useFileListPanel() {
         debounceRef.current = null;
       }
     };
-  }, []);
+  }, [bridge, watchRegistry]);
 
   const navigateToRef = useRef(navigateTo);
   navigateToRef.current = navigateTo;
-
-  const refresh = useCallback(() => {
-    navigateToRef.current(currentPathRef.current);
-  }, []);
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
 
   return useMemo(
     () => ({

@@ -16,7 +16,7 @@ import {
   rightActiveTabIdAtom,
   rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
-import { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "@/features/bridge";
+import type { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { FsProviderExtensionApi } from "@/features/extensions/extensionApi";
@@ -151,7 +151,7 @@ export function useFileOperations() {
         ],
       });
     },
-    [showDialog],
+    [bridge, showDialog],
   );
 
   const handlePermanentDelete = useCallback(
@@ -217,7 +217,7 @@ export function useFileOperations() {
         ],
       });
     },
-    [showDialog, closeDialog],
+    [bridge, closeDialog, showDialog],
   );
 
   const handleCopy = useCallback(
@@ -355,7 +355,7 @@ export function useFileOperations() {
         onCancel: () => {},
       });
     },
-    [showDialog, closeDialog],
+    [bridge, closeDialog, showDialog, updateDialog],
   );
 
   useEffect(() => {
@@ -425,7 +425,7 @@ export function useFileOperations() {
       }
     });
     return unsub;
-  }, [showDialog, closeDialog, updateDialog, refreshBoth]);
+  }, [bridge, showDialog, closeDialog, updateDialog, refreshBoth]);
 
   const handleMove = useCallback(
     async (sourcePaths: string[], refresh: () => void) => {
@@ -488,7 +488,7 @@ export function useFileOperations() {
         onCancel: () => {},
       });
     },
-    [showDialog, closeDialog],
+    [bridge, closeDialog, showDialog],
   );
 
   useEffect(() => {
@@ -558,7 +558,7 @@ export function useFileOperations() {
       }
     });
     return unsub;
-  }, [showDialog, closeDialog, updateDialog, refreshBoth]);
+  }, [bridge, showDialog, closeDialog, updateDialog, refreshBoth]);
 
   useEffect(() => {
     const unsub = bridge.fs.delete.onProgress((payload: DeleteProgressEvent) => {
@@ -605,7 +605,7 @@ export function useFileOperations() {
       }
     });
     return unsub;
-  }, [showDialog, closeDialog, updateDialog, refreshBoth]);
+  }, [bridge, showDialog, closeDialog, updateDialog, refreshBoth]);
 
   const handleRename = useCallback(
     (sourcePath: string, currentName: string, refresh: () => void) => {
@@ -628,7 +628,7 @@ export function useFileOperations() {
         onCancel: () => {},
       });
     },
-    [showDialog],
+    [bridge, showDialog],
   );
 
   return { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename };

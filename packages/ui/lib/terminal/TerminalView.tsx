@@ -70,7 +70,7 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
         return false;
       },
     });
-  }, []);
+  }, [focusContext]);
 
   useEffect(() => {
     // A profile switch replaces the TerminalSession without remounting this component.
@@ -238,13 +238,13 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
       fitRef.current = null;
       term.dispose();
     };
-  }, [session]);
+  }, [commandRegistry, focusContext, session]);
 
   useEffect(() => {
     if (!expanded) return;
     suppressNextCtrlORef.current = true;
     focusContext.request("terminal");
-  }, [expanded, focusRequestKey]);
+  }, [expanded, focusContext, focusRequestKey]);
 
   useEffect(() => {
     const term = termRef.current;
@@ -279,7 +279,7 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
         term.blur();
       }
     });
-  }, [expanded]);
+  }, [expanded, focusContext, session]);
 
   return <div ref={containerRef} className={styles["terminal-container"]} />;
 }

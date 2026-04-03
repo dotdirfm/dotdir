@@ -4,7 +4,7 @@
 /// over WebSocket. Binary frames are used for fs.read responses.
 /// Automatically reconnects on disconnection with exponential backoff.
 
-import {
+import type {
   Bridge,
   ConflictResolution,
   CopyOptions,

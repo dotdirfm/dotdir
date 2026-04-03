@@ -1,24 +1,25 @@
 import { ActionQueue } from "@/actionQueue";
 import type { PanelSide } from "@/entities/panel/model/types";
-import { FileListTabState } from "@/entities/tab/model/types";
+import type { FileListTabState } from "@/entities/tab/model/types";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useGetCachedIcon, useIconThemeVersion, useLoadIconsForPaths, useResolveIcon } from "@/features/file-icons/iconResolver";
-import { useRegisterFileListHandlers } from "@/fileListHandlers";
 import { resolveEntryStyle } from "@/fss";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { usePanelControllerRegistry } from "@/panelControllers";
 import type { ResolvedEntryStyle } from "@/types";
 import { binarySearch } from "@/utils/binarySearch";
 import { cx } from "@/utils/cssModules";
 import { dirname, join } from "@/utils/path";
 import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
 import type { LayeredResolver } from "fss-lang";
-import { FsNode } from "fss-lang";
+import type { FsNode } from "fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
 import { FileInfoFooter } from "./FileInfoFooter";
 import styles from "./FileList.module.css";
 import { useFileListActionHandlers } from "./fileListActions";
+import { useFileListCommands } from "./useFileListCommands";
 
 const ROW_HEIGHT = 26;
 
@@ -30,8 +31,6 @@ interface FileListProps {
   onNavigate: (path: string) => Promise<void>;
   active: boolean;
   resolver: LayeredResolver;
-  requestedActiveName?: string;
-  requestedTopmostName?: string;
   onStateChange?: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
 }
 
@@ -57,14 +56,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function sameNameSet(set: ReadonlySet<string>, arr: readonly string[]): boolean {
-  if (set.size !== arr.length) return false;
-  for (const value of arr) {
-    if (!set.has(value)) return false;
-  }
-  return true;
-}
-
 function getRequestedIndex(entries: DisplayEntry[], requestedName: string, comparer: (a: DisplayEntry, b: DisplayEntry) => number): number {
   const exact = entries.findIndex((item) => item.entry.name === requestedName);
   if (exact >= 0) return exact;
@@ -85,35 +76,23 @@ export const FileList = memo(function FileList({
   onNavigate,
   active,
   resolver,
-  requestedActiveName,
-  requestedTopmostName,
   onStateChange,
 }: FileListProps) {
   const commandRegistry = useCommandRegistry();
-  const registerFileListHandlers = useRegisterFileListHandlers();
+  const { registerVisibleFileListFocus } = usePanelControllerRegistry();
   const entries = useMemo(() => (showHidden ? state.entries : state.entries.filter((e) => !e.meta.hidden)), [showHidden, state.entries]);
 
   const [actionQueue] = useState(() => new ActionQueue());
   const rootRef = useRef<HTMLDivElement>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [topmostIndex, setTopmostIndex] = useState(0);
   const [maxItemsPerColumn, setMaxItemsPerColumn] = useState(1);
   const [columnCount, setColumnCount] = useState(1);
-  const [iconsVersion, setIconsVersion] = useState(0);
-  const [selectedNames, setSelectedNames] = useState<ReadonlySet<string>>(new Set(state.selectedEntryNames ?? []));
+  const [, setIconsVersion] = useState(0);
   const [keyboardNavMode, setKeyboardNavMode] = useState(false);
   const keyboardNavModeRef = useRef(keyboardNavMode);
   keyboardNavModeRef.current = keyboardNavMode;
   const isTouchscreen = useMediaQuery("(pointer: coarse)");
-  const selectedNamesRef = useRef(selectedNames);
-  selectedNamesRef.current = selectedNames;
   /** true = selecting, false = deselecting, undefined = no shift selection in progress */
   const prevSelectRef = useRef<boolean | undefined>(undefined);
-  const prevPathRef = useRef(state.path);
-  const activeIndexRef = useRef(activeIndex);
-  activeIndexRef.current = activeIndex;
-  const topmostIndexRef = useRef(topmostIndex);
-  topmostIndexRef.current = topmostIndex;
   const currentPathRef = useRef(state.path);
   currentPathRef.current = state.path;
   const onNavigateRef = useRef(onNavigate);
@@ -127,6 +106,7 @@ export const FileList = memo(function FileList({
   }, []);
 
   const getCachedIcon = useGetCachedIcon();
+  const iconThemeVersion = useIconThemeVersion();
 
   const getIconUrl = useCallback(
     (iconPath: string | null): string | undefined => {
@@ -158,14 +138,15 @@ export const FileList = memo(function FileList({
         iconFallbackUrl: resolved.fallbackUrl,
       };
     },
-    [resolver, resolveEntryStyle, resolveIcon],
+    [resolver, resolveIcon],
   );
 
   const sorted = useMemo(() => {
+    void iconThemeVersion;
     const withStyle: DisplayEntry[] = entries.map((entry) => toDisplayEntry(entry));
     withStyle.sort(comparer);
     return withStyle;
-  }, [entries, state.path, toDisplayEntry]);
+  }, [entries, comparer, iconThemeVersion, toDisplayEntry]);
 
   const displayEntries: DisplayEntry[] = useMemo(() => {
     const result: DisplayEntry[] = [];
@@ -175,10 +156,34 @@ export const FileList = memo(function FileList({
     }
     for (const item of sorted) result.push(item);
     return result;
-  }, [sorted, state.entry]);
+  }, [sorted, state.entry, toDisplayEntry]);
 
   const displayEntriesRef = useRef(displayEntries);
   displayEntriesRef.current = displayEntries;
+  const displayEntriesNameSet = useMemo(() => new Set(displayEntries.map((entry) => entry.entry.name)), [displayEntries]);
+
+  const activeIndex = useMemo(() => {
+    if (displayEntries.length === 0) return 0;
+    if (state.activeEntryName) return getRequestedIndex(displayEntries, state.activeEntryName, comparer);
+    return 0;
+  }, [comparer, displayEntries, state.activeEntryName]);
+
+  const topmostIndex = useMemo(() => {
+    if (displayEntries.length === 0) return 0;
+    if (state.topmostEntryName) return getRequestedIndex(displayEntries, state.topmostEntryName, comparer);
+    return activeIndex;
+  }, [activeIndex, comparer, displayEntries, state.topmostEntryName]);
+
+  const selectedNames = useMemo(() => {
+    const nextSelected = state.selectedEntryNames ?? [];
+    return new Set(nextSelected.filter((name) => displayEntriesNameSet.has(name)));
+  }, [displayEntriesNameSet, state.selectedEntryNames]);
+  const selectedNamesRef = useRef(selectedNames);
+  selectedNamesRef.current = selectedNames;
+  const activeIndexRef = useRef(activeIndex);
+  activeIndexRef.current = activeIndex;
+  const topmostIndexRef = useRef(topmostIndex);
+  topmostIndexRef.current = topmostIndex;
 
   const neededIcons = useMemo(() => {
     const paths = new Set<string>();
@@ -190,7 +195,6 @@ export const FileList = memo(function FileList({
   const neededIconsKey = useMemo(() => neededIcons.join("\0"), [neededIcons]);
 
   const loadIconsForPaths = useLoadIconsForPaths();
-  const iconThemeVersion = useIconThemeVersion();
 
   useEffect(() => {
     let cancelled = false;
@@ -202,70 +206,45 @@ export const FileList = memo(function FileList({
     };
   }, [loadIconsForPaths, neededIcons, neededIconsKey]);
 
-  useEffect(() => {
-    const prevPath = prevPathRef.current;
-    prevPathRef.current = state.path;
-
-    if (prevPath === state.path) {
-      setActiveIndex((i) => Math.min(i, displayEntries.length - 1));
-      return;
-    }
-
-    if (state.activeEntryName) {
-      const idx = displayEntries.findIndex((d) => d.entry.name === state.activeEntryName);
-      if (idx >= 0) {
-        setActiveIndex(idx);
-        const topmostIdx = state.topmostEntryName
-          ? displayEntries.findIndex((d) => d.entry.name === state.topmostEntryName)
-          : -1;
-        setTopmostIndex(topmostIdx >= 0 ? topmostIdx : Math.max(0, idx - 5));
-        return;
-      }
-    }
-
-    setActiveIndex(0);
-    setTopmostIndex(0);
-  }, [state.path, displayEntries]);
-
-  useEffect(() => {
-    if (!requestedActiveName) return;
-    const entries = displayEntriesRef.current;
-    const idx = getRequestedIndex(entries, requestedActiveName, comparer);
-    setActiveIndex(idx);
-  }, [requestedActiveName, comparer]);
-
-  useEffect(() => {
-    if (!requestedTopmostName) return;
-    const entries = displayEntriesRef.current;
-    const idx = getRequestedIndex(entries, requestedTopmostName, comparer);
-    setTopmostIndex(idx);
-  }, [requestedTopmostName, comparer]);
-
   const onStateChangeRef = useRef(onStateChange);
   onStateChangeRef.current = onStateChange;
 
-  // Report state changes to parent (debounced to avoid per-tick overhead during scroll)
-  const stateChangeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const emitCursorChange = useCallback(
+    (nextActiveIndex: number, nextTopmostIndex: number, nextSelectedNames: Iterable<string>) => {
+      if (!onStateChangeRef.current) return;
+      const entries = displayEntriesRef.current;
+      const maxIndex = Math.max(0, entries.length - 1);
+      const clampedActiveIndex = clamp(nextActiveIndex, 0, maxIndex);
+      const clampedTopmostIndex = clamp(nextTopmostIndex, 0, maxIndex);
+      const selectedName = entries[clampedActiveIndex]?.entry.name;
+      const topmostName = entries[clampedTopmostIndex]?.entry.name;
+      const selectedArray = [...new Set(nextSelectedNames)].filter((name) => entries.some((entry) => entry.entry.name === name));
+      onStateChangeRef.current(selectedName, topmostName, selectedArray);
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!onStateChangeRef.current) return;
-    clearTimeout(stateChangeTimerRef.current);
-    stateChangeTimerRef.current = setTimeout(() => {
-      const selectedName = displayEntriesRef.current[activeIndexRef.current]?.entry.name;
-      const topmostName = displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
-      onStateChangeRef.current?.(selectedName, topmostName, [...selectedNamesRef.current]);
-    }, 150);
-  }, [activeIndex, topmostIndex, displayEntries]);
+    const nextActiveName = displayEntries[activeIndex]?.entry.name;
+    const nextTopmostName = displayEntries[topmostIndex]?.entry.name;
+    const nextSelected = [...selectedNames];
+    const sameSelected =
+      (state.selectedEntryNames ?? []).length === nextSelected.length &&
+      (state.selectedEntryNames ?? []).every((name, idx) => name === nextSelected[idx]);
+    if (state.activeEntryName === nextActiveName && state.topmostEntryName === nextTopmostName && sameSelected) {
+      return;
+    }
+    emitCursorChange(activeIndex, topmostIndex, selectedNames);
+  }, [activeIndex, topmostIndex, displayEntries, emitCursorChange, selectedNames, state.activeEntryName, state.selectedEntryNames, state.topmostEntryName]);
 
-  // Flush selection when unmounting (e.g. tab switch) so debounced callback cannot drop it
+  // Flush selection when unmounting so the parent keeps the latest cursor state.
   useEffect(() => {
     return () => {
-      clearTimeout(stateChangeTimerRef.current);
       if (!onStateChangeRef.current) return;
-      const selectedName = displayEntriesRef.current[activeIndexRef.current]?.entry.name;
-      const topmostName = displayEntriesRef.current[topmostIndexRef.current]?.entry.name;
-      onStateChangeRef.current(selectedName, topmostName, [...selectedNamesRef.current]);
+      emitCursorChange(activeIndexRef.current, topmostIndexRef.current, selectedNamesRef.current);
     };
-  }, []);
+  }, [commandRegistry, emitCursorChange]);
 
   const handleBreadcrumbNavigate = useCallback((path: string) => {
     void onNavigateRef.current(path);
@@ -274,7 +253,7 @@ export const FileList = memo(function FileList({
   // Selection helpers
   type SelectionType = "include-active" | "exclude-active";
 
-  const applySelection = useCallback((oldIndex: number, newIndex: number, selectType: SelectionType) => {
+  const applySelection = useCallback((oldIndex: number, newIndex: number, selectType: SelectionType, nextTopmostIndex?: number) => {
     const entries = displayEntriesRef.current;
     if (prevSelectRef.current === undefined) {
       const currentName = entries[oldIndex]?.entry.name;
@@ -284,20 +263,17 @@ export const FileList = memo(function FileList({
     const lo = Math.min(oldIndex, newIndex);
     const hi = Math.max(oldIndex, newIndex);
 
-    setSelectedNames((prev) => {
-      const next = new Set(prev);
-      for (let i = lo; i <= hi; i++) {
-        if (selectType === "exclude-active" && i === newIndex) continue;
-        const name = entries[i]?.entry.name;
-        if (!name) continue;
-        if (selecting) next.add(name);
-        else next.delete(name);
-      }
-      return next;
-    });
+    const next = new Set(selectedNamesRef.current);
+    for (let i = lo; i <= hi; i++) {
+      if (selectType === "exclude-active" && i === newIndex) continue;
+      const name = entries[i]?.entry.name;
+      if (!name) continue;
+      if (selecting) next.add(name);
+      else next.delete(name);
+    }
 
-    setActiveIndex(clamp(newIndex, 0, entries.length - 1));
-  }, []);
+    emitCursorChange(clamp(newIndex, 0, entries.length - 1), nextTopmostIndex ?? topmostIndexRef.current, next);
+  }, [emitCursorChange]);
 
   // Reset shift selection state on keyup
   useEffect(() => {
@@ -311,16 +287,9 @@ export const FileList = memo(function FileList({
     return () => window.removeEventListener("keyup", handleKeyUp);
   }, [active]);
 
-  // Clear selection when navigating to a new directory or after copy/move
   useEffect(() => {
-    setSelectedNames(new Set());
     prevSelectRef.current = undefined;
   }, [state.path]);
-
-  useEffect(() => {
-    const nextSelected = state.selectedEntryNames ?? [];
-    setSelectedNames((prev) => (sameNameSet(prev, nextSelected) ? prev : new Set(nextSelected)));
-  }, [state.selectedEntryNames]);
 
   const navigateToEntry = useCallback(async (entry: FsNode): Promise<void> => {
     if (entry.name === "..") {
@@ -330,22 +299,13 @@ export const FileList = memo(function FileList({
     } else if (entry.type === "file") {
       void commandRegistry.executeCommand("viewFile", entry.path as string, entry.name, Number(entry.meta.size));
     }
-  }, []);
+  }, [commandRegistry]);
 
   const displayedItems = Math.min(displayEntries.length, maxItemsPerColumn * columnCount);
   const maxItemsPerColumnRef = useRef(maxItemsPerColumn);
   maxItemsPerColumnRef.current = maxItemsPerColumn;
   const displayedItemsRef = useRef(displayedItems);
   displayedItemsRef.current = displayedItems;
-
-  useEffect(() => {
-    setTopmostIndex((t) => {
-      const totalVisible = maxItemsPerColumn * columnCount;
-      if (activeIndex < t) return activeIndex;
-      if (activeIndex > t + totalVisible - 1) return activeIndex - totalVisible + 1;
-      return t;
-    });
-  }, [activeIndex, maxItemsPerColumn, columnCount]);
 
   // Update context when selection changes or registries update
   const updateSelectionContext = useCallback(() => {
@@ -360,7 +320,7 @@ export const FileList = memo(function FileList({
     commandRegistry.setContext("listItemHasViewer", isFile && viewerRegistry.resolve(fileName) !== null);
     commandRegistry.setContext("listItemHasEditor", isFile && editorRegistry.resolve(fileName) !== null);
     commandRegistry.endBatch();
-  }, []);
+  }, [commandRegistry]);
 
   useEffect(() => {
     if (!active) return;
@@ -386,111 +346,41 @@ export const FileList = memo(function FileList({
     refresh: () => onNavigateRef.current(currentPathRef.current),
   });
 
-  useEffect(() => {
-    const handlers = {
-      focus: () => {
-        rootRef.current?.focus({ preventScroll: true });
-      },
-      cursorUp: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          setActiveIndex((i) => Math.max(0, i - 1));
-        }),
-      cursorDown: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + 1));
-        }),
-      cursorLeft: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          setActiveIndex((i) => Math.max(0, i - maxItemsPerColumnRef.current));
-        }),
-      cursorRight: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + maxItemsPerColumnRef.current));
-        }),
-      cursorHome: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          setActiveIndex(0);
-        }),
-      cursorEnd: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          setActiveIndex(displayEntriesRef.current.length - 1);
-        }),
-      cursorPageUp: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          setActiveIndex((i) => Math.max(0, i - displayedItemsRef.current + 1));
-        }),
-      cursorPageDown: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          setActiveIndex((i) => Math.min(displayEntriesRef.current.length - 1, i + displayedItemsRef.current - 1));
-        }),
-      selectUp: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          const cur = activeIndexRef.current;
-          const target = Math.max(0, cur - 1);
-          applySelection(cur, target, cur === 0 ? "include-active" : "exclude-active");
-        }),
-      selectDown: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          const cur = activeIndexRef.current;
-          const last = displayEntriesRef.current.length - 1;
-          const target = Math.min(last, cur + 1);
-          applySelection(cur, target, cur === last ? "include-active" : "exclude-active");
-        }),
-      selectLeft: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          const cur = activeIndexRef.current;
-          applySelection(cur, Math.max(0, cur - maxItemsPerColumnRef.current), "include-active");
-        }),
-      selectRight: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          const cur = activeIndexRef.current;
-          applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + maxItemsPerColumnRef.current), "include-active");
-        }),
-      selectHome: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          applySelection(activeIndexRef.current, 0, "include-active");
-        }),
-      selectEnd: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          applySelection(activeIndexRef.current, displayEntriesRef.current.length - 1, "include-active");
-        }),
-      selectPageUp: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          const cur = activeIndexRef.current;
-          applySelection(cur, Math.max(0, cur - displayedItemsRef.current + 1), "include-active");
-        }),
-      selectPageDown: () =>
-        actionQueue.enqueue(() => {
-          markKeyboardNav();
-          const cur = activeIndexRef.current;
-          applySelection(cur, Math.min(displayEntriesRef.current.length - 1, cur + displayedItemsRef.current - 1), "include-active");
-        }),
-      ...fileActions,
-    };
-    return registerFileListHandlers(side, tabId, handlers);
-  }, [applySelection, fileActions, markKeyboardNav, registerFileListHandlers, side, tabId]);
+  const updateCursor = useCallback(
+    (updater: (current: { activeIndex: number; topmostIndex: number }) => { activeIndex: number; topmostIndex: number }) => {
+      const next = updater({
+        activeIndex: activeIndexRef.current,
+        topmostIndex: topmostIndexRef.current,
+      });
+      emitCursorChange(next.activeIndex, next.topmostIndex, selectedNamesRef.current);
+    },
+    [emitCursorChange],
+  );
 
-  const columnCountRef = useRef(columnCount);
-  columnCountRef.current = columnCount;
+  useFileListCommands({
+    active,
+    actionQueue,
+    fileActions,
+    markKeyboardNav,
+    applySelection,
+    updateCursor,
+    activeIndexRef,
+    topmostIndexRef,
+    maxItemsPerColumnRef,
+    displayedItemsRef,
+    displayEntriesRef,
+    currentPathRef,
+    navigateTo: onNavigate,
+  });
+
+  useEffect(() => {
+    return registerVisibleFileListFocus(side, tabId, () => {
+        rootRef.current?.focus({ preventScroll: true });
+    });
+  }, [registerVisibleFileListFocus, side, tabId]);
 
   const handleItemsPerColumnChanged = useCallback((count: number) => {
     setMaxItemsPerColumn(count);
-    setTopmostIndex((t) => Math.max(0, Math.min(t, displayEntriesRef.current.length - count * columnCountRef.current)));
   }, []);
 
   const handleColumnCountChanged = useCallback((count: number) => {
@@ -499,9 +389,8 @@ export const FileList = memo(function FileList({
 
   const handlePosChange: ColumnsScrollerProps["onPosChange"] = useCallback((topmost: number, active: number) => {
     const len = displayEntriesRef.current.length;
-    setActiveIndex(clamp(active, 0, len - 1));
-    setTopmostIndex(clamp(topmost, 0, len - 1));
-  }, []);
+    emitCursorChange(clamp(active, 0, len - 1), clamp(topmost, 0, len - 1), selectedNamesRef.current);
+  }, [emitCursorChange]);
 
   const getItemKey = useCallback((index: number) => {
     return displayEntriesRef.current[index]?.entry.name ?? index;
@@ -534,7 +423,7 @@ export const FileList = memo(function FileList({
               }
             } else {
               lastClickTimeRef.current = now;
-              actionQueue.enqueue(() => setActiveIndex(index));
+              actionQueue.enqueue(() => emitCursorChange(index, topmostIndexRef.current, selectedNamesRef.current));
             }
           }}
         >
@@ -558,7 +447,7 @@ export const FileList = memo(function FileList({
         </div>
       );
     },
-    [navigateToEntry, iconsVersion, iconThemeVersion, clearKeyboardNav],
+    [navigateToEntry, clearKeyboardNav, actionQueue, commandRegistry, emitCursorChange, getIconUrl],
   );
 
   const activeEntry = displayEntries[activeIndex];

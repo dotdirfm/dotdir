@@ -23,6 +23,9 @@
           "url": "https://marketplace.visualstudio.com/**"
         },
         {
+          "url": "https://open-vsx.org/**"
+        },
+        {
           "url": "https://*.gallerycdn.vsassets.io/**"
         },
         {

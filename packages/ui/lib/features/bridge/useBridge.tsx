@@ -1,6 +1,6 @@
 import { atom, useAtom, useAtomValue } from "jotai";
 import { useEffect } from "react";
-import { Bridge } from ".";
+import type { Bridge } from ".";
 
 export const bridgeAtom = atom<Bridge | null>(null);
 

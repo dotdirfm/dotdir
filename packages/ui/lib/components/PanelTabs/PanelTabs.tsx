@@ -1,5 +1,5 @@
 import { ActionBar } from "@/components/ActionBar/ActionBar";
-import { PanelTab } from "@/entities/tab/model/types";
+import type { PanelTab } from "@/entities/tab/model/types";
 import { cx } from "@/utils/cssModules";
 import { basename } from "@/utils/path";
 import { memo, useCallback, useEffect, useRef, useState } from "react";

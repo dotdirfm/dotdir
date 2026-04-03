@@ -1,8 +1,9 @@
-import { commandLineCwdAtom, commandLineOnExecuteAtom, commandLinePasteFnAtom, panelsVisibleAtom } from "@/atoms";
+import { commandLineCwdAtom, panelsVisibleAtom } from "@/atoms";
+import { useCommandLine, useCommandLineRegistration } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { registerCommandLineKeybindings } from "@/registerKeybindings";
 import terminalStyles from "@/styles/terminal.module.css";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import commandLineStyles from "./CommandLine.module.css";
@@ -11,8 +12,8 @@ export function CommandLine() {
   const commandRegistry = useCommandRegistry();
   const cwd = useAtomValue(commandLineCwdAtom);
   const visible = useAtomValue(panelsVisibleAtom);
-  const onExecute = useAtomValue(commandLineOnExecuteAtom);
-  const setPasteFn = useSetAtom(commandLinePasteFnAtom);
+  const { execute } = useCommandLine();
+  const { setPasteHandler } = useCommandLineRegistration();
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
   const [anchor, setAnchor] = useState(0);
@@ -23,15 +24,15 @@ export function CommandLine() {
   const valueRef = useRef(value);
   const cursorRef = useRef(cursor);
   const anchorRef = useRef(anchor);
-  const onExecuteRef = useRef<((cmd: string) => void) | null>(null);
+  const onExecuteRef = useRef(execute);
   valueRef.current = value;
   cursorRef.current = cursor;
   anchorRef.current = anchor;
-  if (onExecute) onExecuteRef.current = onExecute;
+  onExecuteRef.current = execute;
 
   // Expose paste injection via atom — inserts at cursor position, replacing any selection
   useEffect(() => {
-    setPasteFn(() => (text: string) => {
+    setPasteHandler((text: string) => {
       const pos = cursorRef.current;
       const anch = anchorRef.current;
       const s = Math.min(pos, anch);
@@ -41,13 +42,13 @@ export function CommandLine() {
       setCursor(newPos);
       setAnchor(newPos);
     });
-    return () => setPasteFn(() => () => {});
-  }, [setPasteFn]);
+    return () => setPasteHandler(null);
+  }, [setPasteHandler]);
 
   // Keep commandRegistry context in sync so Enter/Backspace route correctly
   useEffect(() => {
     commandRegistry.setContext("commandLineHasText", visible && value.length > 0);
-  }, [visible, value]);
+  }, [commandRegistry, value, visible]);
 
   // Helpers used inside command handlers (always read via refs)
   const deleteSelection = useCallback((): boolean => {
@@ -201,7 +202,7 @@ export function CommandLine() {
     return () => {
       for (const fn of d) fn();
     };
-  }, [deleteSelection, moveCursor]);
+  }, [commandRegistry, deleteSelection, moveCursor]);
 
   // Register keybindings only while visible
   useEffect(() => {
@@ -213,7 +214,7 @@ export function CommandLine() {
     return () => {
       for (const fn of d) fn();
     };
-  }, [visible]);
+  }, [commandRegistry, visible]);
 
   // Bubble-phase handler: only handles printable character input.
   // All other keys are routed through commandRegistry (capture phase above).
@@ -253,7 +254,7 @@ export function CommandLine() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [visible]);
+  }, [commandRegistry, visible]);
 
   // Resolve click/drag position using elementFromPoint + Range binary search.
   // Avoids caretRangeFromPoint which can return the zero-width cursor span as

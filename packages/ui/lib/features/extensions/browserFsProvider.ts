@@ -14,9 +14,9 @@
  * evaluated once per extension.
  */
 
-import { Bridge } from "@/features/bridge";
+import type { Bridge } from "@/features/bridge";
 import type { FsProviderExtensionApi, FsProviderHostApi } from "@/features/extensions/extensionApi";
-import { readFileBuffer, readFileText } from "@/fs";
+import { readFileBuffer, readFileText } from "@/features/file-system/fs";
 import { join } from "@/utils/path";
 
 /** Cache: key → settled Promise<FsProviderExtensionApi> */

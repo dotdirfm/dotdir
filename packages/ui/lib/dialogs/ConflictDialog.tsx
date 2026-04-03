@@ -1,5 +1,5 @@
-import { ConflictResolution } from "@/features/bridge";
-import { useDialogButtonNav } from "@/hooks/useDialogButtonNav";
+import { useDialogButtonNav } from "@/dialogs/useDialogButtonNav";
+import type { ConflictResolution } from "@/features/bridge";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useRef, useState } from "react";

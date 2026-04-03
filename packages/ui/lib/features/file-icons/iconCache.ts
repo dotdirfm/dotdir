@@ -1,5 +1,5 @@
-import { Bridge } from "@/features/bridge";
-import { readFileText } from "@/fs";
+import type { Bridge } from "@/features/bridge";
+import { readFileBuffer } from "@/features/file-system/fs";
 import { normalizePath } from "@/utils/path";
 
 const MAX_SIZE = 200;
@@ -33,8 +33,24 @@ function evictIfNeeded(): void {
 async function loadIconAbsolute(bridge: Bridge, path: string): Promise<void> {
   const normalized = normalizePath(path);
   try {
-    const content = await readFileText(bridge, normalized);
-    cache.set(path, svgToDataUrl(content));
+    const content = new Uint8Array(await readFileBuffer(bridge, normalized));
+    const ext = normalized.split(".").pop()?.toLowerCase() ?? "";
+    let url: string;
+    if (ext === "svg") {
+      url = svgToDataUrl(new TextDecoder().decode(content));
+    } else {
+      const mime =
+        ext === "png"
+          ? "image/png"
+          : ext === "jpg" || ext === "jpeg"
+            ? "image/jpeg"
+            : ext === "webp"
+              ? "image/webp"
+              : "application/octet-stream";
+      const base64 = btoa(String.fromCharCode(...content));
+      url = `data:${mime};base64,${base64}`;
+    }
+    cache.set(path, url);
     evictIfNeeded();
   } catch (err) {
     console.warn("[IconCache] loadIconAbsolute failed", normalized, err);

@@ -1,5 +1,5 @@
 import type { PanelSide } from "@/entities/panel/model/types";
-import { SystemThemeKind, TerminalProfile } from "@/features/bridge";
+import type { SystemThemeKind, TerminalProfile } from "@/features/bridge";
 import type { LoadedExtension } from "@/features/extensions/extensions";
 import { atom } from "jotai";
 

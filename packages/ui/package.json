@@ -25,6 +25,10 @@
     "dev": "vite",
     "watch": "vite build --watch",
     "build": "pnpm --filter @dotdirfm/extension-api build && tsc && vite build",
+    "lint": "eslint lib vite.config.ts",
+    "lint:fix": "eslint lib vite.config.ts --fix",
+    "fmt": "eslint lib vite.config.ts --fix",
+    "fmt:check": "eslint lib vite.config.ts --fix-dry-run",
     "prepublishOnly": "pnpm build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -55,7 +59,6 @@
     "@dotdirfm/extension-api": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "cmdk": "^1.1.1",
     "fss-lang": "^0.0.5",
     "jotai": "^2.19.0",
     "jsonc-parser": "^3.3.1",

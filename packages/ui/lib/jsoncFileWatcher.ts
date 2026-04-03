@@ -6,10 +6,11 @@
  * On parse error, keeps current value and logs error.
  */
 
-import { Bridge } from "@/features/bridge";
-import { readFileText } from "@/fs";
+import type { Bridge } from "@/features/bridge";
+import { readFileText } from "@/features/file-system/fs";
 import { basename, dirname } from "@/utils/path";
-import { ParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser";
+import type { ParseError} from "jsonc-parser";
+import { parse as parseJsonc, printParseErrorCode } from "jsonc-parser";
 
 export interface JsoncFileWatcher<T> {
   getValue(): T;
