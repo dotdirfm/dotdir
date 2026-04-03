@@ -21,6 +21,8 @@ export interface Command {
   shortTitle?: string;
   category?: string;
   icon?: string;
+  when?: string;
+  palette?: boolean;
 }
 
 export interface Keybinding {
@@ -36,6 +38,8 @@ export interface CommandContribution {
   shortTitle?: string;
   category?: string;
   icon?: string;
+  when?: string;
+  palette?: boolean;
 }
 
 export interface KeybindingContribution {
@@ -174,7 +178,15 @@ export class CommandRegistry {
   getCommand(id: string): Command | undefined {
     const c = this.contributions.get(id);
     if (!c) return undefined;
-    return { id: c.command, title: c.title, shortTitle: c.shortTitle, category: c.category, icon: c.icon };
+    return {
+      id: c.command,
+      title: c.title,
+      shortTitle: c.shortTitle,
+      category: c.category,
+      icon: c.icon,
+      when: c.when,
+      palette: c.palette,
+    };
   }
 
   getAllCommands(): Command[] {
@@ -184,6 +196,8 @@ export class CommandRegistry {
       shortTitle: c.shortTitle,
       category: c.category,
       icon: c.icon,
+      when: c.when,
+      palette: c.palette,
     }));
   }
 
@@ -213,9 +227,13 @@ export class CommandRegistry {
   }
 
   evaluateWhen(when: string | undefined): boolean {
+    return this.evaluateWhenForFocus(when, this.focusLayerGetter());
+  }
+
+  evaluateWhenForFocus(when: string | undefined, focusLayer: string): boolean {
     if (!when) return true;
+    const currentFocus = focusLayer;
     const userContext = this.contextGetter();
-    const currentFocus = this.focusLayerGetter();
     const context: Record<string, unknown> = {
       ...userContext,
       ...this.contextValues,
@@ -357,7 +375,8 @@ export class CommandRegistry {
     if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return null;
 
     const parts: string[] = [];
-    if (e.ctrlKey || e.metaKey) parts.push("ctrl");
+    if (e.metaKey) parts.push(this.isMac() ? "cmd" : "ctrl");
+    if (e.ctrlKey) parts.push("ctrl");
     if (e.altKey) parts.push("alt");
     if (e.shiftKey) parts.push("shift");
 
@@ -369,15 +388,16 @@ export class CommandRegistry {
   }
 
   private normalizeKey(key: string): string {
+    const isMac = this.isMac();
     return key
       .toLowerCase()
-      .replace(/cmd/g, "ctrl")
-      .replace(/meta/g, "ctrl")
-      .replace(/mod/g, "ctrl")
+      .replace(/meta/g, isMac ? "cmd" : "ctrl")
+      .replace(/mod/g, isMac ? "cmd" : "ctrl")
+      .replace(/cmd/g, isMac ? "cmd" : "ctrl")
       .split("+")
       .map((p) => p.trim())
       .sort((a, b) => {
-        const order = ["ctrl", "alt", "shift"];
+        const order = isMac ? ["cmd", "ctrl", "alt", "shift"] : ["ctrl", "alt", "shift"];
         const ai = order.indexOf(a);
         const bi = order.indexOf(b);
         if (ai >= 0 && bi >= 0) return ai - bi;

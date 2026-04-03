@@ -9,7 +9,17 @@ import {
 } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { LanguageOption } from "@/dialogs/OpenCreateFileDialog";
-import { activePanelSideAtom, activeTabAtom, leftActiveTabAtom, rightActiveTabAtom } from "@/entities/tab/model/tabsAtoms";
+import {
+  activePanelSideAtom,
+  activeTabAtom,
+  createFilelistTab,
+  leftActiveTabAtom,
+  leftActiveTabIdAtom,
+  leftTabsAtom,
+  rightActiveTabAtom,
+  rightActiveTabIdAtom,
+  rightTabsAtom,
+} from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
@@ -20,7 +30,7 @@ import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/re
 import { basename } from "@/utils/path";
 import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
 import { useCommandLine } from "../features/command-line/useCommandLine";
 import { useTerminal } from "../features/terminal/useTerminal";
@@ -36,7 +46,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const bridge = useBridge();
   const bridgeRef = useRef(bridge);
   bridgeRef.current = bridge;
-  const { navigateTo, cancelNavigation } = useActivePanelNavigation();
+  const { navigateTo, cancelNavigation, getPanel, activePanelSide } = useActivePanelNavigation();
   const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
   const focusContextRef = useRef(focusContext);
@@ -68,6 +78,10 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
   // Atom setters are stable (Jotai guarantee) — safe to capture in the effect.
   const setActivePanel = useSetAtom(activePanelSideAtom);
+  const [leftTabs, setLeftTabs] = useAtom(leftTabsAtom);
+  const [rightTabs, setRightTabs] = useAtom(rightTabsAtom);
+  const [leftActiveTabId, setLeftActiveTabId] = useAtom(leftActiveTabIdAtom);
+  const [rightActiveTabId, setRightActiveTabId] = useAtom(rightActiveTabIdAtom);
   const leftActiveTab = useAtomValue(leftActiveTabAtom);
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
   const setPanelsVisible = useSetAtom(panelsVisibleAtom);
@@ -76,11 +90,20 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const setViewerFile = useSetAtom(viewerFileAtom);
   const setEditorFile = useSetAtom(editorFileAtom);
   const setCommandPaletteOpen = useSetAtom(commandPaletteOpenAtom);
+  const viewerFile = useAtomValue(viewerFileAtom);
 
   const leftActiveTabRef = useRef(leftActiveTab);
   leftActiveTabRef.current = leftActiveTab;
   const rightActiveTabRef = useRef(rightActiveTab);
   rightActiveTabRef.current = rightActiveTab;
+  const leftTabsRef = useRef(leftTabs);
+  leftTabsRef.current = leftTabs;
+  const rightTabsRef = useRef(rightTabs);
+  rightTabsRef.current = rightTabs;
+  const leftActiveTabIdRef = useRef(leftActiveTabId);
+  leftActiveTabIdRef.current = leftActiveTabId;
+  const rightActiveTabIdRef = useRef(rightActiveTabId);
+  rightActiveTabIdRef.current = rightActiveTabId;
   const navigateToRef = useRef(navigateTo);
   navigateToRef.current = navigateTo;
   const cancelNavigationRef = useRef(cancelNavigation);
@@ -92,9 +115,59 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const activeTab = useAtomValue(activeTabAtom);
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
+  const viewerFileRef = useRef(viewerFile);
+  viewerFileRef.current = viewerFile;
+  const activePanelSideRef = useRef(activePanelSide);
+  activePanelSideRef.current = activePanelSide;
+  const getPanelRef = useRef(getPanel);
+  getPanelRef.current = getPanel;
 
   useEffect(() => {
     const disposables: Array<() => void> = [];
+
+    const closePreviewOnSide = async (side: "left" | "right"): Promise<boolean> => {
+      const activePreview = side === "left" ? leftActiveTabRef.current : rightActiveTabRef.current;
+      if (!activePreview || activePreview.type !== "preview") return false;
+
+      const tabsRef = side === "left" ? leftTabsRef : rightTabsRef;
+      const activeIdRef = side === "left" ? leftActiveTabIdRef : rightActiveTabIdRef;
+      const setTabs = side === "left" ? setLeftTabs : setRightTabs;
+      const setActiveTabId = side === "left" ? setLeftActiveTabId : setRightActiveTabId;
+
+      const closeNow = async () => {
+        const currentTabs = tabsRef.current;
+        if (currentTabs.length > 1) {
+          const idx = currentTabs.findIndex((t) => t.id === activePreview.id);
+          const next = currentTabs.filter((t) => t.id !== activePreview.id);
+          if (activeIdRef.current === activePreview.id) {
+            setActiveTabId(next[Math.min(idx, next.length - 1)]?.id ?? "");
+          }
+          setTabs(next);
+          return;
+        }
+
+        const home = await bridgeRef.current.utils.getHomePath();
+        const newTab = createFilelistTab(home);
+        setTabs([newTab]);
+        setActiveTabId(newTab.id);
+      };
+
+      if (activePreview.mode === "editor" && activePreview.dirty) {
+        showDialogRef.current({
+          type: "message",
+          title: "Unsaved Changes",
+          message: `Close "${activePreview.name}" and discard unsaved changes?`,
+          buttons: [
+            { label: "Cancel", default: true },
+            { label: "Discard", onClick: () => void closeNow() },
+          ],
+        });
+        return true;
+      }
+
+      await closeNow();
+      return true;
+    };
 
     // ── View ──────────────────────────────────────────────────────────────────
 
@@ -133,6 +206,34 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     disposables.push(
       commandRegistry.registerCommand("dotdir.cancelNavigation", () => {
         cancelNavigationRef.current?.();
+      }),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand("dotdir.panelEscape", async () => {
+        const panel = getPanelRef.current(activePanelSideRef.current);
+        if (panel?.navigating) {
+          cancelNavigationRef.current?.();
+          return;
+        }
+
+        if (commandRegistry.getContext("commandLineHasText")) {
+          await commandRegistry.executeCommand("commandLine.clear");
+          return;
+        }
+
+        if (activeTabRef.current?.type === "preview") {
+          await commandRegistry.executeCommand("closeTab");
+          return;
+        }
+
+        if (await closePreviewOnSide(activePanelSideRef.current === "left" ? "right" : "left")) {
+          return;
+        }
+
+        if (viewerFileRef.current) {
+          await commandRegistry.executeCommand("closeViewer");
+        }
       }),
     );
 
@@ -254,6 +355,10 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   }, [
     commandRegistry,
     setActivePanel,
+    setLeftTabs,
+    setRightTabs,
+    setLeftActiveTabId,
+    setRightActiveTabId,
     setPanelsVisible,
     setShowExtensions,
     setViewerFile,

@@ -11,6 +11,7 @@ import {
   rightActiveTabIdAtom,
   rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
+import type { PanelTab } from "@/entities/tab/model/types";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
@@ -26,6 +27,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FileListTabPane } from "../FileListTabPane";
 import styles from "./PanelGroup.module.css";
 import { usePanelCommands } from "./usePanelCommands";
+import type { FsNode } from "fss-lang";
 
 interface PanelGroupProps {
   side: PanelSide;
@@ -136,6 +138,49 @@ export function PanelGroup({ side }: PanelGroupProps) {
       setActiveFileListNavigating(false);
     }
   }, [activeTab?.type]);
+
+  useEffect(() => {
+    if (activeTab?.type !== "filelist") return;
+
+    const entry = getSelectedEntry(activeTab);
+    if (!entry || entry.type !== "file") return;
+
+    const opposite = side === "left" ? "right" : "left";
+    const setOppositeTabs = opposite === "left" ? setLeftTabs : setRightTabs;
+    const oppositeTabsRef = opposite === "left" ? leftTabsRef : rightTabsRef;
+    const tempPreview = oppositeTabsRef.current.find(
+      (tab) => tab.type === "preview" && tab.isTemp && tab.sourcePanel === side,
+    );
+    if (!tempPreview || tempPreview.type !== "preview") return;
+
+    const path = entry.path as string;
+    const name = entry.name;
+    const size = Number(entry.meta.size);
+    const langId = typeof entry.lang === "string" && entry.lang ? entry.lang : "plaintext";
+
+    if (
+      tempPreview.path === path &&
+      tempPreview.name === name &&
+      tempPreview.size === size &&
+      (tempPreview.mode !== "editor" || tempPreview.langId === langId)
+    ) {
+      return;
+    }
+
+    setOppositeTabs((prev) =>
+      prev.map((tab) =>
+        tab.id === tempPreview.id && tab.type === "preview"
+          ? {
+              ...tab,
+              path,
+              name,
+              size,
+              langId: tab.mode === "editor" ? langId : tab.langId,
+            }
+          : tab,
+      ),
+    );
+  }, [activeTab, leftTabsRef, rightTabsRef, setLeftTabs, setRightTabs, side]);
 
   const handleActiveFileListChange = useCallback(
     (panel: FileListPanelController) => {
@@ -439,4 +484,10 @@ export function PanelGroup({ side }: PanelGroupProps) {
       </div>
     </div>
   );
+}
+
+function getSelectedEntry(tab: PanelTab | null | undefined): FsNode | undefined {
+  if (!tab || tab.type !== "filelist") return undefined;
+  const selectedName = tab.selectedEntryNames?.[0] ?? tab.activeEntryName;
+  return selectedName ? tab.entries?.find((entry) => entry.name === selectedName) : undefined;
 }

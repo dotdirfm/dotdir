@@ -8,6 +8,7 @@ import { CommandRegistryProvider, useCommandRegistry } from "@/features/commands
 import { FileSystemWatchRegistryProvider } from "@/features/file-system/fs";
 import { TerminalProvider } from "@/features/terminal/useTerminal";
 import { FocusProvider } from "@/focusContext";
+import { InteractionProvider } from "@/interactionContext";
 import { FssProvider } from "@/fss";
 import { LanguageRegistryProvider } from "@/languageRegistry";
 import { PanelControllersProvider } from "@/panelControllers";
@@ -91,15 +92,17 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
             <FileSystemWatchRegistryProvider>
               <CommandRegistryProvider>
                 <FocusProvider>
-                  <LanguageRegistryProvider>
-                    <FssProvider>
-                      <PanelControllersProvider>
-                        <TerminalProvider>
-                          <DotDirContent widget={widget} appRef={appRef} />
-                        </TerminalProvider>
-                      </PanelControllersProvider>
-                    </FssProvider>
-                  </LanguageRegistryProvider>
+                  <InteractionProvider>
+                    <LanguageRegistryProvider>
+                      <FssProvider>
+                        <PanelControllersProvider>
+                          <TerminalProvider>
+                            <DotDirContent widget={widget} appRef={appRef} />
+                          </TerminalProvider>
+                        </PanelControllersProvider>
+                      </FssProvider>
+                    </LanguageRegistryProvider>
+                  </InteractionProvider>
                 </FocusProvider>
               </CommandRegistryProvider>
             </FileSystemWatchRegistryProvider>

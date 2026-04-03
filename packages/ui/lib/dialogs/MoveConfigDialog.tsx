@@ -1,9 +1,8 @@
 import { useDialogButtonNav } from "@/dialogs/useDialogButtonNav";
 import type { ConflictPolicy, MoveOptions } from "@/features/bridge";
-import { useCommandRegistry } from "@/features/commands/commands";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { PathAutocompleteInput } from "./PathAutocompleteInput";
 import { SmartLabel } from "./dialogHotkeys";
 import styles from "./dialogs.module.css";
@@ -18,7 +17,6 @@ export interface MoveConfigDialogProps {
 }
 
 export function MoveConfigDialog({ itemCount, destPath, suggestionRoots, onConfirm, onCancel }: MoveConfigDialogProps) {
-  const commandRegistry = useCommandRegistry();
   const buttonsRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [destValue, setDestValue] = useState(destPath);
@@ -32,34 +30,11 @@ export function MoveConfigDialog({ itemCount, destPath, suggestionRoots, onConfi
     onConfirm({ conflictPolicy }, trimmed);
   };
 
-  const allowCommandRouting = useCallback(
-    (event: KeyboardEvent) => {
-      if (!commandRegistry.getContext("autocompleteFocused")) return false;
-      const key = event.key.toLowerCase();
-      const autocompleteOpen = Boolean(commandRegistry.getContext("autocompleteOpen"));
-      const autocompleteHasSelection = Boolean(commandRegistry.getContext("autocompleteHasSelection"));
-      if (key === "home" || key === "end") return true;
-      if (!autocompleteOpen) return false;
-      if ((key === "tab" || key === "enter") && !autocompleteHasSelection) return false;
-      return (
-        key === "escape" ||
-        key === "enter" ||
-        key === "tab" ||
-        key === "arrowup" ||
-        key === "arrowdown" ||
-        key === "pageup" ||
-        key === "pagedown"
-      );
-    },
-    [commandRegistry],
-  );
-
   return (
     <OverlayDialog
       className={cx(styles, "modal-dialog", "move-config-dialog")}
       onClose={onCancel}
       onKeyDown={onKeyDown}
-      allowCommandRouting={allowCommandRouting}
     >
       <div className={styles["modal-dialog-header"]}>
         Move {itemCount} item{itemCount !== 1 ? "s" : ""}

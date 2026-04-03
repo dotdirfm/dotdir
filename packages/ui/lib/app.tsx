@@ -14,6 +14,7 @@ import { Terminal, TerminalToolbar } from "@/features/terminal/Terminal";
 import { useFocusContext } from "@/focusContext";
 import { useBuiltInCommands } from "@/hooks/useBuiltInCommands";
 import { useCommandRouting } from "@/hooks/useCommandRouting";
+import { useInteractionCommands } from "@/hooks/useInteractionCommands";
 import { useSystemTheme } from "@/hooks/useSystemTheme";
 import { useViewerEditorState } from "@/hooks/useViewerEditorState";
 import { useActivePanelNavigation } from "@/panelControllers";
@@ -96,6 +97,9 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     onRequestCloseEditor: requestCloseEditor,
   });
 
+  useInteractionCommands();
+  useCommandRouting(rootRef);
+
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
@@ -113,8 +117,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
       },
     });
   }, [focusContext]);
-
-  useCommandRouting(rootRef);
 
   useEffect(() => {
     if (bridge.onReconnect) {

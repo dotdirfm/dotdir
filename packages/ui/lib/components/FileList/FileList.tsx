@@ -358,6 +358,7 @@ export const FileList = memo(function FileList({
 
   useFileListCommands({
     active,
+    containerRef: rootRef,
     actionQueue,
     fileActions,
     markKeyboardNav,

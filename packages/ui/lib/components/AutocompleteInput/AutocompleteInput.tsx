@@ -1,4 +1,4 @@
-import { useCommandRegistry } from "@/features/commands/commands";
+import { useInteractionContext } from "@/interactionContext";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import styles from "./AutocompleteInput.module.css";
 
@@ -21,7 +21,6 @@ interface FlattenedOption {
 }
 
 const PAGE_STEP = 10;
-
 export interface AutocompleteInputProps {
   id?: string;
   value: string;
@@ -55,7 +54,7 @@ export function AutocompleteInput({
   enterKeyHint,
   keepOpenOnSelect = false,
 }: AutocompleteInputProps) {
-  const commandRegistry = useCommandRegistry();
+  const interactionContext = useInteractionContext();
   const localInputRef = useRef<HTMLInputElement>(null);
   const mergedInputRef = inputRef ?? localInputRef;
   const [open, setOpen] = useState(false);
@@ -81,7 +80,6 @@ export function AutocompleteInput({
   const flattenedRef = useRef(flattened);
   const selectedIndexRef = useRef(selectedIndex);
   const dropdownOpenRef = useRef(dropdownOpen);
-  const hasSelection = dropdownOpen && selectedIndex !== null && selectedIndex >= 0 && selectedIndex < flattened.length;
   flattenedRef.current = flattened;
   selectedIndexRef.current = selectedIndex;
   dropdownOpenRef.current = dropdownOpen;
@@ -114,137 +112,74 @@ export function AutocompleteInput({
   commitSelectionRef.current = commitSelection;
 
   useEffect(() => {
-    commandRegistry.setContext("autocompleteFocused", focused);
-    return () => {
-      commandRegistry.setContext("autocompleteFocused", false);
-    };
-  }, [commandRegistry, focused]);
-
-  useEffect(() => {
-    commandRegistry.setContext("autocompleteOpen", dropdownOpen);
-    return () => {
-      commandRegistry.setContext("autocompleteOpen", false);
-    };
-  }, [commandRegistry, dropdownOpen]);
-
-  useEffect(() => {
-    commandRegistry.setContext("autocompleteHasSelection", hasSelection);
-    return () => {
-      commandRegistry.setContext("autocompleteHasSelection", false);
-    };
-  }, [commandRegistry, hasSelection]);
-
-  useEffect(() => {
-    const disposables = [
-      commandRegistry.registerCommand("autocomplete.close", () => {
-        if (!dropdownOpenRef.current) return;
-        setOpen(false);
-      }),
-      commandRegistry.registerCommand("autocomplete.cursorDown", () => {
-        if (!dropdownOpenRef.current) return;
-        setSelectedIndex((current) =>
-          current === null ? 0 : Math.min(flattenedRef.current.length - 1, current + 1),
-        );
-      }),
-      commandRegistry.registerCommand("autocomplete.cursorUp", () => {
-        if (!dropdownOpenRef.current) return;
-        setSelectedIndex((current) =>
-          current === null ? Math.max(0, flattenedRef.current.length - 1) : Math.max(0, current - 1),
-        );
-      }),
-      commandRegistry.registerCommand("autocomplete.cursorPageDown", () => {
-        if (!dropdownOpenRef.current) return;
-        setSelectedIndex((current) =>
-          current === null ? 0 : Math.min(flattenedRef.current.length - 1, current + PAGE_STEP),
-        );
-      }),
-      commandRegistry.registerCommand("autocomplete.cursorPageUp", () => {
-        if (!dropdownOpenRef.current) return;
-        setSelectedIndex((current) =>
-          current === null ? 0 : Math.max(0, current - PAGE_STEP),
-        );
-      }),
-      commandRegistry.registerCommand("autocomplete.cursorHome", () => {
-        if (!dropdownOpenRef.current) {
-          moveInputCursor("start");
-          return;
+    return interactionContext.registerController({
+      contains(node) {
+        const input = mergedInputRef.current;
+        const dropdown = dropdownRef.current;
+        if (!(node instanceof Node)) return false;
+        return Boolean((input && input.contains(node)) || (dropdown && dropdown.contains(node)));
+      },
+      isActive() {
+        return focused;
+      },
+      handleIntent(intent) {
+        switch (intent) {
+          case "cancel":
+            if (!dropdownOpenRef.current) return false;
+            setOpen(false);
+            return true;
+          case "cursorDown":
+            if (!dropdownOpenRef.current) return false;
+            setSelectedIndex((current) =>
+              current === null ? 0 : Math.min(flattenedRef.current.length - 1, current + 1),
+            );
+            return true;
+          case "cursorUp":
+            if (!dropdownOpenRef.current) return false;
+            setSelectedIndex((current) =>
+              current === null ? Math.max(0, flattenedRef.current.length - 1) : Math.max(0, current - 1),
+            );
+            return true;
+          case "cursorPageDown":
+            if (!dropdownOpenRef.current) return false;
+            setSelectedIndex((current) =>
+              current === null ? 0 : Math.min(flattenedRef.current.length - 1, current + PAGE_STEP),
+            );
+            return true;
+          case "cursorPageUp":
+            if (!dropdownOpenRef.current) return false;
+            setSelectedIndex((current) => (current === null ? 0 : Math.max(0, current - PAGE_STEP)));
+            return true;
+          case "cursorHome":
+            if (!dropdownOpenRef.current) {
+              moveInputCursor("start");
+              return true;
+            }
+            if (flattenedRef.current.length === 0) return false;
+            setSelectedIndex(0);
+            return true;
+          case "cursorEnd":
+            if (!dropdownOpenRef.current) {
+              moveInputCursor("end");
+              return true;
+            }
+            if (flattenedRef.current.length === 0) return false;
+            setSelectedIndex(flattenedRef.current.length - 1);
+            return true;
+          case "accept": {
+            if (!dropdownOpenRef.current) return false;
+            if (selectedIndexRef.current === null) return false;
+            const selected = flattenedRef.current[selectedIndexRef.current];
+            if (!selected) return false;
+            commitSelectionRef.current(selected.option.value);
+            return true;
+          }
+          default:
+            return false;
         }
-        if (flattenedRef.current.length === 0) return;
-        setSelectedIndex(0);
-      }),
-      commandRegistry.registerCommand("autocomplete.cursorEnd", () => {
-        if (!dropdownOpenRef.current) {
-          moveInputCursor("end");
-          return;
-        }
-        if (flattenedRef.current.length === 0) return;
-        setSelectedIndex(flattenedRef.current.length - 1);
-      }),
-      commandRegistry.registerCommand("autocomplete.accept", () => {
-        if (!dropdownOpenRef.current) return;
-        if (selectedIndexRef.current === null) return;
-        const selected = flattenedRef.current[selectedIndexRef.current];
-        if (!selected) return;
-        commitSelectionRef.current(selected.option.value);
-      }),
-    ];
-    return () => {
-      disposables.forEach((dispose) => dispose());
-    };
-  }, [commandRegistry, moveInputCursor]);
-
-  useEffect(() => {
-    const disposables = [
-      commandRegistry.registerKeybinding({
-        command: "autocomplete.close",
-        key: "escape",
-        when: "focusModal && autocompleteFocused && autocompleteOpen",
-      }),
-      commandRegistry.registerKeybinding({
-        command: "autocomplete.cursorDown",
-        key: "down",
-        when: "focusModal && autocompleteFocused && autocompleteOpen",
-      }),
-      commandRegistry.registerKeybinding({
-        command: "autocomplete.cursorUp",
-        key: "up",
-        when: "focusModal && autocompleteFocused && autocompleteOpen",
-      }),
-      commandRegistry.registerKeybinding({
-        command: "autocomplete.cursorPageDown",
-        key: "pagedown",
-        when: "focusModal && autocompleteFocused && autocompleteOpen",
-      }),
-      commandRegistry.registerKeybinding({
-        command: "autocomplete.cursorPageUp",
-        key: "pageup",
-        when: "focusModal && autocompleteFocused && autocompleteOpen",
-      }),
-      commandRegistry.registerKeybinding({
-        command: "autocomplete.cursorHome",
-        key: "home",
-        when: "focusModal && autocompleteFocused",
-      }),
-      commandRegistry.registerKeybinding({
-        command: "autocomplete.cursorEnd",
-        key: "end",
-        when: "focusModal && autocompleteFocused",
-      }),
-      commandRegistry.registerKeybinding({
-        command: "autocomplete.accept",
-        key: "enter",
-        when: "focusModal && autocompleteFocused && autocompleteOpen && autocompleteHasSelection",
-      }),
-      commandRegistry.registerKeybinding({
-        command: "autocomplete.accept",
-        key: "tab",
-        when: "focusModal && autocompleteFocused && autocompleteOpen && autocompleteHasSelection",
-      }),
-    ];
-    return () => {
-      disposables.forEach((dispose) => dispose());
-    };
-  }, [commandRegistry]);
+      },
+    });
+  }, [focused, interactionContext, mergedInputRef, moveInputCursor]);
 
   useEffect(() => {
     const dropdown = dropdownRef.current;

@@ -6,6 +6,8 @@ import {
   type Command as CommandType,
   type Keybinding,
 } from "@/features/commands/commands";
+import { useFocusContext } from "@/focusContext";
+import { useInteractionContext } from "@/interactionContext";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +16,7 @@ import paletteStyles from "./command-palette.module.css";
 interface CommandItem {
   command: CommandType;
   keybinding?: Keybinding;
+  keybindings: Keybinding[];
   displayTitle: string;
 }
 
@@ -34,7 +37,10 @@ function fuzzyMatch(haystack: string, needle: string): boolean {
 export function CommandPalette() {
   const [open, setOpen] = useAtom(commandPaletteOpenAtom);
   const commandRegistry = useCommandRegistry();
+  const focusContext = useFocusContext();
+  const interactionContext = useInteractionContext();
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const [commands, setCommands] = useState<CommandType[]>([]);
@@ -70,14 +76,32 @@ export function CommandPalette() {
 
   const items = useMemo<CommandItem[]>(() => {
     return commands.map((cmd) => {
-      const kb = keybindings.find((k) => k.command === cmd.id);
+      const matchingKeybindings = keybindings.filter((k) => k.command === cmd.id);
+      const kb = matchingKeybindings[0];
       const displayTitle = cmd.category ? `${cmd.category}: ${cmd.title}` : cmd.title;
-      return { command: cmd, keybinding: kb, displayTitle };
+      return { command: cmd, keybinding: kb, keybindings: matchingKeybindings, displayTitle };
     });
   }, [commands, keybindings]);
 
   const filteredItems = useMemo(() => {
+    const focusState = focusContext.state;
+    const visibilityFocusLayer =
+      focusState.current === "commandPalette"
+        ? focusState.stack[focusState.stack.length - 1]?.restoreTo ?? "panel"
+        : focusState.current;
     return items
+      .filter((item) => item.command.palette !== false)
+      .filter((item) => {
+        const commandVisible = commandRegistry.evaluateWhenForFocus(
+          item.command.when,
+          visibilityFocusLayer,
+        );
+        if (!commandVisible) return false;
+        if (item.keybindings.length === 0) return true;
+        return item.keybindings.some((binding) =>
+          commandRegistry.evaluateWhenForFocus(binding.when, visibilityFocusLayer),
+        );
+      })
       .filter((item) =>
         fuzzyMatch(
           `${item.command.title}\n${item.command.category ?? ""}\n${item.command.id}\n${item.displayTitle}`,
@@ -91,7 +115,7 @@ export function CommandPalette() {
         if (categoryCompare !== 0) return categoryCompare;
         return a.command.title.localeCompare(b.command.title);
       });
-  }, [items, search]);
+  }, [commandRegistry, focusContext, items, search]);
 
   const groupedItems = useMemo(() => {
     const recentById = new Map(
@@ -161,7 +185,11 @@ export function CommandPalette() {
         return next.slice(0, RECENT_COMMAND_LIMIT);
       });
       closePalette();
-      void commandRegistry.executeCommand(commandId);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          void commandRegistry.executeCommand(commandId);
+        });
+      });
     },
     [closePalette, commandRegistry],
   );
@@ -189,113 +217,68 @@ export function CommandPalette() {
 
   useEffect(() => {
     if (!open) return;
-    const disposables = [
-      commandRegistry.registerCommand("commandPalette.close", () => {
-        paletteStateRef.current.closePalette();
-      }),
-      commandRegistry.registerCommand("commandPalette.selectNext", () => {
+    return interactionContext.registerController({
+      contains(node) {
+        const container = containerRef.current;
+        return node instanceof Node && !!container?.contains(node);
+      },
+      isActive() {
+        return open;
+      },
+      handleIntent(intent, event) {
         setKeyboardNavigationActive(true);
         hoverSelectionEnabledRef.current = false;
         lastPointerPositionRef.current = null;
         lastHoverSelectionPointerRef.current = null;
-        setSelectedIndex((current) => {
-          if (orderedItemsRef.current.length === 0) return 0;
-          return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current + 1));
-        });
-      }),
-      commandRegistry.registerCommand("commandPalette.selectPrevious", () => {
-        setKeyboardNavigationActive(true);
-        hoverSelectionEnabledRef.current = false;
-        lastPointerPositionRef.current = null;
-        lastHoverSelectionPointerRef.current = null;
-        setSelectedIndex((current) => {
-          if (orderedItemsRef.current.length === 0) return 0;
-          return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current - 1));
-        });
-      }),
-      commandRegistry.registerCommand("commandPalette.selectPageDown", () => {
-        setKeyboardNavigationActive(true);
-        hoverSelectionEnabledRef.current = false;
-        lastPointerPositionRef.current = null;
-        lastHoverSelectionPointerRef.current = null;
-        setSelectedIndex((current) => {
-          if (orderedItemsRef.current.length === 0) return 0;
-          return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current + PAGE_STEP));
-        });
-      }),
-      commandRegistry.registerCommand("commandPalette.selectPageUp", () => {
-        setKeyboardNavigationActive(true);
-        hoverSelectionEnabledRef.current = false;
-        lastPointerPositionRef.current = null;
-        lastHoverSelectionPointerRef.current = null;
-        setSelectedIndex((current) => {
-          if (orderedItemsRef.current.length === 0) return 0;
-          return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current - PAGE_STEP));
-        });
-      }),
-      commandRegistry.registerCommand("commandPalette.selectFirst", () => {
-        setKeyboardNavigationActive(true);
-        hoverSelectionEnabledRef.current = false;
-        lastPointerPositionRef.current = null;
-        lastHoverSelectionPointerRef.current = null;
-        setSelectedIndex(() => {
-          if (orderedItemsRef.current.length === 0) return 0;
-          return 0;
-        });
-      }),
-      commandRegistry.registerCommand("commandPalette.selectLast", () => {
-        setKeyboardNavigationActive(true);
-        hoverSelectionEnabledRef.current = false;
-        lastPointerPositionRef.current = null;
-        lastHoverSelectionPointerRef.current = null;
-        setSelectedIndex(() => {
-          if (orderedItemsRef.current.length === 0) return 0;
-          return orderedItemsRef.current.length - 1;
-        });
-      }),
-      commandRegistry.registerCommand("commandPalette.execute", () => {
-        const selected = orderedItemsRef.current[selectedIndexRef.current];
-        if (!selected) return;
-        executePaletteCommandRef.current(selected.command.id);
-      }),
-    ];
-    return () => {
-      disposables.forEach((dispose) => dispose());
-    };
-  }, [commandRegistry, open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const disposables = [
-      commandRegistry.registerKeybinding({ command: "commandPalette.close", key: "escape", when: "focusCommandPalette" }),
-      commandRegistry.registerKeybinding({ command: "commandPalette.selectNext", key: "down", when: "focusCommandPalette" }),
-      commandRegistry.registerKeybinding({ command: "commandPalette.selectPrevious", key: "up", when: "focusCommandPalette" }),
-      commandRegistry.registerKeybinding({ command: "commandPalette.selectPageDown", key: "pagedown", when: "focusCommandPalette" }),
-      commandRegistry.registerKeybinding({ command: "commandPalette.selectPageUp", key: "pageup", when: "focusCommandPalette" }),
-      commandRegistry.registerKeybinding({ command: "commandPalette.selectFirst", key: "home", when: "focusCommandPalette" }),
-      commandRegistry.registerKeybinding({ command: "commandPalette.selectLast", key: "end", when: "focusCommandPalette" }),
-      commandRegistry.registerKeybinding({ command: "commandPalette.execute", key: "enter", when: "focusCommandPalette" }),
-    ];
-    return () => {
-      disposables.forEach((dispose) => dispose());
-    };
-  }, [commandRegistry, open]);
-
-  const allowCommandRouting = useCallback((event: KeyboardEvent) => {
-    const key = event.key.toLowerCase();
-    if ((event.ctrlKey || event.metaKey) && key === "p") return true;
-    if (event.ctrlKey || event.metaKey || event.altKey) return false;
-    return (
-      key === "escape" ||
-      key === "enter" ||
-      key === "arrowup" ||
-      key === "arrowdown" ||
-      key === "home" ||
-      key === "end" ||
-      key === "pageup" ||
-      key === "pagedown"
-    );
-  }, []);
+        switch (intent) {
+          case "cancel":
+            paletteStateRef.current.closePalette();
+            return true;
+          case "cursorDown":
+            setSelectedIndex((current) => {
+              if (orderedItemsRef.current.length === 0) return 0;
+              return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current + 1));
+            });
+            return true;
+          case "cursorUp":
+            setSelectedIndex((current) => {
+              if (orderedItemsRef.current.length === 0) return 0;
+              return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current - 1));
+            });
+            return true;
+          case "cursorPageDown":
+            setSelectedIndex((current) => {
+              if (orderedItemsRef.current.length === 0) return 0;
+              return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current + PAGE_STEP));
+            });
+            return true;
+          case "cursorPageUp":
+            setSelectedIndex((current) => {
+              if (orderedItemsRef.current.length === 0) return 0;
+              return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current - PAGE_STEP));
+            });
+            return true;
+          case "cursorHome":
+            if (orderedItemsRef.current.length === 0) return false;
+            setSelectedIndex(0);
+            return true;
+          case "cursorEnd":
+            if (orderedItemsRef.current.length === 0) return false;
+            setSelectedIndex(orderedItemsRef.current.length - 1);
+            return true;
+          case "accept": {
+            if (event.key !== "Enter") return false;
+            const selected = orderedItemsRef.current[selectedIndexRef.current];
+            if (!selected) return false;
+            executePaletteCommandRef.current(selected.command.id);
+            return true;
+          }
+          default:
+            return false;
+        }
+      },
+    });
+  }, [open, interactionContext]);
 
   if (!open) return null;
 
@@ -306,9 +289,8 @@ export function CommandPalette() {
       initialFocusRef={inputRef}
       placement="top"
       focusLayer="commandPalette"
-      allowCommandRouting={allowCommandRouting}
     >
-      <div className={paletteStyles["command-palette"]}>
+      <div ref={containerRef} className={paletteStyles["command-palette"]}>
         <input
           ref={inputRef}
           className={paletteStyles["command-palette-input"]}

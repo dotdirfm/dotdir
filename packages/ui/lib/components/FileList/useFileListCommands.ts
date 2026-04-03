@@ -1,13 +1,16 @@
 import type { ActionQueue } from "@/actionQueue";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { useFocusContext } from "@/focusContext";
+import { useInteractionContext, type InteractionIntent } from "@/interactionContext";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { dirname } from "@/utils/path";
-import { useEffect, useMemo, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import type { UseFileListActionHandlersReturn } from "./fileListActions";
 
 interface UseFileListCommandsArgs {
   active: boolean;
+  containerRef: RefObject<HTMLElement | null>;
   actionQueue: ActionQueue;
   fileActions: UseFileListActionHandlersReturn;
   markKeyboardNav: () => void;
@@ -25,22 +28,22 @@ interface UseFileListCommandsArgs {
 type CommandHandler = (...args: unknown[]) => void;
 
 const COMMAND_KEYS = {
-  cursorUp: "filelist.cursorUp",
-  cursorDown: "filelist.cursorDown",
-  cursorLeft: "filelist.cursorLeft",
-  cursorRight: "filelist.cursorRight",
-  cursorHome: "filelist.cursorHome",
-  cursorEnd: "filelist.cursorEnd",
-  cursorPageUp: "filelist.cursorPageUp",
-  cursorPageDown: "filelist.cursorPageDown",
-  selectUp: "filelist.selectUp",
-  selectDown: "filelist.selectDown",
-  selectLeft: "filelist.selectLeft",
-  selectRight: "filelist.selectRight",
-  selectHome: "filelist.selectHome",
-  selectEnd: "filelist.selectEnd",
-  selectPageUp: "filelist.selectPageUp",
-  selectPageDown: "filelist.selectPageDown",
+  cursorUp: "cursorUp",
+  cursorDown: "cursorDown",
+  cursorLeft: "cursorLeft",
+  cursorRight: "cursorRight",
+  cursorHome: "cursorHome",
+  cursorEnd: "cursorEnd",
+  cursorPageUp: "cursorPageUp",
+  cursorPageDown: "cursorPageDown",
+  selectUp: "selectUp",
+  selectDown: "selectDown",
+  selectLeft: "selectLeft",
+  selectRight: "selectRight",
+  selectHome: "selectHome",
+  selectEnd: "selectEnd",
+  selectPageUp: "selectPageUp",
+  selectPageDown: "selectPageDown",
   goToParent: "filelist.goToParent",
   goHome: "filelist.goHome",
   refresh: "filelist.refresh",
@@ -57,8 +60,44 @@ const COMMAND_KEYS = {
   pastePath: "pastePath",
 } as const;
 
+const INTERACTION_COMMAND_IDS = new Set<string>([
+  COMMAND_KEYS.cursorUp,
+  COMMAND_KEYS.cursorDown,
+  COMMAND_KEYS.cursorLeft,
+  COMMAND_KEYS.cursorRight,
+  COMMAND_KEYS.cursorHome,
+  COMMAND_KEYS.cursorEnd,
+  COMMAND_KEYS.cursorPageUp,
+  COMMAND_KEYS.cursorPageDown,
+  COMMAND_KEYS.selectUp,
+  COMMAND_KEYS.selectDown,
+  COMMAND_KEYS.selectLeft,
+  COMMAND_KEYS.selectRight,
+  COMMAND_KEYS.selectHome,
+  COMMAND_KEYS.selectEnd,
+  COMMAND_KEYS.selectPageUp,
+  COMMAND_KEYS.selectPageDown,
+  "filelist.cursorUp",
+  "filelist.cursorDown",
+  "filelist.cursorLeft",
+  "filelist.cursorRight",
+  "filelist.cursorHome",
+  "filelist.cursorEnd",
+  "filelist.cursorPageUp",
+  "filelist.cursorPageDown",
+  "filelist.selectUp",
+  "filelist.selectDown",
+  "filelist.selectLeft",
+  "filelist.selectRight",
+  "filelist.selectHome",
+  "filelist.selectEnd",
+  "filelist.selectPageUp",
+  "filelist.selectPageDown",
+]);
+
 export function useFileListCommands({
   active,
+  containerRef,
   actionQueue,
   fileActions,
   markKeyboardNav,
@@ -74,6 +113,8 @@ export function useFileListCommands({
 }: UseFileListCommandsArgs): void {
   const bridge = useBridge();
   const commandRegistry = useCommandRegistry();
+  const focusContext = useFocusContext();
+  const interactionContext = useInteractionContext();
   const argsRef = useRef({
     fileActions,
     markKeyboardNav,
@@ -101,25 +142,59 @@ export function useFileListCommands({
     navigateTo,
   };
 
+  const intentToCommandId = useMemo<Record<InteractionIntent, string | null>>(
+    () => ({
+      cursorUp: COMMAND_KEYS.cursorUp,
+      cursorDown: COMMAND_KEYS.cursorDown,
+      cursorLeft: COMMAND_KEYS.cursorLeft,
+      cursorRight: COMMAND_KEYS.cursorRight,
+      cursorHome: COMMAND_KEYS.cursorHome,
+      cursorEnd: COMMAND_KEYS.cursorEnd,
+      cursorPageUp: COMMAND_KEYS.cursorPageUp,
+      cursorPageDown: COMMAND_KEYS.cursorPageDown,
+      selectUp: COMMAND_KEYS.selectUp,
+      selectDown: COMMAND_KEYS.selectDown,
+      selectLeft: COMMAND_KEYS.selectLeft,
+      selectRight: COMMAND_KEYS.selectRight,
+      selectHome: COMMAND_KEYS.selectHome,
+      selectEnd: COMMAND_KEYS.selectEnd,
+      selectPageUp: COMMAND_KEYS.selectPageUp,
+      selectPageDown: COMMAND_KEYS.selectPageDown,
+      accept: null,
+      cancel: null,
+    }),
+    [],
+  );
+
+  const runIfPanelFocused = useMemo(
+    () => (handler: CommandHandler): CommandHandler =>
+      (...handlerArgs) => {
+        if (!focusContext.is("panel")) return;
+        handler(...handlerArgs);
+      },
+    [focusContext],
+  );
+  const getContainer = useCallback(() => containerRef.current, [containerRef]);
+
   const handlers = useMemo<Record<string, CommandHandler>>(
     () => ({
-      [COMMAND_KEYS.cursorUp]: () =>
+      [COMMAND_KEYS.cursorUp]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           argsRef.current.updateCursor(({ activeIndex, topmostIndex }) => ({
             activeIndex: Math.max(0, activeIndex - 1),
             topmostIndex,
           }));
-        }),
-      [COMMAND_KEYS.cursorDown]: () =>
+        })),
+      [COMMAND_KEYS.cursorDown]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           argsRef.current.updateCursor(({ activeIndex, topmostIndex }) => ({
             activeIndex: Math.min(argsRef.current.displayEntriesRef.current.length - 1, activeIndex + 1),
             topmostIndex,
           }));
-        }),
-      [COMMAND_KEYS.cursorLeft]: () =>
+        })),
+      [COMMAND_KEYS.cursorLeft]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           const step = argsRef.current.maxItemsPerColumnRef.current;
@@ -136,8 +211,8 @@ export function useFileListCommands({
             activeIndex: next,
             topmostIndex: nextTopmost,
           }));
-        }),
-      [COMMAND_KEYS.cursorRight]: () =>
+        })),
+      [COMMAND_KEYS.cursorRight]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           const step = argsRef.current.maxItemsPerColumnRef.current;
@@ -154,29 +229,29 @@ export function useFileListCommands({
             activeIndex: next,
             topmostIndex: nextTopmost,
           }));
-        }),
-      [COMMAND_KEYS.cursorHome]: () =>
+        })),
+      [COMMAND_KEYS.cursorHome]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           argsRef.current.updateCursor(({ topmostIndex }) => ({ activeIndex: 0, topmostIndex }));
-        }),
-      [COMMAND_KEYS.cursorEnd]: () =>
+        })),
+      [COMMAND_KEYS.cursorEnd]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           argsRef.current.updateCursor(({ topmostIndex }) => ({
             activeIndex: argsRef.current.displayEntriesRef.current.length - 1,
             topmostIndex,
           }));
-        }),
-      [COMMAND_KEYS.cursorPageUp]: () =>
+        })),
+      [COMMAND_KEYS.cursorPageUp]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           argsRef.current.updateCursor(({ activeIndex, topmostIndex }) => ({
             activeIndex: Math.max(0, activeIndex - argsRef.current.displayedItemsRef.current + 1),
             topmostIndex,
           }));
-        }),
-      [COMMAND_KEYS.cursorPageDown]: () =>
+        })),
+      [COMMAND_KEYS.cursorPageDown]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           argsRef.current.updateCursor(({ activeIndex, topmostIndex }) => ({
@@ -186,22 +261,22 @@ export function useFileListCommands({
             ),
             topmostIndex,
           }));
-        }),
-      [COMMAND_KEYS.selectUp]: () =>
+        })),
+      [COMMAND_KEYS.selectUp]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           const cur = argsRef.current.activeIndexRef.current;
           const target = Math.max(0, cur - 1);
           argsRef.current.applySelection(cur, target, target === cur ? "include-active" : "exclude-active");
-        }),
-      [COMMAND_KEYS.selectDown]: () =>
+        })),
+      [COMMAND_KEYS.selectDown]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           const cur = argsRef.current.activeIndexRef.current;
           const target = Math.min(argsRef.current.displayEntriesRef.current.length - 1, cur + 1);
           argsRef.current.applySelection(cur, target, target === cur ? "include-active" : "exclude-active");
-        }),
-      [COMMAND_KEYS.selectLeft]: () =>
+        })),
+      [COMMAND_KEYS.selectLeft]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           const cur = argsRef.current.activeIndexRef.current;
@@ -215,8 +290,8 @@ export function useFileListCommands({
             nextTopmost = Math.max(0, Math.min(maxTopmost, firstVisible - step));
           }
           argsRef.current.applySelection(cur, target, "include-active", nextTopmost);
-        }),
-      [COMMAND_KEYS.selectRight]: () =>
+        })),
+      [COMMAND_KEYS.selectRight]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           const cur = argsRef.current.activeIndexRef.current;
@@ -235,13 +310,13 @@ export function useFileListCommands({
             "include-active",
             nextTopmost,
           );
-        }),
-      [COMMAND_KEYS.selectHome]: () =>
+        })),
+      [COMMAND_KEYS.selectHome]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           argsRef.current.applySelection(argsRef.current.activeIndexRef.current, 0, "include-active");
-        }),
-      [COMMAND_KEYS.selectEnd]: () =>
+        })),
+      [COMMAND_KEYS.selectEnd]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           argsRef.current.applySelection(
@@ -249,14 +324,14 @@ export function useFileListCommands({
             argsRef.current.displayEntriesRef.current.length - 1,
             "include-active",
           );
-        }),
-      [COMMAND_KEYS.selectPageUp]: () =>
+        })),
+      [COMMAND_KEYS.selectPageUp]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           const cur = argsRef.current.activeIndexRef.current;
           argsRef.current.applySelection(cur, Math.max(0, cur - argsRef.current.displayedItemsRef.current + 1), "include-active");
-        }),
-      [COMMAND_KEYS.selectPageDown]: () =>
+        })),
+      [COMMAND_KEYS.selectPageDown]: runIfPanelFocused(() =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           const cur = argsRef.current.activeIndexRef.current;
@@ -265,7 +340,7 @@ export function useFileListCommands({
             Math.min(argsRef.current.displayEntriesRef.current.length - 1, cur + argsRef.current.displayedItemsRef.current - 1),
             "include-active",
           );
-        }),
+        })),
       [COMMAND_KEYS.goToParent]: () => {
         const currentPath = argsRef.current.currentPathRef.current;
         if (isContainerPath(currentPath)) {
@@ -297,14 +372,36 @@ export function useFileListCommands({
       [COMMAND_KEYS.pasteFilename]: () => argsRef.current.fileActions.pasteFilename(),
       [COMMAND_KEYS.pastePath]: () => argsRef.current.fileActions.pastePath(),
     }),
-    [actionQueue, bridge],
+    [actionQueue, bridge, runIfPanelFocused],
   );
 
   useEffect(() => {
     if (!active) return;
-    const disposables = Object.entries(handlers).map(([commandId, handler]) => commandRegistry.registerCommand(commandId, handler));
+    const disposables = Object.entries(handlers)
+      .filter(([commandId]) => !INTERACTION_COMMAND_IDS.has(commandId))
+      .map(([commandId, handler]) => commandRegistry.registerCommand(commandId, handler));
     return () => {
       for (const dispose of disposables) dispose();
     };
   }, [active, commandRegistry, handlers]);
+
+  useEffect(() => {
+    return interactionContext.registerController({
+      contains(node) {
+        const container = getContainer();
+        return node instanceof Node && !!container?.contains(node);
+      },
+      isActive() {
+        return active && focusContext.is("panel");
+      },
+      handleIntent(intent) {
+        const commandId = intentToCommandId[intent];
+        if (!commandId) return false;
+        const handler = handlers[commandId];
+        if (!handler) return false;
+        handler();
+        return true;
+      },
+    });
+  }, [active, focusContext, getContainer, handlers, interactionContext, intentToCommandId]);
 }

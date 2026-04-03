@@ -3,7 +3,7 @@
   align-items: stretch;
   flex-shrink: 0;
   height: 28px;
-  background: var(--bg-tabs, var(--bg));
+  background: var(--bg-tabs, var(--bg-secondary));
   border-bottom: 1px solid var(--border);
   overflow: hidden;
   padding-right: 4px;

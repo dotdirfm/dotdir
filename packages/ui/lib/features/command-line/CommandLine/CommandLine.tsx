@@ -142,6 +142,8 @@ export function CommandLine() {
 
     d.push(commandRegistry.registerCommand("commandLine.home", () => moveCursor(0, false)));
     d.push(commandRegistry.registerCommand("commandLine.end", () => moveCursor(valueRef.current.length, false)));
+    d.push(commandRegistry.registerCommand("commandLine.left", () => moveCursor(Math.max(0, cursorRef.current - 1), false)));
+    d.push(commandRegistry.registerCommand("commandLine.right", () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), false)));
 
     d.push(
       commandRegistry.registerCommand("commandLine.selectAll", () => {
@@ -156,6 +158,24 @@ export function CommandLine() {
     d.push(commandRegistry.registerCommand("commandLine.selectRight", () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), true)));
     d.push(commandRegistry.registerCommand("commandLine.selectHome", () => moveCursor(0, true)));
     d.push(commandRegistry.registerCommand("commandLine.selectEnd", () => moveCursor(valueRef.current.length, true)));
+    d.push(
+      commandRegistry.registerCommand("commandLine.selectWordLeft", () => {
+        const v = valueRef.current;
+        let p = cursorRef.current;
+        while (p > 0 && v[p - 1] === " ") p--;
+        while (p > 0 && v[p - 1] !== " ") p--;
+        moveCursor(p, true);
+      }),
+    );
+    d.push(
+      commandRegistry.registerCommand("commandLine.selectWordRight", () => {
+        const v = valueRef.current;
+        let p = cursorRef.current;
+        while (p < v.length && v[p] !== " ") p++;
+        while (p < v.length && v[p] === " ") p++;
+        moveCursor(p, true);
+      }),
+    );
 
     d.push(
       commandRegistry.registerCommand("commandLine.copy", () => {

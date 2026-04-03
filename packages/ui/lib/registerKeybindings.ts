@@ -18,15 +18,17 @@ const appBuiltInKeybindings: Keybinding[] = [
 
   // Navigation commands
   { command: "switchPanel", key: "tab", when: "focusPanel && !dialogOpen" },
-  { command: "dotdir.cancelNavigation", key: "escape", when: "focusPanel && !commandLineHasText" },
+  { command: "dotdir.panelEscape", key: "escape", when: "focusPanel" },
   { command: "filelist.goToParent", key: "alt+pageup", when: "focusPanel" },
   { command: "filelist.goHome", key: "ctrl+home", mac: "cmd+home" },
 
   // File commands
   { command: "newTab", key: "ctrl+t", mac: "cmd+t", when: "focusPanel" },
   { command: "closeTab", key: "ctrl+w", mac: "cmd+w", when: "focusPanel" },
-  { command: "previewInOppositePanel", key: "ctrl+f3", mac: "cmd+f3", when: "focusPanel && listItemIsFile" },
-  { command: "editInOppositePanel", key: "ctrl+f4", mac: "cmd+f4", when: "focusPanel && listItemHasEditor" },
+  { command: "previewInOppositePanel", key: "ctrl+f3", mac: "ctrl+f3", when: "focusPanel && listItemIsFile" },
+  { command: "previewInOppositePanel", key: "cmd+f3", mac: "cmd+f3", when: "focusPanel && listItemIsFile" },
+  { command: "editInOppositePanel", key: "ctrl+f4", mac: "ctrl+f4", when: "focusPanel && listItemHasEditor" },
+  { command: "editInOppositePanel", key: "cmd+f4", mac: "cmd+f4", when: "focusPanel && listItemHasEditor" },
   { command: "filelist.refresh", key: "ctrl+r", mac: "cmd+r", when: "focusPanel" },
   { command: "openCreateFile", key: "shift+f4", when: "focusPanel" },
   { command: "list.makeDir", key: "f7", when: "focusPanel" },
@@ -46,13 +48,18 @@ const appBuiltInKeybindings: Keybinding[] = [
 
 const commandLineKeybindings: Keybinding[] = [
   { command: "commandLine.execute", key: "enter", when: "focusPanel && commandLineHasText" },
-  { command: "commandLine.clear", key: "escape", when: "focusPanel && commandLineHasText" },
   { command: "commandLine.deleteLeft", key: "backspace", when: "focusPanel && commandLineHasText" },
   { command: "commandLine.deleteRight", key: "delete", when: "focusPanel && commandLineHasText" },
-  { command: "commandLine.moveWordLeft", key: "ctrl+left", when: "focusPanel && commandLineHasText" },
-  { command: "commandLine.moveWordRight", key: "ctrl+right", when: "focusPanel && commandLineHasText" },
+  { command: "commandLine.moveWordLeft", key: "ctrl+left", mac: "cmd+alt+left", when: "focusPanel && commandLineHasText" },
+  { command: "commandLine.moveWordRight", key: "ctrl+right", mac: "cmd+alt+right", when: "focusPanel && commandLineHasText" },
+  { command: "commandLine.left", key: "left", mac: "cmd+left", when: "focusPanel && commandLineHasText" },
+  { command: "commandLine.right", key: "right", mac: "cmd+right", when: "focusPanel && commandLineHasText" },
   { command: "commandLine.home", key: "home", when: "focusPanel && commandLineHasText" },
   { command: "commandLine.end", key: "end", when: "focusPanel && commandLineHasText" },
+  { command: "commandLine.selectLeft", key: "ctrl+shift+left", mac: "cmd+shift+left", when: "focusPanel && commandLineHasText" },
+  { command: "commandLine.selectRight", key: "ctrl+shift+right", mac: "cmd+shift+right", when: "focusPanel && commandLineHasText" },
+  { command: "commandLine.selectWordLeft", key: "ctrl+alt+shift+left", mac: "cmd+alt+shift+left", when: "focusPanel && commandLineHasText" },
+  { command: "commandLine.selectWordRight", key: "ctrl+alt+shift+right", mac: "cmd+alt+shift+right", when: "focusPanel && commandLineHasText" },
   { command: "commandLine.selectAll", key: "ctrl+a", when: "focusPanel && commandLineHasText" },
   { command: "commandLine.copy", key: "ctrl+c", when: "focusPanel && commandLineHasText" },
   { command: "commandLine.cut", key: "ctrl+x", when: "focusPanel && commandLineHasText" },
@@ -61,24 +68,24 @@ const commandLineKeybindings: Keybinding[] = [
 
 const fileListKeybindings: Keybinding[] = [
   // Cursor/navigation
-  { command: "filelist.cursorUp", key: "up", when: "focusPanel" },
-  { command: "filelist.cursorDown", key: "down", when: "focusPanel" },
-  { command: "filelist.cursorLeft", key: "left", when: "focusPanel" },
-  { command: "filelist.cursorRight", key: "right", when: "focusPanel" },
-  { command: "filelist.cursorHome", key: "home", when: "focusPanel" },
-  { command: "filelist.cursorEnd", key: "end", when: "focusPanel" },
-  { command: "filelist.cursorPageUp", key: "pageup", when: "focusPanel" },
-  { command: "filelist.cursorPageDown", key: "pagedown", when: "focusPanel" },
+  { command: "cursorUp", key: "up", when: "focusPanel" },
+  { command: "cursorDown", key: "down", when: "focusPanel" },
+  { command: "cursorLeft", key: "left", when: "focusPanel" },
+  { command: "cursorRight", key: "right", when: "focusPanel" },
+  { command: "cursorHome", key: "home", when: "focusPanel" },
+  { command: "cursorEnd", key: "end", when: "focusPanel" },
+  { command: "cursorPageUp", key: "pageup", when: "focusPanel" },
+  { command: "cursorPageDown", key: "pagedown", when: "focusPanel" },
 
   // Selection commands (Shift+Arrow)
-  { command: "filelist.selectUp", key: "shift+up", when: "focusPanel" },
-  { command: "filelist.selectDown", key: "shift+down", when: "focusPanel" },
-  { command: "filelist.selectLeft", key: "shift+left", when: "focusPanel" },
-  { command: "filelist.selectRight", key: "shift+right", when: "focusPanel" },
-  { command: "filelist.selectHome", key: "shift+home", when: "focusPanel" },
-  { command: "filelist.selectEnd", key: "shift+end", when: "focusPanel" },
-  { command: "filelist.selectPageUp", key: "shift+pageup", when: "focusPanel" },
-  { command: "filelist.selectPageDown", key: "shift+pagedown", when: "focusPanel" },
+  { command: "selectUp", key: "shift+up", when: "focusPanel" },
+  { command: "selectDown", key: "shift+down", when: "focusPanel" },
+  { command: "selectLeft", key: "shift+left", when: "focusPanel" },
+  { command: "selectRight", key: "shift+right", when: "focusPanel" },
+  { command: "selectHome", key: "shift+home", when: "focusPanel" },
+  { command: "selectEnd", key: "shift+end", when: "focusPanel" },
+  { command: "selectPageUp", key: "shift+pageup", when: "focusPanel" },
+  { command: "selectPageDown", key: "shift+pagedown", when: "focusPanel" },
 
   // Execute/open
   { command: "list.execute", key: "enter", when: "focusPanel && listItemIsExecutable && !commandLineHasText" },
