@@ -13,6 +13,7 @@ export const activeColorThemeAtom = atom(get => get(settingsAtom).colorTheme);
 
 // Ensures initUserSettings() is called at most once across all hook instances
 let initPromise: Promise<DotDirSettings> | null = null;
+let initialSettingsApplied = false;
 
 export function useUserSettings() {
   const settings = useAtomValue(settingsAtom);
@@ -24,7 +25,10 @@ export function useUserSettings() {
   useEffect(() => {
     if (!initPromise) initPromise = initUserSettings(bridge);
     initPromise.then((s) => {
-      setSettings(s);
+      if (!initialSettingsApplied) {
+        setSettings(s);
+        initialSettingsApplied = true;
+      }
       setReady(true);
     });
     return onSettingsChange(setSettings);

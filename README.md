@@ -1,125 +1,107 @@
-# .dir
+# DotDir
 
-Dual-pane file manager built with Tauri + React + Rust.
+DotDir is a keyboard-friendly dual-pane file manager with a built-in terminal, command palette, extension support, and a reusable React UI package.
 
-## Tech Stack
+This repository contains the main desktop app plus the shared UI workspace used by the website demo and npm package.
 
-- **Frontend**: React 19, TypeScript 5.9, Vite 7
-- **Editor**: CodeMirror 6 — syntax highlighting for JS, TS, Python, Rust, SQL, JSON, HTML, CSS, YAML, XML, Markdown
-- **Terminal**: xterm.js 6 — integrated PTY shell with cwd tracking
-- **Desktop**: Tauri 2
-- **Native layer**: Rust — `dotdir-core` for FS ops, elevated helper for privileged operations
-- **Headless**: Standalone Rust server (axum) — HTTP + WebSocket, no GUI
-- **Styling**: FSS (filesystem stylesheets) via `fss-lang` — custom CSS-like language for styling file listings
-- **Build**: pnpm, Cargo
-- **Targets**: macOS, Linux, Windows
+## Overview
+
+DotDir is designed for fast navigation and file operations with a modern, embeddable UI.
+
+What’s in this repo:
+
+- desktop app built with Tauri + React
+- reusable UI package published as [`@dotdirfm/ui`](https://www.npmjs.com/package/@dotdirfm/ui)
+- shared workspace packages used by the app
+
+## Workspace
+
+Key directories:
+
+- [`src`](./dotdir/src) — app frontend
+- [`src-tauri`](./dotdir/src-tauri) — desktop shell and native backend
+- [`packages/ui`](./dotdir/packages/ui) — reusable DotDir UI package
+- [`packages/extension-api`](./dotdir/packages/extension-api) — shared extension API package
 
 ## Prerequisites
 
-- **Node.js** 22+
-- **pnpm** (version pinned in `package.json`)
-- **Rust** stable toolchain
-- **Linux only**: `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf`
+- Node.js 22+
+- `pnpm`
+- Rust stable toolchain
+- Tauri prerequisites for your platform
 
-## Project Structure
-
-```
-src/
-  main.tsx             # Renderer entry point
-  app.tsx              # Root component — dual-pane layout, keyboard shortcuts
-  bridge.ts            # Dynamic bridge provider (Tauri IPC or WebSocket)
-  tauriBridge.ts       # Tauri IPC bridge (invoke/listen)
-  wsBridge.ts          # WebSocket bridge (headless/browser mode)
-  fs.ts                # File System Access API shim
-  fss.ts               # FSS resolver (layered .dotdir/fs.css)
-  types.ts             # Shared types (FsRawEntry, FsChangeEvent)
-  iconCache.ts         # SVG icon loading and LRU cache
-  langDetect.ts        # File language detection for syntax highlighting
-  path.ts              # Cross-platform path utilities
-  actionQueue.ts       # Debounced action queue
-  FileList/            # File list components (virtual scrolling)
-  FileViewer.tsx       # Read-only text file viewer with syntax highlighting
-  FileEditor.tsx       # CodeMirror-based file editor
-  ImageViewer.tsx      # Image viewer
-  Terminal.tsx         # Integrated terminal (xterm.js + PTY)
-  ModalDialog.tsx      # Error/confirmation dialogs
-src-tauri/
-  Cargo.toml           # Workspace manifest (dotdir + dotdir-core)
-  tauri.conf.json      # Tauri app config
-  src/
-    main.rs            # Entry point — desktop / serve / rpc modes
-    lib.rs             # Tauri commands + AppState
-    elevate.rs         # Unix privileged helper proxy (binary protocol over Unix socket)
-    elevate_stub.rs    # Windows stub
-    pty.rs             # PTY spawn/write/resize/close (Unix)
-    serve.rs           # Headless HTTP + WebSocket server (axum, JSON-RPC 2.0)
-    rpc.rs             # JSON-RPC 2.0 command dispatcher
-  dotdir-core/        # Pure Rust core: ops, watch, error, proto
-```
-
-## Architecture
-
-### Filesystem Access Layers
-
-The app accesses the filesystem through multiple backends, all using `dotdir-core`:
-
-1. **Tauri (desktop)** — Rust commands called via Tauri IPC. Primary backend.
-2. **Elevated helper** — Spawned with admin privileges on EACCES. Communicates over a Unix socket using a custom binary protocol (`dotdir-core/src/proto.rs`).
-3. **Headless server** — `dotdir serve`. HTTP for static files + WebSocket for FS operations via JSON-RPC 2.0. Used for browser-only or remote access.
-
-### Bridge System
-
-The frontend uses a dynamic bridge that detects the runtime environment:
-
-- **Tauri mode** (`tauriBridge.ts`): Uses `@tauri-apps/api` `invoke()` and `listen()` for IPC.
-- **Browser mode** (`wsBridge.ts`): Uses WebSocket with JSON-RPC 2.0. Binary frames for file reads (4-byte LE request ID prefix + payload).
-
-Detection: `'__TAURI_INTERNALS__' in window` — if true, loads Tauri bridge; otherwise, connects WebSocket to `ws://{host}/ws`.
-
-### FSS (Filesystem Stylesheets)
-
-Files are styled using `fss-lang` — a CSS-like language that matches filesystem entries by name, type, and metadata. Stylesheets cascade from `.dotdir/fs.css` files found in ancestor directories. The built-in base layer (`material-icons.fs.css`) provides Material Icons mappings.
-
-## Commands
-
-### Desktop (Tauri)
+Linux users may also need the usual Tauri WebKit/system packages, such as:
 
 ```bash
-pnpm tauri dev        # Start Tauri dev (frontend HMR + Rust backend)
-pnpm tauri build      # Build desktop app
+sudo apt install libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 ```
 
-### Headless Server
+## Install
+
+From the repo root:
 
 ```bash
-pnpm build:web        # Build web UI → dist-web/
-pnpm build:rust       # Build Rust binary (release)
-pnpm build:rust:dev   # Build Rust binary (debug)
-
-# Run headless
-./src-tauri/target/release/dotdir serve
-# → http://127.0.0.1:3001
-
-# With options
-./src-tauri/target/release/dotdir serve \
-  --port 8080 \
-  --host 0.0.0.0 \
-  --static-dir dist-web
+pnpm install
 ```
 
-The server auto-detects `dist-web/` relative to CWD. Port and host can also be set via `DOTDIR_PORT` and `DOTDIR_HOST` environment variables.
+## Development
 
-### Development (headless with HMR)
+Start the frontend dev server:
 
 ```bash
-pnpm build:rust:dev && ./src-tauri/target/debug/dotdir serve &
-pnpm dev:web          # Vite dev server at http://localhost:5173 (proxies /ws → :3001)
+pnpm dev
 ```
 
-## Key Conventions
+Start the desktop app in development mode:
 
-- `dotdir-core` is a pure Rust library shared by the Tauri app, the headless server, and the elevated helper
-- File watcher events are delivered via `notify` crate callbacks routed by watch ID
-- The renderer uses virtual scrolling for file lists
-- FSS cache is invalidated when `.dotdir/fs.css` changes are detected via watch events
-- Elevated file descriptors are negated (`fd < 0`) to distinguish proxy vs local handles
+```bash
+pnpm tauri dev
+```
+
+Run the app via the custom Tauri subcommand used in this project:
+
+```bash
+pnpm serve
+```
+
+## Build
+
+Build the frontend:
+
+```bash
+pnpm build
+```
+
+Build the desktop app:
+
+```bash
+pnpm tauri build
+```
+
+## Quality Checks
+
+Run linting:
+
+```bash
+pnpm lint
+```
+
+Auto-fix formatting/lint issues:
+
+```bash
+pnpm fmt
+```
+
+## UI Package
+
+The shared UI package lives in [`packages/ui`](./dotdir/packages/ui) and is published separately as `@dotdirfm/ui`.
+
+Package-specific docs:
+
+- [`packages/ui/README.md`](./dotdir/packages/ui/README.md)
+
+## Links
+
+- GitHub: [dotdirfm/dotdir](https://github.com/dotdirfm/dotdir)
+- npm: [`@dotdirfm/ui`](https://www.npmjs.com/package/@dotdirfm/ui)
+- Issues: [github.com/dotdirfm/dotdir/issues](https://github.com/dotdirfm/dotdir/issues)
