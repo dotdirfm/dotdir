@@ -162,7 +162,7 @@ export function useFileListPanel() {
     const paths: string[] = [];
     for (const ancestor of ancestors) {
       paths.push(ancestor);
-      paths.push(join(ancestor, ".dotdir"));
+      paths.push(join(ancestor, ".dir"));
     }
     observer.sync(paths);
   }, []);
@@ -202,7 +202,7 @@ export function useFileListPanel() {
             // ── Container path: delegate listing to the fsProvider extension ──
             const { containerFile: hostFile, innerPath } = parseContainerPath(path);
             // Container tabs still need resolver layers so icon/theme extensions
-            // and host-directory .dotdir rules apply after tab cloning/remounts.
+            // and host-directory .dir rules apply after tab cloning/remounts.
             await syncLayers(bridge, resolverRef.current!, dirname(hostFile), extensionLayers);
             if (abort.signal.aborted) return;
             const providerMatch = fsProviderRegistry.resolve(basename(hostFile));
@@ -318,14 +318,14 @@ export function useFileListPanel() {
           } else {
             needsRefresh = true;
           }
-        } else if (rootPath.endsWith("/.dotdir")) {
+        } else if (rootPath.endsWith("/.dir")) {
           if (changedName === "fs.css") {
             const parentDir = dirname(rootPath);
             invalidateFssCache(parentDir);
             needsFssRefresh = true;
           }
         } else if (curPath.startsWith(rootPath + "/") || curPath === rootPath) {
-          if (changedName === ".dotdir") {
+          if (changedName === ".dir") {
             invalidateFssCache(rootPath);
             needsFssRefresh = true;
           } else if (changedName) {

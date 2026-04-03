@@ -65,9 +65,12 @@ pub enum ExtensionInstallEvent {
     },
 }
 
-fn normalized_home_extensions_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "Home directory not available".to_string())?;
-    Ok(home.join(".dotdir").join("extensions"))
+fn normalized_extensions_dir() -> Result<PathBuf, String> {
+    let data_dir = dirs::data_dir()
+        .or_else(dirs::config_dir)
+        .or_else(dirs::home_dir)
+        .ok_or_else(|| "Application data directory not available".to_string())?;
+    Ok(data_dir.join("dotdir").join("extensions"))
 }
 
 fn extension_dir_name(installed: &InstalledExtensionRef) -> String {
@@ -303,7 +306,7 @@ pub fn install_extension(
     let archive_bytes = download_bytes(&download_url, &cancel, &emit)?;
     let (installed, files) = extract_archive(&archive_bytes, &request, &cancel, &emit)?;
 
-    let extensions_dir = normalized_home_extensions_dir()?;
+    let extensions_dir = normalized_extensions_dir()?;
     let ext_dir = extensions_dir.join(extension_dir_name(&installed));
     fs::create_dir_all(&ext_dir).map_err(|e| e.to_string())?;
 

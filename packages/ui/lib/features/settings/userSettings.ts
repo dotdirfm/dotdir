@@ -1,10 +1,11 @@
 /**
  * User Settings Watcher
  *
- * Watches ~/.dotdir/settings.json for changes and notifies listeners.
+ * Watches settings.json in the host-provided config directory.
  */
 
 import type { Bridge } from "@/features/bridge";
+import { getAppDirs } from "@/features/bridge/appDirs";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/jsoncFileWatcher";
 import { join } from "@/utils/path";
 import type { DotDirSettings } from "./types";
@@ -45,8 +46,8 @@ export function updateSettings(bridge: Bridge, partial: Partial<DotDirSettings>)
 async function saveSettingsToDisk(bridge: Bridge, settings: DotDirSettings): Promise<void> {
   try {
     if (!settingsPath) {
-      const homePath = await bridge.utils.getHomePath();
-      settingsPath = join(homePath, ".dotdir", "settings.json");
+      const { configDir } = await getAppDirs(bridge);
+      settingsPath = join(configDir, "settings.json");
     }
     await bridge.fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
   } catch (err) {
@@ -62,8 +63,8 @@ export async function initUserSettings(bridge: Bridge): Promise<DotDirSettings> 
   watcher = await createJsoncFileWatcher<DotDirSettings>(bridge, {
     name: "userSettings",
     getPath: async () => {
-      const homePath = await bridge.utils.getHomePath();
-      return join(homePath, ".dotdir", "settings.json");
+      const { configDir } = await getAppDirs(bridge);
+      return join(configDir, "settings.json");
     },
     validate: validateSettings,
     defaultValue: {},

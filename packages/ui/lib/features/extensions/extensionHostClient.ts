@@ -7,6 +7,7 @@
  */
 
 import type { Bridge } from "@/features/bridge";
+import { getAppDirs } from "@/features/bridge/appDirs";
 import { useBridge } from "@/features/bridge/useBridge";
 import { readFileText } from "@/features/file-system/fs";
 import { normalizePath } from "@/utils/path";
@@ -17,7 +18,7 @@ type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
 
 export class ExtensionHostClient {
   private worker: Worker | null = null;
-  private homePath: string | null = null;
+  private dataDir: string | null = null;
   private listeners: ExtensionsLoadedCallback[] = [];
   private starting = false;
   private nextRequestId = 1;
@@ -41,8 +42,9 @@ export class ExtensionHostClient {
     if (this.worker || this.starting) return;
     this.starting = true;
     try {
-      if (!this.homePath) {
-        this.homePath = await this.bridge.utils.getHomePath();
+      if (!this.dataDir) {
+        const appDirs = await getAppDirs(this.bridge);
+        this.dataDir = appDirs.dataDir;
       }
       this.spawnWorker();
     } finally {
@@ -128,7 +130,7 @@ export class ExtensionHostClient {
 
     this.worker = worker;
     void (async () => {
-      worker.postMessage({ type: "start", homePath: this.homePath });
+      worker.postMessage({ type: "start", dataDir: this.dataDir });
     })();
   }
 
@@ -162,7 +164,7 @@ export class ExtensionHostClient {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : String(err);
-      if (message.includes("Not a file:")) {
+      if (message.includes("Not a file:") || message.includes("ENOENT")) {
         worker.postMessage({
           type: "readFileResult",
           id,

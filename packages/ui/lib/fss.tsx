@@ -123,9 +123,9 @@ export async function syncLayers(bridge: Bridge, resolver: LayeredResolver, dirP
   }
 
   for (const p of ancestors) {
-    if (basename(p) === ".dotdir") continue;
+    if (basename(p) === ".dir") continue;
     if (!fssSourceCache.has(p)) {
-      const dir = join(p, ".dotdir");
+      const dir = join(p, ".dir");
       try {
         fssSourceCache.set(p, await readFileText(bridge, join(dir, "fs.css")));
       } catch {
@@ -147,7 +147,7 @@ export async function syncLayers(bridge: Bridge, resolver: LayeredResolver, dirP
       const source = fssSourceCache.get(p);
       if (source != null) {
         const depth = p === "/" ? 0 : p.split("/").filter(Boolean).length;
-        const fssDir = join(p, ".dotdir");
+        const fssDir = join(p, ".dir");
         layers.push(createLayer(resolveIconUrls(source, fssDir), p, LayerPriority.nestedPriority(depth)));
       }
     }

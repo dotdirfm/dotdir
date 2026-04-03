@@ -1,12 +1,13 @@
 /**
  * UI State persistence
  *
- * Stores UI state (open tabs, active panel) in ~/.dotdir/ui-state.json.
+ * Stores UI state (open tabs, active panel) in the host-provided data dir.
  * Read once on startup; written with a short debounce. Not watched for
  * external changes.
  */
 
 import type { Bridge } from "@/features/bridge";
+import { getAppDirs } from "@/features/bridge/appDirs";
 import { readFileText } from "@/features/file-system/fs";
 import { join } from "@/utils/path";
 import type { DotDirUiState } from "./types";
@@ -17,8 +18,8 @@ let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function getStatePath(bridge: Bridge): Promise<string> {
   if (!statePath) {
-    const home = await bridge.utils.getHomePath();
-    statePath = join(home, ".dotdir", "ui-state.json");
+    const { dataDir } = await getAppDirs(bridge);
+    statePath = join(dataDir, "ui-state.json");
   }
   return statePath;
 }

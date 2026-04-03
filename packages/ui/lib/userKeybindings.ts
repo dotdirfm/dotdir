@@ -1,9 +1,10 @@
 /**
  * User Keybindings
  *
- * Loads and watches user-defined keybindings from ~/.dotdir/keybindings.json
+ * Loads and watches user-defined keybindings from the host-provided config dir.
  */
 
+import { getAppDirs } from "@/features/bridge/appDirs";
 import { useBridge } from "@/features/bridge/useBridge";
 import { type Keybinding, useCommandRegistry } from "@/features/commands/commands";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/jsoncFileWatcher";
@@ -41,8 +42,8 @@ export function useUserKeybindings(): void {
     void createJsoncFileWatcher<Keybinding[]>(bridge, {
       name: "userKeybindings",
       getPath: async () => {
-        const homePath = await bridge.utils.getHomePath();
-        return join(homePath, ".dotdir", "keybindings.json");
+        const { configDir } = await getAppDirs(bridge);
+        return join(configDir, "keybindings.json");
       },
       validate: validateKeybindings,
       defaultValue: [],

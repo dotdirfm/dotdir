@@ -202,6 +202,46 @@ pub(crate) fn get_home_path() -> String {
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct AppDirs {
+    pub(crate) home_dir: String,
+    pub(crate) config_dir: String,
+    pub(crate) data_dir: String,
+    pub(crate) cache_dir: String,
+}
+
+pub(crate) fn get_app_dirs() -> AppDirs {
+    let home_dir = get_home_path();
+    let config_dir = dirs::config_dir()
+        .or_else(dirs::home_dir)
+        .unwrap_or_default()
+        .join("dotdir")
+        .to_string_lossy()
+        .into_owned();
+    let data_dir = dirs::data_dir()
+        .or_else(dirs::config_dir)
+        .or_else(dirs::home_dir)
+        .unwrap_or_default()
+        .join("dotdir")
+        .to_string_lossy()
+        .into_owned();
+    let cache_dir = dirs::cache_dir()
+        .or_else(dirs::data_dir)
+        .or_else(dirs::config_dir)
+        .or_else(dirs::home_dir)
+        .unwrap_or_default()
+        .join("dotdir")
+        .to_string_lossy()
+        .into_owned();
+    AppDirs {
+        home_dir,
+        config_dir,
+        data_dir,
+        cache_dir,
+    }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct PtySpawnInfo {
     pub(crate) pty_id: u32,
     pub(crate) cwd: String,

@@ -6,7 +6,7 @@
  *
  * Communication protocol with main thread:
  *   Main → Worker:
- *     { type: 'start', homePath: string }           — begin loading extensions
+ *     { type: 'start', dataDir: string }            — begin loading extensions
  *     { type: 'readFileResult', id, data, error? }   — response to a file read request
  *   Worker → Main:
  *     { type: 'readFile', id, path }                 — request file contents
@@ -441,11 +441,10 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
   }
 }
 
-async function loadExtensions(homePath: string): Promise<WorkerLoadedExtension[]> {
+async function loadExtensions(dataDir: string): Promise<WorkerLoadedExtension[]> {
   const loaded: WorkerLoadedExtension[] = [];
 
-  // Load user extensions from ~/.dotdir/extensions/
-  const extensionsDir = join(homePath, ".dotdir", "extensions");
+  const extensionsDir = join(dataDir, "extensions");
   let refs: ExtensionRef[];
   try {
     const text = await readTextFile(join(extensionsDir, "extensions.json"));
@@ -484,7 +483,7 @@ self.onmessage = (e: MessageEvent) => {
   const msg = e.data;
 
   if (msg.type === "start") {
-    loadExtensions(msg.homePath)
+    loadExtensions(msg.dataDir)
       .then(async (extensions) => {
         await activateByEvent("*");
         self.postMessage({ type: "loaded", extensions });

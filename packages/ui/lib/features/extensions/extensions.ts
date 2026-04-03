@@ -1,4 +1,5 @@
 import type { Bridge} from "@/features/bridge";
+import { getAppDirs } from "@/features/bridge/appDirs";
 import { type CwdEscapeMode, type DeleteProgressEvent } from "@/features/bridge";
 import { readFileBuffer, readFileText } from "@/features/file-system/fs";
 import { dirname, join, normalizePath } from "@/utils/path";
@@ -264,8 +265,8 @@ function extensionDirName(ref: ExtensionRef): string {
 }
 
 async function getExtensionsDir(bridge: Bridge): Promise<string> {
-  const homePath = await bridge.utils.getHomePath();
-  return join(homePath, ".dotdir", "extensions");
+  const { dataDir } = await getAppDirs(bridge);
+  return join(dataDir, "extensions");
 }
 
 async function readRefs(bridge: Bridge): Promise<ExtensionRef[]> {

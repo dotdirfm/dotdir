@@ -2,6 +2,13 @@ export type Unsubscribe = () => void;
 export type SystemThemeKind = "light" | "dark";
 export type ThemePreference = SystemThemeKind | "system";
 
+export interface AppDirs {
+  homeDir: string;
+  configDir: string;
+  dataDir: string;
+  cacheDir: string;
+}
+
 export type EntryKind =
   | "file"
   | "directory"
@@ -196,6 +203,7 @@ export interface Bridge {
   };
   utils: {
     getHomePath(): Promise<string>;
+    getAppDirs(): Promise<AppDirs>;
     getEnv(): Promise<Record<string, string>>;
   };
   systemTheme: {

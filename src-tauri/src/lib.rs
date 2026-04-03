@@ -16,7 +16,8 @@ use runtime_ops::{
     fs_read_file as backend_fs_read_file, fs_stat as backend_fs_stat,
     fs_unwatch as backend_fs_unwatch, fs_watch as backend_fs_watch,
     fs_write_binary as backend_fs_write_binary, fs_write_text as backend_fs_write_text,
-    get_env as backend_get_env, get_home_path as backend_get_home_path,
+    get_app_dirs as backend_get_app_dirs, get_env as backend_get_env,
+    get_home_path as backend_get_home_path,
     move_to_trash as backend_move_to_trash, pty_close as backend_pty_close,
     pty_resize as backend_pty_resize, pty_spawn as backend_pty_spawn,
     pty_write as backend_pty_write, rename_item as backend_rename_item,
@@ -433,6 +434,11 @@ fn pty_close(pty_id: u32, state: State<'_, AppState>) {
 #[tauri::command]
 fn get_home_path() -> String {
     backend_get_home_path()
+}
+
+#[tauri::command]
+fn get_app_dirs() -> runtime_ops::AppDirs {
+    backend_get_app_dirs()
 }
 
 #[tauri::command]
@@ -1002,6 +1008,7 @@ pub fn run() {
             fs_watch,
             fs_unwatch,
             get_home_path,
+            get_app_dirs,
             get_env,
             get_theme,
             debug_log,
