@@ -160,6 +160,16 @@ export class ExtensionHostClient {
       console.log("[ExtHost] readFile ok", normalizedPath);
       worker.postMessage({ type: "readFileResult", id, data: text });
     } catch (err) {
+      const message =
+        err instanceof Error ? err.message : String(err);
+      if (message.includes("Not a file:")) {
+        worker.postMessage({
+          type: "readFileResult",
+          id,
+          data: null,
+        });
+        return;
+      }
       console.error("[ExtHost] readFile failed", path, err);
       worker.postMessage({
         type: "readFileResult",

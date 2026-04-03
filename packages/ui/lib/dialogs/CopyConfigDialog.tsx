@@ -1,8 +1,10 @@
 import { useDialogButtonNav } from "@/dialogs/useDialogButtonNav";
 import type { ConflictPolicy, CopyOptions, SymlinkMode } from "@/features/bridge";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { PathAutocompleteInput } from "./PathAutocompleteInput";
 import { SmartLabel } from "./dialogHotkeys";
 import styles from "./dialogs.module.css";
 import { OverlayDialog } from "./OverlayDialog";
@@ -10,12 +12,15 @@ import { OverlayDialog } from "./OverlayDialog";
 export interface CopyConfigDialogProps {
   itemCount: number;
   destPath: string;
+  suggestionRoots: Array<{ id: string; label: string; path: string }>;
   onConfirm: (options: CopyOptions, destDir: string) => void;
   onCancel: () => void;
 }
 
-export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: CopyConfigDialogProps) {
+export function CopyConfigDialog({ itemCount, destPath, suggestionRoots, onConfirm, onCancel }: CopyConfigDialogProps) {
+  const commandRegistry = useCommandRegistry();
   const buttonsRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [destValue, setDestValue] = useState(destPath);
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("ask");
   const [symlinkMode, setSymlinkMode] = useState<SymlinkMode>("smart");
@@ -44,8 +49,35 @@ export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: C
     );
   };
 
+  const allowCommandRouting = useCallback(
+    (event: KeyboardEvent) => {
+      if (!commandRegistry.getContext("autocompleteFocused")) return false;
+      const key = event.key.toLowerCase();
+      const autocompleteOpen = Boolean(commandRegistry.getContext("autocompleteOpen"));
+      const autocompleteHasSelection = Boolean(commandRegistry.getContext("autocompleteHasSelection"));
+      if (key === "home" || key === "end") return true;
+      if (!autocompleteOpen) return false;
+      if ((key === "tab" || key === "enter") && !autocompleteHasSelection) return false;
+      return (
+        key === "escape" ||
+        key === "enter" ||
+        key === "tab" ||
+        key === "arrowup" ||
+        key === "arrowdown" ||
+        key === "pageup" ||
+        key === "pagedown"
+      );
+    },
+    [commandRegistry],
+  );
+
   return (
-    <OverlayDialog className={cx(styles, "modal-dialog", "copy-config-dialog")} onClose={onCancel} onKeyDown={onKeyDown}>
+    <OverlayDialog
+      className={cx(styles, "modal-dialog", "copy-config-dialog")}
+      onClose={onCancel}
+      onKeyDown={onKeyDown}
+      allowCommandRouting={allowCommandRouting}
+    >
       <div className={styles["modal-dialog-header"]}>
         Copy {itemCount} item{itemCount !== 1 ? "s" : ""}
       </div>
@@ -55,7 +87,16 @@ export function CopyConfigDialog({ itemCount, destPath, onConfirm, onCancel }: C
             <label htmlFor="copy-dest">
               <SmartLabel>Destination</SmartLabel>
             </label>
-            <input id="copy-dest" type="text" value={destValue} onChange={(e) => setDestValue(e.target.value)} {...INPUT_NO_ASSIST} />
+            <PathAutocompleteInput
+              id="copy-dest"
+              value={destValue}
+              onChange={setDestValue}
+              roots={suggestionRoots}
+              mode="directories"
+              inputRef={inputRef}
+              inputClassName={styles["open-create-file-field"] ? undefined : undefined}
+              {...INPUT_NO_ASSIST}
+            />
           </div>
 
           <div className={styles["copy-config-field"]}>

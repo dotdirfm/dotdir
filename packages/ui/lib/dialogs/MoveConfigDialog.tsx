@@ -1,8 +1,10 @@
 import { useDialogButtonNav } from "@/dialogs/useDialogButtonNav";
 import type { ConflictPolicy, MoveOptions } from "@/features/bridge";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { PathAutocompleteInput } from "./PathAutocompleteInput";
 import { SmartLabel } from "./dialogHotkeys";
 import styles from "./dialogs.module.css";
 import { OverlayDialog } from "./OverlayDialog";
@@ -10,12 +12,15 @@ import { OverlayDialog } from "./OverlayDialog";
 export interface MoveConfigDialogProps {
   itemCount: number;
   destPath: string;
+  suggestionRoots: Array<{ id: string; label: string; path: string }>;
   onConfirm: (options: MoveOptions, destDir: string) => void;
   onCancel: () => void;
 }
 
-export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: MoveConfigDialogProps) {
+export function MoveConfigDialog({ itemCount, destPath, suggestionRoots, onConfirm, onCancel }: MoveConfigDialogProps) {
+  const commandRegistry = useCommandRegistry();
   const buttonsRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [destValue, setDestValue] = useState(destPath);
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("ask");
   const { onKeyDown } = useDialogButtonNav(buttonsRef, { defaultIndex: 1 });
@@ -27,8 +32,35 @@ export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: M
     onConfirm({ conflictPolicy }, trimmed);
   };
 
+  const allowCommandRouting = useCallback(
+    (event: KeyboardEvent) => {
+      if (!commandRegistry.getContext("autocompleteFocused")) return false;
+      const key = event.key.toLowerCase();
+      const autocompleteOpen = Boolean(commandRegistry.getContext("autocompleteOpen"));
+      const autocompleteHasSelection = Boolean(commandRegistry.getContext("autocompleteHasSelection"));
+      if (key === "home" || key === "end") return true;
+      if (!autocompleteOpen) return false;
+      if ((key === "tab" || key === "enter") && !autocompleteHasSelection) return false;
+      return (
+        key === "escape" ||
+        key === "enter" ||
+        key === "tab" ||
+        key === "arrowup" ||
+        key === "arrowdown" ||
+        key === "pageup" ||
+        key === "pagedown"
+      );
+    },
+    [commandRegistry],
+  );
+
   return (
-    <OverlayDialog className={cx(styles, "modal-dialog", "move-config-dialog")} onClose={onCancel} onKeyDown={onKeyDown}>
+    <OverlayDialog
+      className={cx(styles, "modal-dialog", "move-config-dialog")}
+      onClose={onCancel}
+      onKeyDown={onKeyDown}
+      allowCommandRouting={allowCommandRouting}
+    >
       <div className={styles["modal-dialog-header"]}>
         Move {itemCount} item{itemCount !== 1 ? "s" : ""}
       </div>
@@ -38,7 +70,15 @@ export function MoveConfigDialog({ itemCount, destPath, onConfirm, onCancel }: M
             <label htmlFor="move-dest">
               <SmartLabel>Destination</SmartLabel>
             </label>
-            <input id="move-dest" type="text" value={destValue} onChange={(e) => setDestValue(e.target.value)} {...INPUT_NO_ASSIST} />
+            <PathAutocompleteInput
+              id="move-dest"
+              value={destValue}
+              onChange={setDestValue}
+              roots={suggestionRoots}
+              mode="directories"
+              inputRef={inputRef}
+              {...INPUT_NO_ASSIST}
+            />
           </div>
 
           <div className={styles["copy-config-field"]}>

@@ -6,10 +6,12 @@
  * goes through the shared DialogContext (useDialog()).
  */
 
+import { pathAutocompleteRecentAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
 import {
   activePanelSideAtom,
+  activeTabAtom,
   inactiveTabAtom,
   leftActiveTabIdAtom,
   leftTabsAtom,
@@ -57,10 +59,14 @@ export function useFileOperations() {
   const inactiveTab = useAtomValue(inactiveTabAtom);
   const inactiveTabRef = useRef(inactiveTab);
   inactiveTabRef.current = inactiveTab;
+  const activeTab = useAtomValue(activeTabAtom);
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
   const leftActiveTabId = useAtomValue(leftActiveTabIdAtom);
   const rightActiveTabId = useAtomValue(rightActiveTabIdAtom);
   const setLeftTabs = useSetAtom(leftTabsAtom);
   const setRightTabs = useSetAtom(rightTabsAtom);
+  const setRecentPaths = useSetAtom(pathAutocompleteRecentAtom);
 
   const bridge = useBridge();
   const activeCopyIdRef = useRef<number | null>(null);
@@ -231,7 +237,12 @@ export function useFileOperations() {
         type: "copyConfig",
         itemCount: sourcePaths.length,
         destPath: destDir,
+        suggestionRoots: [
+          ...(activeTabRef.current?.type === "filelist" ? [{ id: "source", label: "From Current Panel", path: activeTabRef.current.path }] : []),
+          { id: "destination", label: "From Other Panel", path: destDir },
+        ],
         onConfirm: async (options: CopyOptions, newDestDir: string) => {
+          setRecentPaths((current) => [newDestDir, ...current.filter((path) => path !== newDestDir)].slice(0, 12));
           try {
             if (sourcePaths.some((p) => isContainerPath(p))) {
               if (!sourcePaths.every((p) => isContainerPath(p))) {
@@ -355,7 +366,7 @@ export function useFileOperations() {
         onCancel: () => {},
       });
     },
-    [bridge, closeDialog, showDialog, updateDialog],
+    [bridge, closeDialog, setRecentPaths, showDialog, updateDialog],
   );
 
   useEffect(() => {
@@ -438,7 +449,12 @@ export function useFileOperations() {
         type: "moveConfig",
         itemCount: sourcePaths.length,
         destPath: destDir,
+        suggestionRoots: [
+          ...(activeTabRef.current?.type === "filelist" ? [{ id: "source", label: "From Current Panel", path: activeTabRef.current.path }] : []),
+          { id: "destination", label: "From Other Panel", path: destDir },
+        ],
         onConfirm: async (options: MoveOptions, newDestDir: string) => {
+          setRecentPaths((current) => [newDestDir, ...current.filter((path) => path !== newDestDir)].slice(0, 12));
           try {
             const onCancel = () => {
               showDialog({
@@ -488,7 +504,7 @@ export function useFileOperations() {
         onCancel: () => {},
       });
     },
-    [bridge, closeDialog, showDialog],
+    [bridge, closeDialog, setRecentPaths, showDialog],
   );
 
   useEffect(() => {

@@ -55,6 +55,7 @@ export type DialogSpec =
       type: "copyConfig";
       itemCount: number;
       destPath: string;
+      suggestionRoots: Array<{ id: string; label: string; path: string }>;
       onConfirm: (options: CopyOptions, destDir: string) => void;
       onCancel: () => void;
     }
@@ -86,6 +87,7 @@ export type DialogSpec =
       type: "moveConfig";
       itemCount: number;
       destPath: string;
+      suggestionRoots: Array<{ id: string; label: string; path: string }>;
       onConfirm: (options: MoveOptions, destDir: string) => void;
       onCancel: () => void;
     }
@@ -239,6 +241,7 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
         <CopyConfigDialog
           itemCount={dialog.itemCount}
           destPath={dialog.destPath}
+          suggestionRoots={dialog.suggestionRoots}
           onConfirm={(options, destDir) => {
             dialog.onConfirm(options, destDir);
           }}
@@ -297,6 +300,7 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
         <MoveConfigDialog
           itemCount={dialog.itemCount}
           destPath={dialog.destPath}
+          suggestionRoots={dialog.suggestionRoots}
           onConfirm={(options, destDir) => {
             dialog.onConfirm(options, destDir);
           }}

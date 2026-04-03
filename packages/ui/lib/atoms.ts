@@ -24,3 +24,4 @@ export const editorFileAtom = atom<{ path: string; name: string; size: number; l
 export const commandLineCwdAtom = atom("");
 export const commandLineOnExecuteAtom = atom<((cmd: string) => void) | null>(null);
 export const commandLinePasteFnAtom = atom<((text: string) => void) | null>(null);
+export const pathAutocompleteRecentAtom = atom<string[]>([]);
