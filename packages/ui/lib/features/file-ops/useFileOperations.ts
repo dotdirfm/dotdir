@@ -22,7 +22,7 @@ import type { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgress
 import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { FsProviderExtensionApi } from "@/features/extensions/extensionApi";
-import { isExistingDirectory } from "@/features/navigation/lib/commandLineCd";
+import { isExistingDirectory } from "@/features/file-system/utils";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join } from "@/utils/path";

@@ -1,7 +1,7 @@
 import type { ActionQueue } from "@/actionQueue";
 import { useCommandLine } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
-import { useFileOperationHandlers } from "@/features/file-ops/model/fileOperationHandlers";
+import { useFileOperationHandlers } from "@/features/file-ops/fileOperationHandlers";
 import type { FsNode } from "fss-lang";
 import { useMemo, useRef } from "react";
 

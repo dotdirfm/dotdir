@@ -73,14 +73,3 @@ export async function resolveCdPath(bridge: Bridge, pathArg: string, cwd: string
   const resolved = resolveDotSegments(normalizePath(combined));
   return normalizeTerminalPath(resolved);
 }
-
-/** True if path exists and can be listed as a directory. */
-export async function isExistingDirectory(bridge: Bridge, path: string): Promise<boolean> {
-  if (!(await bridge.fs.exists(path))) return false;
-  try {
-    await bridge.fs.entries(path);
-    return true;
-  } catch {
-    return false;
-  }
-}

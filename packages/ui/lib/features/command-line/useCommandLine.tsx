@@ -1,7 +1,8 @@
 import { useDialog } from "@/dialogs/dialogContext";
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
-import { isExistingDirectory, parseCdCommand, resolveCdPath } from "@/features/navigation/lib/commandLineCd";
+import { parseCdCommand, resolveCdPath } from "@/features/command-line/commandLineCd";
+import { isExistingDirectory } from "@/features/file-system/utils";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { useUserSettings } from "@/features/settings/useUserSettings";
 import { normalizeTerminalPath } from "@/features/terminal/path";
