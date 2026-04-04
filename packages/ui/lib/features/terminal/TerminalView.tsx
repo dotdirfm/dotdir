@@ -14,6 +14,14 @@ interface TerminalViewProps {
   focusRequestKey?: number;
 }
 
+const TERMINAL_ROUTED_COMMANDS = [
+  "togglePanels",
+  "showCommandPalette",
+  "toggleHiddenFiles",
+  "dotdir.exit",
+  "showExtensions",
+] as const;
+
 function resolveTerminalTheme() {
   return {
     background: "#11131a",
@@ -32,7 +40,6 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
   const fitRef = useRef<FitAddon | null>(null);
   const hasTerminalFocusRef = useRef(false);
   const suppressPtyInputRef = useRef(false);
-  const suppressNextCtrlORef = useRef(false);
   const expandedRef = useRef(expanded);
   expandedRef.current = expanded;
   /** Last viewport size we fitted to; avoids ResizeObserver loop from fit.fit() changing layout. */
@@ -58,19 +65,11 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
         return node instanceof Node ? container.contains(node) : false;
       },
       allowCommandRouting(event) {
-        const key = event.key.toLowerCase();
-        if ((event.ctrlKey || event.metaKey) && !event.altKey) {
-          if (key === "p") return true;
-          if (key === ".") return true;
-          if (key === "q") return true;
-        }
-        if (!event.ctrlKey && !event.metaKey && !event.altKey) {
-          if (key === "f10" || key === "f11") return true;
-        }
-        return false;
+        if (session.getCapabilities().commandRunning) return false;
+        return commandRegistry.matchesEventForCommands(event, TERMINAL_ROUTED_COMMANDS, "terminal");
       },
     });
-  }, [focusContext]);
+  }, [commandRegistry, focusContext, session]);
 
   useEffect(() => {
     // A profile switch replaces the TerminalSession without remounting this component.
@@ -153,16 +152,8 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
       focusContext.blurCurrent();
       focusContext.pop("terminal");
     };
-    term.attachCustomKeyEventHandler((event) => {
+    term.attachCustomKeyEventHandler(() => {
       setTerminalFocus();
-      if (event.key.toLowerCase() === "o" && event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
-        if (suppressNextCtrlORef.current) {
-          suppressNextCtrlORef.current = false;
-          return false;
-        }
-        void commandRegistry.executeCommand("togglePanels");
-        return false;
-      }
       return true;
     });
     scheduleLayout();
@@ -242,7 +233,6 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
 
   useEffect(() => {
     if (!expanded) return;
-    suppressNextCtrlORef.current = true;
     focusContext.request("terminal");
   }, [expanded, focusContext, focusRequestKey]);
 

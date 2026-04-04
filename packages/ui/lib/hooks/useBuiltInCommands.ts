@@ -59,9 +59,11 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const pasteToCommandLineRef = useRef(pasteToCommandLine);
   pasteToCommandLineRef.current = pasteToCommandLine;
 
-  const { writeToTerminal, activeSession } = useTerminal();
-  const writeToTerminalRef = useRef(writeToTerminal);
-  writeToTerminalRef.current = writeToTerminal;
+  const { runCommand, activeCwd, activeSession } = useTerminal();
+  const runCommandRef = useRef(runCommand);
+  runCommandRef.current = runCommand;
+  const activeCwdRef = useRef(activeCwd);
+  activeCwdRef.current = activeCwd;
   const activeSessionRef = useRef(activeSession);
   activeSessionRef.current = activeSession;
 
@@ -312,7 +314,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       commandRegistry.registerCommand("terminal.execute", async (path: unknown) => {
         const name = basename(path as string);
         const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? `./${name}` : `./${JSON.stringify(name)}`;
-        await writeToTerminalRef.current(`${arg}\r`);
+        await runCommandRef.current(arg, activeCwdRef.current);
       }),
     );
 

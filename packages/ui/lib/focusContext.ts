@@ -118,6 +118,15 @@ export class FocusContextManager {
     return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
   }
 
+  allowsCommandRouting(event: KeyboardEvent, layer = this.current): boolean {
+    const adapter = this.adapters.get(layer);
+    if (typeof adapter?.allowCommandRouting === "function") {
+      return adapter.allowCommandRouting(event);
+    }
+    if (adapter?.allowCommandRouting === false) return false;
+    return layer === "panel" || layer === "viewer" || layer === "editor";
+  }
+
   shouldRouteCommandEvent(event: KeyboardEvent, root: HTMLElement): boolean {
     // Command routing is intentionally conservative: only route events that
     // originate inside the app, avoid editable controls/dialogs by default,
@@ -140,8 +149,7 @@ export class FocusContextManager {
     };
 
     if (isDialogTarget(event.target) || isDialogTarget(active)) return false;
-    if (activeAdapter?.allowCommandRouting === false) return false;
-    return activeLayer === "panel" || activeLayer === "viewer" || activeLayer === "editor";
+    return this.allowsCommandRouting(event, activeLayer);
   }
 
   onChange(callback: FocusChangeCallback): () => void {

@@ -226,6 +226,23 @@ export class CommandRegistry {
     return this.getKeybindings().find((k: Keybinding) => k.command === commandId);
   }
 
+  matchesEventForCommands(e: KeyboardEvent, commandIds: readonly string[], focusLayer = this.focusLayerGetter()): boolean {
+    const keyCombo = this.eventToKeyCombo(e);
+    if (!keyCombo) return false;
+
+    const allowedCommands = new Set(commandIds);
+    const layers: KeybindingLayer[] = ["user", "extension", "default"];
+    for (const layer of layers) {
+      for (const binding of this.keybindingLayers[layer]) {
+        const bindingKey = this.normalizeKey(this.isMac() ? (binding.mac ?? binding.key) : binding.key);
+        if (bindingKey !== keyCombo) continue;
+        if (!this.evaluateWhenForFocus(binding.when, focusLayer)) continue;
+        return allowedCommands.has(binding.command);
+      }
+    }
+    return false;
+  }
+
   evaluateWhen(when: string | undefined): boolean {
     return this.evaluateWhenForFocus(when, this.focusLayerGetter());
   }

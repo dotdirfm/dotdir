@@ -10,6 +10,17 @@ interface KeyBarItem {
   keybinding?: Keybinding;
 }
 
+function createKeybarKeyboardEvent(fKey: number, ctrl: boolean, shift: boolean, alt: boolean): KeyboardEvent {
+  return new KeyboardEvent("keydown", {
+    key: `F${fKey}`,
+    code: `F${fKey}`,
+    ctrlKey: ctrl,
+    metaKey: ctrl,
+    shiftKey: shift,
+    altKey: alt,
+  });
+}
+
 function getModifierPrefix(ctrl: boolean, shift: boolean, alt: boolean): string {
   const parts: string[] = [];
   if (ctrl) parts.push("ctrl");
@@ -44,7 +55,8 @@ export function KeyBar() {
       });
 
       if (kb) {
-        if (commandRegistry.evaluateWhen(kb.when)) {
+        const event = createKeybarKeyboardEvent(i, modifiers.ctrl, modifiers.shift, modifiers.alt);
+        if (commandRegistry.evaluateWhen(kb.when) && focusContext.allowsCommandRouting(event)) {
           const cmd = commandRegistry.getCommand(kb.command);
           newItems.push({ fKey: i, command: cmd, keybinding: kb });
           continue;
@@ -54,7 +66,7 @@ export function KeyBar() {
     }
 
     setItems(newItems);
-  }, [commandRegistry, modifiers]);
+  }, [commandRegistry, focusContext, modifiers]);
 
   useEffect(() => {
     updateItems();

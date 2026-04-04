@@ -28,7 +28,7 @@ import {
 export interface TerminalController {
   activeCwd: string;
   writeToTerminal: (data: string) => Promise<void>;
-  runCommand: (cmd: string, cwd: string) => Promise<void>;
+  runCommand: (cmd: string, cwd: string, options?: { restorePanels?: boolean }) => Promise<void>;
 }
 
 type TerminalContextValue = TerminalController & TerminalState;
@@ -142,9 +142,10 @@ function useProvideTerminal(): TerminalContextValue {
   );
 
   const runCommand = useCallback(
-    async (cmd: string, cwd: string): Promise<void> => {
+    async (cmd: string, cwd: string, options?: { restorePanels?: boolean }): Promise<void> => {
       if (!activeSession) return;
-      restorePanelsAfterCommandSessionIdRef.current = activeSession.id;
+      const shouldRestorePanels = options?.restorePanels ?? true;
+      restorePanelsAfterCommandSessionIdRef.current = shouldRestorePanels ? activeSession.id : null;
       setPanelsVisible(false);
       focusContext.request("terminal");
       setTerminalFocusRequestKey((k) => k + 1);
