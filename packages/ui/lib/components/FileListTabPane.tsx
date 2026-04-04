@@ -1,8 +1,8 @@
 import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
-import type { FileListPanelController } from "@/hooks/useFileListPanel";
-import { useFileListPanel } from "@/hooks/useFileListPanel";
-import { usePanelControllerRegistry } from "@/panelControllers";
+import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
+import type { FileListPanelController } from "@/features/panels/useFileListPanel";
+import { useFileListPanel } from "@/features/panels/useFileListPanel";
 import { useEffect, useMemo, useRef } from "react";
 import { FileList } from "./FileList/FileList";
 
@@ -115,7 +115,7 @@ export function FileListTabPane({
           return panel.navigateTo(nextPath);
         }}
         active={focused}
-        resolver={panel.resolver}
+        fssResolver={panel.fssResolver}
         onStateChange={pathsInSync ? onStateChange : undefined}
       />
     </div>

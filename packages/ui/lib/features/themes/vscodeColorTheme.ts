@@ -7,8 +7,8 @@
 
 import type { Bridge, SystemThemeKind } from "@/features/bridge";
 import { readFileText } from "@/features/file-system/fs";
-import { getStyleHostElement } from "@/styleHost";
 import { dirname, join } from "@/utils/path";
+import { getStyleHostElement } from "@/utils/styleHost";
 import { parse as parseJsonc } from "jsonc-parser";
 
 export interface VSCodeColorThemeJson {

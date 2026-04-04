@@ -1,6 +1,6 @@
 import type { PanelSide } from "@/entities/panel/model/types";
 import { activePanelSideAtom } from "@/entities/tab/model/tabsAtoms";
-import type { FileListPanelController } from "@/hooks/useFileListPanel";
+import type { FileListPanelController } from "@/features/panels/useFileListPanel";
 import { useAtomValue } from "jotai";
 import { createContext, createElement, type ReactNode, useCallback, useContext, useMemo, useRef } from "react";
 

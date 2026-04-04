@@ -15,19 +15,19 @@ import type { PanelTab } from "@/entities/tab/model/types";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
+import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
+import { type FileListPanelController } from "@/features/panels/useFileListPanel";
 import { showHiddenAtom } from "@/features/settings/useUserSettings";
 import { useFocusContext } from "@/focusContext";
-import { type FileListPanelController } from "@/hooks/useFileListPanel";
-import { usePanelControllerRegistry } from "@/panelControllers";
 import { cx } from "@/utils/cssModules";
 import { basename, dirname } from "@/utils/path";
 import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
+import type { FsNode } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FileListTabPane } from "../FileListTabPane";
 import styles from "./PanelGroup.module.css";
 import { usePanelCommands } from "./usePanelCommands";
-import type { FsNode } from "fss-lang";
 
 interface PanelGroupProps {
   side: PanelSide;

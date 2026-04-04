@@ -6,10 +6,10 @@
 
 import { getAppDirs } from "@/features/bridge/appDirs";
 import { useBridge } from "@/features/bridge/useBridge";
-import { type Keybinding, useCommandRegistry } from "@/features/commands/commands";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/jsoncFileWatcher";
 import { join } from "@/utils/path";
 import { useEffect } from "react";
+import { type Keybinding, useCommandRegistry } from "./commands";
 
 function validateKeybindings(parsed: unknown): Keybinding[] | null {
   if (!Array.isArray(parsed)) {

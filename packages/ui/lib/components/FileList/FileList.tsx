@@ -3,9 +3,9 @@ import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useGetCachedIcon, useIconThemeVersion, useLoadIconsForPaths, useResolveIcon } from "@/features/file-icons/iconResolver";
+import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { resolveEntryStyle } from "@/fss";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { usePanelControllerRegistry } from "@/panelControllers";
 import type { ResolvedEntryStyle } from "@/types";
 import { binarySearch } from "@/utils/binarySearch";
 import { cx } from "@/utils/cssModules";
@@ -29,7 +29,7 @@ interface FileListProps {
   showHidden: boolean;
   onNavigate: (path: string) => Promise<void>;
   active: boolean;
-  resolver: LayeredResolver;
+  fssResolver: LayeredResolver;
   onStateChange?: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
 }
 
@@ -74,7 +74,7 @@ export const FileList = memo(function FileList({
   showHidden,
   onNavigate,
   active,
-  resolver,
+  fssResolver,
   onStateChange,
 }: FileListProps) {
   const commandRegistry = useCommandRegistry();
@@ -127,7 +127,7 @@ export const FileList = memo(function FileList({
 
   const toDisplayEntry = useCallback(
     (entry: FsNode): DisplayEntry => {
-      const style = resolveEntryStyle(resolver, entry);
+      const style = resolveEntryStyle(fssResolver, entry);
       const isDir = entry.type === "folder";
       const resolved = resolveIcon(entry.name, isDir, false, false, entry.lang, style.icon);
       return {
@@ -137,7 +137,7 @@ export const FileList = memo(function FileList({
         iconFallbackUrl: resolved.fallbackUrl,
       };
     },
-    [resolver, resolveIcon],
+    [fssResolver, resolveIcon],
   );
 
   const sorted = useMemo(() => {

@@ -13,14 +13,14 @@ import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/featur
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
 import { readFileText as readFileTextFromFs } from "@/features/file-system/fs";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
+import { useActivePanelNavigation } from "@/features/panels/panelControllers";
+import { getActiveColorThemeData, onColorThemeChange } from "@/features/themes/vscodeColorTheme";
 import { useFocusContext } from "@/focusContext";
-import { useActivePanelNavigation } from "@/panelControllers";
-import { getStyleHostElement } from "@/styleHost";
 import styles from "@/styles/viewers.module.css";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
+import { getStyleHostElement } from "@/utils/styleHost";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
-import { getActiveColorThemeData, onColorThemeChange } from "@/vscodeColorTheme";
 import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 

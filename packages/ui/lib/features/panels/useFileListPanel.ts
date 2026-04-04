@@ -19,8 +19,7 @@ import { buildContainerPath, isContainerPath, parseContainerPath } from "@/utils
 import { basename, dirname, isFileExecutable, isRootPath, join } from "@/utils/path";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
 import type { FsProviderEntry } from "@dotdirfm/extension-api";
-import type { LayeredResolver } from "fss-lang";
-import type { FsNode } from "fss-lang";
+import type { FsNode, LayeredResolver } from "fss-lang";
 import { createFsNode } from "fss-lang/helpers";
 import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -115,7 +114,7 @@ export interface FileListPanelController {
   navigating: boolean;
   cancelNavigation: () => void;
   refresh: () => void;
-  resolver: LayeredResolver;
+  fssResolver: LayeredResolver;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -382,7 +381,7 @@ export function useFileListPanel() {
       navigating,
       cancelNavigation,
       refresh,
-      resolver: resolverRef.current!,
+      fssResolver: resolverRef.current!,
     }),
     [state, navigateTo, navigating, cancelNavigation, refresh],
   );

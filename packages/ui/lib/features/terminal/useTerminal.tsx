@@ -8,10 +8,10 @@ import {
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { normalizeTerminalPath } from "@/features/terminal/path";
 import { useTerminalState, type TerminalState } from "@/features/terminal/useTerminalState";
 import { useFocusContext } from "@/focusContext";
-import { useActivePanelNavigation } from "@/panelControllers";
 import { normalizePath } from "@/utils/path";
 import { useAtomValue, useSetAtom } from "jotai";
 import {

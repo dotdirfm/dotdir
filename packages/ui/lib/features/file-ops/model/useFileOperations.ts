@@ -23,7 +23,7 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { FsProviderExtensionApi } from "@/features/extensions/extensionApi";
 import { isExistingDirectory } from "@/features/navigation/lib/commandLineCd";
-import { usePanelControllerRegistry } from "@/panelControllers";
+import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join } from "@/utils/path";
 import { fsProviderRegistry } from "@/viewerEditorRegistry";
