@@ -21,6 +21,64 @@ type UseViewerEditorStateResult = {
   overlays: ReactNode;
 };
 
+type CachedViewerOverlay = {
+  cacheKey: string;
+  dirPath: string;
+  entry: string;
+  lastUsedAt: number;
+  file: {
+    path: string;
+    name: string;
+    size: number;
+    panel: "left" | "right";
+  };
+};
+
+type CachedEditorOverlay = {
+  cacheKey: string;
+  dirPath: string;
+  entry: string;
+  lastUsedAt: number;
+  file: {
+    path: string;
+    name: string;
+    size: number;
+    langId: string;
+  };
+};
+
+const MAX_CACHED_VIEWER_OVERLAYS = 3;
+const MAX_CACHED_EDITOR_OVERLAYS = 2;
+
+function upsertBoundedCacheEntry<T extends { cacheKey: string; lastUsedAt: number }>(
+  entries: T[],
+  nextEntry: T,
+  limit: number,
+): T[] {
+  const existingIndex = entries.findIndex((entry) => entry.cacheKey === nextEntry.cacheKey);
+  const updatedEntries =
+    existingIndex < 0
+      ? [...entries, nextEntry]
+      : entries.map((entry, index) => (index === existingIndex ? nextEntry : entry));
+
+  if (updatedEntries.length <= limit) {
+    return updatedEntries;
+  }
+
+  const sortedEvictionCandidates = [...updatedEntries]
+    .filter((entry) => entry.cacheKey !== nextEntry.cacheKey)
+    .sort((a, b) => a.lastUsedAt - b.lastUsedAt);
+
+  let trimmed = updatedEntries;
+  while (trimmed.length > limit && sortedEvictionCandidates.length > 0) {
+    const evict = sortedEvictionCandidates.shift();
+    if (!evict) break;
+    trimmed = trimmed.filter((entry) => entry.cacheKey !== evict.cacheKey);
+  }
+
+  return trimmed;
+}
+
 export function useViewerEditorState(): UseViewerEditorStateResult {
   const bridge = useBridge();
   const { navigateTo } = useActivePanelNavigation();
@@ -32,8 +90,8 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   const rightActiveTabId = useAtomValue(rightActiveTabIdAtom);
   const leftActiveTab = useAtomValue(leftActiveTabAtom);
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
-  const [viewerExt, setViewerExt] = useState<{ dirPath: string; entry: string } | null>(null);
-  const [editorExt, setEditorExt] = useState<{ dirPath: string; entry: string } | null>(null);
+  const [viewerCache, setViewerCache] = useState<CachedViewerOverlay[]>([]);
+  const [editorCache, setEditorCache] = useState<CachedEditorOverlay[]>([]);
   const [editorDirty, setEditorDirty] = useState(false);
   const showHidden = useAtomValue(showHiddenAtom);
   const { showDialog } = useDialog();
@@ -167,28 +225,74 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
 
   const viewerResolved = viewerFile ? viewerRegistry.resolve(viewerFile.name) : null;
   const editorResolved = editorFile ? editorRegistry.resolve(editorFile.name) : null;
+  const activeViewerCacheKey =
+    viewerResolved ? `viewer:${viewerResolved.extensionDirPath}:${viewerResolved.contribution.entry}` : null;
+  const activeEditorCacheKey =
+    editorResolved ? `editor:${editorResolved.extensionDirPath}:${editorResolved.contribution.entry}` : null;
 
   useEffect(() => {
-    if (!viewerResolved) return;
-    setViewerExt((prev) => {
-      if (prev?.dirPath === viewerResolved.extensionDirPath && prev?.entry === viewerResolved.contribution.entry) return prev;
-      return {
+    if (!viewerResolved || !viewerFile) return;
+
+    const cacheKey = `viewer:${viewerResolved.extensionDirPath}:${viewerResolved.contribution.entry}`;
+    setViewerCache((prev) => {
+      const now = Date.now();
+      const nextEntry: CachedViewerOverlay = {
+        cacheKey,
         dirPath: viewerResolved.extensionDirPath,
         entry: viewerResolved.contribution.entry,
+        lastUsedAt: now,
+        file: viewerFile,
       };
+      const index = prev.findIndex((entry) => entry.cacheKey === cacheKey);
+      if (index < 0) {
+        return upsertBoundedCacheEntry(prev, nextEntry, MAX_CACHED_VIEWER_OVERLAYS);
+      }
+      const current = prev[index]!;
+      if (
+        current.dirPath === nextEntry.dirPath &&
+        current.entry === nextEntry.entry &&
+        current.file.path === nextEntry.file.path &&
+        current.file.name === nextEntry.file.name &&
+        current.file.size === nextEntry.file.size &&
+        current.file.panel === nextEntry.file.panel
+      ) {
+        return prev;
+      }
+      return upsertBoundedCacheEntry(prev, nextEntry, MAX_CACHED_VIEWER_OVERLAYS);
     });
-  }, [viewerResolved]);
+  }, [viewerFile, viewerResolved]);
 
   useEffect(() => {
-    if (!editorResolved) return;
-    setEditorExt((prev) => {
-      if (prev?.dirPath === editorResolved.extensionDirPath && prev?.entry === editorResolved.contribution.entry) return prev;
-      return {
+    if (!editorResolved || !editorFile) return;
+
+    const cacheKey = `editor:${editorResolved.extensionDirPath}:${editorResolved.contribution.entry}`;
+    setEditorCache((prev) => {
+      const now = Date.now();
+      const nextEntry: CachedEditorOverlay = {
+        cacheKey,
         dirPath: editorResolved.extensionDirPath,
         entry: editorResolved.contribution.entry,
+        lastUsedAt: now,
+        file: editorFile,
       };
+      const index = prev.findIndex((entry) => entry.cacheKey === cacheKey);
+      if (index < 0) {
+        return upsertBoundedCacheEntry(prev, nextEntry, MAX_CACHED_EDITOR_OVERLAYS);
+      }
+      const current = prev[index]!;
+      if (
+        current.dirPath === nextEntry.dirPath &&
+        current.entry === nextEntry.entry &&
+        current.file.path === nextEntry.file.path &&
+        current.file.name === nextEntry.file.name &&
+        current.file.size === nextEntry.file.size &&
+        current.file.langId === nextEntry.file.langId
+      ) {
+        return prev;
+      }
+      return upsertBoundedCacheEntry(prev, nextEntry, MAX_CACHED_EDITOR_OVERLAYS);
     });
-  }, [editorResolved]);
+  }, [editorFile, editorResolved]);
 
   useEffect(() => {
     if (!viewerFile) return;
@@ -223,18 +327,23 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
             onClose={() => setViewerFile(null)}
           />
         )}
-        {viewerExt && viewerFile && viewerResolved && (
-          <ViewerContainer
-            key={`viewer:${viewerExt.dirPath}:${viewerExt.entry}`}
-            extensionDirPath={viewerExt.dirPath}
-            entry={viewerExt.entry}
-            filePath={viewerFile.path}
-            fileName={viewerFile.name}
-            fileSize={viewerFile.size}
-            onClose={() => setViewerFile(null)}
-            onExecuteCommand={handleExecuteCommand}
-          />
-        )}
+        {viewerCache.map((cachedViewer) => {
+          const isActive = cachedViewer.cacheKey === activeViewerCacheKey && !!viewerFile && !!viewerResolved;
+          const file = isActive ? viewerFile : cachedViewer.file;
+          return (
+            <ViewerContainer
+              key={cachedViewer.cacheKey}
+              extensionDirPath={cachedViewer.dirPath}
+              entry={cachedViewer.entry}
+              filePath={file.path}
+              fileName={file.name}
+              fileSize={file.size}
+              visible={isActive}
+              onClose={() => setViewerFile(null)}
+              onExecuteCommand={handleExecuteCommand}
+            />
+          );
+        })}
         {editorFile && !editorResolved && (
           <ModalDialog
             title="No editor"
@@ -242,21 +351,38 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
             onClose={requestCloseEditor}
           />
         )}
-        {editorExt && editorFile && editorResolved && (
-          <EditorContainer
-            key={`editor:${editorExt.dirPath}:${editorExt.entry}`}
-            extensionDirPath={editorExt.dirPath}
-            entry={editorExt.entry}
-            filePath={editorFile.path}
-            fileName={editorFile.name}
-            langId={editorFile.langId}
-            onClose={requestCloseEditor}
-            onDirtyChange={setEditorDirty}
-          />
-        )}
+        {editorCache.map((cachedEditor) => {
+          const isActive = cachedEditor.cacheKey === activeEditorCacheKey && !!editorFile && !!editorResolved;
+          const file = isActive ? editorFile : cachedEditor.file;
+          return (
+            <EditorContainer
+              key={cachedEditor.cacheKey}
+              extensionDirPath={cachedEditor.dirPath}
+              entry={cachedEditor.entry}
+              filePath={file.path}
+              fileName={file.name}
+              langId={file.langId}
+              visible={isActive}
+              onClose={requestCloseEditor}
+              onDirtyChange={setEditorDirty}
+            />
+          );
+        })}
       </>
     ),
-    [editorExt, editorFile, editorResolved, handleExecuteCommand, requestCloseEditor, setViewerFile, viewerExt, viewerFile, viewerResolved],
+    [
+      activeEditorCacheKey,
+      activeViewerCacheKey,
+      editorCache,
+      editorFile,
+      editorResolved,
+      handleExecuteCommand,
+      requestCloseEditor,
+      setViewerFile,
+      viewerCache,
+      viewerFile,
+      viewerResolved,
+    ],
   );
 
   return {

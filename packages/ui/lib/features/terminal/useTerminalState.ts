@@ -1,12 +1,12 @@
 import type { TerminalProfile } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
+import { formatHiddenCd, normalizeTerminalPath } from "@/features/terminal/path";
+import { terminalActiveSessionIdAtom, terminalSessionsAtom } from "@/features/terminal/terminalAtoms";
+import { TerminalSession } from "@/features/terminal/TerminalSession";
+import type { ManagedTerminalSession } from "@/features/terminal/types";
 import { useFocusContext } from "@/focusContext";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useRef } from "react";
-import { formatHiddenCd, normalizeTerminalPath } from "../../terminal/path";
-import { terminalActiveSessionIdAtom, terminalSessionsAtom } from "../../terminal/terminalAtoms";
-import { TerminalSession } from "../../terminal/TerminalSession";
-import type { ManagedTerminalSession } from "../../terminal/types";
 
 export type { ManagedTerminalSession };
 

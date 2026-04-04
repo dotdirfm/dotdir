@@ -8,12 +8,12 @@ import { type LoadedExtension, findColorTheme } from "@/features/extensions/exte
 import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
 import { readFileText } from "@/features/file-system/fs";
 import { activeColorThemeAtom, activeIconThemeAtom, settingsReadyAtom } from "@/features/settings/useUserSettings";
+import { resolveShellProfiles } from "@/features/terminal/shellProfiles";
 import { useClearExtensionFssLayers, useSetExtensionFssLayers } from "@/fss";
 import { useLanguageRegistry } from "@/languageRegistry";
 import { useActivePanelNavigation } from "@/panelControllers";
 import { registerExtensionKeybindings } from "@/registerKeybindings";
 import { getStyleHostElement } from "@/styleHost";
-import { resolveShellProfiles } from "@/terminal/shellProfiles";
 import { dirname, join } from "@/utils/path";
 import { populateRegistries } from "@/viewerEditorRegistry";
 import { clearColorTheme, loadAndApplyColorTheme, uiThemeToKind } from "@/vscodeColorTheme";

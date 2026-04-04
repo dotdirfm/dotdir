@@ -3,9 +3,9 @@ import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { isExistingDirectory, parseCdCommand, resolveCdPath } from "@/features/navigation/lib/commandLineCd";
 import { useUserSettings } from "@/features/settings/useUserSettings";
+import { normalizeTerminalPath } from "@/features/terminal/path";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import { useActivePanelNavigation } from "@/panelControllers";
-import { normalizeTerminalPath } from "@/terminal/path";
 import { normalizePath, resolveDotSegments } from "@/utils/path";
 import { useAtomValue } from "jotai";
 import {

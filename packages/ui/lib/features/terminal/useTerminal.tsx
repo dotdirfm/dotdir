@@ -8,10 +8,10 @@ import {
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { normalizeTerminalPath } from "@/features/terminal/path";
 import { useTerminalState, type TerminalState } from "@/features/terminal/useTerminalState";
 import { useFocusContext } from "@/focusContext";
 import { useActivePanelNavigation } from "@/panelControllers";
-import { normalizeTerminalPath } from "@/terminal/path";
 import { normalizePath } from "@/utils/path";
 import { useAtomValue, useSetAtom } from "jotai";
 import {
@@ -64,12 +64,14 @@ function useProvideTerminal(): TerminalContextValue {
   const activePanelCwd = activeTab?.path ?? "";
   const activePanelCwdRef = useRef(activePanelCwd);
   activePanelCwdRef.current = activePanelCwd;
+  const restorePanelsAfterCommandSessionIdRef = useRef<string | null>(null);
 
   const onNavigatePanelRef = useRef(navigateTo);
   onNavigatePanelRef.current = navigateTo;
 
   useEffect(() => {
     if (!activeSession) {
+      restorePanelsAfterCommandSessionIdRef.current = null;
       commandRegistry.setContext("terminalCommandRunning", false);
       return;
     }
@@ -81,11 +83,15 @@ function useProvideTerminal(): TerminalContextValue {
         commandRegistry.setContext("terminalCommandRunning", true);
       } else if (event.type === "command-finish") {
         commandRegistry.setContext("terminalCommandRunning", false);
+        if (restorePanelsAfterCommandSessionIdRef.current === activeSession.id) {
+          restorePanelsAfterCommandSessionIdRef.current = null;
+          setPanelsVisible(true);
+        }
       } else if (event.type === "capabilities") {
         commandRegistry.setContext("terminalCommandRunning", event.capabilities.commandRunning);
       }
     });
-  }, [activeSession, activeSessionId, commandRegistry]);
+  }, [activeSession, activeSessionId, commandRegistry, setPanelsVisible]);
 
   useEffect(() => {
     if (profilesLoaded && profiles.length > 0) {
@@ -137,12 +143,22 @@ function useProvideTerminal(): TerminalContextValue {
 
   const runCommand = useCallback(
     async (cmd: string, cwd: string): Promise<void> => {
+      if (!activeSession) return;
+      restorePanelsAfterCommandSessionIdRef.current = activeSession.id;
       setPanelsVisible(false);
       focusContext.request("terminal");
       setTerminalFocusRequestKey((k) => k + 1);
-      await executeCommandInCwd(cmd, cwd);
+      try {
+        await executeCommandInCwd(cmd, cwd);
+      } catch (error) {
+        if (restorePanelsAfterCommandSessionIdRef.current === activeSession.id) {
+          restorePanelsAfterCommandSessionIdRef.current = null;
+          setPanelsVisible(true);
+        }
+        throw error;
+      }
     },
-    [executeCommandInCwd, focusContext, setPanelsVisible, setTerminalFocusRequestKey],
+    [activeSession, executeCommandInCwd, focusContext, setPanelsVisible, setTerminalFocusRequestKey],
   );
 
   return useMemo(

@@ -1,10 +1,10 @@
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useFocusContext } from "@/focusContext";
+import styles from "@/styles/terminal.module.css";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal, type IDisposable } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
-import styles from "../styles/terminal.module.css";
 import { normalizeTerminalPath } from "./path";
 import type { TerminalSession } from "./TerminalSession";
 

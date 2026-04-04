@@ -1,7 +1,7 @@
 import { panelsVisibleAtom, resolvedProfilesAtom, terminalFocusRequestKeyAtom, terminalProfilesLoadedAtom } from "@/atoms";
+import { TerminalView } from "@/features/terminal/TerminalView";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import styles from "@/styles/terminal.module.css";
-import { TerminalView } from "@/terminal/TerminalView";
 import { cx } from "@/utils/cssModules";
 import { useAtomValue } from "jotai";
 

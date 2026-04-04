@@ -59,9 +59,11 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const pasteToCommandLineRef = useRef(pasteToCommandLine);
   pasteToCommandLineRef.current = pasteToCommandLine;
 
-  const { writeToTerminal } = useTerminal();
+  const { writeToTerminal, activeSession } = useTerminal();
   const writeToTerminalRef = useRef(writeToTerminal);
   writeToTerminalRef.current = writeToTerminal;
+  const activeSessionRef = useRef(activeSession);
+  activeSessionRef.current = activeSession;
 
   // Updated every render so command handlers always see the latest callbacks.
   const depsRef = useRef(deps);
@@ -181,6 +183,9 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     disposables.push(
       commandRegistry.registerCommand("togglePanels", () =>
         setPanelsVisible((v) => {
+          if (activeSessionRef.current?.session.getCapabilities().commandRunning) {
+            return v;
+          }
           const next = !v;
           if (next) {
             focusContextRef.current.request("panel");
