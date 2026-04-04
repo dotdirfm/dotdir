@@ -28,6 +28,7 @@ function validateKeybindings(parsed: unknown): Keybinding[] | null {
       key: item.key,
       mac: typeof item.mac === "string" ? item.mac : undefined,
       when: typeof item.when === "string" ? item.when : undefined,
+      args: "args" in item ? item.args : undefined,
     }));
 }
 

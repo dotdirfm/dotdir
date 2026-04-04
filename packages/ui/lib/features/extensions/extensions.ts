@@ -49,6 +49,7 @@ export interface ExtensionKeybinding {
   key: string;
   mac?: string;
   when?: string;
+  args?: unknown;
 }
 
 export interface ExtensionMenu {

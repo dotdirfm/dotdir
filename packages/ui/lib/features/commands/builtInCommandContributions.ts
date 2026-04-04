@@ -4,6 +4,7 @@ export const builtInCommandContributions: CommandContribution[] = [
   // ── View ──────────────────────────────────────────────────────────────────
   { command: "toggleHiddenFiles", title: "Toggle Hidden Files", category: "View" },
   { command: "togglePanels", title: "Toggle Panels", category: "View" },
+  { command: "runCommands", title: "Run Commands", category: "View", palette: false },
   { command: "showExtensions", title: "Show Extensions", shortTitle: "Plugins", category: "View" },
   { command: "showCommandPalette", title: "Show All Commands", category: "View" },
   { command: "closeViewer", title: "Close Viewer", category: "View" },

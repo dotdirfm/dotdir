@@ -30,7 +30,7 @@
     "fmt": "eslint lib vite.config.ts --fix",
     "fmt:check": "eslint lib vite.config.ts --fix-dry-run",
     "prepublishOnly": "pnpm build",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run"
   },
   "keywords": [
     "dotdir",
@@ -66,7 +66,8 @@
   },
   "devDependencies": {
     "vite": "^8.0.0",
-    "vite-plugin-dts": "^4.5.4"
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^4.1.2"
   },
   "packageManager": "pnpm@10.30.3"
 }

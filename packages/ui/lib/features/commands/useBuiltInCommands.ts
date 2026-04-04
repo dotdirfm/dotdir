@@ -21,6 +21,7 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandLine } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
+import { runCommandSequence, type RunCommandsArgs } from "@/features/commands/runCommands";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
 import { useUserSettings } from "@/features/settings/useUserSettings";
@@ -174,6 +175,14 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       commandRegistry.registerCommand("toggleHiddenFiles", () => {
         const next = !settingsRef.current.showHidden;
         updateSettings({ showHidden: next });
+      }),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand("runCommands", async (args) => {
+        const payload = (args ?? null) as RunCommandsArgs | null;
+        if (!payload || !Array.isArray(payload.commands)) return;
+        await runCommandSequence(commandRegistry, payload.commands);
       }),
     );
 

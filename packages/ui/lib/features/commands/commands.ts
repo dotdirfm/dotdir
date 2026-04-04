@@ -30,6 +30,7 @@ export interface Keybinding {
   key: string;
   mac?: string;
   when?: string;
+  args?: unknown;
 }
 
 export interface CommandContribution {
@@ -47,12 +48,14 @@ export interface KeybindingContribution {
   key: string;
   mac?: string;
   when?: string;
+  args?: unknown;
 }
 
 export type KeybindingLayer = "default" | "extension" | "user";
 
 type CommandHandler = (...args: unknown[]) => void | Promise<void>;
 type ContextGetter = () => Record<string, unknown>;
+type ResolvedKeybinding = Keybinding & { normalizedKey: string };
 
 export class CommandRegistry {
   private contributions = new Map<string, CommandContribution>();
@@ -202,20 +205,9 @@ export class CommandRegistry {
   }
 
   getKeybindings(): Keybinding[] {
-    // Merge layers: later layers override earlier ones for the same key
-    const merged = new Map<string, Keybinding>();
-    const layers: KeybindingLayer[] = ["default", "extension", "user"];
-
-    for (const layer of layers) {
-      for (const binding of this.keybindingLayers[layer]) {
-        const normalizedKey = this.normalizeKey(this.isMac() ? (binding.mac ?? binding.key) : binding.key);
-        // Use key + when as the unique identifier for overriding
-        const id = `${normalizedKey}|${binding.when ?? ""}`;
-        merged.set(id, binding);
-      }
-    }
-
-    return Array.from(merged.values());
+    return this.resolveKeybindings()
+      .filter((binding) => binding.command !== "")
+      .map(({ normalizedKey: _normalizedKey, ...binding }) => binding);
   }
 
   getKeybindingsForLayer(layer: KeybindingLayer): Keybinding[] {
@@ -231,14 +223,13 @@ export class CommandRegistry {
     if (!keyCombo) return false;
 
     const allowedCommands = new Set(commandIds);
-    const layers: KeybindingLayer[] = ["user", "extension", "default"];
-    for (const layer of layers) {
-      for (const binding of this.keybindingLayers[layer]) {
-        const bindingKey = this.normalizeKey(this.isMac() ? (binding.mac ?? binding.key) : binding.key);
-        if (bindingKey !== keyCombo) continue;
-        if (!this.evaluateWhenForFocus(binding.when, focusLayer)) continue;
-        return allowedCommands.has(binding.command);
-      }
+    const resolved = this.resolveKeybindings();
+    for (let index = resolved.length - 1; index >= 0; index--) {
+      const binding = resolved[index]!;
+      if (binding.normalizedKey !== keyCombo) continue;
+      if (binding.command === "") return false;
+      if (!this.evaluateWhenForFocus(binding.when, focusLayer)) continue;
+      return allowedCommands.has(binding.command);
     }
     return false;
   }
@@ -287,21 +278,62 @@ export class CommandRegistry {
     const keyCombo = this.eventToKeyCombo(e);
     if (!keyCombo) return false;
 
-    // Priority: later layers override earlier ones.
-    // Evaluate from highest → lowest and stop on first match.
-    const layers: KeybindingLayer[] = ["user", "extension", "default"];
-    for (const layer of layers) {
-      for (const binding of this.keybindingLayers[layer]) {
-        const bindingKey = this.normalizeKey(this.isMac() ? (binding.mac ?? binding.key) : binding.key);
-        if (bindingKey === keyCombo && this.evaluateWhen(binding.when)) {
-          e.preventDefault();
-          e.stopPropagation();
-          this.executeCommand(binding.command);
-          return true;
+    const resolved = this.resolveKeybindings();
+    for (let index = resolved.length - 1; index >= 0; index--) {
+      const binding = resolved[index]!;
+      if (binding.normalizedKey !== keyCombo) continue;
+      if (!this.evaluateWhen(binding.when)) continue;
+
+      e.preventDefault();
+      e.stopPropagation();
+      if (binding.command !== "") {
+        if (binding.args === undefined) {
+          void this.executeCommand(binding.command);
+        } else {
+          void this.executeCommand(binding.command, binding.args);
         }
       }
+      return true;
     }
     return false;
+  }
+
+  private resolveKeybindings(): ResolvedKeybinding[] {
+    const layers: KeybindingLayer[] = ["default", "extension", "user"];
+    const resolved: ResolvedKeybinding[] = [];
+
+    for (const layer of layers) {
+      for (const binding of this.keybindingLayers[layer]) {
+        const normalizedKey = this.normalizeKey(this.isMac() ? (binding.mac ?? binding.key) : binding.key);
+        const resolvedBinding: ResolvedKeybinding = { ...binding, normalizedKey };
+
+        if (binding.command.startsWith("-")) {
+          const removedCommand = binding.command.slice(1);
+          for (let index = resolved.length - 1; index >= 0; index--) {
+            const current = resolved[index]!;
+            if (current.normalizedKey !== normalizedKey) continue;
+            if (current.command !== removedCommand) continue;
+            if (binding.when && current.when !== binding.when) continue;
+            resolved.splice(index, 1);
+          }
+          continue;
+        }
+
+        if (binding.command === "") {
+          for (let index = resolved.length - 1; index >= 0; index--) {
+            const current = resolved[index]!;
+            if (current.normalizedKey !== normalizedKey) continue;
+            if (binding.when && current.when !== binding.when) continue;
+            resolved.splice(index, 1);
+          }
+          resolved.push(resolvedBinding);
+          continue;
+        }
+
+        resolved.push(resolvedBinding);
+      }
+    }
+    return resolved;
   }
 
   private isMac(): boolean {
