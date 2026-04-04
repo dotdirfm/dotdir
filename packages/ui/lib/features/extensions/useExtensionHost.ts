@@ -1,6 +1,7 @@
 import { loadedExtensionsAtom, resolvedProfilesAtom, systemThemeAtom, terminalProfilesLoadedAtom, themesReadyAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { registerExtensionKeybindings } from "@/features/commands/registerKeybindings";
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
 import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
@@ -12,7 +13,6 @@ import { resolveShellProfiles } from "@/features/terminal/shellProfiles";
 import { useClearExtensionFssLayers, useSetExtensionFssLayers } from "@/fss";
 import { useLanguageRegistry } from "@/languageRegistry";
 import { useActivePanelNavigation } from "@/panelControllers";
-import { registerExtensionKeybindings } from "@/registerKeybindings";
 import { getStyleHostElement } from "@/styleHost";
 import { dirname, join } from "@/utils/path";
 import { populateRegistries } from "@/viewerEditorRegistry";

@@ -1,18 +1,16 @@
 /**
- * User Settings Watcher
+ * User Settings helpers
  *
  * Watches settings.json in the host-provided config directory.
  */
 
 import type { Bridge } from "@/features/bridge";
 import { getAppDirs } from "@/features/bridge/appDirs";
+import { readFileText } from "@/features/file-system/fs";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/jsoncFileWatcher";
-import { join } from "@/utils/path";
+import { dirname, join } from "@/utils/path";
+import { applyEdits, modify, type FormattingOptions, type ModificationOptions } from "jsonc-parser";
 import type { DotDirSettings } from "./types";
-
-let watcher: JsoncFileWatcher<DotDirSettings> | null = null;
-let settingsPath: string | null = null;
-let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 0 disables the limit (allows editing any size file).
 export const DEFAULT_EDITOR_FILE_SIZE_LIMIT = 0;
@@ -25,54 +23,57 @@ function validateSettings(parsed: unknown): DotDirSettings | null {
   return parsed as DotDirSettings;
 }
 
-export function getSettings(): DotDirSettings {
-  return watcher?.getValue() ?? {};
+export async function getSettingsPath(bridge: Bridge): Promise<string> {
+  const { configDir } = await getAppDirs(bridge);
+  return join(configDir, "settings.json");
 }
 
-export function updateSettings(bridge: Bridge, partial: Partial<DotDirSettings>): void {
-  if (!watcher) return;
-  const current = watcher.getValue();
-  const updated = { ...current, ...partial };
-  // Update watcher's internal value immediately
-  watcher.setValue(updated);
-  // Debounce save to disk
-  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
-  saveDebounceTimer = setTimeout(() => {
-    saveDebounceTimer = null;
-    saveSettingsToDisk(bridge, updated);
-  }, 500);
+function getFormattingOptions(text: string): FormattingOptions {
+  const eol = text.includes("\r\n") ? "\r\n" : "\n";
+  const indentMatch = text.match(/^(?<indent>[ \t]+)\S/m);
+  const indent = indentMatch?.groups?.indent ?? "  ";
+  const insertSpaces = !indent.includes("\t");
+  const tabSize = insertSpaces ? Math.max(indent.length, 1) : 2;
+  return { insertSpaces, tabSize, eol };
 }
 
-async function saveSettingsToDisk(bridge: Bridge, settings: DotDirSettings): Promise<void> {
+function applySettingsPatch(text: string, partial: Partial<DotDirSettings>): string {
+  let nextText = text.trim() ? text : "{}";
+  const options: ModificationOptions = { formattingOptions: getFormattingOptions(nextText) };
+  for (const [key, value] of Object.entries(partial)) {
+    const edits = modify(nextText, [key], value, options);
+    nextText = applyEdits(nextText, edits);
+  }
+  return nextText;
+}
+
+export async function saveSettingsPatchToDisk(bridge: Bridge, partial: Partial<DotDirSettings>): Promise<void> {
   try {
-    if (!settingsPath) {
-      const { configDir } = await getAppDirs(bridge);
-      settingsPath = join(configDir, "settings.json");
+    const path = await getSettingsPath(bridge);
+    let currentText = "{}";
+    try {
+      currentText = await readFileText(bridge, path);
+    } catch {
+      // ignore read errors and start with empty settings
     }
-    await bridge.fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
+    let nextText: string;
+    try {
+      nextText = applySettingsPatch(currentText, partial);
+    } catch {
+      nextText = applySettingsPatch("{}", partial);
+    }
+    await bridge.fs.createDir(dirname(path));
+    await bridge.fs.writeFile(path, nextText);
   } catch (err) {
     console.error("[userSettings] Failed to save settings:", err);
   }
 }
 
-export function onSettingsChange(callback: (settings: DotDirSettings) => void): () => void {
-  return watcher?.onChange(callback) ?? (() => {});
-}
-
-export async function initUserSettings(bridge: Bridge): Promise<DotDirSettings> {
-  watcher = await createJsoncFileWatcher<DotDirSettings>(bridge, {
+export async function createUserSettingsWatcher(bridge: Bridge): Promise<JsoncFileWatcher<DotDirSettings>> {
+  return createJsoncFileWatcher<DotDirSettings>(bridge, {
     name: "userSettings",
-    getPath: async () => {
-      const { configDir } = await getAppDirs(bridge);
-      return join(configDir, "settings.json");
-    },
+    getPath: async () => getSettingsPath(bridge),
     validate: validateSettings,
     defaultValue: {},
   });
-  return watcher.getValue();
-}
-
-export async function disposeUserSettings(): Promise<void> {
-  await watcher?.dispose();
-  watcher = null;
 }

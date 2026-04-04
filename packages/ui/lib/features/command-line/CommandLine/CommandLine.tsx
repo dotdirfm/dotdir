@@ -1,7 +1,7 @@
 import { commandLineCwdAtom, panelsVisibleAtom } from "@/atoms";
 import { useCommandLine, useCommandLineRegistration } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
-import { registerCommandLineKeybindings } from "@/registerKeybindings";
+import { registerCommandLineKeybindings } from "@/features/commands/registerKeybindings";
 import terminalStyles from "@/styles/terminal.module.css";
 import { useAtomValue } from "jotai";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";

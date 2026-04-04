@@ -209,19 +209,21 @@ pub(crate) struct AppDirs {
     pub(crate) cache_dir: String,
 }
 
+const APP_DIR_NAME: &str = "dev.dotdir";
+
 pub(crate) fn get_app_dirs() -> AppDirs {
     let home_dir = get_home_path();
     let config_dir = dirs::config_dir()
         .or_else(dirs::home_dir)
         .unwrap_or_default()
-        .join("dotdir")
+        .join(APP_DIR_NAME)
         .to_string_lossy()
         .into_owned();
     let data_dir = dirs::data_dir()
         .or_else(dirs::config_dir)
         .or_else(dirs::home_dir)
         .unwrap_or_default()
-        .join("dotdir")
+        .join(APP_DIR_NAME)
         .to_string_lossy()
         .into_owned();
     let cache_dir = dirs::cache_dir()
@@ -229,7 +231,7 @@ pub(crate) fn get_app_dirs() -> AppDirs {
         .or_else(dirs::config_dir)
         .or_else(dirs::home_dir)
         .unwrap_or_default()
-        .join("dotdir")
+        .join(APP_DIR_NAME)
         .to_string_lossy()
         .into_owned();
     AppDirs {

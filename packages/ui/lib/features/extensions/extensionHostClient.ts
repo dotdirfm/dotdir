@@ -22,10 +22,7 @@ export class ExtensionHostClient {
   private listeners: ExtensionsLoadedCallback[] = [];
   private starting = false;
   private nextRequestId = 1;
-  private pendingRequests = new Map<
-    number,
-    { resolve: (value: unknown) => void; reject: (error: Error) => void }
-  >();
+  private pendingRequests = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
 
   constructor(private bridge: Bridge) {}
 
@@ -92,20 +89,9 @@ export class ExtensionHostClient {
         this.handleFileRead(worker, msg.id, msg.path);
       } else if (msg.type === "loaded") {
         const extensions: LoadedExtension[] = msg.extensions;
-        const fss = extensions
-          .filter((e) => e.iconThemeFss)
-          .map((e) => `${e.ref.publisher}.${e.ref.name}`);
-        const vscode = extensions
-          .filter((e) => e.vscodeIconThemePath)
-          .map((e) => `${e.ref.publisher}.${e.ref.name}`);
-        console.log(
-          "[ExtHost] loaded",
-          extensions.length,
-          "extensions; FSS:",
-          fss,
-          "vscode:",
-          vscode,
-        );
+        const fss = extensions.filter((e) => e.iconThemeFss).map((e) => `${e.ref.publisher}.${e.ref.name}`);
+        const vscode = extensions.filter((e) => e.vscodeIconThemePath).map((e) => `${e.ref.publisher}.${e.ref.name}`);
+        console.log("[ExtHost] loaded", extensions.length, "extensions; FSS:", fss, "vscode:", vscode);
         for (const cb of this.listeners) {
           cb(extensions);
         }
@@ -143,42 +129,23 @@ export class ExtensionHostClient {
     }
     const requestId = this.nextRequestId++;
     return await new Promise<T>((resolve, reject) => {
-      this.pendingRequests.set(requestId, {
-        resolve: resolve as (value: unknown) => void,
-        reject,
-      });
+      this.pendingRequests.set(requestId, { resolve: resolve as (value: unknown) => void, reject });
       this.worker!.postMessage({ ...message, requestId });
     });
   }
 
-  private async handleFileRead(
-    worker: Worker,
-    id: number,
-    path: string,
-  ): Promise<void> {
+  private async handleFileRead(worker: Worker, id: number, path: string): Promise<void> {
     try {
       const normalizedPath = normalizePath(path);
       const text = await readFileText(this.bridge, normalizedPath);
-      console.log("[ExtHost] readFile ok", normalizedPath);
       worker.postMessage({ type: "readFileResult", id, data: text });
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : String(err);
+      const message = err instanceof Error ? err.message : String(err);
       if (message.includes("Not a file:") || message.includes("ENOENT")) {
-        worker.postMessage({
-          type: "readFileResult",
-          id,
-          data: null,
-        });
+        worker.postMessage({ type: "readFileResult", id, data: null });
         return;
       }
-      console.error("[ExtHost] readFile failed", path, err);
-      worker.postMessage({
-        type: "readFileResult",
-        id,
-        data: null,
-        error: "read failed",
-      });
+      worker.postMessage({ type: "readFileResult", id, data: null, error: "read failed" });
     }
   }
 }

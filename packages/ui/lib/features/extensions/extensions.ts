@@ -282,6 +282,9 @@ async function readRefs(bridge: Bridge): Promise<ExtensionRef[]> {
 
 async function writeRefs(bridge: Bridge, refs: ExtensionRef[]): Promise<void> {
   const extensionsDir = await getExtensionsDir(bridge);
+  if (bridge.fs.createDir) {
+    await bridge.fs.createDir(extensionsDir);
+  }
   await bridge.fs.writeFile(join(extensionsDir, "extensions.json"), JSON.stringify(refs, null, 2));
 }
 

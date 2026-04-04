@@ -169,7 +169,7 @@ export interface Bridge {
     onFsChange(callback: (event: FsChangeEvent) => void): Unsubscribe;
     writeFile(filePath: string, data: string): Promise<void>;
     writeBinaryFile(filePath: string, data: Uint8Array): Promise<void>;
-    createDir?(dirPath: string): Promise<void>;
+    createDir(dirPath: string): Promise<void>;
     moveToTrash(paths: string[]): Promise<void>;
     copy: {
       start(sources: string[], destDir: string, options: CopyOptions): Promise<number>;

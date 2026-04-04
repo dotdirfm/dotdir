@@ -7,59 +7,107 @@
  */
 
 import type { Bridge } from "@/features/bridge";
-import { getAppDirs } from "@/features/bridge/appDirs";
+import { useBridge } from "@/features/bridge/useBridge";
 import { readFileText } from "@/features/file-system/fs";
-import { join } from "@/utils/path";
+import { dirname, join } from "@/utils/path";
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, type MutableRefObject, type ReactNode } from "react";
 import type { DotDirUiState } from "./types";
 
-let currentState: DotDirUiState = {};
-let statePath: string | null = null;
-let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+type UiStateContextValue = {
+  loadUiState(): Promise<DotDirUiState>;
+  updateUiState(partial: Partial<DotDirUiState>): void;
+  flushUiState(): Promise<void>;
+};
 
-async function getStatePath(bridge: Bridge): Promise<string> {
-  if (!statePath) {
-    const { dataDir } = await getAppDirs(bridge);
-    statePath = join(dataDir, "ui-state.json");
+const UiStateContext = createContext<UiStateContextValue | null>(null);
+
+async function getStatePath(bridge: Bridge, statePathRef: MutableRefObject<string | null>): Promise<string> {
+  if (!statePathRef.current) {
+    const { dataDir } = await bridge.utils.getAppDirs();
+    statePathRef.current = join(dataDir, "ui-state.json");
   }
-  return statePath;
+  return statePathRef.current;
 }
 
-export async function initUiState(bridge: Bridge): Promise<DotDirUiState> {
+async function saveUiStateToDisk(bridge: Bridge, statePathRef: MutableRefObject<string | null>, state: DotDirUiState): Promise<void> {
   try {
-    const path = await getStatePath(bridge);
-    const text = await readFileText(bridge, path);
-    const parsed = JSON.parse(text);
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-      currentState = parsed as DotDirUiState;
+    const path = await getStatePath(bridge, statePathRef);
+    if (bridge.fs.createDir) {
+      await bridge.fs.createDir(dirname(path));
     }
-  } catch {
-    // File missing or parse error — start with empty state
-  }
-  return currentState;
-}
-
-export function updateUiState(bridge: Bridge, partial: Partial<DotDirUiState>): void {
-  currentState = { ...currentState, ...partial };
-  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
-  saveDebounceTimer = setTimeout(() => {
-    saveDebounceTimer = null;
-    void saveUiStateToDisk(bridge, currentState);
-  }, 500);
-}
-
-export function flushUiState(bridge: Bridge): void {
-  if (saveDebounceTimer) {
-    clearTimeout(saveDebounceTimer);
-    saveDebounceTimer = null;
-  }
-  void saveUiStateToDisk(bridge, currentState);
-}
-
-async function saveUiStateToDisk(bridge: Bridge, state: DotDirUiState): Promise<void> {
-  try {
-    const path = await getStatePath(bridge);
     await bridge.fs.writeFile(path, JSON.stringify(state, null, 2));
   } catch (err) {
     console.error("[uiState] Failed to save:", err);
   }
+}
+
+export function UiStateProvider({ children }: { children: ReactNode }) {
+  const bridge = useBridge();
+  const currentStateRef = useRef<DotDirUiState>({});
+  const statePathRef = useRef<string | null>(null);
+  const saveDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadUiState = useCallback(async (): Promise<DotDirUiState> => {
+    try {
+      const path = await getStatePath(bridge, statePathRef);
+      const text = await readFileText(bridge, path);
+      const parsed = JSON.parse(text);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        currentStateRef.current = parsed as DotDirUiState;
+      } else {
+        currentStateRef.current = {};
+      }
+    } catch {
+      currentStateRef.current = {};
+    }
+    return currentStateRef.current;
+  }, [bridge]);
+
+  const flushUiState = useCallback(async (): Promise<void> => {
+    if (saveDebounceTimerRef.current) {
+      clearTimeout(saveDebounceTimerRef.current);
+      saveDebounceTimerRef.current = null;
+    }
+    await saveUiStateToDisk(bridge, statePathRef, currentStateRef.current);
+  }, [bridge]);
+
+  const updateUiState = useCallback(
+    (partial: Partial<DotDirUiState>): void => {
+      currentStateRef.current = { ...currentStateRef.current, ...partial };
+      if (saveDebounceTimerRef.current) clearTimeout(saveDebounceTimerRef.current);
+      saveDebounceTimerRef.current = setTimeout(() => {
+        saveDebounceTimerRef.current = null;
+        void saveUiStateToDisk(bridge, statePathRef, currentStateRef.current);
+      }, 500);
+    },
+    [bridge],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (saveDebounceTimerRef.current) {
+        clearTimeout(saveDebounceTimerRef.current);
+        saveDebounceTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const value = useMemo<UiStateContextValue>(
+    () => ({
+      loadUiState,
+      updateUiState,
+      flushUiState,
+    }),
+    [flushUiState, loadUiState, updateUiState],
+  );
+
+  return createElement(UiStateContext.Provider, { value }, children);
+}
+
+export function useUiState(): UiStateContextValue {
+  const value = useContext(UiStateContext);
+  if (!value) {
+    throw new Error("useUiState must be used within UiStateProvider");
+  }
+  return value;
 }

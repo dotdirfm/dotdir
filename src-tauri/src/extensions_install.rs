@@ -66,11 +66,12 @@ pub enum ExtensionInstallEvent {
 }
 
 fn normalized_extensions_dir() -> Result<PathBuf, String> {
+    const APP_DIR_NAME: &str = "dev.dotdir";
     let data_dir = dirs::data_dir()
         .or_else(dirs::config_dir)
         .or_else(dirs::home_dir)
         .ok_or_else(|| "Application data directory not available".to_string())?;
-    Ok(data_dir.join("dotdir").join("extensions"))
+    Ok(data_dir.join(APP_DIR_NAME).join("extensions"))
 }
 
 fn extension_dir_name(installed: &InstalledExtensionRef) -> String {

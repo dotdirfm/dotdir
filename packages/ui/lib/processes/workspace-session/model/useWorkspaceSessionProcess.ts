@@ -1,28 +1,34 @@
 import { activePanelSideAtom, genTabId, leftActiveIndexAtom, leftActiveTabIdAtom, leftTabsAtom, rightActiveIndexAtom, rightActiveTabIdAtom, rightTabsAtom } from "@/entities/tab/model/tabsAtoms";
 import type { PanelTab } from "@/entities/tab/model/types";
 import { useBridge } from "@/features/bridge/useBridge";
+import { useUiState } from "@/features/ui-state/uiState";
 import type { DotDirUiState, PanelPersistedState, PersistedTab } from "@/features/ui-state/types";
-import { flushUiState, initUiState, updateUiState } from "@/features/ui-state/uiState";
 import { basename, dirname, join } from "@/utils/path";
 import type { FsNode } from "fss-lang";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { Dispatch, SetStateAction } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export function useWorkspaceRestoreProcess() {
   const bridge = useBridge();
+  const { loadUiState } = useUiState();
 
   const setLeftTabs = useSetAtom(leftTabsAtom);
   const setRightTabs = useSetAtom(rightTabsAtom);
   const setLeftActiveTabId = useSetAtom(leftActiveTabIdAtom);
   const setRightActiveTabId = useSetAtom(rightActiveTabIdAtom);
 
-  const uiStateRef = useRef<DotDirUiState>({});
   const [uiStateLoaded, setUiStateLoaded] = useState(false);
 
   useEffect(() => {
-    initUiState(bridge).then(async (state) => {
+    let cancelled = false;
+
+    void (async () => {
+      const state = await loadUiState();
+      if (cancelled) return;
+
       const home = await bridge.utils.getHomePath();
+      if (cancelled) return;
 
       const setTabsForPanel = (
         panelState: PanelPersistedState | undefined,
@@ -89,10 +95,13 @@ export function useWorkspaceRestoreProcess() {
 
       setTabsForPanel(state.leftPanel, setLeftTabs, setLeftActiveTabId);
       setTabsForPanel(state.rightPanel, setRightTabs, setRightActiveTabId);
-      uiStateRef.current = state;
       setUiStateLoaded(true);
-    });
-  }, [bridge, setLeftActiveTabId, setLeftTabs, setRightActiveTabId, setRightTabs]);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge, loadUiState, setLeftActiveTabId, setLeftTabs, setRightActiveTabId, setRightTabs]);
 
   return {
     uiStateLoaded,
@@ -100,10 +109,7 @@ export function useWorkspaceRestoreProcess() {
 }
 
 export function useWorkspacePersistenceProcess() {
-  const bridge = useBridge();
-
-  const panelStateSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingPanelStateRef = useRef<Partial<DotDirUiState>>({});
+  const { flushUiState, updateUiState } = useUiState();
 
   const activePanelSide = useAtomValue(activePanelSideAtom);
   const leftTabs = useAtomValue(leftTabsAtom);
@@ -130,20 +136,26 @@ export function useWorkspacePersistenceProcess() {
     [],
   );
 
-  const flushPanelState = useCallback(() => {
-    if (panelStateSaveTimerRef.current) {
-      clearTimeout(panelStateSaveTimerRef.current);
-      panelStateSaveTimerRef.current = null;
-    }
-    const state: DotDirUiState = {
+  const persistedState = useMemo<DotDirUiState>(
+    () => ({
       activePanel: activePanelSide,
       leftPanel: buildPersistedTabs(leftTabs, leftActiveIndex),
       rightPanel: buildPersistedTabs(rightTabs, rightActiveIndex),
-    };
-    updateUiState(bridge, state);
-    flushUiState(bridge);
-    pendingPanelStateRef.current = {};
-  }, [activePanelSide, bridge, buildPersistedTabs, leftActiveIndex, leftTabs, rightActiveIndex, rightTabs]);
+    }),
+    [activePanelSide, buildPersistedTabs, leftActiveIndex, leftTabs, rightActiveIndex, rightTabs],
+  );
+
+  const flushPanelState = useCallback(() => {
+    updateUiState(persistedState);
+    void flushUiState();
+  }, [flushUiState, persistedState, updateUiState]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      updateUiState(persistedState);
+    }, 10_000);
+    return () => clearTimeout(timer);
+  }, [persistedState, updateUiState]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {

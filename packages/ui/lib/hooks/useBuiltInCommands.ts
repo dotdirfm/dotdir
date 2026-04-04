@@ -21,19 +21,19 @@ import {
   rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
+import { useCommandLine } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
 import { useUserSettings } from "@/features/settings/useUserSettings";
+import { useTerminal } from "@/features/terminal/useTerminal";
 import { useFocusContext } from "@/focusContext";
 import { useActivePanelNavigation } from "@/panelControllers";
-import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/registerKeybindings";
 import { basename } from "@/utils/path";
 import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
-import { useCommandLine } from "@/features/command-line/useCommandLine";
-import { useTerminal } from "@/features/terminal/useTerminal";
 
 export interface BuiltInCommandDeps {
   onOpenCreateFileConfirm: (path: string, name: string, langId: string) => Promise<void>;

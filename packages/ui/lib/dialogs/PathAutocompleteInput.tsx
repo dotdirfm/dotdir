@@ -26,10 +26,6 @@ interface PathAutocompleteInputProps {
   mode?: PathAutocompleteMode;
   inputRef?: React.RefObject<HTMLInputElement | null>;
   inputClassName?: string;
-  autoComplete?: string;
-  autoCapitalize?: string;
-  autoCorrect?: string;
-  spellCheck?: boolean;
 }
 
 function stripTrailingSlash(path: string): string {
@@ -57,10 +53,6 @@ export function PathAutocompleteInput({
   mode = "all",
   inputRef,
   inputClassName,
-  autoComplete,
-  autoCapitalize,
-  autoCorrect,
-  spellCheck,
 }: PathAutocompleteInputProps) {
   const bridge = useBridge();
   const recentPaths = useAtomValue(pathAutocompleteRecentAtom);
@@ -188,10 +180,6 @@ export function PathAutocompleteInput({
       groups={groups}
       inputRef={inputRef}
       inputClassName={inputClassName}
-      autoComplete={autoComplete}
-      autoCapitalize={autoCapitalize}
-      autoCorrect={autoCorrect}
-      spellCheck={spellCheck}
       keepOpenOnSelect
     />
   );

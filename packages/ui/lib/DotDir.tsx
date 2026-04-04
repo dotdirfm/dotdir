@@ -6,6 +6,8 @@ import { CommandLineProvider } from "@/features/command-line/useCommandLine";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { CommandRegistryProvider, useCommandRegistry } from "@/features/commands/commands";
 import { FileSystemWatchRegistryProvider } from "@/features/file-system/fs";
+import { UserSettingsProvider } from "@/features/settings/useUserSettings";
+import { UiStateProvider } from "@/features/ui-state/uiState";
 import { TerminalProvider } from "@/features/terminal/useTerminal";
 import { FocusProvider } from "@/focusContext";
 import { InteractionProvider } from "@/interactionContext";
@@ -62,9 +64,11 @@ function DotDirContent({ widget, appRef }: { widget: React.ReactNode; appRef: Re
   return (
     <ErrorBoundary>
       <DialogProvider>
-        <CommandLineProvider>
-          <App ref={appRef} widget={widget} />
-        </CommandLineProvider>
+        <UserSettingsProvider>
+          <CommandLineProvider>
+            <App ref={appRef} widget={widget} />
+          </CommandLineProvider>
+        </UserSettingsProvider>
       </DialogProvider>
     </ErrorBoundary>
   );
@@ -96,9 +100,11 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
                     <LanguageRegistryProvider>
                       <FssProvider>
                         <PanelControllersProvider>
-                          <TerminalProvider>
-                            <DotDirContent widget={widget} appRef={appRef} />
-                          </TerminalProvider>
+                          <UiStateProvider>
+                            <TerminalProvider>
+                              <DotDirContent widget={widget} appRef={appRef} />
+                            </TerminalProvider>
+                          </UiStateProvider>
                         </PanelControllersProvider>
                       </FssProvider>
                     </LanguageRegistryProvider>

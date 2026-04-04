@@ -30,10 +30,6 @@ export interface AutocompleteInputProps {
   className?: string;
   inputClassName?: string;
   placeholder?: string;
-  autoComplete?: string;
-  autoCapitalize?: string;
-  autoCorrect?: string;
-  spellCheck?: boolean;
   enterKeyHint?: React.HTMLAttributes<HTMLInputElement>["enterKeyHint"];
   keepOpenOnSelect?: boolean;
 }
@@ -47,10 +43,6 @@ export function AutocompleteInput({
   className,
   inputClassName,
   placeholder,
-  autoComplete,
-  autoCapitalize,
-  autoCorrect,
-  spellCheck,
   enterKeyHint,
   keepOpenOnSelect = false,
 }: AutocompleteInputProps) {
@@ -239,10 +231,7 @@ export function AutocompleteInput({
         value={value}
         className={inputClassName ? `${styles["autocomplete-input"]} ${inputClassName}` : styles["autocomplete-input"]}
         placeholder={placeholder}
-        autoComplete={autoComplete}
-        autoCapitalize={autoCapitalize}
-        autoCorrect={autoCorrect}
-        spellCheck={spellCheck}
+        spellCheck={false}
         enterKeyHint={enterKeyHint}
         onChange={(event) => {
           onChange(event.target.value);
