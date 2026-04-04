@@ -662,11 +662,36 @@ async fn embedded_asset_handler(uri: Uri) -> Response {
 
 // ── VFS (raw filesystem) serving ─────────────────────────────────────
 
+fn decode_vfs_path(path: &str) -> Option<String> {
+    let bytes = path.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' => {
+                if i + 2 >= bytes.len() {
+                    return None;
+                }
+                let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).ok()?;
+                let value = u8::from_str_radix(hex, 16).ok()?;
+                out.push(value);
+                i += 3;
+            }
+            byte => {
+                out.push(byte);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
 #[cfg(unix)]
 fn vfs_path_to_os(path: &str) -> Option<PathBuf> {
     // We expose absolute paths through the VFS surface. The HTTP route is
     // `/vfs/<absolute path without leading slash>`.
-    let trimmed = path.trim_start_matches('/');
+    let decoded = decode_vfs_path(path)?;
+    let trimmed = decoded.trim_start_matches('/');
     if trimmed.is_empty() {
         return None;
     }
@@ -676,7 +701,8 @@ fn vfs_path_to_os(path: &str) -> Option<PathBuf> {
 #[cfg(windows)]
 fn vfs_path_to_os(path: &str) -> Option<PathBuf> {
     // Windows uses `/vfs/C/Program Files/...` where the first segment is the drive.
-    let trimmed = path.trim_start_matches('/');
+    let decoded = decode_vfs_path(path)?;
+    let trimmed = decoded.trim_start_matches('/');
     let mut parts = trimmed.split('/').filter(|s| !s.is_empty());
     let drive = parts.next()?;
     if drive.len() != 1 || !drive.chars().all(|c| c.is_ascii_alphabetic()) {

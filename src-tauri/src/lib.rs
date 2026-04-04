@@ -691,9 +691,34 @@ fn auth_clear_tokens(app_handle: tauri::AppHandle) {
 
 // ── VFS protocol handler ─────────────────────────────────────────────
 
+fn decode_vfs_path(path: &str) -> Option<String> {
+    let bytes = path.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' => {
+                if i + 2 >= bytes.len() {
+                    return None;
+                }
+                let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).ok()?;
+                let value = u8::from_str_radix(hex, 16).ok()?;
+                out.push(value);
+                i += 3;
+            }
+            byte => {
+                out.push(byte);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
 #[cfg(unix)]
 fn vfs_request_path_to_os(path: &str) -> Option<PathBuf> {
-    let trimmed = path.trim_start_matches('/');
+    let decoded = decode_vfs_path(path)?;
+    let trimmed = decoded.trim_start_matches('/');
     if trimmed.is_empty() {
         return None;
     }
@@ -704,7 +729,8 @@ fn vfs_request_path_to_os(path: &str) -> Option<PathBuf> {
 fn vfs_request_path_to_os(path: &str) -> Option<PathBuf> {
     // Accept both `/C/Users/...` (single-letter segments) and `C:/Users/...` (colon after
     // drive), which is what the frontend path helpers and percent-decoded URLs produce.
-    let trimmed = path.trim_start_matches('/');
+    let decoded = decode_vfs_path(path)?;
+    let trimmed = decoded.trim_start_matches('/');
     let mut parts = trimmed.split('/').filter(|s| !s.is_empty());
     let first = parts.next()?;
     let mut pb = if first.len() == 2
