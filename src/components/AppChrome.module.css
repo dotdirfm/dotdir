@@ -1,0 +1,107 @@
+.shell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--app-chrome-bg, #1e1e2e);
+  color: var(--app-chrome-fg, #cdd6f4);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.titleBar {
+  height: 34px;
+  min-height: 34px;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  background: var(--app-chrome-bg-secondary, var(--app-chrome-bg, #181825));
+  border-bottom: 1px solid var(--app-chrome-border, #313244);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.titleBarDrag {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+}
+
+.titleSide {
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.titleText {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 12px;
+  color: var(--app-chrome-fg-secondary, var(--app-chrome-fg, #a6adc8));
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.macGap {
+  width: 78px;
+  height: 100%;
+  pointer-events: none;
+}
+
+.windowControls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.windowButton {
+  width: 46px;
+  height: 100%;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, var(--app-chrome-border, #313244) 55%, transparent 45%);
+  background: transparent;
+  color: var(--app-chrome-fg-secondary, var(--app-chrome-fg, #a6adc8));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: default;
+}
+
+.windowButton:hover {
+  background: color-mix(in srgb, var(--app-chrome-border-active, #585b70) 18%, transparent 82%);
+  color: var(--app-chrome-fg, #cdd6f4);
+}
+
+.windowButton:active {
+  background: color-mix(in srgb, var(--app-chrome-border, #313244) 75%, transparent 25%);
+}
+
+.windowButtonClose:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.windowButton svg {
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+}
+
+.windowButton:focus,
+.windowButton:focus-visible {
+  outline: none;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+}

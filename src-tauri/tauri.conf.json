@@ -13,6 +13,8 @@
     "windows": [
       {
         "title": ".dir",
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay",
         "width": 1200,
         "height": 700
       }

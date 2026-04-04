@@ -1,9 +1,11 @@
 import "@dotdirfm/ui/dotdir.css";
 
-import { defaultResolveVfsUrl, DotDir } from "@dotdirfm/ui";
+import { defaultResolveVfsUrl, DotDir, type DotDirTheme } from "@dotdirfm/ui";
 import { invoke, isTauri as isTauriApp } from "@tauri-apps/api/core";
+import { createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AccountWidget } from "./components/AccountWidget";
+import { AppChrome } from "./components/AppChrome";
 import { tauriBridge } from "./tauriBridge";
 import { createWsBridge } from "./wsBridge";
 
@@ -76,12 +78,22 @@ try {
 
   document.getElementById("boot-status")?.remove();
   const root = createRoot(container);
+  const DesktopApp = () => {
+    const [theme, setTheme] = useState<DotDirTheme | undefined>(undefined);
+
+    return (
+      <AppChrome theme={theme}>
+        <DotDir
+          bridge={bridge}
+          widget={<AccountWidget />}
+          resolveVfsUrl={defaultResolveVfsUrl}
+          onThemeChange={setTheme}
+        />
+      </AppChrome>
+    );
+  };
   root.render(
-    <DotDir
-      bridge={bridge}
-      widget={<AccountWidget />}
-      resolveVfsUrl={defaultResolveVfsUrl}
-    />,
+    createElement(DesktopApp),
   );
   appBooted = true;
   await writeBootLog("React render started");

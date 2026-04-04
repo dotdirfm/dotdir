@@ -952,6 +952,13 @@ pub fn run() {
         })
         .setup(|app| {
             write_debug_log("tauri setup started");
+            #[cfg(not(target_os = "macos"))]
+            if let Some(window) = app.get_webview_window("main") {
+                if let Err(err) = window.set_decorations(false) {
+                    write_debug_log(&format!("failed to disable window decorations: {err}"));
+                }
+            }
+
             let handle = app.handle().clone();
             // IMPORTANT: The notify callback runs on the FSEvents thread (macOS).
             // handle.emit() dispatches to the main thread. If we block the
