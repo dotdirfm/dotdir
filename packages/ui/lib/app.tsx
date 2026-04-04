@@ -76,8 +76,9 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     handleViewFile,
     handleEditFile,
     handleOpenCreateFileConfirm,
+    requestCloseViewer,
     requestCloseEditor,
-    overlays: viewerEditorOverlays,
+    viewerOpen,
   } = useViewerEditorState();
 
   useWorkspacePersistenceProcess();
@@ -92,7 +93,9 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     onOpenCreateFileConfirm: handleOpenCreateFileConfirm,
     onViewFile: handleViewFile,
     onEditFile: handleEditFile,
+    onRequestCloseViewer: requestCloseViewer,
     onRequestCloseEditor: requestCloseEditor,
+    viewerOpen,
   });
 
   useInteractionCommands();
@@ -148,7 +151,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
           <KeyBar />
           {widget}
         </div>
-        {viewerEditorOverlays}
         <DialogHolder />
         <CommandPalette />
       </>

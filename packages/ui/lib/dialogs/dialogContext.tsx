@@ -1,5 +1,7 @@
 import type { ConflictResolution, CopyOptions, MoveOptions } from "@/features/bridge";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { type EditorProps, type ViewerProps } from "@/features/extensions/extensionApi";
+import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
 import { ExtensionsPanel } from "@/features/extensions/ExtensionsPanel/ExtensionsPanel";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ConflictDialog } from "./ConflictDialog";
@@ -124,6 +126,22 @@ export type DialogSpec =
     }
   | {
       type: "extensions";
+    }
+  | {
+      type: "viewer";
+      extensionDirPath: string;
+      entry: string;
+      props: ViewerProps;
+      onClose: () => void;
+      onExecuteCommand?: (command: string, args?: unknown) => Promise<unknown>;
+    }
+  | {
+      type: "editor";
+      extensionDirPath: string;
+      entry: string;
+      props: EditorProps;
+      onClose: () => void;
+      onDirtyChange?: (dirty: boolean) => void;
     };
 
 export type DialogUpdate =
@@ -133,7 +151,9 @@ export type DialogUpdate =
 
 interface DialogContextValue {
   dialog: DialogSpec | null;
+  dialogs: DialogSpec[];
   showDialog: (spec: DialogSpec) => void;
+  replaceDialog: (spec: DialogSpec) => void;
   showError: (message: string) => void;
   closeDialog: () => void;
   /** Update the current dialog (for deleteProgress or copyProgress: partial updates). */
@@ -144,17 +164,27 @@ const DialogContext = createContext<DialogContextValue | null>(null);
 
 export function DialogProvider({ children }: { children: ReactNode }) {
   const commandRegistry = useCommandRegistry();
-  const [dialog, setDialog] = useState<DialogSpec | null>(null);
+  const [dialogs, setDialogs] = useState<DialogSpec[]>([]);
+  const dialog = dialogs.length > 0 ? dialogs[dialogs.length - 1]! : null;
 
   useEffect(() => {
-    commandRegistry.setContext("dialogOpen", dialog !== null);
+    commandRegistry.setContext("dialogOpen", dialogs.length > 0);
     return () => {
       commandRegistry.setContext("dialogOpen", false);
     };
-  }, [commandRegistry, dialog]);
+  }, [commandRegistry, dialogs.length]);
 
   const showDialog = useCallback((spec: DialogSpec) => {
-    setDialog(spec);
+    setDialogs((prev) => [...prev, spec]);
+  }, []);
+
+  const replaceDialog = useCallback((spec: DialogSpec) => {
+    setDialogs((prev) => {
+      if (prev.length === 0) return [spec];
+      const next = [...prev];
+      next[next.length - 1] = spec;
+      return next;
+    });
   }, []);
 
   const showError = useCallback(
@@ -170,19 +200,25 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   );
 
   const closeDialog = useCallback(() => {
-    setDialog(null);
+    setDialogs((prev) => prev.slice(0, -1));
   }, []);
 
   const updateDialog = useCallback((update: DialogUpdate) => {
-    setDialog((prev) => {
-      if (prev?.type === "deleteProgress" || prev?.type === "copyProgress" || prev?.type === "moveProgress") {
-        return { ...prev, ...update } as DialogSpec;
+    setDialogs((prev) => {
+      const current = prev.length > 0 ? prev[prev.length - 1]! : null;
+      if (current?.type === "deleteProgress" || current?.type === "copyProgress" || current?.type === "moveProgress") {
+        const next = [...prev];
+        next[next.length - 1] = { ...current, ...update } as DialogSpec;
+        return next;
       }
       return prev;
     });
   }, []);
 
-  const value = useMemo(() => ({ dialog, showDialog, closeDialog, updateDialog, showError }), [dialog, showDialog, closeDialog, updateDialog, showError]);
+  const value = useMemo(
+    () => ({ dialog, dialogs, showDialog, replaceDialog, closeDialog, updateDialog, showError }),
+    [dialog, dialogs, showDialog, replaceDialog, closeDialog, updateDialog, showError],
+  );
 
   return <DialogContext.Provider value={value}>{children}</DialogContext.Provider>;
 }
@@ -374,6 +410,30 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
       );
     case "extensions":
       return <ExtensionsPanel onClose={ctx.closeDialog} />;
+    case "viewer":
+      return (
+        <ViewerContainer
+          extensionDirPath={dialog.extensionDirPath}
+          entry={dialog.entry}
+          filePath={dialog.props.filePath}
+          fileName={dialog.props.fileName}
+          fileSize={dialog.props.fileSize}
+          onClose={dialog.onClose}
+          onExecuteCommand={dialog.onExecuteCommand}
+        />
+      );
+    case "editor":
+      return (
+        <EditorContainer
+          extensionDirPath={dialog.extensionDirPath}
+          entry={dialog.entry}
+          filePath={dialog.props.filePath}
+          fileName={dialog.props.fileName}
+          langId={dialog.props.langId}
+          onClose={dialog.onClose}
+          onDirtyChange={dialog.onDirtyChange}
+        />
+      );
     default:
       return null;
   }

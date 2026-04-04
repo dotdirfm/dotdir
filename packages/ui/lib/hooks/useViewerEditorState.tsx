@@ -1,102 +1,40 @@
-import { editorFileAtom, viewerFileAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
-import { ModalDialog } from "@/dialogs/ModalDialog";
 import { activePanelSideAtom, leftActiveTabAtom, leftActiveTabIdAtom, leftTabsAtom, rightActiveTabAtom, rightActiveTabIdAtom, rightTabsAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
-import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { showHiddenAtom } from "@/features/settings/useUserSettings";
 import { CONTAINER_SEP } from "@/utils/containerPath";
 import { isMediaFile } from "@/utils/mediaFiles";
 import { basename } from "@/utils/path";
 import { editorRegistry, fsProviderRegistry, viewerRegistry } from "@/viewerEditorRegistry";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type UseViewerEditorStateResult = {
   handleViewFile: (filePath: string, fileName: string, fileSize: number) => void;
   handleEditFile: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
   handleOpenCreateFileConfirm: (filePath: string, fileName: string, langId: string) => Promise<void>;
+  requestCloseViewer: () => void;
   requestCloseEditor: () => void;
-  overlays: ReactNode;
+  viewerOpen: boolean;
 };
-
-type CachedViewerOverlay = {
-  cacheKey: string;
-  dirPath: string;
-  entry: string;
-  lastUsedAt: number;
-  file: {
-    path: string;
-    name: string;
-    size: number;
-    panel: "left" | "right";
-  };
-};
-
-type CachedEditorOverlay = {
-  cacheKey: string;
-  dirPath: string;
-  entry: string;
-  lastUsedAt: number;
-  file: {
-    path: string;
-    name: string;
-    size: number;
-    langId: string;
-  };
-};
-
-const MAX_CACHED_VIEWER_OVERLAYS = 3;
-const MAX_CACHED_EDITOR_OVERLAYS = 2;
-
-function upsertBoundedCacheEntry<T extends { cacheKey: string; lastUsedAt: number }>(
-  entries: T[],
-  nextEntry: T,
-  limit: number,
-): T[] {
-  const existingIndex = entries.findIndex((entry) => entry.cacheKey === nextEntry.cacheKey);
-  const updatedEntries =
-    existingIndex < 0
-      ? [...entries, nextEntry]
-      : entries.map((entry, index) => (index === existingIndex ? nextEntry : entry));
-
-  if (updatedEntries.length <= limit) {
-    return updatedEntries;
-  }
-
-  const sortedEvictionCandidates = [...updatedEntries]
-    .filter((entry) => entry.cacheKey !== nextEntry.cacheKey)
-    .sort((a, b) => a.lastUsedAt - b.lastUsedAt);
-
-  let trimmed = updatedEntries;
-  while (trimmed.length > limit && sortedEvictionCandidates.length > 0) {
-    const evict = sortedEvictionCandidates.shift();
-    if (!evict) break;
-    trimmed = trimmed.filter((entry) => entry.cacheKey !== evict.cacheKey);
-  }
-
-  return trimmed;
-}
 
 export function useViewerEditorState(): UseViewerEditorStateResult {
   const bridge = useBridge();
   const { navigateTo } = useActivePanelNavigation();
-  const [viewerFile, setViewerFile] = useAtom(viewerFileAtom);
-  const [editorFile, setEditorFile] = useAtom(editorFileAtom);
+  const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: "left" | "right" } | null>(null);
+  const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
   const setLeftTabs = useSetAtom(leftTabsAtom);
   const setRightTabs = useSetAtom(rightTabsAtom);
   const leftActiveTabId = useAtomValue(leftActiveTabIdAtom);
   const rightActiveTabId = useAtomValue(rightActiveTabIdAtom);
   const leftActiveTab = useAtomValue(leftActiveTabAtom);
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
-  const [viewerCache, setViewerCache] = useState<CachedViewerOverlay[]>([]);
-  const [editorCache, setEditorCache] = useState<CachedEditorOverlay[]>([]);
   const [editorDirty, setEditorDirty] = useState(false);
   const showHidden = useAtomValue(showHiddenAtom);
-  const { showDialog } = useDialog();
+  const { dialog, showDialog, replaceDialog, closeDialog } = useDialog();
 
-  const [activePanelSide] = useAtom(activePanelSideAtom);
+  const activePanelSide = useAtomValue(activePanelSideAtom);
   const activePanelSideRef = useRef(activePanelSide);
   activePanelSideRef.current = activePanelSide;
 
@@ -136,6 +74,10 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
     },
     [bridge, setEditorFile],
   );
+
+  const requestCloseViewer = useCallback(() => {
+    setViewerFile(null);
+  }, []);
 
   const requestCloseEditor = useCallback(() => {
     if (!editorDirty || !editorFile) {
@@ -225,75 +167,6 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
 
   const viewerResolved = viewerFile ? viewerRegistry.resolve(viewerFile.name) : null;
   const editorResolved = editorFile ? editorRegistry.resolve(editorFile.name) : null;
-  const activeViewerCacheKey =
-    viewerResolved ? `viewer:${viewerResolved.extensionDirPath}:${viewerResolved.contribution.entry}` : null;
-  const activeEditorCacheKey =
-    editorResolved ? `editor:${editorResolved.extensionDirPath}:${editorResolved.contribution.entry}` : null;
-
-  useEffect(() => {
-    if (!viewerResolved || !viewerFile) return;
-
-    const cacheKey = `viewer:${viewerResolved.extensionDirPath}:${viewerResolved.contribution.entry}`;
-    setViewerCache((prev) => {
-      const now = Date.now();
-      const nextEntry: CachedViewerOverlay = {
-        cacheKey,
-        dirPath: viewerResolved.extensionDirPath,
-        entry: viewerResolved.contribution.entry,
-        lastUsedAt: now,
-        file: viewerFile,
-      };
-      const index = prev.findIndex((entry) => entry.cacheKey === cacheKey);
-      if (index < 0) {
-        return upsertBoundedCacheEntry(prev, nextEntry, MAX_CACHED_VIEWER_OVERLAYS);
-      }
-      const current = prev[index]!;
-      if (
-        current.dirPath === nextEntry.dirPath &&
-        current.entry === nextEntry.entry &&
-        current.file.path === nextEntry.file.path &&
-        current.file.name === nextEntry.file.name &&
-        current.file.size === nextEntry.file.size &&
-        current.file.panel === nextEntry.file.panel
-      ) {
-        return prev;
-      }
-      return upsertBoundedCacheEntry(prev, nextEntry, MAX_CACHED_VIEWER_OVERLAYS);
-    });
-  }, [viewerFile, viewerResolved]);
-
-  useEffect(() => {
-    if (!editorResolved || !editorFile) return;
-
-    const cacheKey = `editor:${editorResolved.extensionDirPath}:${editorResolved.contribution.entry}`;
-    setEditorCache((prev) => {
-      const now = Date.now();
-      const nextEntry: CachedEditorOverlay = {
-        cacheKey,
-        dirPath: editorResolved.extensionDirPath,
-        entry: editorResolved.contribution.entry,
-        lastUsedAt: now,
-        file: editorFile,
-      };
-      const index = prev.findIndex((entry) => entry.cacheKey === cacheKey);
-      if (index < 0) {
-        return upsertBoundedCacheEntry(prev, nextEntry, MAX_CACHED_EDITOR_OVERLAYS);
-      }
-      const current = prev[index]!;
-      if (
-        current.dirPath === nextEntry.dirPath &&
-        current.entry === nextEntry.entry &&
-        current.file.path === nextEntry.file.path &&
-        current.file.name === nextEntry.file.name &&
-        current.file.size === nextEntry.file.size &&
-        current.file.langId === nextEntry.file.langId
-      ) {
-        return prev;
-      }
-      return upsertBoundedCacheEntry(prev, nextEntry, MAX_CACHED_EDITOR_OVERLAYS);
-    });
-  }, [editorFile, editorResolved]);
-
   useEffect(() => {
     if (!viewerFile) return;
     const viewerActiveName = isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
@@ -317,79 +190,80 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
     });
   }, [leftActiveTabId, rightActiveTabId, setLeftTabs, setRightTabs, viewerFile]);
 
-  const overlays = useMemo(
-    () => (
-      <>
-        {viewerFile && !viewerResolved && (
-          <ModalDialog
-            title="No viewer"
-            message="No viewer extension found for this file type. Install viewer extensions (e.g. Image Viewer, File Viewer) from the extensions panel."
-            onClose={() => setViewerFile(null)}
-          />
-        )}
-        {viewerCache.map((cachedViewer) => {
-          const isActive = cachedViewer.cacheKey === activeViewerCacheKey && !!viewerFile && !!viewerResolved;
-          const file = isActive ? viewerFile : cachedViewer.file;
-          return (
-            <ViewerContainer
-              key={cachedViewer.cacheKey}
-              extensionDirPath={cachedViewer.dirPath}
-              entry={cachedViewer.entry}
-              filePath={file.path}
-              fileName={file.name}
-              fileSize={file.size}
-              visible={isActive}
-              onClose={() => setViewerFile(null)}
-              onExecuteCommand={handleExecuteCommand}
-            />
-          );
-        })}
-        {editorFile && !editorResolved && (
-          <ModalDialog
-            title="No editor"
-            message="No editor extension found for this file type. Install an editor extension (e.g. Monaco Editor) from the extensions panel."
-            onClose={requestCloseEditor}
-          />
-        )}
-        {editorCache.map((cachedEditor) => {
-          const isActive = cachedEditor.cacheKey === activeEditorCacheKey && !!editorFile && !!editorResolved;
-          const file = isActive ? editorFile : cachedEditor.file;
-          return (
-            <EditorContainer
-              key={cachedEditor.cacheKey}
-              extensionDirPath={cachedEditor.dirPath}
-              entry={cachedEditor.entry}
-              filePath={file.path}
-              fileName={file.name}
-              langId={file.langId}
-              visible={isActive}
-              onClose={requestCloseEditor}
-              onDirtyChange={setEditorDirty}
-            />
-          );
-        })}
-      </>
-    ),
-    [
-      activeEditorCacheKey,
-      activeViewerCacheKey,
-      editorCache,
-      editorFile,
-      editorResolved,
-      handleExecuteCommand,
-      requestCloseEditor,
-      setViewerFile,
-      viewerCache,
-      viewerFile,
-      viewerResolved,
-    ],
-  );
+  useEffect(() => {
+    if (!viewerFile) {
+      if (dialog?.type === "viewer") {
+        closeDialog();
+      }
+      return;
+    }
+
+    if (!viewerResolved) {
+      if (dialog?.type !== "message") {
+        showDialog({
+          type: "message",
+          title: "No viewer",
+          message: "No viewer extension found for this file type. Install viewer extensions (e.g. Image Viewer, File Viewer) from the extensions panel.",
+          buttons: [{ label: "OK", default: true, onClick: () => setViewerFile(null) }],
+        });
+      }
+      return;
+    }
+
+    replaceDialog({
+      type: "viewer",
+      extensionDirPath: viewerResolved.extensionDirPath,
+      entry: viewerResolved.contribution.entry,
+      props: {
+        filePath: viewerFile.path,
+        fileName: viewerFile.name,
+        fileSize: viewerFile.size,
+      },
+      onClose: requestCloseViewer,
+      onExecuteCommand: handleExecuteCommand,
+    });
+  }, [closeDialog, dialog?.type, handleExecuteCommand, replaceDialog, requestCloseViewer, showDialog, viewerFile, viewerResolved]);
+
+  useEffect(() => {
+    if (!editorFile) {
+      if (dialog?.type === "editor") {
+        closeDialog();
+      }
+      return;
+    }
+
+    if (!editorResolved) {
+      if (dialog?.type !== "message") {
+        showDialog({
+          type: "message",
+          title: "No editor",
+          message: "No editor extension found for this file type. Install an editor extension (e.g. Monaco Editor) from the extensions panel.",
+          buttons: [{ label: "OK", default: true, onClick: requestCloseEditor }],
+        });
+      }
+      return;
+    }
+
+    replaceDialog({
+      type: "editor",
+      extensionDirPath: editorResolved.extensionDirPath,
+      entry: editorResolved.contribution.entry,
+      props: {
+        filePath: editorFile.path,
+        fileName: editorFile.name,
+        langId: editorFile.langId,
+      },
+      onClose: requestCloseEditor,
+      onDirtyChange: setEditorDirty,
+    });
+  }, [closeDialog, dialog?.type, editorFile, editorResolved, replaceDialog, requestCloseEditor, showDialog]);
 
   return {
     handleViewFile,
     handleEditFile,
     handleOpenCreateFileConfirm,
+    requestCloseViewer,
     requestCloseEditor,
-    overlays,
+    viewerOpen: viewerFile !== null,
   };
 }

@@ -1,10 +1,8 @@
 import {
   commandPaletteOpenAtom,
-  editorFileAtom,
   loadedExtensionsAtom,
   panelsVisibleAtom,
   terminalFocusRequestKeyAtom,
-  viewerFileAtom,
 } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { LanguageOption } from "@/dialogs/OpenCreateFileDialog";
@@ -38,7 +36,9 @@ export interface BuiltInCommandDeps {
   onOpenCreateFileConfirm: (path: string, name: string, langId: string) => Promise<void>;
   onViewFile: (filePath: string, fileName: string, fileSize: number) => void;
   onEditFile: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
+  onRequestCloseViewer: () => void;
   onRequestCloseEditor: () => void;
+  viewerOpen: boolean;
 }
 
 export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
@@ -89,10 +89,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
   const setPanelsVisible = useSetAtom(panelsVisibleAtom);
   const setTerminalFocusRequestKey = useSetAtom(terminalFocusRequestKeyAtom);
-  const setViewerFile = useSetAtom(viewerFileAtom);
-  const setEditorFile = useSetAtom(editorFileAtom);
   const setCommandPaletteOpen = useSetAtom(commandPaletteOpenAtom);
-  const viewerFile = useAtomValue(viewerFileAtom);
 
   const leftActiveTabRef = useRef(leftActiveTab);
   leftActiveTabRef.current = leftActiveTab;
@@ -117,8 +114,8 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const activeTab = useAtomValue(activeTabAtom);
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
-  const viewerFileRef = useRef(viewerFile);
-  viewerFileRef.current = viewerFile;
+  const viewerOpenRef = useRef(deps.viewerOpen);
+  viewerOpenRef.current = deps.viewerOpen;
   const activePanelSideRef = useRef(activePanelSide);
   activePanelSideRef.current = activePanelSide;
   const getPanelRef = useRef(getPanel);
@@ -205,7 +202,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       ),
     );
     disposables.push(commandRegistry.registerCommand("showCommandPalette", () => setCommandPaletteOpen((o) => !o)));
-    disposables.push(commandRegistry.registerCommand("closeViewer", () => setViewerFile(null)));
+    disposables.push(commandRegistry.registerCommand("closeViewer", () => depsRef.current.onRequestCloseViewer()));
     disposables.push(commandRegistry.registerCommand("closeEditor", () => depsRef.current.onRequestCloseEditor()));
 
     // ── Navigation ────────────────────────────────────────────────────────────
@@ -242,7 +239,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
           return;
         }
 
-        if (viewerFileRef.current) {
+        if (viewerOpenRef.current) {
           await commandRegistry.executeCommand("closeViewer");
         }
       }),
@@ -371,8 +368,6 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     setLeftActiveTabId,
     setRightActiveTabId,
     setPanelsVisible,
-    setViewerFile,
-    setEditorFile,
     setCommandPaletteOpen,
     updateSettings,
     setTerminalFocusRequestKey,
