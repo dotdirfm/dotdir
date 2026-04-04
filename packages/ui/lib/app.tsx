@@ -1,4 +1,4 @@
-import { panelsVisibleAtom, showExtensionsAtom, systemThemeAtom, themesReadyAtom } from "@/atoms";
+import { panelsVisibleAtom, systemThemeAtom, themesReadyAtom } from "@/atoms";
 import { CommandPalette } from "@/components/CommandPalette/CommandPalette";
 import { KeyBar } from "@/components/KeyBar/KeyBar";
 import { PanelGroup } from "@/components/PanelGroup/PanelGroup";
@@ -8,7 +8,6 @@ import { CommandLine } from "@/features/command-line/CommandLine/CommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useBuiltInCommands } from "@/features/commands/useBuiltInCommands";
 import { useCommandRouting } from "@/features/commands/useCommandRouting";
-import { ExtensionsPanel } from "@/features/extensions/ExtensionsPanel/ExtensionsPanel";
 import { useExtensionHost } from "@/features/extensions/useExtensionHost";
 import { FileOperationHandlersProvider } from "@/features/file-ops/fileOperationHandlers";
 import { useFileOperations } from "@/features/file-ops/useFileOperations";
@@ -48,7 +47,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   useDialog();
 
   const panelsVisible = useAtomValue(panelsVisibleAtom);
-  const showExtensions = useAtomValue(showExtensionsAtom);
   const themesReady = useAtomValue(themesReadyAtom);
   const systemTheme = useSystemTheme();
 
@@ -151,7 +149,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
           {widget}
         </div>
         {viewerEditorOverlays}
-        {showExtensions && <ExtensionsPanel />}
         <DialogHolder />
         <CommandPalette />
       </>

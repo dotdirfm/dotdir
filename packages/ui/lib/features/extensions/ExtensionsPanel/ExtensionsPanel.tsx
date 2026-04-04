@@ -1,4 +1,4 @@
-import { loadedExtensionsAtom, showExtensionsAtom } from "@/atoms";
+import { loadedExtensionsAtom } from "@/atoms";
 import { OverlayDialog } from "@/dialogs/OverlayDialog";
 import type { ExtensionInstallProgressEvent } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
@@ -29,7 +29,7 @@ import {
 import { activeColorThemeAtom, activeIconThemeAtom, useUserSettings } from "@/features/settings/useUserSettings";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./ExtensionsPanel.module.css";
 
@@ -45,9 +45,8 @@ type MarketplaceSource = "dotdir" | "open-vsx" | "vscode";
 type InstallPhase = "download" | "extract" | "write" | "finalize";
 type BusyState = { kind: "install"; phase: InstallPhase } | { kind: "uninstall" };
 
-export function ExtensionsPanel() {
+export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const bridge = useBridge();
-  const setShowExtensions = useSetAtom(showExtensionsAtom);
   const activeIconTheme = useAtomValue(activeIconThemeAtom);
   const activeColorTheme = useAtomValue(activeColorThemeAtom);
   const installed = useAtomValue(loadedExtensionsAtom);
@@ -288,10 +287,10 @@ export function ExtensionsPanel() {
   };
 
   return (
-    <OverlayDialog className={styles["ext-panel"]} onClose={() => setShowExtensions(false)} initialFocusRef={searchInputRef}>
+    <OverlayDialog className={styles["ext-panel"]} onClose={onClose} initialFocusRef={searchInputRef}>
       <div className={styles["ext-panel-header"]}>
         <span className={styles["ext-panel-title"]}>Extensions</span>
-        <button className={styles["ext-panel-close"]} onClick={() => setShowExtensions(false)}>
+        <button className={styles["ext-panel-close"]} onClick={onClose}>
           ✕
         </button>
       </div>

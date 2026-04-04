@@ -1,5 +1,6 @@
 import type { ConflictResolution, CopyOptions, MoveOptions } from "@/features/bridge";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { ExtensionsPanel } from "@/features/extensions/ExtensionsPanel/ExtensionsPanel";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ConflictDialog } from "./ConflictDialog";
 import { CopyConfigDialog } from "./CopyConfigDialog";
@@ -120,6 +121,9 @@ export type DialogSpec =
       currentName: string;
       onConfirm: (newName: string) => void;
       onCancel: () => void;
+    }
+  | {
+      type: "extensions";
     };
 
 export type DialogUpdate =
@@ -368,6 +372,8 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
           }}
         />
       );
+    case "extensions":
+      return <ExtensionsPanel onClose={ctx.closeDialog} />;
     default:
       return null;
   }

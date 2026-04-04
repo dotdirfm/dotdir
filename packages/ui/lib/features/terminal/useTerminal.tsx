@@ -1,11 +1,9 @@
 import {
-  commandLineCwdAtom,
   panelsVisibleAtom,
-  resolvedProfilesAtom,
   terminalFocusRequestKeyAtom,
-  terminalProfilesLoadedAtom,
 } from "@/atoms";
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
+import type { TerminalProfile } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
@@ -22,11 +20,16 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 
 export interface TerminalController {
   activeCwd: string;
+  profiles: TerminalProfile[];
+  profilesLoaded: boolean;
+  setAvailableProfiles: (profiles: TerminalProfile[]) => void;
+  setProfilesLoaded: (loaded: boolean) => void;
   writeToTerminal: (data: string) => Promise<void>;
   runCommand: (cmd: string, cwd: string, options?: { restorePanels?: boolean }) => Promise<void>;
 }
@@ -40,13 +43,12 @@ function useProvideTerminal(): TerminalContextValue {
   const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
   const { navigateTo } = useActivePanelNavigation();
-  const profiles = useAtomValue(resolvedProfilesAtom);
-  const profilesLoaded = useAtomValue(terminalProfilesLoadedAtom);
+  const [profiles, setAvailableProfiles] = useState<TerminalProfile[]>([]);
+  const [profilesLoaded, setProfilesLoaded] = useState(false);
 
   const panelsVisible = useAtomValue(panelsVisibleAtom);
   const setPanelsVisible = useSetAtom(panelsVisibleAtom);
   const setTerminalFocusRequestKey = useSetAtom(terminalFocusRequestKeyAtom);
-  const setCommandLineCwd = useSetAtom(commandLineCwdAtom);
 
   const terminalState = useTerminalState();
   const {
@@ -124,9 +126,9 @@ function useProvideTerminal(): TerminalContextValue {
   }, [activeSession]);
 
   const activeCwd = activePanelCwd;
-  useEffect(() => {
-    setCommandLineCwd(activeCwd);
-  }, [activeCwd, setCommandLineCwd]);
+  const setProfilesLoadedState = useCallback((loaded: boolean) => {
+    setProfilesLoaded(loaded);
+  }, []);
 
   useEffect(() => {
     if (!panelsVisible) return;
@@ -166,10 +168,14 @@ function useProvideTerminal(): TerminalContextValue {
     () => ({
       ...terminalState,
       activeCwd,
+      profiles,
+      profilesLoaded,
+      setAvailableProfiles,
+      setProfilesLoaded: setProfilesLoadedState,
       writeToTerminal,
       runCommand,
     }),
-    [activeCwd, runCommand, terminalState, writeToTerminal],
+    [activeCwd, profiles, profilesLoaded, runCommand, setProfilesLoadedState, terminalState, writeToTerminal],
   );
 }
 

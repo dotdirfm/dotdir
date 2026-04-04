@@ -1,7 +1,8 @@
-import { commandLineCwdAtom, panelsVisibleAtom } from "@/atoms";
+import { panelsVisibleAtom } from "@/atoms";
 import { useCommandLine, useCommandLineRegistration } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { registerCommandLineKeybindings } from "@/features/commands/registerKeybindings";
+import { useTerminal } from "@/features/terminal/useTerminal";
 import terminalStyles from "@/styles/terminal.module.css";
 import { useAtomValue } from "jotai";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
@@ -10,10 +11,10 @@ import commandLineStyles from "./CommandLine.module.css";
 
 export function CommandLine() {
   const commandRegistry = useCommandRegistry();
-  const cwd = useAtomValue(commandLineCwdAtom);
   const visible = useAtomValue(panelsVisibleAtom);
   const { execute } = useCommandLine();
   const { setPasteHandler } = useCommandLineRegistration();
+  const { activeCwd: cwd } = useTerminal();
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
   const [anchor, setAnchor] = useState(0);

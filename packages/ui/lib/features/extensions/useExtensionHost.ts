@@ -1,4 +1,4 @@
-import { loadedExtensionsAtom, resolvedProfilesAtom, systemThemeAtom, terminalProfilesLoadedAtom, themesReadyAtom } from "@/atoms";
+import { loadedExtensionsAtom, systemThemeAtom, themesReadyAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { registerExtensionKeybindings } from "@/features/commands/registerKeybindings";
@@ -10,6 +10,7 @@ import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/icon
 import { readFileText } from "@/features/file-system/fs";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { activeColorThemeAtom, activeIconThemeAtom, settingsReadyAtom } from "@/features/settings/useUserSettings";
+import { useTerminal } from "@/features/terminal/useTerminal";
 import { resolveShellProfiles } from "@/features/terminal/shellProfiles";
 import { clearColorTheme, loadAndApplyColorTheme, uiThemeToKind } from "@/features/themes/vscodeColorTheme";
 import { useClearExtensionFssLayers, useSetExtensionFssLayers } from "@/fss";
@@ -43,8 +44,7 @@ export function useExtensionHost(): void {
   const themesReady = useAtomValue(themesReadyAtom);
   const setLoadedExtensions = useSetAtom(loadedExtensionsAtom);
   const setThemesReady = useSetAtom(themesReadyAtom);
-  const setResolvedProfiles = useSetAtom(resolvedProfilesAtom);
-  const setTerminalProfilesLoaded = useSetAtom(terminalProfilesLoadedAtom);
+  const { setAvailableProfiles, setProfilesLoaded } = useTerminal();
   const { setIconTheme } = useSetIconTheme();
   const { setIconThemeKind } = useSetIconThemeKind();
 
@@ -92,10 +92,10 @@ export function useExtensionHost(): void {
     clearExtensionFssLayers();
     clearFsProviderCache();
     setLoadedExtensions([]);
-    setResolvedProfiles([]);
-    setTerminalProfilesLoaded(false);
+    setAvailableProfiles([]);
+    setProfilesLoaded(false);
     setThemesReady(false);
-  }, [clearExtensionCommandRegistrations, clearExtensionFssLayers, setLoadedExtensions, setResolvedProfiles, setTerminalProfilesLoaded, setThemesReady]);
+  }, [clearExtensionCommandRegistrations, clearExtensionFssLayers, setAvailableProfiles, setLoadedExtensions, setProfilesLoaded, setThemesReady]);
 
   const restartExtensionHost = useCallback(async () => {
     resetExtensionRuntimeState();
@@ -311,15 +311,15 @@ export function useExtensionHost(): void {
           .getEnv()
           .then((env) =>
             resolveShellProfiles(bridgeRef.current, exts, env).then(({ profiles, shellScripts }) => {
-              setResolvedProfiles(profiles);
-              setTerminalProfilesLoaded(true);
+              setAvailableProfiles(profiles);
+              setProfilesLoaded(true);
               if (bridgeRef.current.pty.setShellIntegrations && Object.keys(shellScripts).length > 0) {
                 bridgeRef.current.pty.setShellIntegrations(shellScripts).catch(() => {});
               }
             }),
           )
           .catch(() => {
-            setTerminalProfilesLoaded(true);
+            setProfilesLoaded(true);
           });
 
         registerLanguages(exts);

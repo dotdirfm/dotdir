@@ -3,7 +3,6 @@ import {
   editorFileAtom,
   loadedExtensionsAtom,
   panelsVisibleAtom,
-  showExtensionsAtom,
   terminalFocusRequestKeyAtom,
   viewerFileAtom,
 } from "@/atoms";
@@ -90,7 +89,6 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
   const setPanelsVisible = useSetAtom(panelsVisibleAtom);
   const setTerminalFocusRequestKey = useSetAtom(terminalFocusRequestKeyAtom);
-  const setShowExtensions = useSetAtom(showExtensionsAtom);
   const setViewerFile = useSetAtom(viewerFileAtom);
   const setEditorFile = useSetAtom(editorFileAtom);
   const setCommandPaletteOpen = useSetAtom(commandPaletteOpenAtom);
@@ -199,7 +197,13 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       ),
     );
 
-    disposables.push(commandRegistry.registerCommand("showExtensions", () => setShowExtensions(true)));
+    disposables.push(
+      commandRegistry.registerCommand("showExtensions", () =>
+        showDialogRef.current({
+          type: "extensions",
+        }),
+      ),
+    );
     disposables.push(commandRegistry.registerCommand("showCommandPalette", () => setCommandPaletteOpen((o) => !o)));
     disposables.push(commandRegistry.registerCommand("closeViewer", () => setViewerFile(null)));
     disposables.push(commandRegistry.registerCommand("closeEditor", () => depsRef.current.onRequestCloseEditor()));
@@ -367,7 +371,6 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     setLeftActiveTabId,
     setRightActiveTabId,
     setPanelsVisible,
-    setShowExtensions,
     setViewerFile,
     setEditorFile,
     setCommandPaletteOpen,
