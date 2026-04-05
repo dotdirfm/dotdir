@@ -11,6 +11,7 @@ export const settingsReadyAtom = atom(false);
 export const showHiddenAtom = atom((get) => get(settingsAtom).showHidden ?? false);
 export const activeIconThemeAtom = atom((get) => get(settingsAtom).iconTheme);
 export const activeColorThemeAtom = atom((get) => get(settingsAtom).colorTheme);
+export const extensionsAutoUpdateAtom = atom((get) => get(settingsAtom).extensions?.autoUpdate ?? true);
 
 type UserSettingsContextValue = {
   updateSettings: (partial: Partial<DotDirSettings>) => void;

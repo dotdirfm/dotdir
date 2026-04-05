@@ -1,51 +1,52 @@
 import { panelsVisibleAtom, terminalFocusRequestKeyAtom } from "@/atoms";
+import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import { TerminalView } from "@/features/terminal/TerminalView";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import styles from "@/styles/terminal.module.css";
 import { cx } from "@/utils/cssModules";
 import { useAtomValue } from "jotai";
+import { useMemo } from "react";
 
 export function TerminalToolbar() {
   const { sessions, activeSessionId, activeSession, activate, createSession, closeSession, switchActiveProfile, profiles, profilesLoaded } = useTerminal();
   const activeProfileId = activeSession?.profileId ?? null;
   const activeProfileShell = activeSession ? (profiles.find((p) => p.id === activeSession.profileId)?.shell ?? null) : null;
   const activeError = activeSession?.error ?? null;
+  const tabItems = useMemo<Array<TabsItem & { status: string }>>(
+    () =>
+      sessions.map((session) => ({
+        id: session.id,
+        label: session.profileLabel,
+        status: session.status,
+      })),
+    [sessions],
+  );
 
   return (
     <div className={styles["terminal-toolbar"]}>
-      <div className={styles["terminal-tabs"]}>
-        {sessions.map((session) => (
+      <Tabs
+        items={tabItems}
+        activeItemId={activeSessionId ?? ""}
+        onSelectItem={activate}
+        onCloseItem={sessions.length > 1 ? closeSession : undefined}
+        renderItemContent={(item) => (
+          <>
+            <span className={cx(styles, "terminal-tab-status", `status-${item.status}`)} />
+            <span className={styles["terminal-tab-label"]}>{item.label}</span>
+          </>
+        )}
+        rightSlot={
           <button
-            key={session.id}
-            tabIndex={-1}
             type="button"
-            className={cx(styles, "terminal-tab", session.id === activeSessionId && "active")}
-            onClick={() => activate(session.id)}
+            tabIndex={-1}
+            className={styles["terminal-tab-add"]}
+            onClick={() => createSession(activeProfileId ?? profiles[0]?.id)}
           >
-            <span className={cx(styles, "terminal-tab-status", `status-${session.status}`)} />
-            <span className={styles["terminal-tab-label"]}>{session.profileLabel}</span>
-            {sessions.length > 1 && (
-              <span
-                className={styles["terminal-tab-close"]}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  closeSession(session.id);
-                }}
-              >
-                x
-              </span>
-            )}
+            +
           </button>
-        ))}
-        <button
-          type="button"
-          tabIndex={-1}
-          className={cx(styles, "terminal-tab", "terminal-tab-add")}
-          onClick={() => createSession(activeProfileId ?? profiles[0]?.id)}
-        >
-          +
-        </button>
-      </div>
+        }
+        variant="terminal"
+      />
       <label className={styles["terminal-profile-picker"]}>
         <span className={styles["terminal-profile-label"]}>Shell</span>
         <select

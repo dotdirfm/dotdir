@@ -24,13 +24,6 @@ pub enum ExtensionInstallRequest {
         #[serde(rename = "downloadUrl", alias = "download_url")]
         download_url: String,
     },
-    #[serde(rename = "vscode-marketplace", alias = "vscodeMarketplace")]
-    VscodeMarketplace {
-        publisher: String,
-        name: String,
-        #[serde(rename = "downloadUrl", alias = "download_url")]
-        download_url: String,
-    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,6 +32,8 @@ pub struct InstalledExtensionRef {
     pub publisher: String,
     pub name: String,
     pub version: String,
+    pub source: String,
+    pub auto_update: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -179,8 +174,7 @@ fn extract_archive(
             ExtensionInstallRequest::DotdirMarketplace { .. } => {
                 names.push(name.clone());
             }
-            ExtensionInstallRequest::OpenVsxMarketplace { .. }
-            | ExtensionInstallRequest::VscodeMarketplace { .. } => {
+            ExtensionInstallRequest::OpenVsxMarketplace { .. } => {
                 if name.starts_with("extension/") {
                     kept_names.push(name.clone());
                 }
@@ -190,14 +184,12 @@ fn extract_archive(
 
     let strip_prefix = match request {
         ExtensionInstallRequest::DotdirMarketplace { .. } => strip_common_top_level(&names),
-        ExtensionInstallRequest::OpenVsxMarketplace { .. }
-        | ExtensionInstallRequest::VscodeMarketplace { .. } => "extension/".to_string(),
+        ExtensionInstallRequest::OpenVsxMarketplace { .. } => "extension/".to_string(),
     };
 
     let files_total = match request {
         ExtensionInstallRequest::DotdirMarketplace { .. } => names.len() as u32,
-        ExtensionInstallRequest::OpenVsxMarketplace { .. }
-        | ExtensionInstallRequest::VscodeMarketplace { .. } => kept_names.len() as u32,
+        ExtensionInstallRequest::OpenVsxMarketplace { .. } => kept_names.len() as u32,
     };
 
     let mut files = Vec::new();
@@ -222,8 +214,7 @@ fn extract_archive(
                     original_name[strip_prefix.len()..].to_string()
                 }
             }
-            ExtensionInstallRequest::OpenVsxMarketplace { .. }
-            | ExtensionInstallRequest::VscodeMarketplace { .. } => {
+            ExtensionInstallRequest::OpenVsxMarketplace { .. } => {
                 if !original_name.starts_with(&strip_prefix) {
                     continue;
                 }
@@ -237,11 +228,8 @@ fn extract_archive(
         let mut content = Vec::new();
         file.read_to_end(&mut content).map_err(|e| e.to_string())?;
 
-        if matches!(
-            request,
-            ExtensionInstallRequest::OpenVsxMarketplace { .. }
-                | ExtensionInstallRequest::VscodeMarketplace { .. }
-        ) && normalized_name == "package.json"
+        if matches!(request, ExtensionInstallRequest::OpenVsxMarketplace { .. })
+            && normalized_name == "package.json"
         {
             let package_json: serde_json::Value =
                 serde_json::from_slice(&content).map_err(|e| e.to_string())?;
@@ -272,13 +260,16 @@ fn extract_archive(
             publisher: publisher.clone(),
             name: name.clone(),
             version: version.clone(),
+            source: "dotdir-marketplace".to_string(),
+            auto_update: true,
         },
-        ExtensionInstallRequest::OpenVsxMarketplace { publisher, name, .. }
-        | ExtensionInstallRequest::VscodeMarketplace { publisher, name, .. } => {
+        ExtensionInstallRequest::OpenVsxMarketplace { publisher, name, .. } => {
             InstalledExtensionRef {
                 publisher: publisher.clone(),
                 name: name.clone(),
                 version: version_from_package.unwrap_or_else(|| "0.0.0".to_string()),
+                source: "open-vsx-marketplace".to_string(),
+                auto_update: true,
             }
         }
     };
@@ -300,8 +291,7 @@ pub fn install_extension(
             "{}/api/extensions/{}/{}/{}/download",
             MARKETPLACE_URL, publisher, name, version
         ),
-        ExtensionInstallRequest::OpenVsxMarketplace { download_url, .. }
-        | ExtensionInstallRequest::VscodeMarketplace { download_url, .. } => download_url.clone(),
+        ExtensionInstallRequest::OpenVsxMarketplace { download_url, .. } => download_url.clone(),
     };
 
     let archive_bytes = download_bytes(&download_url, &cancel, &emit)?;

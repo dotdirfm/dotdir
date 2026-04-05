@@ -170,10 +170,14 @@ export interface ExtensionManifest {
   contributes?: ExtensionContributions;
 }
 
+export type ExtensionInstallSource = "dotdir-marketplace" | "open-vsx-marketplace";
+
 export interface ExtensionRef {
   publisher: string;
   name: string;
   version: string;
+  source?: ExtensionInstallSource;
+  autoUpdate?: boolean;
   /** Optional absolute path for development; when set, load extension from this dir instead of ~/.dotdir/extensions/<publisher>-<name>-<version>. */
   path?: string;
 }
@@ -245,20 +249,35 @@ export interface LoadedExtension {
 }
 
 export interface MarketplaceExtension {
-  id: string;
+  namespace: string;
   name: string;
-  display_name: string;
+  version: string;
+  displayName: string;
+  namespaceDisplayName?: string;
   description: string;
-  icon_url: string | null;
-  categories: string[];
-  tags: string[];
-  total_downloads: number;
-  publisher: { username: string; display_name: string | null };
-  latest_version: {
-    version: string;
-    archive_size: number;
-    created_at: string;
-  } | null;
+  downloadCount: number;
+  averageRating?: number;
+  reviewCount?: number;
+  categories?: string[];
+  tags?: string[];
+  timestamp?: string;
+  homepage?: string;
+  repository?: string;
+  bugs?: string;
+  files?: {
+    download?: string;
+    icon?: string;
+    readme?: string;
+    changelog?: string;
+  };
+}
+
+export interface MarketplaceUpdateInfo {
+  publisher: string;
+  name: string;
+  currentVersion: string;
+  latestVersion: string | null;
+  hasUpdate: boolean;
 }
 
 function extensionDirName(ref: ExtensionRef): string {
@@ -287,6 +306,12 @@ async function writeRefs(bridge: Bridge, refs: ExtensionRef[]): Promise<void> {
     await bridge.fs.createDir(extensionsDir);
   }
   await bridge.fs.writeFile(join(extensionsDir, "extensions.json"), JSON.stringify(refs, null, 2));
+}
+
+export async function setExtensionAutoUpdate(bridge: Bridge, publisher: string, name: string, autoUpdate: boolean): Promise<void> {
+  const refs = await readRefs(bridge);
+  const next = refs.map((ref) => (ref.publisher === publisher && ref.name === name ? { ...ref, autoUpdate } : ref));
+  await writeRefs(bridge, next);
 }
 
 export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]> {
@@ -442,11 +467,84 @@ export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]>
 }
 
 export async function searchMarketplace(query = "", page = 1): Promise<{ extensions: MarketplaceExtension[]; total: number }> {
-  const params = new URLSearchParams({ page: String(page), pageSize: "30" });
-  if (query) params.set("q", query);
-  const res = await fetch(`${MARKETPLACE_URL}/api/extensions/search?${params}`);
+  const pageSize = 30;
+  const params = new URLSearchParams({
+    size: String(pageSize),
+    offset: String((page - 1) * pageSize),
+  });
+  if (query) params.set("query", query);
+  const res = await fetch(`${MARKETPLACE_URL}/api/-/search?${params}`);
   if (!res.ok) throw new Error("Failed to search marketplace");
-  return res.json();
+  const data = (await res.json()) as { extensions?: MarketplaceExtension[]; totalSize?: number };
+  return {
+    extensions: Array.isArray(data.extensions) ? data.extensions : [],
+    total: data.totalSize ?? 0,
+  };
+}
+
+export async function fetchMarketplaceExtensionDetails(namespace: string, name: string): Promise<MarketplaceExtension> {
+  const res = await fetch(`${MARKETPLACE_URL}/api/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/latest`);
+  if (!res.ok) throw new Error("Failed to fetch marketplace extension details");
+  return res.json() as Promise<MarketplaceExtension>;
+}
+
+export async function checkMarketplaceUpdates(
+  extensions: Array<{ publisher: string; name: string; version: string }>,
+): Promise<MarketplaceUpdateInfo[]> {
+  return Promise.all(
+    extensions.map(async (ext) => {
+      try {
+        const latest = await fetchMarketplaceExtensionDetails(ext.publisher, ext.name);
+        const latestVersion = latest.version || null;
+        return {
+          publisher: ext.publisher,
+          name: ext.name,
+          currentVersion: ext.version,
+          latestVersion,
+          hasUpdate: latestVersion ? compareExtensionVersions(latestVersion, ext.version) > 0 : false,
+        };
+      } catch {
+        return {
+          publisher: ext.publisher,
+          name: ext.name,
+          currentVersion: ext.version,
+          latestVersion: null,
+          hasUpdate: false,
+        };
+      }
+    }),
+  );
+}
+
+export function compareExtensionVersions(left: string, right: string): number {
+  if (left === right) return 0;
+
+  const parse = (value: string) =>
+    value
+      .split(/[.+-]/)
+      .map((part) => {
+        const numeric = Number(part);
+        return Number.isFinite(numeric) ? numeric : part;
+      });
+
+  const leftParts = parse(left);
+  const rightParts = parse(right);
+  const length = Math.max(leftParts.length, rightParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const a = leftParts[index];
+    const b = rightParts[index];
+    if (a == null) return -1;
+    if (b == null) return 1;
+    if (typeof a === "number" && typeof b === "number") {
+      if (a !== b) return a > b ? 1 : -1;
+      continue;
+    }
+    const cmp = String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+    if (cmp !== 0) return cmp > 0 ? 1 : -1;
+  }
+
+  return 0;
 }
 
 /**

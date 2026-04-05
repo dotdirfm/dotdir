@@ -5,11 +5,12 @@ import { registerExtensionKeybindings } from "@/features/commands/registerKeybin
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
 import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
-import { type LoadedExtension, findColorTheme } from "@/features/extensions/extensions";
+import { fetchOpenVsxExtensionDetails } from "@/features/marketplace/openVsxMarketplace";
+import { checkMarketplaceUpdates, compareExtensionVersions, type ExtensionInstallSource, type LoadedExtension, findColorTheme } from "@/features/extensions/extensions";
 import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
 import { readFileText } from "@/features/file-system/fs";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
-import { activeColorThemeAtom, activeIconThemeAtom, settingsReadyAtom } from "@/features/settings/useUserSettings";
+import { activeColorThemeAtom, activeIconThemeAtom, extensionsAutoUpdateAtom, settingsReadyAtom } from "@/features/settings/useUserSettings";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import { resolveShellProfiles } from "@/features/terminal/shellProfiles";
 import { clearColorTheme, loadAndApplyColorTheme, uiThemeToKind } from "@/features/themes/vscodeColorTheme";
@@ -20,6 +21,9 @@ import { getStyleHostElement } from "@/utils/styleHost";
 import { populateRegistries } from "@/viewerEditorRegistry";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
+
+const AUTO_UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const AUTO_UPDATE_INITIAL_DELAY_MS = 60 * 1000;
 
 export function useExtensionHost(): void {
   const bridge = useBridge();
@@ -40,8 +44,10 @@ export function useExtensionHost(): void {
   const activeIconTheme = useAtomValue(activeIconThemeAtom);
   const activeColorTheme = useAtomValue(activeColorThemeAtom);
   const settingsReady = useAtomValue(settingsReadyAtom);
+  const extensionsAutoUpdateEnabled = useAtomValue(extensionsAutoUpdateAtom);
   const systemTheme = useAtomValue(systemThemeAtom);
   const themesReady = useAtomValue(themesReadyAtom);
+  const loadedExtensions = useAtomValue(loadedExtensionsAtom);
   const setLoadedExtensions = useSetAtom(loadedExtensionsAtom);
   const setThemesReady = useSetAtom(themesReadyAtom);
   const { setAvailableProfiles, setProfilesLoaded } = useTerminal();
@@ -71,6 +77,7 @@ export function useExtensionHost(): void {
   const themesReadyRef = useRef(false);
   const iconThemeApplyGenerationRef = useRef(0);
   const colorThemeApplyGenerationRef = useRef(0);
+  const autoUpdateInFlightRef = useRef(false);
 
   const clearExtensionCommandRegistrations = useCallback(() => {
     for (const d of extensionContributionDisposersRef.current) {
@@ -102,6 +109,109 @@ export function useExtensionHost(): void {
     extensionsLoadedRef.current = false;
     await extensionHostRef.current.restart();
   }, [resetExtensionRuntimeState]);
+
+  const installExtensionAndWait = useCallback(
+    async (
+      request:
+        | { source: "dotdir-marketplace"; publisher: string; name: string; version: string }
+        | { source: "open-vsx-marketplace"; publisher: string; name: string; downloadUrl: string },
+    ): Promise<void> => {
+      await new Promise<void>((resolve, reject) => {
+        let installId: number | null = null;
+        let finished = false;
+
+        const cleanup = () => {
+          if (finished) return;
+          finished = true;
+          unsubscribe();
+        };
+
+        const unsubscribe = bridgeRef.current.extensions.install.onProgress((payload) => {
+          if (installId == null || payload.installId !== installId) return;
+          if (payload.event.kind === "done") {
+            cleanup();
+            resolve();
+          } else if (payload.event.kind === "error") {
+            cleanup();
+            reject(new Error(payload.event.message));
+          }
+        });
+
+        bridgeRef.current.extensions.install.start(request).then((id) => {
+          installId = id;
+        }).catch((error) => {
+          cleanup();
+          reject(error instanceof Error ? error : new Error(String(error)));
+        });
+      });
+    },
+    [],
+  );
+
+  const runAutoUpdatePass = useCallback(async (): Promise<void> => {
+    if (autoUpdateInFlightRef.current) return;
+    autoUpdateInFlightRef.current = true;
+    try {
+      const installedForUpdate = latestExtensionsRef.current.filter(
+        (ext) => !ext.ref.path && ext.ref.source && (ext.ref.autoUpdate ?? true),
+      );
+      if (installedForUpdate.length === 0) return;
+
+      const pendingInstalls: Array<
+        | { source: "dotdir-marketplace"; publisher: string; name: string; version: string }
+        | { source: "open-vsx-marketplace"; publisher: string; name: string; downloadUrl: string }
+      > = [];
+
+      const bySource = (source: ExtensionInstallSource) => installedForUpdate.filter((ext) => ext.ref.source === source);
+
+      const dotdirExtensions = bySource("dotdir-marketplace");
+      if (dotdirExtensions.length > 0) {
+        const updates = await checkMarketplaceUpdates(
+          dotdirExtensions.map((ext) => ({
+            publisher: ext.ref.publisher,
+            name: ext.ref.name,
+            version: ext.ref.version,
+          })),
+        );
+        for (const update of updates) {
+          if (!update.hasUpdate || !update.latestVersion) continue;
+          pendingInstalls.push({
+            source: "dotdir-marketplace",
+            publisher: update.publisher,
+            name: update.name,
+            version: update.latestVersion,
+          });
+        }
+      }
+
+      const openVsxExtensions = bySource("open-vsx-marketplace");
+      for (const ext of openVsxExtensions) {
+        try {
+          const details = await fetchOpenVsxExtensionDetails(ext.ref.publisher, ext.ref.name);
+          if (!details.version || compareExtensionVersions(details.version, ext.ref.version) <= 0) continue;
+          if (!details.files?.download) continue;
+          pendingInstalls.push({
+            source: "open-vsx-marketplace",
+            publisher: ext.ref.publisher,
+            name: ext.ref.name,
+            downloadUrl: details.files.download,
+          });
+        } catch (error) {
+          console.warn("[ExtHost] Failed to check Open VSX update for", `${ext.ref.publisher}.${ext.ref.name}`, error);
+        }
+      }
+
+      if (pendingInstalls.length === 0) return;
+
+      for (const request of pendingInstalls) {
+        await installExtensionAndWait(request);
+      }
+
+      await restartExtensionHost();
+    } finally {
+      autoUpdateInFlightRef.current = false;
+    }
+  }, [installExtensionAndWait, restartExtensionHost]);
 
   // OS theme + active color theme → keep iconThemeKind in sync
   useEffect(() => {
@@ -244,6 +354,36 @@ export function useExtensionHost(): void {
     if (themesReadyRef.current) return;
     void applyInitialThemes();
   }, [applyInitialThemes, settingsReady]);
+
+  useEffect(() => {
+    if (!settingsReady) return;
+    if (!extensionsAutoUpdateEnabled) return;
+    if (loadedExtensions.length === 0) return;
+    if (!loadedExtensions.some((ext) => ext.ref.autoUpdate ?? true)) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = (delay: number) => {
+      timer = setTimeout(() => {
+        if (cancelled) return;
+        void runAutoUpdatePass()
+          .catch((error) => {
+            console.warn("[ExtHost] Automatic extension update failed:", error);
+          })
+          .finally(() => {
+            if (!cancelled) schedule(AUTO_UPDATE_INTERVAL_MS);
+          });
+      }, delay);
+    };
+
+    schedule(AUTO_UPDATE_INITIAL_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [extensionsAutoUpdateEnabled, loadedExtensions, runAutoUpdatePass, settingsReady]);
 
   useEffect(() => {
     return commandRegistryRef.current.registerCommand("dotdir.restartExtensionHost", restartExtensionHost);

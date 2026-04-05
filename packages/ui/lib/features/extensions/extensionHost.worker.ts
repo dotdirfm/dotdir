@@ -146,6 +146,8 @@ interface ExtensionRef {
   publisher: string;
   name: string;
   version: string;
+  source?: "dotdir-marketplace" | "open-vsx-marketplace";
+  autoUpdate?: boolean;
   /** Optional absolute path for development; when set, load from this dir instead of extensionsDir. */
   path?: string;
 }

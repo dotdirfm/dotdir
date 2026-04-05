@@ -115,8 +115,7 @@ export type DeleteProgressEvent = {
 
 export type ExtensionInstallRequest =
   | { source: "dotdir-marketplace"; publisher: string; name: string; version: string }
-  | { source: "open-vsx-marketplace"; publisher: string; name: string; downloadUrl: string }
-  | { source: "vscode-marketplace"; publisher: string; name: string; downloadUrl: string };
+  | { source: "open-vsx-marketplace"; publisher: string; name: string; downloadUrl: string };
 
 export type ExtensionInstallProgressEvent = {
   installId: number;

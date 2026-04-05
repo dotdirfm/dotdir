@@ -13,6 +13,30 @@ export interface OpenVsxExtension {
   };
 }
 
+export interface OpenVsxExtensionDetails {
+  namespace: string;
+  name: string;
+  version: string;
+  displayName: string;
+  namespaceDisplayName?: string;
+  description: string;
+  averageRating?: number;
+  reviewCount?: number;
+  downloadCount?: number;
+  categories?: string[];
+  tags?: string[];
+  timestamp?: string;
+  homepage?: string;
+  repository?: string;
+  bugs?: string;
+  files?: {
+    readme?: string;
+    changelog?: string;
+    icon?: string;
+    download?: string;
+  };
+}
+
 interface OpenVsxSearchResult {
   offset: number;
   totalSize: number;
@@ -40,6 +64,12 @@ export async function searchOpenVsxMarketplace(
     extensions: data.extensions ?? [],
     total: data.totalSize ?? 0,
   };
+}
+
+export async function fetchOpenVsxExtensionDetails(namespace: string, name: string): Promise<OpenVsxExtensionDetails> {
+  const res = await fetch(`${OPEN_VSX_MARKETPLACE_URL}/api/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/latest`);
+  if (!res.ok) throw new Error("Open VSX extension details request failed");
+  return res.json() as Promise<OpenVsxExtensionDetails>;
 }
 
 export function getOpenVsxDownloadUrl(ext: OpenVsxExtension): string | null {
