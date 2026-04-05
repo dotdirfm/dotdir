@@ -416,16 +416,6 @@ export const FileList = memo(function FileList({
           onPointerDown={(e) => {
             e.stopPropagation();
             clearKeyboardNav();
-            if (isTouchscreen) {
-              lastClickTimeRef.current = 0;
-              actionQueue.enqueue(() => emitCursorChange(index, topmostIndexRef.current, selectedNamesRef.current));
-              if (isExecutable) {
-                actionQueue.enqueue(() => commandRegistry.executeCommand("terminal.execute", entry.path as string));
-              } else {
-                actionQueue.enqueue(() => navigateToEntry(entry));
-              }
-              return;
-            }
             const now = Date.now();
             if (now - lastClickTimeRef.current < 300) {
               lastClickTimeRef.current = 0;
