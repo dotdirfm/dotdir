@@ -1,16 +1,11 @@
 .ext-dialog {
-  width: min(1480px, calc(100vw - 8px));
-  height: min(940px, calc(100vh - 8px));
-  max-width: calc(100vw - 8px);
-  max-height: calc(100vh - 8px);
-  margin: auto;
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border-active);
-  border-radius: 2px;
-  padding: 0;
-  overflow: hidden;
-  box-shadow: 0 22px 64px rgba(0, 0, 0, 0.38);
+  composes: surface from "../../../styles/wide-dialog.module.css";
+  width: min(1480px, calc(100% - 64px));
+  height: min(940px, calc(100% - 64px));
+  max-width: calc(100% - 64px);
+  max-height: calc(100% - 64px);
+  container-type: inline-size;
+  container-name: extensions-dialog;
 }
 
 .ext-shell {
@@ -663,7 +658,7 @@
   margin-top: 5px;
 }
 
-@media (max-width: 980px) {
+@container extensions-dialog (max-width: 980px) {
   .ext-content-layout {
     grid-template-columns: 1fr;
   }
@@ -685,13 +680,21 @@
 
 @media (max-width: 760px) {
   .ext-dialog {
-    width: 100vw;
-    height: 100vh;
-    max-width: 100vw;
-    max-height: 100vh;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
     border-radius: 0;
-    border-left: none;
-    border-right: none;
+    border: none;
+  }
+}
+
+@container extensions-dialog (max-width: 760px) {
+  .ext-dialog {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
   }
 
   .ext-shell {
