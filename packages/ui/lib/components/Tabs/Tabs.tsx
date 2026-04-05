@@ -1,5 +1,5 @@
 import { cx } from "@/utils/cssModules";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useRef, useState } from "react";
 import styles from "./Tabs.module.css";
 
 export type TabsVariant = "panel" | "subtle" | "terminal";
@@ -80,7 +80,12 @@ export const Tabs = memo(function Tabs<T extends TabsItem>({
   const handleWheel = useCallback((event: React.WheelEvent) => {
     const element = listRef.current;
     if (!element) return;
-    element.scrollLeft += event.deltaY !== 0 ? event.deltaY : event.deltaX;
+    const canScrollHorizontally = element.scrollWidth > element.clientWidth + 1;
+    if (!canScrollHorizontally) return;
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (delta === 0) return;
+    event.preventDefault();
+    element.scrollLeft += delta;
   }, []);
 
   const getDropIndex = useCallback((clientX: number): number | null => {
@@ -141,14 +146,6 @@ export const Tabs = memo(function Tabs<T extends TabsItem>({
     (event.target as HTMLElement).classList.remove(styles.dragging);
     dragFromRef.current = null;
     setDropIndex(null);
-  }, []);
-
-  useEffect(() => {
-    const element = listRef.current;
-    if (!element) return;
-    const suppress = (event: WheelEvent) => event.preventDefault();
-    element.addEventListener("wheel", suppress, { passive: false });
-    return () => element.removeEventListener("wheel", suppress);
   }, []);
 
   return (

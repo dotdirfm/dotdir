@@ -19,6 +19,7 @@ import type {
 import { normalizePath } from "@dotdirfm/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 const ptyWriteEncoder = new TextEncoder();
 
@@ -338,6 +339,9 @@ export const tauriBridge: Bridge = {
     },
     async getEnv(): Promise<Record<string, string>> {
       return invoke<Record<string, string>>("get_env");
+    },
+    async openExternal(url: string): Promise<void> {
+      await openUrl(url);
     },
   },
   systemTheme: {

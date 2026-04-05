@@ -204,6 +204,7 @@ export interface Bridge {
     getHomePath(): Promise<string>;
     getAppDirs(): Promise<AppDirs>;
     getEnv(): Promise<Record<string, string>>;
+    openExternal?(url: string): Promise<void>;
   };
   systemTheme: {
     get(): Promise<SystemThemeKind>;

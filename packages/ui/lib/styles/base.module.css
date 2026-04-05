@@ -20,6 +20,8 @@
   --error-fg: #f38ba8;
   --accent: #89b4fa;
   --accent-fg: #1e1e2e;
+  --link-fg: #89b4fa;
+  --link-hover-fg: #b4befe;
   --button-bg: #313244;
   --button-fg: #cdd6f4;
   --button-border: #45475a;
@@ -91,6 +93,8 @@
   --error-fg: #d20f39;
   --accent: #1e66f5;
   --accent-fg: #ffffff;
+  --link-fg: #1e66f5;
+  --link-hover-fg: #2457d4;
   --button-bg: #dce0e8;
   --button-fg: #4c4f69;
   --button-border: #bcc0cc;

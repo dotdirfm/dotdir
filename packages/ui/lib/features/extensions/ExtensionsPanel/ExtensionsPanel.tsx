@@ -18,9 +18,11 @@ import { readFileText } from "@/features/file-system/fs";
 import { join } from "@/utils/path";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { marked } from "marked";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { FaGithub } from "react-icons/fa6";
+import { VscArrowLeft, VscCloudDownload, VscStarEmpty, VscStarFull, VscVerifiedFilled } from "react-icons/vsc";
 import styles from "./ExtensionsPanel.module.css";
 
 type MarketplaceSource = "dotdir" | "open-vsx";
@@ -173,8 +175,13 @@ function formatNumber(value: number | null): string {
   return value == null ? "Unavailable" : value.toLocaleString();
 }
 
-function formatVersion(value: string): string {
-  return value ? `v${value}` : "Unknown version";
+function formatHostLabel(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).host;
+  } catch {
+    return value;
+  }
 }
 
 function formatFilterLabel(kind: FilterKind, category: string | null): string {
@@ -202,29 +209,6 @@ async function tryReadOptionalDoc(bridge: ReturnType<typeof useBridge>, dirPath:
   return null;
 }
 
-function buildFallbackDetails(item: SidebarItem): string {
-  const lines = [
-    `# ${item.title}`,
-    "",
-    item.description || "No description provided.",
-    "",
-    `- Publisher: ${item.publisher}`,
-    `- Version: ${formatVersion(item.version)}`,
-    `- Source: ${item.source === "installed" ? "Installed" : item.source === "dotdir" ? ".dir Marketplace" : "Open VSX"}`,
-    `- Downloads: ${formatNumber(item.downloads)}`,
-    `- Rating: ${item.rating == null ? "Unavailable" : String(item.rating)}`,
-  ];
-
-  if (item.categories.length > 0) {
-    lines.push(`- Categories: ${item.categories.join(", ")}`);
-  }
-  if (item.tags.length > 0) {
-    lines.push(`- Tags: ${item.tags.join(", ")}`);
-  }
-
-  return lines.join("\n");
-}
-
 function renderFeatureGroup(label: string, items: string[]) {
   if (items.length === 0) return null;
   return (
@@ -243,6 +227,32 @@ function isProbablyHtml(value: string | null): boolean {
   if (!value) return false;
   const trimmed = value.trim();
   return /^<!doctype html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed) || /^<body[\s>]/i.test(trimmed) || /^<div[\s>]/i.test(trimmed);
+}
+
+function toOpenVsxContentUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const match = parsed.pathname.match(/^\/api\/([^/]+)\/([^/]+)\/(.+)\/file\/([^/]+)$/);
+    if (!match) return url;
+    const [, namespace, name, versionPath, fileName] = match;
+    return `https://openvsx.eclipsecontent.org/${namespace}/${name}/${versionPath}/${fileName}`;
+  } catch {
+    return url;
+  }
+}
+
+async function fetchRemoteText(url: string, options?: { openVsx?: boolean }): Promise<string | null> {
+  const candidates = options?.openVsx ? [toOpenVsxContentUrl(url), url] : [url];
+  for (const candidate of candidates) {
+    try {
+      const response = await fetch(candidate);
+      if (!response.ok) continue;
+      return await response.text();
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 function formatRelativeDate(value: string | null): string | null {
@@ -265,21 +275,26 @@ function formatRelativeDate(value: string | null): string | null {
   return rtf.format(Math.round(diffMs / minute), "minute");
 }
 
+function renderStars(rating: number | null, reviewCount: number | null, loading = false) {
+  if (loading) return null;
+  if (rating == null) return <span className={styles["ext-meta-muted"]}>No ratings</span>;
+  const rounded = Math.max(0, Math.min(5, Math.round(rating)));
+  return (
+    <span className={styles["ext-stars"]} title={`${rating.toFixed(1)} / 5`}>
+      {Array.from({ length: 5 }, (_, index) =>
+        index < rounded ? <VscStarFull key={index} aria-hidden="true" /> : <VscStarEmpty key={index} aria-hidden="true" />,
+      )}
+      <span className={styles["ext-stars-count"]}>({reviewCount ?? 0})</span>
+    </span>
+  );
+}
+
 function openVsxExtensionUrl(namespace: string, name: string): string {
   return `https://open-vsx.org/extension/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`;
 }
 
 function openVsxNamespaceUrl(namespace: string): string {
   return `https://open-vsx.org/namespace/${encodeURIComponent(namespace)}`;
-}
-
-function scheduleDeferredWork(work: () => void): () => void {
-  if (typeof window.requestIdleCallback === "function" && typeof window.cancelIdleCallback === "function") {
-    const id = window.requestIdleCallback(work);
-    return () => window.cancelIdleCallback(id);
-  }
-  const id = globalThis.setTimeout(work, 0);
-  return () => globalThis.clearTimeout(id);
 }
 
 function featureSectionsForInstalled(ext: LoadedExtension): Array<{ label: string; items: string[] }> {
@@ -316,6 +331,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const activeIconTheme = useAtomValue(activeIconThemeAtom);
   const activeColorTheme = useAtomValue(activeColorThemeAtom);
   const installed = useAtomValue(loadedExtensionsAtom);
+  const setInstalled = useSetAtom(loadedExtensionsAtom);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const filterMenuRef = useRef<HTMLDivElement>(null);
   const extensionHost = useExtensionHostClient();
@@ -335,8 +351,8 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [docsByKey, setDocsByKey] = useState<Record<string, LoadedDocs>>({});
   const [remoteMetaByKey, setRemoteMetaByKey] = useState<Record<string, RemoteMetadata>>({});
-  const [renderedDocsByKey, setRenderedDocsByKey] = useState<Record<string, RenderedDocs>>({});
   const [docsLoadingKey, setDocsLoadingKey] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const installIdToKeyRef = useRef(new Map<number, string>());
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { updateSettings } = useUserSettings();
@@ -489,6 +505,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (sidebarItems.length === 0) {
       setSelectedKey(null);
+      setMobileDetailOpen(false);
       return;
     }
     if (!selectedKey || !sidebarItems.some((item) => item.key === selectedKey)) {
@@ -497,14 +514,46 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   }, [selectedKey, sidebarItems]);
 
   const selectedItem = useMemo(() => sidebarItems.find((item) => item.key === selectedKey) ?? null, [selectedKey, sidebarItems]);
+
+  useEffect(() => {
+    if (!selectedItem) {
+      setMobileDetailOpen(false);
+    }
+  }, [selectedItem]);
   const selectedInstalled = selectedItem ? installedByKey.get(selectedItem.key) ?? (selectedItem.kind === "installed" ? selectedItem.loaded : null) : null;
   const selectedBusy = selectedItem ? busyByKey[selectedItem.key] : undefined;
   const selectedAutoUpdate = selectedInstalled ? (pendingAutoUpdateByKey[selectedInstalled.ref.publisher + "." + selectedInstalled.ref.name] ?? selectedInstalled.ref.autoUpdate ?? true) : false;
   const selectedIconThemeId = selectedInstalled ? extensionIconThemeId(selectedInstalled) : null;
   const selectedColorThemes = selectedInstalled?.colorThemes ?? [];
+  const selectedColorThemeValue = selectedInstalled
+    ? selectedColorThemes.find((theme) => colorThemeKey(selectedInstalled, theme.id) === activeColorTheme)?.id ?? ""
+    : "";
   const selectedDocs = selectedItem ? docsByKey[selectedItem.key] : undefined;
   const selectedRemoteMeta = selectedItem ? remoteMetaByKey[selectedItem.key] : undefined;
-  const selectedRenderedDocs = selectedItem ? renderedDocsByKey[selectedItem.key] : undefined;
+  const selectedReviewCount = selectedRemoteMeta?.reviewCount ?? (selectedItem?.kind === "dotdir" ? selectedItem.raw.reviewCount ?? 0 : 0);
+  const selectedHomepageLabel = formatHostLabel(selectedRemoteMeta?.homepage ?? null);
+
+  const openExternalLink = useCallback(
+    async (url: string) => {
+      if (bridge.utils.openExternal) {
+        await bridge.utils.openExternal(url);
+        return;
+      }
+      window.open(url, "_blank", "noopener,noreferrer");
+    },
+    [bridge],
+  );
+
+  const handleExternalLinkClick = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      const anchor = (event.target as HTMLElement | null)?.closest("a");
+      const href = anchor?.getAttribute("href");
+      if (!href) return;
+      event.preventDefault();
+      void openExternalLink(href);
+    },
+    [openExternalLink],
+  );
 
   useEffect(() => {
     if (!selectedInstalled || !selectedItem) return;
@@ -542,8 +591,8 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
             ? await fetchOpenVsxExtensionDetails(selectedItem.raw.namespace, selectedItem.raw.name)
             : await fetchMarketplaceExtensionDetails(selectedItem.raw.namespace, selectedItem.raw.name);
         const [readme, changelog] = await Promise.all([
-          details.files?.readme ? fetch(details.files.readme).then((res) => (res.ok ? res.text() : null)) : Promise.resolve(null),
-          details.files?.changelog ? fetch(details.files.changelog).then((res) => (res.ok ? res.text() : null)) : Promise.resolve(null),
+          details.files?.readme ? fetchRemoteText(details.files.readme, { openVsx: selectedItem.kind === "open-vsx" }) : Promise.resolve(null),
+          details.files?.changelog ? fetchRemoteText(details.files.changelog, { openVsx: selectedItem.kind === "open-vsx" }) : Promise.resolve(null),
         ]);
 
         if (cancelled) return;
@@ -685,7 +734,13 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
       setPendingAutoUpdateByKey((current) => ({ ...current, [key]: autoUpdate }));
       try {
         await setExtensionAutoUpdate(bridge, ext.ref.publisher, ext.ref.name, autoUpdate);
-        await extensionHost.restart();
+        setInstalled((current) =>
+          current.map((item) =>
+            item.ref.publisher === ext.ref.publisher && item.ref.name === ext.ref.name
+              ? { ...item, ref: { ...item.ref, autoUpdate } }
+              : item,
+          ),
+        );
       } catch (err) {
         setPendingAutoUpdateByKey((current) => {
           const next = { ...current };
@@ -695,7 +750,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
         throw err;
       }
     },
-    [bridge, extensionHost],
+    [bridge, setInstalled],
   );
 
   useEffect(() => {
@@ -718,10 +773,10 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   }, [installed]);
 
   const detailsSource = useMemo(() => {
-    if (!selectedItem) return "";
+    if (!selectedItem) return null;
     if (selectedRemoteMeta?.readme) return selectedRemoteMeta.readme;
     if (selectedDocs?.readme) return selectedDocs.readme;
-    return buildFallbackDetails(selectedItem);
+    return null;
   }, [selectedDocs?.readme, selectedItem, selectedRemoteMeta?.readme]);
 
   const changelogSource = useMemo(() => {
@@ -766,53 +821,49 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
     return [
       installRows.length > 0 ? { title: "Installation", rows: installRows } : null,
       marketplaceRows.length > 0 ? { title: "Marketplace", rows: marketplaceRows } : null,
-      categories.length > 0 ? { title: "Categories", rows: categories.map((value) => ({ label: value, value })) } : null,
+      categories.length > 0 ? { title: "Categories", badges: categories } : null,
       resources.length > 0 ? { title: "Resources", links: resources } : null,
     ].filter(Boolean) as Array<
       | { title: string; rows: Array<{ label: string; value: string | null }> }
+      | { title: string; badges: string[] }
       | { title: string; links: Array<{ label: string; href: string }> }
     >;
   }, [selectedItem, selectedRemoteMeta]);
 
-  useEffect(() => {
-    if (!selectedItem) return;
+  const selectedRenderedDocs = useMemo<RenderedDocs | undefined>(() => {
+    if (!selectedItem) return undefined;
+    const detailsHtml =
+      !detailsSource
+        ? null
+        : selectedRemoteMeta?.readme && isProbablyHtml(selectedRemoteMeta.readme)
+          ? selectedRemoteMeta.readme
+          : (marked.parse(detailsSource) as string);
+    const changelogHtml =
+      selectedRemoteMeta?.changelog && isProbablyHtml(selectedRemoteMeta.changelog)
+        ? selectedRemoteMeta.changelog
+        : (marked.parse(changelogSource) as string);
+    return {
+      detailsSource,
+      changelogSource,
+      detailsHtml,
+      changelogHtml,
+    };
+  }, [changelogSource, detailsSource, selectedItem, selectedRemoteMeta?.changelog, selectedRemoteMeta?.readme]);
 
-    const key = selectedItem.key;
-    const current = renderedDocsByKey[key];
-    const needsDetails = contentTab === "details" && (current?.detailsHtml == null || current.detailsSource !== detailsSource);
-    const needsChangelog = contentTab === "changelog" && (current?.changelogHtml == null || current.changelogSource !== changelogSource);
-    if (!needsDetails && !needsChangelog) return;
-
-    return scheduleDeferredWork(() => {
-      setRenderedDocsByKey((existing) => {
-        const prev = existing[key] ?? { detailsSource: null, changelogSource: null, detailsHtml: null, changelogHtml: null };
-        let next = prev;
-
-        if (needsDetails) {
-          const detailsHtml =
-            selectedRemoteMeta?.readme && isProbablyHtml(selectedRemoteMeta.readme)
-              ? selectedRemoteMeta.readme
-              : (marked.parse(detailsSource) as string);
-          next = { ...next, detailsSource, detailsHtml };
-        }
-
-        if (needsChangelog) {
-          const changelogHtml =
-            selectedRemoteMeta?.changelog && isProbablyHtml(selectedRemoteMeta.changelog)
-              ? selectedRemoteMeta.changelog
-              : (marked.parse(changelogSource) as string);
-          next = { ...next, changelogSource, changelogHtml };
-        }
-
-        if (next === prev) return existing;
-        return { ...existing, [key]: next };
-      });
-    });
-  }, [changelogSource, contentTab, detailsSource, renderedDocsByKey, selectedItem, selectedRemoteMeta?.changelog, selectedRemoteMeta?.readme]);
+  const detailsLoading =
+    !!selectedItem &&
+    docsLoadingKey === selectedItem.key &&
+    !selectedRemoteMeta?.readme &&
+    !selectedDocs?.readme;
+  const remoteMetaLoading =
+    !!selectedItem &&
+    docsLoadingKey === selectedItem.key &&
+    selectedItem.kind !== "installed" &&
+    !selectedRemoteMeta;
 
   return (
     <OverlayDialog className={styles["ext-dialog"]} onClose={onClose} initialFocusRef={searchInputRef}>
-      <div className={styles["ext-shell"]}>
+      <div className={cx(styles, "ext-shell", mobileDetailOpen && "mobile-detail-open")}>
         <aside className={styles["ext-sidebar"]}>
           <div className={styles["ext-sidebar-header"]}>
             <div className={styles["ext-dialog-title"]}>Extensions</div>
@@ -856,75 +907,91 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                 </button>
                 {filterMenuOpen && (
                   <div className={styles["ext-filter-menu"]}>
-                    <button
-                      className={cx(styles, "ext-filter-item", filterKind === "none" && "active")}
-                      onClick={() => {
-                        setFilterKind("none");
-                        setSelectedCategory(null);
-                        setFilterMenuOpen(false);
-                        setCategoryMenuOpen(false);
-                      }}
-                    >
-                      Installed
-                    </button>
-                    <button
-                      className={cx(styles, "ext-filter-item", filterKind === "featured" && "active")}
-                      onClick={() => {
-                        setFilterKind("featured");
-                        setSelectedCategory(null);
-                        setFilterMenuOpen(false);
-                        setCategoryMenuOpen(false);
-                      }}
-                    >
-                      Featured
-                    </button>
-                    <button
-                      className={cx(styles, "ext-filter-item", filterKind === "recent" && "active")}
-                      onClick={() => {
-                        setFilterKind("recent");
-                        setSelectedCategory(null);
-                        setFilterMenuOpen(false);
-                        setCategoryMenuOpen(false);
-                      }}
-                    >
-                      Recently Published
-                    </button>
-                    <button
-                      className={cx(styles, "ext-filter-item", filterKind === "recommended" && "active")}
-                      onClick={() => {
-                        setFilterKind("recommended");
-                        setSelectedCategory(null);
-                        setFilterMenuOpen(false);
-                        setCategoryMenuOpen(false);
-                      }}
-                    >
-                      Recommended
-                    </button>
-                    <button
-                      className={cx(styles, "ext-filter-item", filterKind === "category" && "active")}
-                      onClick={() => setCategoryMenuOpen((open) => !open)}
-                    >
-                      Category
-                    </button>
+                    <ul className={styles["ext-filter-list"]}>
+                      <li
+                        className={cx(styles, "ext-filter-item", filterKind === "none" && "active")}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setFilterKind("none");
+                          setSelectedCategory(null);
+                          setFilterMenuOpen(false);
+                          setCategoryMenuOpen(false);
+                        }}
+                      >
+                        Installed
+                      </li>
+                      <li
+                        className={cx(styles, "ext-filter-item", filterKind === "featured" && "active")}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setFilterKind("featured");
+                          setSelectedCategory(null);
+                          setFilterMenuOpen(false);
+                          setCategoryMenuOpen(false);
+                        }}
+                      >
+                        Featured
+                      </li>
+                      <li
+                        className={cx(styles, "ext-filter-item", filterKind === "recent" && "active")}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setFilterKind("recent");
+                          setSelectedCategory(null);
+                          setFilterMenuOpen(false);
+                          setCategoryMenuOpen(false);
+                        }}
+                      >
+                        Recently Published
+                      </li>
+                      <li
+                        className={cx(styles, "ext-filter-item", filterKind === "recommended" && "active")}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setFilterKind("recommended");
+                          setSelectedCategory(null);
+                          setFilterMenuOpen(false);
+                          setCategoryMenuOpen(false);
+                        }}
+                      >
+                        Recommended
+                      </li>
+                      <li
+                        className={cx(styles, "ext-filter-item", filterKind === "category" && "active")}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setCategoryMenuOpen((open) => !open)}
+                      >
+                        Category
+                      </li>
+                    </ul>
                     {categoryMenuOpen && (
                       <div className={styles["ext-category-menu"]}>
                         {availableCategories.length === 0 ? (
                           <div className={styles["ext-filter-empty"]}>No categories from current source</div>
                         ) : (
-                          availableCategories.map((category) => (
-                            <button
-                              key={category}
-                              className={cx(styles, "ext-filter-item", selectedCategory === category && "active")}
-                              onClick={() => {
-                                setFilterKind("category");
-                                setSelectedCategory(category);
-                                setFilterMenuOpen(false);
-                                setCategoryMenuOpen(false);
-                              }}
-                            >
-                              {category}
-                            </button>
-                          ))
+                          <ul className={styles["ext-filter-list"]}>
+                            {availableCategories.map((category) => (
+                              <li
+                                key={category}
+                                className={cx(styles, "ext-filter-item", selectedCategory === category && "active")}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => {
+                                  setFilterKind("category");
+                                  setSelectedCategory(category);
+                                  setFilterMenuOpen(false);
+                                  setCategoryMenuOpen(false);
+                                }}
+                              >
+                                {category}
+                              </li>
+                            ))}
+                          </ul>
                         )}
                       </div>
                     )}
@@ -941,35 +1008,40 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
             {!loading && sidebarItems.length === 0 && (
               <div className={styles["ext-empty"]}>{showingMarketplace ? "No matching extensions" : "No installed extensions"}</div>
             )}
-            {sidebarItems.map((item) => {
-              const isSelected = item.key === selectedKey;
-              const installedExtension = installedByKey.get(item.key);
-              const busy = busyByKey[item.key];
-              return (
-                <button
-                  key={item.key}
-                  className={cx(styles, "ext-sidebar-item", isSelected && "selected")}
-                  onClick={() => {
-                    setSelectedKey(item.key);
-                    setContentTab("details");
-                  }}
-                >
-                  <div className={styles["ext-item-icon"]}>
-                    {item.iconUrl ? <img src={item.iconUrl} alt="" /> : (item.title[0]?.toUpperCase() ?? "?")}
-                  </div>
-                  <div className={styles["ext-item-copy"]}>
-                    <div className={styles["ext-item-title"]}>{item.title}</div>
-                    <div className={styles["ext-item-subtitle"]}>{item.publisher}</div>
-                    <div className={styles["ext-item-description"]}>{item.description || "No description"}</div>
-                    <div className={styles["ext-item-flags"]}>
-                      {installedExtension && <span>Installed</span>}
-                      {busy?.kind === "install" && <span>{busy.phase === "finalize" ? "Finalizing" : "Installing"}</span>}
-                      {busy?.kind === "uninstall" && <span>Removing</span>}
+            <ul className={styles["ext-sidebar-items"]}>
+              {sidebarItems.map((item) => {
+                const isSelected = item.key === selectedKey;
+                const installedExtension = installedByKey.get(item.key);
+                const busy = busyByKey[item.key];
+                return (
+                  <li
+                    key={item.key}
+                    className={cx(styles, "ext-sidebar-item", isSelected && "selected")}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setSelectedKey(item.key);
+                      setContentTab("details");
+                      setMobileDetailOpen(true);
+                    }}
+                  >
+                    <div className={styles["ext-item-icon"]}>
+                      {item.iconUrl ? <img src={item.iconUrl} alt="" /> : (item.title[0]?.toUpperCase() ?? "?")}
                     </div>
-                  </div>
-                </button>
-              );
-            })}
+                    <div className={styles["ext-item-copy"]}>
+                      <div className={styles["ext-item-title"]}>{item.title}</div>
+                      <div className={styles["ext-item-subtitle"]}>{item.publisher}</div>
+                      <div className={styles["ext-item-description"]}>{item.description || "No description"}</div>
+                      <div className={styles["ext-item-flags"]}>
+                        {installedExtension && <span>Installed</span>}
+                        {busy?.kind === "install" && <span>{busy.phase === "finalize" ? "Finalizing" : "Installing"}</span>}
+                        {busy?.kind === "uninstall" && <span>Removing</span>}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         </aside>
 
@@ -979,83 +1051,132 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
           ) : (
             <>
               <header className={styles["ext-hero"]}>
+                <div className={styles["ext-hero-mobile-top"]}>
+                  <button className={styles["ext-back"]} onClick={() => setMobileDetailOpen(false)} type="button">
+                    <VscArrowLeft aria-hidden="true" />
+                    Back
+                  </button>
+                </div>
                 <div className={styles["ext-hero-icon"]}>
                   {selectedItem.iconUrl ? <img src={selectedItem.iconUrl} alt="" /> : (selectedItem.title[0]?.toUpperCase() ?? "?")}
                 </div>
                 <div className={styles["ext-hero-copy"]}>
                   <div className={styles["ext-hero-title-row"]}>
                     <h1>{selectedItem.title}</h1>
+                  </div>
+                  <div className={styles["ext-hero-meta-row"]}>
                     <span className={styles["ext-source-pill"]}>
                       {selectedItem.source === "installed" ? "Installed" : selectedItem.source === "dotdir" ? ".dir" : "Open VSX"}
                     </span>
-                  </div>
-                  <div className={styles["ext-hero-publisher"]}>{selectedItem.publisher}</div>
-                  <p className={styles["ext-hero-description"]}>{selectedItem.description || "No description available."}</p>
-                  <div className={styles["ext-stats"]}>
-                    <div>
-                      <span>Version</span>
-                      <strong>{formatVersion(selectedItem.version)}</strong>
-                    </div>
-                    <div>
-                      <span>Downloads</span>
-                      <strong>{formatNumber(selectedRemoteMeta?.downloadCount ?? selectedItem.downloads)}</strong>
-                    </div>
-                    <div>
-                      <span>Rating</span>
-                      <strong>
-                        {selectedRemoteMeta?.averageRating != null
-                          ? `${selectedRemoteMeta.averageRating} (${selectedRemoteMeta.reviewCount ?? 0})`
-                          : selectedItem.rating == null
-                            ? "Unavailable"
-                            : selectedItem.rating}
-                      </strong>
-                    </div>
-                    <div>
-                      <span>Publisher</span>
-                      <strong>{selectedItem.publisher}</strong>
-                    </div>
-                  </div>
-                </div>
-                <div className={styles["ext-hero-actions"]}>
-                  {selectedInstalled ? (
+                    {selectedItem.kind !== "installed" && selectedItem.publisher.toLowerCase().includes("github") && (
+                      <span className={styles["ext-meta-with-icon"]}><FaGithub aria-hidden="true" /> {selectedItem.publisher}</span>
+                    )}
+                    {selectedItem.kind === "installed" && (
+                      <span className={styles["ext-meta-with-icon"]}>{selectedItem.publisher}</span>
+                    )}
+                    {selectedRemoteMeta?.homepage && (
+                      <>
+                        <span className={styles["ext-meta-separator"]}>|</span>
+                        <a className={styles["ext-meta-link"]} href={selectedRemoteMeta.homepage} onClick={handleExternalLinkClick}>
+                          {selectedHomepageLabel}
+                        </a>
+                      </>
+                    )}
+                    {selectedItem.kind === "dotdir" && (
+                      <>
+                        <span className={styles["ext-meta-separator"]}>|</span>
+                        <span className={styles["ext-meta-with-icon"]}>
+                          <VscVerifiedFilled aria-hidden="true" />
+                          Trusted
+                        </span>
+                      </>
+                    )}
+                    {(selectedRemoteMeta?.downloadCount ?? selectedItem.downloads) != null && (
+                      <>
+                        <span className={styles["ext-meta-separator"]}>|</span>
+                        <span className={styles["ext-meta-with-icon"]}>
+                          <VscCloudDownload aria-hidden="true" />
+                          {formatNumber(selectedRemoteMeta?.downloadCount ?? selectedItem.downloads)}
+                        </span>
+                      </>
+                    )}
                     <>
-                      <label className={styles["ext-toggle"]}>
-                        <input
-                          type="checkbox"
-                          checked={selectedAutoUpdate}
-                          onChange={(event) => {
-                            void handleSetAutoUpdate(selectedInstalled, event.target.checked);
-                          }}
-                        />
-                        <SmartLabel>Auto Update</SmartLabel>
-                      </label>
-                      {selectedIconThemeId && (
-                        <button
-                          className={cx(styles, "ext-action", selectedIconThemeId === activeIconTheme && "active")}
-                          onClick={() => handleSetIconTheme(selectedInstalled)}
-                        >
-                          <SmartLabel>{selectedIconThemeId === activeIconTheme ? "Deactivate Icon Theme" : "Activate Icon Theme"}</SmartLabel>
-                        </button>
-                      )}
-                      {selectedColorThemes.map((theme: LoadedColorTheme) => {
-                        const themeKey = colorThemeKey(selectedInstalled, theme.id);
-                        const active = themeKey === activeColorTheme;
-                        return (
-                          <button key={theme.id} className={cx(styles, "ext-action", active && "active")} onClick={() => handleSetColorTheme(selectedInstalled, theme.id)}>
-                            <SmartLabel>{active ? `Deactivate ${theme.label}` : `Activate ${theme.label}`}</SmartLabel>
-                          </button>
-                        );
-                      })}
-                      <button className={cx(styles, "ext-action", "danger")} disabled={selectedBusy?.kind === "uninstall"} onClick={() => handleUninstall(selectedInstalled)}>
-                        <SmartLabel>{selectedBusy?.kind === "uninstall" ? "Removing…" : "Uninstall"}</SmartLabel>
-                      </button>
+                      <span className={styles["ext-meta-separator"]}>|</span>
+                      {renderStars(selectedRemoteMeta?.averageRating ?? selectedItem.rating, selectedReviewCount, remoteMetaLoading)}
                     </>
-                  ) : (
-                    <button className={cx(styles, "ext-action", "primary")} disabled={selectedBusy?.kind === "install"} onClick={() => handleInstall(selectedItem)}>
-                      <SmartLabel>{selectedBusy?.kind === "install" ? (selectedBusy.phase === "finalize" ? "Finalizing…" : "Installing…") : "Install"}</SmartLabel>
-                    </button>
-                  )}
+                  </div>
+                  <p className={styles["ext-hero-description"]}>{selectedItem.description || "No description available."}</p>
+                  <div className={styles["ext-hero-actions"]}>
+                    {selectedInstalled ? (
+                      <>
+                        <button className={cx(styles, "ext-action", "danger")} disabled={selectedBusy?.kind === "uninstall"} onClick={() => handleUninstall(selectedInstalled)} type="button">
+                          <SmartLabel>{selectedBusy?.kind === "uninstall" ? "Removing…" : "Uninstall"}</SmartLabel>
+                        </button>
+                        <label className={styles["ext-toggle"]}>
+                          <input
+                            type="checkbox"
+                            checked={selectedAutoUpdate}
+                            onChange={(event) => {
+                              void handleSetAutoUpdate(selectedInstalled, event.target.checked);
+                            }}
+                          />
+                          <SmartLabel>Auto Update</SmartLabel>
+                        </label>
+                      </>
+                    ) : (
+                      <button className={cx(styles, "ext-action", "primary")} disabled={selectedBusy?.kind === "install"} onClick={() => handleInstall(selectedItem)} type="button">
+                        <SmartLabel>{selectedBusy?.kind === "install" ? (selectedBusy.phase === "finalize" ? "Finalizing…" : "Installing…") : "Install"}</SmartLabel>
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {selectedInstalled && (selectedIconThemeId || selectedColorThemes.length > 0) && (
+                  <div className={styles["ext-hero-side-controls"]}>
+                    {selectedIconThemeId && (
+                      <label className={styles["ext-select-wrap"]}>
+                        <span className={styles["ext-select-label"]}>Icon Theme</span>
+                        <select
+                          className={styles["ext-select"]}
+                          value={selectedIconThemeId === activeIconTheme ? selectedIconThemeId : ""}
+                          onChange={(event) => {
+                            if (!selectedIconThemeId) return;
+                            if (!event.target.value) {
+                              updateSettings({ iconTheme: undefined });
+                              return;
+                            }
+                            handleSetIconTheme(selectedInstalled);
+                          }}
+                        >
+                          <option value="">Default</option>
+                          <option value={selectedIconThemeId}>{selectedInstalled.manifest.displayName || selectedInstalled.manifest.name}</option>
+                        </select>
+                      </label>
+                    )}
+                    {selectedColorThemes.length > 0 && (
+                      <label className={styles["ext-select-wrap"]}>
+                        <span className={styles["ext-select-label"]}>Color Theme</span>
+                        <select
+                          className={styles["ext-select"]}
+                          value={selectedColorThemeValue}
+                          onChange={(event) => {
+                            if (!event.target.value) {
+                              updateSettings({ colorTheme: undefined });
+                              return;
+                            }
+                            handleSetColorTheme(selectedInstalled, event.target.value);
+                          }}
+                        >
+                          <option value="">Default</option>
+                          {selectedColorThemes.map((theme: LoadedColorTheme) => (
+                            <option key={theme.id} value={theme.id}>
+                              {theme.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                )}
               </header>
 
               <Tabs items={contentTabs} activeItemId={contentTab} onSelectItem={(id) => setContentTab(id as ContentTab)} variant="subtle" />
@@ -1064,10 +1185,12 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                 <div className={styles["ext-content-layout"]}>
                   <div className={styles["ext-content-main"]}>
                     {contentTab === "details" && (
-                      selectedRenderedDocs?.detailsHtml ? (
-                        <div className={styles["ext-markdown"]} dangerouslySetInnerHTML={{ __html: selectedRenderedDocs.detailsHtml }} />
+                      detailsLoading ? (
+                        <div className={styles["ext-empty-panel"]}>Loading README…</div>
+                      ) : selectedRenderedDocs?.detailsHtml ? (
+                        <div className={styles["ext-markdown"]} onClick={handleExternalLinkClick} dangerouslySetInnerHTML={{ __html: selectedRenderedDocs.detailsHtml }} />
                       ) : (
-                        <div className={styles["ext-empty-panel"]}>Loading details…</div>
+                        <div className={styles["ext-empty-panel"]}>No README available.</div>
                       )
                     )}
 
@@ -1098,7 +1221,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                       docsLoadingKey === selectedItem.key && !selectedRemoteMeta?.changelog && !selectedDocs?.changelog ? (
                         <div className={styles["ext-empty-panel"]}>Loading changelog…</div>
                       ) : selectedRenderedDocs?.changelogHtml ? (
-                        <div className={styles["ext-markdown"]} dangerouslySetInnerHTML={{ __html: selectedRenderedDocs.changelogHtml }} />
+                        <div className={styles["ext-markdown"]} onClick={handleExternalLinkClick} dangerouslySetInnerHTML={{ __html: selectedRenderedDocs.changelogHtml }} />
                       ) : (
                         <div className={styles["ext-empty-panel"]}>Loading changelog…</div>
                       )
@@ -1119,11 +1242,19 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                                 </div>
                               ))}
                             </dl>
+                          ) : "badges" in section ? (
+                            <ul className={styles["ext-badges"]}>
+                              {section.badges.map((badge) => (
+                                <li key={`${section.title}-${badge}`} className={styles["ext-badge"]}>
+                                  {badge}
+                                </li>
+                              ))}
+                            </ul>
                           ) : (
                             <ul className={styles["ext-info-links"]}>
                               {section.links.map((link) => (
                                 <li key={`${section.title}-${link.href}`}>
-                                  <a href={link.href} target="_blank" rel="noreferrer">
+                                  <a href={link.href} onClick={handleExternalLinkClick}>
                                     {link.label}
                                   </a>
                                 </li>

@@ -1,6 +1,6 @@
 {
   "name": "@dotdirfm/ui",
-  "version": "0.1.25",
+  "version": "0.1.26",
   "description": "Reusable DotDir file manager UI component for React apps.",
   "main": "./dist/dotdir.js",
   "module": "./dist/dotdir.mjs",
@@ -62,7 +62,8 @@
     "fss-lang": "^0.0.5",
     "jotai": "^2.19.0",
     "jsonc-parser": "^3.3.1",
-    "marked": "^17.0.5"
+    "marked": "^17.0.5",
+    "react-icons": "^5.6.0"
   },
   "devDependencies": {
     "vite": "^8.0.0",

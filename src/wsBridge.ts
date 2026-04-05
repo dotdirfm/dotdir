@@ -422,6 +422,9 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
           cacheDir: string;
         }>,
       getEnv: () => rpc("utils.getEnv", {}) as Promise<Record<string, string>>,
+      openExternal: async (url: string) => {
+        window.open(url, "_blank", "noopener,noreferrer");
+      },
     },
 
     systemTheme: {

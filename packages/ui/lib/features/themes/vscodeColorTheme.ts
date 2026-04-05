@@ -40,6 +40,8 @@ const COLOR_MAPPING: Array<{ cssVar: string; keys: string[] }> = [
   { cssVar: "--error-fg", keys: ["errorForeground", "editorError.foreground"] },
   { cssVar: "--accent", keys: ["button.background", "textLink.foreground", "focusBorder"] },
   { cssVar: "--accent-fg", keys: ["button.foreground"] },
+  { cssVar: "--link-fg", keys: ["textLink.foreground", "textLink.activeForeground", "focusBorder"] },
+  { cssVar: "--link-hover-fg", keys: ["textLink.activeForeground", "textLink.foreground", "focusBorder"] },
   { cssVar: "--key-bar-border", keys: ["activityBar.border"] },
   { cssVar: "--key-bar-bg", keys: ["activityBar.background"] },
   { cssVar: "--key-bar-fg", keys: ["activityBar.foreground"] },
