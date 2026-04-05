@@ -13,7 +13,7 @@ import type { Bridge, FsChangeType, FsEntry } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import { FileSystemObserver, useFileSystemWatchRegistry, type FileSystemChangeRecord, type HandleMeta } from "@/features/file-system/fs";
-import { createPanelResolver, invalidateFssCache, syncLayers, useExtensionFssLayers } from "@/fss";
+import { createPanelResolver, invalidateFssCache, syncLayers, useExtensionFssLayers } from "@/features/fss/fss";
 import { useLanguageRegistry } from "@/languageRegistry";
 import { buildContainerPath, isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, isFileExecutable, isRootPath, join } from "@/utils/path";

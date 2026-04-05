@@ -1,9 +1,9 @@
 import type { Bridge } from "@/features/bridge";
 import type { LoadedExtension } from "@/features/extensions/extensions";
 import { readFileText } from "@/features/file-system/fs";
-import type { ResolvedEntryStyle } from "@/types";
+import type { ResolvedEntryStyle } from "@/features/fss/types";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
-import type { FsNode} from "fss-lang";
+import type { FsNode } from "fss-lang";
 import { createLayer, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from "fss-lang";
 import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 

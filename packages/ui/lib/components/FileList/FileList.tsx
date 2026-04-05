@@ -1,12 +1,12 @@
-import { ActionQueue } from "@/actionQueue";
+import { ActionQueue } from "@/components/FileList/actionQueue";
 import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useGetCachedIcon, useIconThemeVersion, useLoadIconsForPaths, useResolveIcon } from "@/features/file-icons/iconResolver";
+import { resolveEntryStyle } from "@/features/fss/fss";
+import type { ResolvedEntryStyle } from "@/features/fss/types";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
-import { resolveEntryStyle } from "@/fss";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import type { ResolvedEntryStyle } from "@/types";
 import { binarySearch } from "@/utils/binarySearch";
 import { cx } from "@/utils/cssModules";
 import { dirname, join } from "@/utils/path";

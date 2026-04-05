@@ -75,7 +75,8 @@ const COLOR_MAPPING: Array<{ cssVar: string; keys: string[] }> = [
   { cssVar: "--tab-inactive-bg", keys: ["tab.inactiveBackground"] },
   { cssVar: "--tab-inactive-fg", keys: ["tab.inactiveForeground"] },
   { cssVar: "--tab-inactive-border", keys: ["tab.border"] },
-  { cssVar: "--tab-border-top", keys: ["tab.activeBorderTop"] }
+  { cssVar: "--tab-border-top", keys: ["tab.activeBorderTop"] },
+  { cssVar: "--hidden-entry-fg", keys: ["gitDecoration.ignoredResourceForeground"] },
 ];
 
 async function loadThemeJson(bridge: Bridge, jsonPath: string, maxDepth = 3): Promise<VSCodeColorThemeJson> {

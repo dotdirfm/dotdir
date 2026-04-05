@@ -1,4 +1,4 @@
-import type { ActionQueue } from "@/actionQueue";
+import type { ActionQueue } from "@/components/FileList/actionQueue";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useFocusContext } from "@/focusContext";
