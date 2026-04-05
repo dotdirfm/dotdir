@@ -1,5 +1,5 @@
 import { PanelTabs } from "@/components/PanelTabs/PanelTabs";
-import type { NestedPopoverMenuItem } from "@/components/NestedPopoverMenu/NestedPopoverMenu";
+import type { NestedPopoverMenuHandle, NestedPopoverMenuItem } from "@/components/NestedPopoverMenu/NestedPopoverMenu";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
 import {
@@ -68,6 +68,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
   const [mountedRoots, setMountedRoots] = useState<string[]>([]);
 
   const tabsRef = useRef(tabs);
+  const menuRef = useRef<NestedPopoverMenuHandle | null>(null);
   tabsRef.current = tabs;
   const leftTabsRef = useRef(leftTabs);
   leftTabsRef.current = leftTabs;
@@ -347,6 +348,18 @@ export function PanelGroup({ side }: PanelGroupProps) {
     });
   }, [focusContext, focusFileList, setActivePanel, side]);
 
+  const openPanelMenu = useCallback(() => {
+    setActivePanel(side);
+    menuRef.current?.open();
+  }, [setActivePanel, side]);
+
+  useEffect(() => {
+    const commandId = side === "left" ? "dotdir.openLeftPanelMenu" : "dotdir.openRightPanelMenu";
+    return commandRegistry.registerCommand(commandId, () => {
+      openPanelMenu();
+    });
+  }, [commandRegistry, openPanelMenu, side]);
+
   const oppositePanelPath = useMemo(() => {
     const oppositeTab =
       side === "left"
@@ -565,6 +578,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
         onCloseTab={handleCloseTab}
         onReorderTabs={handleReorderTabs}
         menuItems={menuItems}
+        menuRef={menuRef}
       />
       <div className={styles["panel-content"]} style={{ position: "relative" }}>
         {tabs

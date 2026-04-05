@@ -246,6 +246,7 @@ export class CommandRegistry {
       ...userContext,
       ...this.contextValues,
       focusPanel: currentFocus === "panel",
+      focusMenu: currentFocus === "menu",
       focusViewer: currentFocus === "viewer",
       focusEditor: currentFocus === "editor",
       focusTerminal: currentFocus === "terminal",

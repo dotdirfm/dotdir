@@ -15,6 +15,8 @@ const appBuiltInKeybindings: Keybinding[] = [
   { command: "toggleHiddenFiles", key: "ctrl+.", mac: "cmd+." },
   { command: "togglePanels", key: "ctrl+o", mac: "cmd+o", when: "!terminalCommandRunning" },
   { command: "showExtensions", key: "f11" },
+  { command: "dotdir.openLeftPanelMenu", key: "alt+f1", when: "!dialogOpen" },
+  { command: "dotdir.openRightPanelMenu", key: "alt+f2", when: "!dialogOpen" },
 
   // Navigation commands
   { command: "switchPanel", key: "tab", when: "focusPanel && !dialogOpen" },
@@ -69,13 +71,22 @@ const commandLineKeybindings: Keybinding[] = [
 const fileListKeybindings: Keybinding[] = [
   // Cursor/navigation
   { command: "cursorUp", key: "up", when: "focusPanel" },
+  { command: "cursorUp", key: "up", when: "focusMenu" },
   { command: "cursorDown", key: "down", when: "focusPanel" },
+  { command: "cursorDown", key: "down", when: "focusMenu" },
   { command: "cursorLeft", key: "left", when: "focusPanel" },
+  { command: "cursorLeft", key: "left", when: "focusMenu" },
   { command: "cursorRight", key: "right", when: "focusPanel" },
+  { command: "cursorRight", key: "right", when: "focusMenu" },
   { command: "cursorHome", key: "home", when: "focusPanel" },
+  { command: "cursorHome", key: "home", when: "focusMenu" },
   { command: "cursorEnd", key: "end", when: "focusPanel" },
+  { command: "cursorEnd", key: "end", when: "focusMenu" },
   { command: "cursorPageUp", key: "pageup", when: "focusPanel" },
+  { command: "cursorPageUp", key: "pageup", when: "focusMenu" },
   { command: "cursorPageDown", key: "pagedown", when: "focusPanel" },
+  { command: "cursorPageDown", key: "pagedown", when: "focusMenu" },
+  { command: "cancel", key: "escape", when: "focusMenu" },
 
   // Selection commands (Shift+Arrow)
   { command: "selectUp", key: "shift+up", when: "focusPanel" },

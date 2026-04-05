@@ -1,5 +1,9 @@
 import { ActionBar } from "@/components/ActionBar/ActionBar";
-import { NestedPopoverMenu, type NestedPopoverMenuItem } from "@/components/NestedPopoverMenu/NestedPopoverMenu";
+import {
+  NestedPopoverMenu,
+  type NestedPopoverMenuHandle,
+  type NestedPopoverMenuItem,
+} from "@/components/NestedPopoverMenu/NestedPopoverMenu";
 import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import type { PanelTab } from "@/entities/tab/model/types";
 import { basename } from "@/utils/path";
@@ -15,6 +19,7 @@ interface PanelTabsProps {
   onCloseTab?: (id: string) => void;
   onReorderTabs?: (fromIndex: number, toIndex: number) => void;
   menuItems: NestedPopoverMenuItem[];
+  menuRef?: RefObject<NestedPopoverMenuHandle | null>;
 }
 
 function tabLabel(tab: PanelTab): string {
@@ -25,7 +30,16 @@ function tabLabel(tab: PanelTab): string {
   return `${tab.dirty ? "* " : ""}${tab.name}`;
 }
 
-export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTab, onDoubleClickTab, onCloseTab, onReorderTabs, menuItems }: PanelTabsProps) {
+export const PanelTabs = memo(function PanelTabs({
+  tabs,
+  activeTabId,
+  onSelectTab,
+  onDoubleClickTab,
+  onCloseTab,
+  onReorderTabs,
+  menuItems,
+  menuRef,
+}: PanelTabsProps) {
   const items = useMemo<Array<TabsItem & { temp?: boolean }>>(
     () =>
       tabs.map((tab) => {
@@ -53,6 +67,7 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
       rightSlot={
         <ActionBar>
           <NestedPopoverMenu
+            ref={menuRef}
             items={menuItems}
             placement="bottom-end"
             renderAnchor={({ ref, open, toggle }) => (

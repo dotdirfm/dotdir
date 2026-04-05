@@ -99,6 +99,7 @@
 .list-item {
   margin: 0;
   padding: 0;
+  border: 0;
 }
 
 .item {
@@ -122,6 +123,10 @@
 .item:focus-visible {
   background: var(--entry-hover, rgba(255, 255, 255, 0.08));
   outline: none;
+}
+
+.itemSelected {
+  background: var(--entry-hover, rgba(255, 255, 255, 0.08));
 }
 
 .itemDisabled {

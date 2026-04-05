@@ -14,6 +14,8 @@ export const builtInCommandContributions: CommandContribution[] = [
   { command: "switchPanel", title: "Switch Panel", category: "Navigation" },
   { command: "dotdir.focusLeftPanel", title: "Focus Left Panel", category: "Navigation" },
   { command: "dotdir.focusRightPanel", title: "Focus Right Panel", category: "Navigation" },
+  { command: "dotdir.openLeftPanelMenu", title: "Open Left Panel Menu", shortTitle: "LeftMn", category: "Navigation", palette: false },
+  { command: "dotdir.openRightPanelMenu", title: "Open Right Panel Menu", shortTitle: "RightMn", category: "Navigation", palette: false },
   { command: "dotdir.cancelNavigation", title: "Cancel Navigation", category: "Navigation", palette: false },
   { command: "dotdir.panelEscape", title: "Panel Escape", category: "Navigation", palette: false },
   { command: "cursorUp", title: "Cursor Up", category: "Navigation" },

@@ -1,5 +1,17 @@
 import { cx } from "@/utils/cssModules";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useFocusContext } from "@/focusContext";
+import { useInteractionContext, type InteractionIntent } from "@/interactionContext";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { VscChevronLeft, VscChevronRight } from "react-icons/vsc";
 import styles from "./NestedPopoverMenu.module.css";
 
@@ -42,6 +54,12 @@ interface NestedPopoverMenuProps {
     toggle: () => void;
     close: () => void;
   }) => React.ReactNode;
+}
+
+export interface NestedPopoverMenuHandle {
+  open: () => void;
+  close: () => void;
+  toggle: () => void;
 }
 
 interface MenuView {
@@ -114,18 +132,43 @@ function measureElementSize(element: HTMLElement | null): { width: number; heigh
   };
 }
 
-export function NestedPopoverMenu({
+function getFirstEnabledIndex(items: NestedPopoverMenuItem[]): number {
+  return items.findIndex((item) => !item.disabled);
+}
+
+function getLastEnabledIndex(items: NestedPopoverMenuItem[]): number {
+  for (let index = items.length - 1; index >= 0; index--) {
+    if (!items[index]?.disabled) return index;
+  }
+  return -1;
+}
+
+function getNextEnabledIndex(items: NestedPopoverMenuItem[], startIndex: number, delta: 1 | -1): number {
+  if (items.length === 0) return -1;
+  let index = startIndex;
+  for (let step = 0; step < items.length; step++) {
+    index = (index + delta + items.length) % items.length;
+    if (!items[index]?.disabled) return index;
+  }
+  return startIndex;
+}
+
+export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopoverMenuProps>(function NestedPopoverMenu({
   items,
   placement = "bottom-end",
   className,
   popoverClassName,
   viewTitle,
   renderAnchor,
-}: NestedPopoverMenuProps) {
+}, ref) {
+  const focusContext = useFocusContext();
+  const interactionContext = useInteractionContext();
   const anchorRef = useRef<HTMLElement | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const currentContentRef = useRef<HTMLDivElement | null>(null);
   const prevContentRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef(new Map<string, HTMLAnchorElement | null>());
+  const previousFocusedRef = useRef<HTMLElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const animationTimeoutRef = useRef<number | null>(null);
   const generatedId = useId().replace(/:/g, "");
@@ -142,15 +185,20 @@ export function NestedPopoverMenu({
 
   const [open, setOpen] = useState(false);
   const [stack, setStack] = useState<MenuView[]>([rootView]);
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([getFirstEnabledIndex(rootView.items)]);
   const [prevView, setPrevView] = useState<MenuView | null>(null);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [contentSize, setContentSize] = useState<{ width: number; height: number } | undefined>(undefined);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties | null>(null);
 
   const currentView = stack[stack.length - 1] ?? rootView;
+  const selectedIndex = selectedIndices[selectedIndices.length - 1] ?? getFirstEnabledIndex(currentView.items);
+  const selectedItem = selectedIndex >= 0 ? currentView.items[selectedIndex] : undefined;
+  const selectedItemId = selectedItem ? `${currentView.id}:${selectedItem.id}` : null;
 
   useEffect(() => {
     setStack([rootView]);
+    setSelectedIndices([getFirstEnabledIndex(rootView.items)]);
     setPrevView(null);
   }, [rootView]);
 
@@ -231,22 +279,46 @@ export function NestedPopoverMenu({
     });
   }, [prevView, runAnimation]);
 
-  const close = useCallback(() => {
-    setOpen(false);
+  const resetToRoot = useCallback(() => {
     setStack([rootView]);
+    setSelectedIndices([getFirstEnabledIndex(rootView.items)]);
     finishPreviousView();
   }, [finishPreviousView, rootView]);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    resetToRoot();
+  }, [resetToRoot]);
+
+  const openMenu = useCallback(() => {
+    setOpen((value) => {
+      if (value) return value;
+      resetToRoot();
+      return true;
+    });
+  }, [resetToRoot]);
 
   const toggle = useCallback(() => {
     setOpen((value) => {
       const next = !value;
       if (!next) {
-        setStack([rootView]);
-        finishPreviousView();
+        resetToRoot();
+      } else {
+        resetToRoot();
       }
       return next;
     });
-  }, [finishPreviousView, rootView]);
+  }, [resetToRoot]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      open: openMenu,
+      close,
+      toggle,
+    }),
+    [close, openMenu, toggle],
+  );
 
   const pushView = useCallback((item: NestedPopoverMenuItem) => {
     if (!item.items?.length) return;
@@ -261,6 +333,7 @@ export function NestedPopoverMenu({
         items: item.items ?? [],
       },
     ]);
+    setSelectedIndices((indices) => [...indices, getFirstEnabledIndex(item.items ?? [])]);
   }, [currentView]);
 
   const popView = useCallback(() => {
@@ -271,15 +344,20 @@ export function NestedPopoverMenu({
       prevContentRef.current = currentContentRef.current;
       return views.slice(0, -1);
     });
+    setSelectedIndices((indices) => (indices.length > 1 ? indices.slice(0, -1) : indices));
   }, []);
 
-  const handleItemClick = useCallback(async (item: NestedPopoverMenuItem) => {
+  const handleItemClick = useCallback(async (item: NestedPopoverMenuItem, alternate = false) => {
     if (item.disabled) return;
     if (item.items?.length) {
       pushView(item);
       return;
     }
-    await item.onSelect?.();
+    if (alternate && item.onOpenInNewTab) {
+      await item.onOpenInNewTab();
+    } else {
+      await item.onSelect?.();
+    }
     close();
   }, [close, pushView]);
 
@@ -306,15 +384,14 @@ export function NestedPopoverMenu({
       const nextState = (event as ToggleEvent).newState;
       if (nextState === "closed") {
         setOpen(false);
-        setStack([rootView]);
-        finishPreviousView();
+        resetToRoot();
       }
     };
     popover.addEventListener("toggle", onToggle);
     return () => {
       popover.removeEventListener("toggle", onToggle);
     };
-  }, [finishPreviousView, rootView]);
+  }, [resetToRoot]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -335,6 +412,122 @@ export function NestedPopoverMenu({
       window.removeEventListener("scroll", updatePosition, true);
     };
   }, [contentSize, open, placement]);
+
+  useEffect(() => {
+    const container = popoverRef.current;
+    if (!container) return;
+    return focusContext.registerAdapter("menu", {
+      focus() {
+        if (selectedItemId) {
+          itemRefs.current.get(selectedItemId)?.focus();
+          return;
+        }
+        anchorRef.current?.focus();
+      },
+      contains(node) {
+        return node instanceof Node ? container.contains(node) || anchorRef.current?.contains(node) === true : false;
+      },
+      allowCommandRouting: true,
+    });
+  }, [focusContext, selectedItemId]);
+
+  useEffect(() => {
+    if (!open) return;
+    previousFocusedRef.current = document.activeElement as HTMLElement | null;
+    focusContext.push("menu");
+    const frame = requestAnimationFrame(() => {
+      focusContext.focusCurrent();
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      focusContext.pop("menu");
+      requestAnimationFrame(() => {
+        if (focusContext.is("panel")) {
+          focusContext.focusCurrent();
+          return;
+        }
+        previousFocusedRef.current?.focus?.();
+      });
+    };
+  }, [focusContext, open]);
+
+  useEffect(() => {
+    if (!open || !selectedItemId) return;
+    itemRefs.current.get(selectedItemId)?.focus();
+  }, [open, selectedItemId]);
+
+  const updateSelectedIndex = useCallback((nextIndex: number) => {
+    setSelectedIndices((indices) => {
+      const next = [...indices];
+      next[next.length - 1] = nextIndex;
+      return next;
+    });
+  }, []);
+
+  const handleIntent = useCallback((intent: InteractionIntent, event?: KeyboardEvent | null): boolean => {
+    if (!open) return false;
+
+    switch (intent) {
+      case "cursorUp": {
+        if (selectedIndex < 0) {
+          updateSelectedIndex(getLastEnabledIndex(currentView.items));
+          return true;
+        }
+        updateSelectedIndex(getNextEnabledIndex(currentView.items, selectedIndex, -1));
+        return true;
+      }
+      case "cursorDown": {
+        if (selectedIndex < 0) {
+          updateSelectedIndex(getFirstEnabledIndex(currentView.items));
+          return true;
+        }
+        updateSelectedIndex(getNextEnabledIndex(currentView.items, selectedIndex, 1));
+        return true;
+      }
+      case "cursorHome":
+      case "cursorPageUp":
+        updateSelectedIndex(getFirstEnabledIndex(currentView.items));
+        return true;
+      case "cursorEnd":
+      case "cursorPageDown":
+        updateSelectedIndex(getLastEnabledIndex(currentView.items));
+        return true;
+      case "cursorLeft":
+        if (stack.length <= 1) return false;
+        popView();
+        return true;
+      case "cursorRight":
+        if (!selectedItem?.items?.length) return false;
+        pushView(selectedItem);
+        return true;
+      case "accept":
+        if (!selectedItem) return false;
+        void handleItemClick(selectedItem, Boolean(event?.shiftKey && selectedItem.onOpenInNewTab));
+        return true;
+      case "cancel":
+        close();
+        return true;
+      default:
+        return false;
+    }
+  }, [close, currentView.items, handleItemClick, open, popView, pushView, selectedIndex, selectedItem, stack.length, updateSelectedIndex]);
+
+  useEffect(() => {
+    return interactionContext.registerController({
+      contains(node) {
+        const popover = popoverRef.current;
+        return node instanceof Node
+          ? (popover?.contains(node) ?? false) || (anchorRef.current?.contains(node) ?? false)
+          : false;
+      },
+      isActive() {
+        return open && focusContext.is("menu");
+      },
+      handleIntent(intent, event) {
+        return handleIntent(intent, event);
+      },
+    });
+  }, [focusContext, handleIntent, interactionContext, open]);
 
   return (
     <>
@@ -359,30 +552,54 @@ export function NestedPopoverMenu({
         <div className={styles.viewport}>
           {currentView ? (
             <div key={currentView.id} ref={observeCurrentContent} className={styles["screen-current"]}>
-              <MenuViewBody view={currentView} canGoBack={stack.length > 1} onBack={popView} onItemClick={handleItemClick} />
+              <MenuViewBody
+                view={currentView}
+                canGoBack={stack.length > 1}
+                onBack={popView}
+                onItemClick={handleItemClick}
+                selectedItemId={selectedItemId}
+                setItemRef={(itemId, element) => {
+                  itemRefs.current.set(itemId, element);
+                }}
+                onItemPointerMove={updateSelectedIndex}
+              />
             </div>
           ) : null}
           {prevView && prevView.id !== currentView.id ? (
             <div key={`prev-${prevView.id}`} ref={prevContentRef} className={styles["screen-previous"]}>
-              <MenuViewBody view={prevView} canGoBack={stack.length > 1} onBack={popView} onItemClick={handleItemClick} />
+              <MenuViewBody
+                view={prevView}
+                canGoBack={stack.length > 1}
+                onBack={popView}
+                onItemClick={handleItemClick}
+                selectedItemId={null}
+                setItemRef={() => {}}
+                onItemPointerMove={() => {}}
+              />
             </div>
           ) : null}
         </div>
       </div>
     </>
   );
-}
+});
 
 function MenuViewBody({
   view,
   canGoBack,
   onBack,
   onItemClick,
+  selectedItemId,
+  setItemRef,
+  onItemPointerMove,
 }: {
   view: MenuView;
   canGoBack: boolean;
   onBack: () => void;
   onItemClick: (item: NestedPopoverMenuItem) => void | Promise<void>;
+  selectedItemId: string | null;
+  setItemRef: (itemId: string, element: HTMLAnchorElement | null) => void;
+  onItemPointerMove: (index: number) => void;
 }) {
   return (
     <div className={styles["menu-view"]}>
@@ -395,15 +612,23 @@ function MenuViewBody({
         </div>
       ) : null}
       <ul className={styles.list}>
-        {view.items.map((item) => {
+        {view.items.map((item, index) => {
           const hasChildren = Boolean(item.items?.length);
+          const itemKey = `${view.id}:${item.id}`;
           return (
             <li key={item.id} className={styles["list-item"]}>
               <a
+                ref={(element) => {
+                  setItemRef(itemKey, element);
+                }}
                 href="#"
-                className={cx(styles, "item", item.disabled && "itemDisabled")}
+                className={cx(styles, "item", item.disabled && "itemDisabled", selectedItemId === itemKey && "itemSelected")}
                 title={item.title}
                 aria-disabled={item.disabled || undefined}
+                aria-current={selectedItemId === itemKey ? "true" : undefined}
+                onPointerMove={() => {
+                  if (!item.disabled) onItemPointerMove(index);
+                }}
                 onClick={(event) => {
                   event.preventDefault();
                   void onItemClick(item);

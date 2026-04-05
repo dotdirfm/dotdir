@@ -2,6 +2,7 @@ import { createContext, createElement, useContext, useRef, type ReactNode } from
 
 export type FocusLayer =
   | "panel"
+  | "menu"
   | "commandPalette"
   | "modal"
   | "terminal"
@@ -124,7 +125,7 @@ export class FocusContextManager {
       return adapter.allowCommandRouting(event);
     }
     if (adapter?.allowCommandRouting === false) return false;
-    return layer === "panel" || layer === "viewer" || layer === "editor";
+    return layer === "panel" || layer === "menu" || layer === "viewer" || layer === "editor";
   }
 
   shouldRouteCommandEvent(event: KeyboardEvent, root: HTMLElement): boolean {
