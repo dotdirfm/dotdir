@@ -21,8 +21,3 @@
   width: 16px;
   height: 16px;
 }
-
-.panel-tab-menu:hover {
-  color: var(--fg);
-  background: var(--entry-hover, rgba(255, 255, 255, 0.06));
-}

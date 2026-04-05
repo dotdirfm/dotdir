@@ -25,7 +25,8 @@ import { basename, dirname } from "@/utils/path";
 import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
 import type { FsNode } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { VscArrowDown, VscArrowUp, VscRegex } from "react-icons/vsc";
 import { FileListTabPane } from "../FileListTabPane";
 import styles from "./PanelGroup.module.css";
 import { usePanelCommands } from "./usePanelCommands";
@@ -66,6 +67,14 @@ export function PanelGroup({ side }: PanelGroupProps) {
   const showHidden = useAtomValue(showHiddenAtom);
   const [activeFileListNavigating, setActiveFileListNavigating] = useState(false);
   const [mountedRoots, setMountedRoots] = useState<string[]>([]);
+  const visibleSortedActiveEntries = useMemo(() => {
+    if (!activeTab || activeTab.type !== "filelist") return [];
+    const visibleEntries = showHidden ? activeTab.entries : activeTab.entries.filter((entry) => !entry.meta.hidden);
+    return [...visibleEntries].sort((left, right) => {
+      if (left.type !== right.type) return left.type === "folder" ? -1 : 1;
+      return left.name.localeCompare(right.name);
+    });
+  }, [activeTab, showHidden]);
 
   const tabsRef = useRef(tabs);
   const menuRef = useRef<NestedPopoverMenuHandle | null>(null);
@@ -301,6 +310,45 @@ export function PanelGroup({ side }: PanelGroupProps) {
     });
   }, [setTabs]);
 
+  const quickSearchTo = useCallback((query: string, matchIndex = 0, regexp = false) => {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) return;
+    const currentTab = activeTabRef.current;
+    if (!currentTab || currentTab.type !== "filelist") return;
+
+    const visibleEntries = (showHidden ? currentTab.entries : currentTab.entries.filter((entry) => !entry.meta.hidden)).slice();
+    visibleEntries.sort((left, right) => {
+      if (left.type !== right.type) return left.type === "folder" ? -1 : 1;
+      return left.name.localeCompare(right.name);
+    });
+    const matches = regexp
+      ? (() => {
+          try {
+            const re = new RegExp(normalizedQuery, "i");
+            return visibleEntries.filter((entry) => re.test(entry.name));
+          } catch {
+            return [];
+          }
+        })()
+      : visibleEntries.filter((entry) => entry.name.toLowerCase().includes(normalizedQuery.toLowerCase()));
+    const match = matches[matchIndex];
+    if (!match) return;
+
+    setTabs((prev) => {
+      const index = prev.findIndex((tab) => tab.id === activeTabIdRef.current);
+      if (index < 0) return prev;
+      const tab = prev[index];
+      if (!tab || tab.type !== "filelist") return prev;
+      const next = [...prev];
+      next[index] = {
+        ...tab,
+        activeEntryName: match.name,
+        selectedEntryNames: [],
+      };
+      return next;
+    });
+  }, [setTabs, showHidden]);
+
   const handleNewTab = useCallback(() => {
     const path = getPanelTabDirectoryPath(activeTabRef.current) ?? "";
     openFileListTab(path);
@@ -409,8 +457,25 @@ export function PanelGroup({ side }: PanelGroupProps) {
           },
         ],
       },
+      {
+        id: "quick-search",
+        label: "Jump To...",
+        disabled: activeTab?.type !== "filelist",
+        renderView: ({ close }) => (
+          <QuickSearchView
+            entries={visibleSortedActiveEntries}
+            onSelectMatch={quickSearchTo}
+            onConfirm={() => {
+              close();
+              requestAnimationFrame(() => {
+                void commandRegistry.executeCommand("list.open");
+              });
+            }}
+          />
+        ),
+      },
     ],
-    [bridge, duplicateCurrentTab, mountedRoots, openFileListTab, openPathInCurrentTab, oppositePanelPath],
+    [activeTab?.type, bridge, commandRegistry, duplicateCurrentTab, mountedRoots, openFileListTab, openPathInCurrentTab, oppositePanelPath, quickSearchTo, visibleSortedActiveEntries],
   );
 
   usePanelCommands({
@@ -622,3 +687,147 @@ function getPanelTabDirectoryPath(tab: PanelTab | null | undefined): string | nu
   if (tab.type === "filelist") return tab.path;
   return dirname(tab.path);
 }
+
+function QuickSearchView({
+  entries,
+  onSelectMatch,
+  onConfirm,
+}: {
+  entries: FsNode[];
+  onSelectMatch: (query: string, matchIndex?: number, regexp?: boolean) => void;
+  onConfirm: () => void;
+}) {
+  const [value, setValue] = useState("");
+  const [matchIndex, setMatchIndex] = useState(0);
+  const [regexp, setRegexp] = useState(false);
+
+  const getMatches = useCallback(
+    (query: string) => {
+      const normalized = query.trim();
+      if (!normalized) return [];
+      if (regexp) {
+        try {
+          const re = new RegExp(normalized, "i");
+          return entries.filter((entry) => re.test(entry.name));
+        } catch {
+          return [];
+        }
+      }
+      const lower = normalized.toLowerCase();
+      return entries.filter((entry) => entry.name.toLowerCase().includes(lower));
+    },
+    [entries, regexp],
+  );
+
+  const moveMatch = useCallback((delta: 1 | -1, query: string, currentIndex: number, useRegexp: boolean) => {
+    const matches = getMatches(query);
+    if (matches.length === 0) return;
+    const nextIndex = (currentIndex + delta + matches.length) % matches.length;
+    setMatchIndex(nextIndex);
+    onSelectMatch(query, nextIndex, useRegexp);
+  }, [getMatches, onSelectMatch]);
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr) auto auto auto",
+        gap: 6,
+        alignItems: "stretch",
+      }}
+    >
+      <input
+        autoFocus
+        type="text"
+        value={value}
+        placeholder="Type filename..."
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        style={{
+          width: "100%",
+          minHeight: 30,
+          padding: "6px 8px",
+          border: "1px solid var(--border)",
+          borderRadius: 2,
+          background: "var(--input-bg, var(--bg))",
+          color: "var(--fg)",
+          boxSizing: "border-box",
+        }}
+        onChange={(event) => {
+          const nextValue = event.target.value;
+          setValue(nextValue);
+          setMatchIndex(0);
+          onSelectMatch(nextValue, 0, regexp);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            onConfirm();
+            return;
+          }
+          if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+          event.preventDefault();
+          moveMatch(event.key === "ArrowDown" ? 1 : -1, value, matchIndex, regexp);
+        }}
+      />
+      <button
+        type="button"
+        aria-label="Previous match"
+        title="Previous match"
+        style={jumpButtonStyle}
+        onClick={() => {
+          moveMatch(-1, value, matchIndex, regexp);
+        }}
+      >
+        <VscArrowUp aria-hidden />
+      </button>
+      <button
+        type="button"
+        aria-label="Next match"
+        title="Next match"
+        style={jumpButtonStyle}
+        onClick={() => {
+          moveMatch(1, value, matchIndex, regexp);
+        }}
+      >
+        <VscArrowDown aria-hidden />
+      </button>
+      <button
+        type="button"
+        aria-label="Use regular expression"
+        title="Regexp"
+        aria-pressed={regexp}
+        style={{
+          ...jumpButtonStyle,
+          background: regexp ? "var(--entry-hover, rgba(255, 255, 255, 0.08))" : "transparent",
+        }}
+        onClick={() => {
+          setRegexp((current) => {
+            const next = !current;
+            setMatchIndex(0);
+            onSelectMatch(value, 0, next);
+            return next;
+          });
+        }}
+      >
+        <VscRegex aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+const jumpButtonStyle: CSSProperties = {
+  minWidth: 30,
+  minHeight: 30,
+  padding: 0,
+  border: "1px solid var(--border)",
+  borderRadius: 2,
+  background: "transparent",
+  color: "var(--fg)",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+};

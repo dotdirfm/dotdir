@@ -9,7 +9,6 @@
     width: 20px;
     height: 20px;
     background: transparent;
-    border: 1px solid var(--border);
     color: var(--fg);
   }
 }

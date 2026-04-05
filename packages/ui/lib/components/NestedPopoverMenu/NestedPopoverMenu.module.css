@@ -55,6 +55,10 @@
   padding: 6px;
 }
 
+.custom-view {
+  min-width: 240px;
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -150,4 +154,15 @@
   flex-shrink: 0;
   width: 14px;
   height: 14px;
+}
+
+.menu-input {
+  width: 100%;
+  min-height: 30px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--input-bg, var(--bg));
+  color: var(--fg);
+  box-sizing: border-box;
 }

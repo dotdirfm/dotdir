@@ -39,6 +39,7 @@ export interface NestedPopoverMenuItem {
   onSelect?: () => void | Promise<void>;
   onOpenInNewTab?: () => void | Promise<void>;
   items?: NestedPopoverMenuItem[];
+  renderView?: (props: { close: () => void; goBack: () => void }) => React.ReactNode;
 }
 
 interface NestedPopoverMenuProps {
@@ -66,6 +67,7 @@ interface MenuView {
   id: string;
   title?: string;
   items: NestedPopoverMenuItem[];
+  renderView?: (props: { close: () => void; goBack: () => void }) => React.ReactNode;
 }
 
 const ANIMATION_MS = 200;
@@ -192,15 +194,19 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties | null>(null);
 
   const currentView = stack[stack.length - 1] ?? rootView;
-  const selectedIndex = selectedIndices[selectedIndices.length - 1] ?? getFirstEnabledIndex(currentView.items);
-  const selectedItem = selectedIndex >= 0 ? currentView.items[selectedIndex] : undefined;
+  const currentViewHasList = !currentView.renderView;
+  const selectedIndex = currentViewHasList
+    ? (selectedIndices[selectedIndices.length - 1] ?? getFirstEnabledIndex(currentView.items))
+    : -1;
+  const selectedItem = currentViewHasList && selectedIndex >= 0 ? currentView.items[selectedIndex] : undefined;
   const selectedItemId = selectedItem ? `${currentView.id}:${selectedItem.id}` : null;
 
   useEffect(() => {
+    if (open) return;
     setStack([rootView]);
     setSelectedIndices([getFirstEnabledIndex(rootView.items)]);
     setPrevView(null);
-  }, [rootView]);
+  }, [open, rootView]);
 
   useEffect(() => {
     resizeObserverRef.current = new ResizeObserver((entries) => {
@@ -321,7 +327,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   );
 
   const pushView = useCallback((item: NestedPopoverMenuItem) => {
-    if (!item.items?.length) return;
+    if (!item.items?.length && !item.renderView) return;
     setDirection(1);
     setPrevView(currentView);
     prevContentRef.current = currentContentRef.current;
@@ -331,9 +337,10 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
         id: item.id,
         title: item.label,
         items: item.items ?? [],
+        renderView: item.renderView,
       },
     ]);
-    setSelectedIndices((indices) => [...indices, getFirstEnabledIndex(item.items ?? [])]);
+    setSelectedIndices((indices) => [...indices, item.renderView ? -1 : getFirstEnabledIndex(item.items ?? [])]);
   }, [currentView]);
 
   const popView = useCallback(() => {
@@ -349,7 +356,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
 
   const handleItemClick = useCallback(async (item: NestedPopoverMenuItem, alternate = false) => {
     if (item.disabled) return;
-    if (item.items?.length) {
+    if (item.items?.length || item.renderView) {
       pushView(item);
       return;
     }
@@ -422,6 +429,14 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
           itemRefs.current.get(selectedItemId)?.focus();
           return;
         }
+        const currentContent = currentContentRef.current;
+        const editable = currentContent?.querySelector<HTMLElement>(
+          'input, textarea, select, [contenteditable="true"], [contenteditable=""], [tabindex]:not([tabindex="-1"])',
+        );
+        if (editable) {
+          editable.focus();
+          return;
+        }
         anchorRef.current?.focus();
       },
       contains(node) {
@@ -466,6 +481,15 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
 
   const handleIntent = useCallback((intent: InteractionIntent, event?: KeyboardEvent | null): boolean => {
     if (!open) return false;
+    const editableTarget = focusContext.isEditableTarget(document.activeElement);
+
+    if (editableTarget) {
+      if (intent === "cancel") {
+        close();
+        return true;
+      }
+      return false;
+    }
 
     switch (intent) {
       case "cursorUp": {
@@ -497,7 +521,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
         popView();
         return true;
       case "cursorRight":
-        if (!selectedItem?.items?.length) return false;
+        if (!selectedItem?.items?.length && !selectedItem?.renderView) return false;
         pushView(selectedItem);
         return true;
       case "accept":
@@ -510,7 +534,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
       default:
         return false;
     }
-  }, [close, currentView.items, handleItemClick, open, popView, pushView, selectedIndex, selectedItem, stack.length, updateSelectedIndex]);
+  }, [close, currentView.items, focusContext, handleItemClick, open, popView, pushView, selectedIndex, selectedItem, stack.length, updateSelectedIndex]);
 
   useEffect(() => {
     return interactionContext.registerController({
@@ -562,6 +586,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
                   itemRefs.current.set(itemId, element);
                 }}
                 onItemPointerMove={updateSelectedIndex}
+                close={close}
               />
             </div>
           ) : null}
@@ -575,6 +600,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
                 selectedItemId={null}
                 setItemRef={() => {}}
                 onItemPointerMove={() => {}}
+                close={close}
               />
             </div>
           ) : null}
@@ -592,6 +618,7 @@ function MenuViewBody({
   selectedItemId,
   setItemRef,
   onItemPointerMove,
+  close,
 }: {
   view: MenuView;
   canGoBack: boolean;
@@ -600,7 +627,24 @@ function MenuViewBody({
   selectedItemId: string | null;
   setItemRef: (itemId: string, element: HTMLAnchorElement | null) => void;
   onItemPointerMove: (index: number) => void;
+  close: () => void;
 }) {
+  if (view.renderView) {
+    return (
+      <div className={styles["menu-view"]}>
+        {canGoBack ? (
+          <div className={styles.header}>
+            <button type="button" className={styles["back-button"]} onClick={onBack} aria-label="Back">
+              <VscChevronLeft aria-hidden />
+            </button>
+            <div className={styles["header-title"]}>{view.title}</div>
+          </div>
+        ) : null}
+        <div className={styles["custom-view"]}>{view.renderView?.({ close, goBack: onBack })}</div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles["menu-view"]}>
       {canGoBack ? (

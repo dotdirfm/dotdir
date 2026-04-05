@@ -8,7 +8,7 @@ import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import type { PanelTab } from "@/entities/tab/model/types";
 import { basename } from "@/utils/path";
 import { memo, useMemo, type RefObject } from "react";
-import { VscEllipsis } from "react-icons/vsc";
+import { VscKebabVertical } from "react-icons/vsc";
 import panelTabsStyles from "./PanelTabs.module.css";
 
 interface PanelTabsProps {
@@ -75,12 +75,12 @@ export const PanelTabs = memo(function PanelTabs({
                 ref={ref as RefObject<HTMLButtonElement | null>}
                 type="button"
                 className={panelTabsStyles["panel-tab-menu"]}
-                onClick={toggle}
-                aria-label="Tab actions"
-                aria-expanded={open}
-                title="Tab actions"
-              >
-                <VscEllipsis aria-hidden />
+              onClick={toggle}
+              aria-label="Tab actions"
+              aria-expanded={open}
+              title="Tab actions"
+            >
+                <VscKebabVertical aria-hidden />
               </button>
             )}
           />
