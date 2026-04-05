@@ -1,0 +1,148 @@
+.popover {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--menu-bg, var(--bg));
+  color: var(--fg);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease,
+    width 200ms ease,
+    height 200ms ease,
+    display 180ms allow-discrete,
+    overlay 180ms allow-discrete;
+  transform-origin: top right;
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+}
+
+.popover:popover-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+@starting-style {
+  .popover:popover-open {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+.viewport {
+  position: relative;
+  overflow: hidden;
+}
+
+.screen-current,
+.screen-previous {
+  position: absolute;
+  inset: 0;
+  width: max-content;
+}
+
+.screen-current {
+  position: relative;
+}
+
+.menu-view {
+  width: max-content;
+  min-width: 220px;
+  max-width: min(360px, calc(100vw - 16px));
+  padding: 6px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 2px 4px 8px;
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.back-button:hover {
+  background: var(--entry-hover, rgba(255, 255, 255, 0.08));
+}
+
+.header-title {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.list-item {
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  min-width: 220px;
+  width: auto;
+  min-height: 30px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.item:hover,
+.item:focus-visible {
+  background: var(--entry-hover, rgba(255, 255, 255, 0.08));
+  outline: none;
+}
+
+.itemDisabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.itemDisabled:hover {
+  background: transparent;
+}
+
+.item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}

@@ -202,6 +202,7 @@ export interface Bridge {
   };
   utils: {
     getHomePath(): Promise<string>;
+    getMountedRoots(): Promise<string[]>;
     getAppDirs(): Promise<AppDirs>;
     getEnv(): Promise<Record<string, string>>;
     openExternal?(url: string): Promise<void>;

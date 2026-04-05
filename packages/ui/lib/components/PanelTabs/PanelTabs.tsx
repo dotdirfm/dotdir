@@ -1,9 +1,10 @@
 import { ActionBar } from "@/components/ActionBar/ActionBar";
+import { NestedPopoverMenu, type NestedPopoverMenuItem } from "@/components/NestedPopoverMenu/NestedPopoverMenu";
 import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import type { PanelTab } from "@/entities/tab/model/types";
 import { basename } from "@/utils/path";
-import { memo, useMemo } from "react";
-import { VscAdd } from "react-icons/vsc";
+import { memo, useMemo, type RefObject } from "react";
+import { VscEllipsis } from "react-icons/vsc";
 import panelTabsStyles from "./PanelTabs.module.css";
 
 interface PanelTabsProps {
@@ -12,8 +13,8 @@ interface PanelTabsProps {
   onSelectTab: (id: string) => void;
   onDoubleClickTab: (id: string) => void;
   onCloseTab?: (id: string) => void;
-  onNewTab: () => void;
   onReorderTabs?: (fromIndex: number, toIndex: number) => void;
+  menuItems: NestedPopoverMenuItem[];
 }
 
 function tabLabel(tab: PanelTab): string {
@@ -24,7 +25,7 @@ function tabLabel(tab: PanelTab): string {
   return `${tab.dirty ? "* " : ""}${tab.name}`;
 }
 
-export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTab, onDoubleClickTab, onCloseTab, onNewTab, onReorderTabs }: PanelTabsProps) {
+export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTab, onDoubleClickTab, onCloseTab, onReorderTabs, menuItems }: PanelTabsProps) {
   const items = useMemo<Array<TabsItem & { temp?: boolean }>>(
     () =>
       tabs.map((tab) => {
@@ -51,9 +52,23 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
       getItemClassName={(item) => (item.temp ? panelTabsStyles.temp : undefined)}
       rightSlot={
         <ActionBar>
-          <button type="button" className={panelTabsStyles["panel-tab-new"]} onClick={onNewTab} aria-label="New tab" title="New tab">
-            <VscAdd aria-hidden />
-          </button>
+          <NestedPopoverMenu
+            items={menuItems}
+            placement="bottom-end"
+            renderAnchor={({ ref, open, toggle }) => (
+              <button
+                ref={ref as RefObject<HTMLButtonElement | null>}
+                type="button"
+                className={panelTabsStyles["panel-tab-menu"]}
+                onClick={toggle}
+                aria-label="Tab actions"
+                aria-expanded={open}
+                title="Tab actions"
+              >
+                <VscEllipsis aria-hidden />
+              </button>
+            )}
+          />
         </ActionBar>
       }
     />

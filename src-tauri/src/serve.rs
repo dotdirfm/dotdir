@@ -27,7 +27,7 @@ use crate::runtime_ops::{
     fs_unwatch as backend_fs_unwatch, fs_watch as backend_fs_watch,
     fs_write_binary as backend_fs_write_binary, fs_write_text as backend_fs_write_text,
     get_app_dirs as backend_get_app_dirs, get_env as backend_get_env,
-    get_home_path as backend_get_home_path,
+    get_home_path as backend_get_home_path, get_mounted_roots as backend_get_mounted_roots,
     move_to_trash as backend_move_to_trash, rename_item as backend_rename_item,
     pty_close as backend_pty_close, pty_resize as backend_pty_resize,
     pty_spawn as backend_pty_spawn, pty_write as backend_pty_write,
@@ -613,6 +613,7 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
         }
         "ping" => Ok(Value::Null),
         "utils.getHomePath" => Ok(json!(backend_get_home_path())),
+        "utils.getMountedRoots" => Ok(serde_json::to_value(backend_get_mounted_roots()).unwrap()),
         "utils.getAppDirs" => Ok(serde_json::to_value(backend_get_app_dirs()).unwrap()),
         "utils.getEnv" => Ok(serde_json::to_value(backend_get_env()).unwrap()),
         _ => Err(FsError::InvalidInput),

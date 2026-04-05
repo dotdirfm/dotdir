@@ -328,6 +328,10 @@ export const tauriBridge: Bridge = {
     async getHomePath(): Promise<string> {
       return normalizePath(await invoke<string>("get_home_path"));
     },
+    async getMountedRoots(): Promise<string[]> {
+      const roots = await invoke<string[]>("get_mounted_roots");
+      return roots.map((root) => normalizePath(root));
+    },
     async getAppDirs(): Promise<{ homeDir: string; configDir: string; dataDir: string; cacheDir: string }> {
       const dirs = await invoke<{ homeDir: string; configDir: string; dataDir: string; cacheDir: string }>("get_app_dirs");
       return {

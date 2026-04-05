@@ -1,4 +1,5 @@
 import { PanelTabs } from "@/components/PanelTabs/PanelTabs";
+import type { NestedPopoverMenuItem } from "@/components/NestedPopoverMenu/NestedPopoverMenu";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
 import {
@@ -24,7 +25,7 @@ import { basename, dirname } from "@/utils/path";
 import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
 import type { FsNode } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileListTabPane } from "../FileListTabPane";
 import styles from "./PanelGroup.module.css";
 import { usePanelCommands } from "./usePanelCommands";
@@ -64,6 +65,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
 
   const showHidden = useAtomValue(showHiddenAtom);
   const [activeFileListNavigating, setActiveFileListNavigating] = useState(false);
+  const [mountedRoots, setMountedRoots] = useState<string[]>([]);
 
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
@@ -275,12 +277,66 @@ export function PanelGroup({ side }: PanelGroupProps) {
     [setTabs],
   );
 
-  const handleNewTab = useCallback(() => {
-    const path = activeTab?.type === "filelist" ? activeTab.path : "";
+  const openFileListTab = useCallback((path: string) => {
     const newTab = createFilelistTab(path);
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newTab.id);
-  }, [activeTab, setTabs, setActiveTabId]);
+  }, [setActiveTabId, setTabs]);
+
+  const openPathInCurrentTab = useCallback((path: string) => {
+    setTabs((prev) => {
+      const index = prev.findIndex((tab) => tab.id === activeTabIdRef.current);
+      if (index < 0) return prev;
+      const current = prev[index];
+      const next = [...prev];
+      next[index] = {
+        id: current.id,
+        type: "filelist",
+        path,
+        entries: [],
+        selectedEntryNames: [],
+      };
+      return next;
+    });
+  }, [setTabs]);
+
+  const handleNewTab = useCallback(() => {
+    const path = getPanelTabDirectoryPath(activeTabRef.current) ?? "";
+    openFileListTab(path);
+  }, [openFileListTab]);
+
+  const duplicateCurrentTab = useCallback(() => {
+    const currentTab = activeTabRef.current;
+    if (!currentTab) return;
+    const duplicatedTab: PanelTab =
+      currentTab.type === "filelist"
+        ? {
+            ...currentTab,
+            id: createFilelistTab(currentTab.path).id,
+            entries: [...currentTab.entries],
+            selectedEntryNames: [...(currentTab.selectedEntryNames ?? [])],
+          }
+        : {
+            ...currentTab,
+            id: createFilelistTab("").id,
+          };
+    setTabs((prev) => [...prev, duplicatedTab]);
+    setActiveTabId(duplicatedTab.id);
+  }, [setActiveTabId, setTabs]);
+
+  useEffect(() => {
+    let cancelled = false;
+    bridge.utils.getMountedRoots()
+      .then((roots) => {
+        if (!cancelled) setMountedRoots(roots);
+      })
+      .catch(() => {
+        if (!cancelled) setMountedRoots([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge]);
 
   const activatePanelFocus = useCallback(() => {
     setActivePanel(side);
@@ -290,6 +346,59 @@ export function PanelGroup({ side }: PanelGroupProps) {
       focusFileList(side);
     });
   }, [focusContext, focusFileList, setActivePanel, side]);
+
+  const oppositePanelPath = useMemo(() => {
+    const oppositeTab =
+      side === "left"
+        ? rightTabs.find((tab) => tab.id === rightActiveTabId) ?? null
+        : leftTabs.find((tab) => tab.id === leftActiveTabId) ?? null;
+    return getPanelTabDirectoryPath(oppositeTab);
+  }, [leftActiveTabId, leftTabs, rightActiveTabId, rightTabs, side]);
+
+  const menuItems = useMemo<NestedPopoverMenuItem[]>(
+    () => [
+      {
+        id: "duplicate",
+        label: "Duplicate Tab",
+        onSelect: duplicateCurrentTab,
+      },
+      {
+        id: "go-to",
+        label: "Go To",
+        items: [
+          {
+            id: "go-to-opposite",
+            label: "Same Path as Opposite Panel",
+            disabled: !oppositePanelPath,
+            onSelect: oppositePanelPath ? () => openPathInCurrentTab(oppositePanelPath) : undefined,
+            onOpenInNewTab: oppositePanelPath ? () => openFileListTab(oppositePanelPath) : undefined,
+          },
+          {
+            id: "go-to-home",
+            label: "Home Directory",
+            onSelect: async () => {
+              openPathInCurrentTab(await bridge.utils.getHomePath());
+            },
+            onOpenInNewTab: async () => {
+              openFileListTab(await bridge.utils.getHomePath());
+            },
+          },
+          {
+            id: "go-to-mounted-roots",
+            label: "Mounted Drives",
+            disabled: mountedRoots.length === 0,
+            items: mountedRoots.map((root) => ({
+              id: `go-to-root-${root}`,
+              label: root,
+              onSelect: () => openPathInCurrentTab(root),
+              onOpenInNewTab: () => openFileListTab(root),
+            })),
+          },
+        ],
+      },
+    ],
+    [bridge, duplicateCurrentTab, mountedRoots, openFileListTab, openPathInCurrentTab, oppositePanelPath],
+  );
 
   usePanelCommands({
     active,
@@ -454,8 +563,8 @@ export function PanelGroup({ side }: PanelGroupProps) {
         onSelectTab={handleSelectTab}
         onDoubleClickTab={handlePinTab}
         onCloseTab={handleCloseTab}
-        onNewTab={handleNewTab}
         onReorderTabs={handleReorderTabs}
+        menuItems={menuItems}
       />
       <div className={styles["panel-content"]} style={{ position: "relative" }}>
         {tabs
@@ -492,4 +601,10 @@ function getSelectedEntry(tab: PanelTab | null | undefined): FsNode | undefined 
   if (!tab || tab.type !== "filelist") return undefined;
   const selectedName = tab.selectedEntryNames?.[0] ?? tab.activeEntryName;
   return selectedName ? tab.entries?.find((entry) => entry.name === selectedName) : undefined;
+}
+
+function getPanelTabDirectoryPath(tab: PanelTab | null | undefined): string | null {
+  if (!tab) return null;
+  if (tab.type === "filelist") return tab.path;
+  return dirname(tab.path);
 }

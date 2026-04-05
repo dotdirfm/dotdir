@@ -2,17 +2,27 @@
   font-style: italic;
 }
 
-.panel-tab-new {
+.panel-tab-menu {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  width: 28px;
+  height: 24px;
   padding: 0;
+  border: none;
+  background: none;
+  color: var(--fg-muted, var(--fg));
   cursor: pointer;
   border-radius: 2px;
 }
 
-.panel-tab-new svg {
+.panel-tab-menu svg {
   width: 16px;
   height: 16px;
+}
+
+.panel-tab-menu:hover {
+  color: var(--fg);
+  background: var(--entry-hover, rgba(255, 255, 255, 0.06));
 }

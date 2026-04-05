@@ -200,6 +200,52 @@ pub(crate) fn get_home_path() -> String {
     path
 }
 
+pub(crate) fn get_mounted_roots() -> Vec<String> {
+    let mut roots: Vec<String> = Vec::new();
+
+    #[cfg(windows)]
+    {
+        for drive in b'A'..=b'Z' {
+            let root = format!("{}:\\", drive as char);
+            if Path::new(&root).exists() {
+                roots.push(root);
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        roots.push("/".to_string());
+        if let Ok(entries) = fs::read_dir("/Volumes") {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    roots.push(path.to_string_lossy().into_owned());
+                }
+            }
+        }
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        roots.push("/".to_string());
+        for base in ["/mnt", "/media", "/run/media"] {
+            if let Ok(entries) = fs::read_dir(base) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        roots.push(path.to_string_lossy().into_owned());
+                    }
+                }
+            }
+        }
+    }
+
+    roots.sort();
+    roots.dedup();
+    roots
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AppDirs {

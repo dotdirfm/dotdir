@@ -414,6 +414,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
     },
     utils: {
       getHomePath: () => rpc("utils.getHomePath", {}) as Promise<string>,
+      getMountedRoots: () => rpc("utils.getMountedRoots", {}) as Promise<string[]>,
       getAppDirs: () =>
         rpc("utils.getAppDirs", {}) as Promise<{
           homeDir: string;
