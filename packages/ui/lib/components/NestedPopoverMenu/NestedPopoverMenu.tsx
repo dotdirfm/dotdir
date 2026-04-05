@@ -36,6 +36,8 @@ export interface NestedPopoverMenuItem {
   label: string;
   title?: string;
   disabled?: boolean;
+  sectionLabel?: boolean;
+  showHeader?: boolean;
   onSelect?: () => void | Promise<void>;
   onOpenInNewTab?: () => void | Promise<void>;
   items?: NestedPopoverMenuItem[];
@@ -67,6 +69,7 @@ interface MenuView {
   id: string;
   title?: string;
   items: NestedPopoverMenuItem[];
+  showHeader?: boolean;
   renderView?: (props: { close: () => void; goBack: () => void }) => React.ReactNode;
 }
 
@@ -135,12 +138,12 @@ function measureElementSize(element: HTMLElement | null): { width: number; heigh
 }
 
 function getFirstEnabledIndex(items: NestedPopoverMenuItem[]): number {
-  return items.findIndex((item) => !item.disabled);
+  return items.findIndex((item) => !item.disabled && !item.sectionLabel);
 }
 
 function getLastEnabledIndex(items: NestedPopoverMenuItem[]): number {
   for (let index = items.length - 1; index >= 0; index--) {
-    if (!items[index]?.disabled) return index;
+    if (!items[index]?.disabled && !items[index]?.sectionLabel) return index;
   }
   return -1;
 }
@@ -150,7 +153,7 @@ function getNextEnabledIndex(items: NestedPopoverMenuItem[], startIndex: number,
   let index = startIndex;
   for (let step = 0; step < items.length; step++) {
     index = (index + delta + items.length) % items.length;
-    if (!items[index]?.disabled) return index;
+    if (!items[index]?.disabled && !items[index]?.sectionLabel) return index;
   }
   return startIndex;
 }
@@ -189,6 +192,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   const [stack, setStack] = useState<MenuView[]>([rootView]);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([getFirstEnabledIndex(rootView.items)]);
   const [prevView, setPrevView] = useState<MenuView | null>(null);
+  const [prevViewCanGoBack, setPrevViewCanGoBack] = useState(false);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [contentSize, setContentSize] = useState<{ width: number; height: number } | undefined>(undefined);
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties | null>(null);
@@ -241,6 +245,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   const finishPreviousView = useCallback(() => {
     prevContentRef.current = null;
     setPrevView(null);
+    setPrevViewCanGoBack(false);
   }, []);
 
   const runAnimation = useCallback(() => {
@@ -330,6 +335,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
     if (!item.items?.length && !item.renderView) return;
     setDirection(1);
     setPrevView(currentView);
+    setPrevViewCanGoBack(stack.length > 1);
     prevContentRef.current = currentContentRef.current;
     setStack((views) => [
       ...views,
@@ -337,17 +343,19 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
         id: item.id,
         title: item.label,
         items: item.items ?? [],
+        showHeader: item.showHeader,
         renderView: item.renderView,
       },
     ]);
     setSelectedIndices((indices) => [...indices, item.renderView ? -1 : getFirstEnabledIndex(item.items ?? [])]);
-  }, [currentView]);
+  }, [currentView, stack.length]);
 
   const popView = useCallback(() => {
     setStack((views) => {
       if (views.length <= 1) return views;
       setDirection(-1);
       setPrevView(views[views.length - 1] ?? null);
+      setPrevViewCanGoBack(true);
       prevContentRef.current = currentContentRef.current;
       return views.slice(0, -1);
     });
@@ -594,7 +602,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
             <div key={`prev-${prevView.id}`} ref={prevContentRef} className={styles["screen-previous"]}>
               <MenuViewBody
                 view={prevView}
-                canGoBack={stack.length > 1}
+                canGoBack={prevViewCanGoBack}
                 onBack={popView}
                 onItemClick={handleItemClick}
                 selectedItemId={null}
@@ -632,7 +640,7 @@ function MenuViewBody({
   if (view.renderView) {
     return (
       <div className={styles["menu-view"]}>
-        {canGoBack ? (
+        {canGoBack && view.showHeader !== false ? (
           <div className={styles.header}>
             <button type="button" className={styles["back-button"]} onClick={onBack} aria-label="Back">
               <VscChevronLeft aria-hidden />
@@ -647,7 +655,7 @@ function MenuViewBody({
 
   return (
     <div className={styles["menu-view"]}>
-      {canGoBack ? (
+      {canGoBack && view.showHeader !== false ? (
         <div className={styles.header}>
           <button type="button" className={styles["back-button"]} onClick={onBack} aria-label="Back">
             <VscChevronLeft aria-hidden />
@@ -659,6 +667,13 @@ function MenuViewBody({
         {view.items.map((item, index) => {
           const hasChildren = Boolean(item.items?.length);
           const itemKey = `${view.id}:${item.id}`;
+          if (item.sectionLabel) {
+            return (
+              <li key={item.id} className={styles["list-item"]}>
+                <div className={styles["section-label"]}>{item.label}</div>
+              </li>
+            );
+          }
           return (
             <li key={item.id} className={styles["list-item"]}>
               <a

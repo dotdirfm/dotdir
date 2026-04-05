@@ -26,7 +26,7 @@ import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
 import type { FsNode } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { VscArrowDown, VscArrowUp, VscRegex } from "react-icons/vsc";
+import { VscArrowDown, VscArrowUp, VscChevronLeft, VscRegex } from "react-icons/vsc";
 import { FileListTabPane } from "../FileListTabPane";
 import styles from "./PanelGroup.module.css";
 import { usePanelCommands } from "./usePanelCommands";
@@ -444,25 +444,34 @@ export function PanelGroup({ side }: PanelGroupProps) {
               openFileListTab(await bridge.utils.getHomePath());
             },
           },
-          {
-            id: "go-to-mounted-roots",
-            label: "Mounted Drives",
-            disabled: mountedRoots.length === 0,
-            items: mountedRoots.map((root) => ({
-              id: `go-to-root-${root}`,
-              label: root,
-              onSelect: () => openPathInCurrentTab(root),
-              onOpenInNewTab: () => openFileListTab(root),
-            })),
-          },
+          ...(mountedRoots.length > 0
+            ? [
+                {
+                  id: "go-to-mounted-roots-label",
+                  label: "Mounted Drives",
+                  sectionLabel: true,
+                } satisfies NestedPopoverMenuItem,
+                ...mountedRoots.map(
+                  (root) =>
+                    ({
+                      id: `go-to-root-${root}`,
+                      label: root,
+                      onSelect: () => openPathInCurrentTab(root),
+                      onOpenInNewTab: () => openFileListTab(root),
+                    }) satisfies NestedPopoverMenuItem,
+                ),
+              ]
+            : []),
         ],
       },
       {
         id: "quick-search",
         label: "Jump To...",
+        showHeader: false,
         disabled: activeTab?.type !== "filelist",
-        renderView: ({ close }) => (
+        renderView: ({ close, goBack }) => (
           <QuickSearchView
+            onBack={goBack}
             entries={visibleSortedActiveEntries}
             onSelectMatch={quickSearchTo}
             onConfirm={() => {
@@ -689,10 +698,12 @@ function getPanelTabDirectoryPath(tab: PanelTab | null | undefined): string | nu
 }
 
 function QuickSearchView({
+  onBack,
   entries,
   onSelectMatch,
   onConfirm,
 }: {
+  onBack: () => void;
   entries: FsNode[];
   onSelectMatch: (query: string, matchIndex?: number, regexp?: boolean) => void;
   onConfirm: () => void;
@@ -731,11 +742,20 @@ function QuickSearchView({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr) auto auto auto",
+        gridTemplateColumns: "auto minmax(0, 1fr) auto auto auto",
         gap: 6,
         alignItems: "stretch",
       }}
     >
+      <button
+        type="button"
+        aria-label="Back"
+        title="Back"
+        style={jumpButtonStyle}
+        onClick={onBack}
+      >
+        <VscChevronLeft aria-hidden />
+      </button>
       <input
         autoFocus
         type="text"
@@ -747,8 +767,8 @@ function QuickSearchView({
         spellCheck={false}
         style={{
           width: "100%",
-          minHeight: 30,
-          padding: "6px 8px",
+          minHeight: 26,
+          padding: "4px 6px",
           border: "1px solid var(--border)",
           borderRadius: 2,
           background: "var(--input-bg, var(--bg))",
@@ -819,8 +839,8 @@ function QuickSearchView({
 }
 
 const jumpButtonStyle: CSSProperties = {
-  minWidth: 30,
-  minHeight: 30,
+  minWidth: 26,
+  minHeight: 26,
   padding: 0,
   border: "1px solid var(--border)",
   borderRadius: 2,
