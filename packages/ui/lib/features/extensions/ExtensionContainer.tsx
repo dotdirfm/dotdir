@@ -20,7 +20,7 @@ import styles from "@/styles/viewers.module.css";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
 import { getStyleHostElement } from "@/utils/styleHost";
-import { fsProviderRegistry } from "@/viewerEditorRegistry";
+import { useFsProviderRegistry } from "@/viewerEditorRegistry";
 import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -55,7 +55,13 @@ interface EditorContainerProps extends ExtensionContainerProps {
 export type ContainerProps = ViewerContainerProps | EditorContainerProps;
 
 /** Read a byte range from a file inside a container (e.g. ZIP) via the fsProvider. */
-async function readFromContainer(bridge: Bridge, path: string, offset: number, length: number): Promise<ArrayBuffer> {
+async function readFromContainer(
+  bridge: Bridge,
+  fsProviderRegistry: ReturnType<typeof useFsProviderRegistry>,
+  path: string,
+  offset: number,
+  length: number,
+): Promise<ArrayBuffer> {
   const { containerFile: hostFile, innerPath } = parseContainerPath(path);
   const match = fsProviderRegistry.resolve(basename(hostFile));
   if (!match) throw new Error(`No fsProvider registered for "${basename(hostFile)}"`);
@@ -73,6 +79,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
 
   const bridge = useBridge();
   const commandRegistry = useCommandRegistry();
+  const fsProviderRegistry = useFsProviderRegistry();
   const focusContext = useFocusContext();
   const resolveVfsUrl = useVfsUrlResolver();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -202,12 +209,12 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     (): HostApi => ({
       async readFile(path: string): Promise<ArrayBuffer> {
         const normalized = normalizePath(path);
-        if (isContainerPath(normalized)) return readFromContainer(bridge, normalized, 0, 64 * 1024 * 1024);
+        if (isContainerPath(normalized)) return readFromContainer(bridge, fsProviderRegistry, normalized, 0, 64 * 1024 * 1024);
         return bridge.fs.readFile(normalized);
       },
       async readFileRange(path: string, offset: number, length: number): Promise<ArrayBuffer> {
         const normalized = normalizePath(path);
-        if (isContainerPath(normalized)) return readFromContainer(bridge, normalized, offset, length);
+        if (isContainerPath(normalized)) return readFromContainer(bridge, fsProviderRegistry, normalized, offset, length);
         const current = currentFileRef.current;
         let target = current;
         if (!target || target.path !== normalized) {
@@ -241,7 +248,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       async statFile(path: string): Promise<{ size: number; mtimeMs: number }> {
         const normalized = normalizePath(path);
         if (isContainerPath(normalized)) {
-          const data = await readFromContainer(bridge, normalized, 0, 64 * 1024 * 1024);
+          const data = await readFromContainer(bridge, fsProviderRegistry, normalized, 0, 64 * 1024 * 1024);
           return { size: data.byteLength, mtimeMs: 0 };
         }
         const stat = await bridge.fs.stat(normalized);
@@ -320,7 +327,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         throw new Error("Extension resource URL not available in mount-point mode");
       },
     }),
-    [bridge],
+    [bridge, fsProviderRegistry],
   );
 
   const getThemeVars = useCallback((): Record<string, string> => {

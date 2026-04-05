@@ -7,7 +7,7 @@
  */
 
 import { createContext, createElement, useContext, useRef, type ReactNode } from "react";
-import { detectLang as detectLangFallback } from "./utils/langDetect";
+import { detectLang as detectLangFallback } from "./langDetect";
 
 export interface LanguageContribution {
   id: string;

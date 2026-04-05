@@ -56,22 +56,19 @@
 }
 
 .terminal-tab-add {
-  flex-shrink: 0;
-  width: 26px;
-  height: 24px;
-  padding: 0;
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
   justify-content: center;
-  border: 1px solid var(--button-border);
+  flex-shrink: 0;
+  padding: 0;
   border-radius: 3px;
-  background: var(--button-bg);
-  color: var(--button-fg);
-  font-size: 12px;
   cursor: pointer;
 }
 
-.terminal-tab-add:hover {
-  border-color: var(--border-active);
-  color: var(--fg);
+.terminal-tab-add-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .terminal-tab-status {

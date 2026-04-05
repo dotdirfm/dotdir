@@ -3,6 +3,7 @@ import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import type { PanelTab } from "@/entities/tab/model/types";
 import { basename } from "@/utils/path";
 import { memo, useMemo } from "react";
+import { VscAdd } from "react-icons/vsc";
 import panelTabsStyles from "./PanelTabs.module.css";
 
 interface PanelTabsProps {
@@ -50,9 +51,9 @@ export const PanelTabs = memo(function PanelTabs({ tabs, activeTabId, onSelectTa
       getItemClassName={(item) => (item.temp ? panelTabsStyles.temp : undefined)}
       rightSlot={
         <ActionBar>
-          <a className={panelTabsStyles["panel-tab-new"]} onClick={onNewTab} aria-label="New tab" title="New tab">
-            +
-          </a>
+          <button type="button" className={panelTabsStyles["panel-tab-new"]} onClick={onNewTab} aria-label="New tab" title="New tab">
+            <VscAdd aria-hidden />
+          </button>
         </ActionBar>
       }
     />

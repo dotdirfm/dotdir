@@ -10,7 +10,7 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { binarySearch } from "@/utils/binarySearch";
 import { cx } from "@/utils/cssModules";
 import { dirname, join } from "@/utils/path";
-import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
+import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
 import type { FsNode, LayeredResolver } from "fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Breadcrumbs } from "./Breadcrumbs";
@@ -78,6 +78,8 @@ export const FileList = memo(function FileList({
   onStateChange,
 }: FileListProps) {
   const commandRegistry = useCommandRegistry();
+  const viewerRegistry = useViewerRegistry();
+  const editorRegistry = useEditorRegistry();
   const { registerVisibleFileListFocus } = usePanelControllerRegistry();
   const entries = useMemo(() => (showHidden ? state.entries : state.entries.filter((e) => !e.meta.hidden)), [showHidden, state.entries]);
 
@@ -319,7 +321,7 @@ export const FileList = memo(function FileList({
     commandRegistry.setContext("listItemHasViewer", isFile && viewerRegistry.resolve(fileName) !== null);
     commandRegistry.setContext("listItemHasEditor", isFile && editorRegistry.resolve(fileName) !== null);
     commandRegistry.endBatch();
-  }, [commandRegistry]);
+  }, [commandRegistry, editorRegistry, viewerRegistry]);
 
   useEffect(() => {
     if (!active) return;
@@ -334,7 +336,7 @@ export const FileList = memo(function FileList({
       unsubViewer();
       unsubEditor();
     };
-  }, [active, updateSelectionContext]);
+  }, [active, editorRegistry, updateSelectionContext, viewerRegistry]);
 
   const fileActions = useFileListActionHandlers({
     actionQueue,

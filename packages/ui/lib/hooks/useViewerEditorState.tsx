@@ -6,7 +6,7 @@ import { showHiddenAtom } from "@/features/settings/useUserSettings";
 import { CONTAINER_SEP } from "@/utils/containerPath";
 import { isMediaFile } from "@/utils/mediaFiles";
 import { basename } from "@/utils/path";
-import { editorRegistry, fsProviderRegistry, viewerRegistry } from "@/viewerEditorRegistry";
+import { useEditorRegistry, useFsProviderRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -21,6 +21,9 @@ type UseViewerEditorStateResult = {
 
 export function useViewerEditorState(): UseViewerEditorStateResult {
   const bridge = useBridge();
+  const viewerRegistry = useViewerRegistry();
+  const editorRegistry = useEditorRegistry();
+  const fsProviderRegistry = useFsProviderRegistry();
   const { navigateTo } = useActivePanelNavigation();
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: "left" | "right" } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
@@ -51,7 +54,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
         panel: activePanelSideRef.current,
       });
     },
-    [activePanelSideRef, navigateTo, setViewerFile],
+    [activePanelSideRef, fsProviderRegistry, navigateTo, setViewerFile],
   );
 
   const handleEditFile = useCallback(

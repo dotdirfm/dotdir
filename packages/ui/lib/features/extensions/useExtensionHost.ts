@@ -9,16 +9,16 @@ import { checkMarketplaceUpdates, compareExtensionVersions, findColorTheme, type
 import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
 import { readFileText } from "@/features/file-system/fs";
 import { useClearExtensionFssLayers, useSetExtensionFssLayers } from "@/features/fss/fss";
+import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { fetchOpenVsxExtensionDetails } from "@/features/marketplace/openVsxMarketplace";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { activeColorThemeAtom, activeIconThemeAtom, extensionsAutoUpdateAtom, settingsReadyAtom } from "@/features/settings/useUserSettings";
 import { resolveShellProfiles } from "@/features/terminal/shellProfiles";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import { clearColorTheme, loadAndApplyColorTheme, uiThemeToKind } from "@/features/themes/vscodeColorTheme";
-import { useLanguageRegistry } from "@/languageRegistry";
 import { dirname, join } from "@/utils/path";
 import { getStyleHostElement } from "@/utils/styleHost";
-import { populateRegistries } from "@/viewerEditorRegistry";
+import { useViewerEditorRegistry } from "@/viewerEditorRegistry";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
 
@@ -27,6 +27,7 @@ const AUTO_UPDATE_INITIAL_DELAY_MS = 60 * 1000;
 
 export function useExtensionHost(): void {
   const bridge = useBridge();
+  const viewerEditorRegistry = useViewerEditorRegistry();
   const bridgeRef = useRef(bridge);
   bridgeRef.current = bridge;
   const commandRegistry = useCommandRegistry();
@@ -78,6 +79,8 @@ export function useExtensionHost(): void {
   const iconThemeApplyGenerationRef = useRef(0);
   const colorThemeApplyGenerationRef = useRef(0);
   const autoUpdateInFlightRef = useRef(false);
+  const viewerEditorRegistryRef = useRef(viewerEditorRegistry);
+  viewerEditorRegistryRef.current = viewerEditorRegistry;
 
   const clearExtensionCommandRegistrations = useCallback(() => {
     for (const d of extensionContributionDisposersRef.current) {
@@ -95,7 +98,7 @@ export function useExtensionHost(): void {
     themesReadyRef.current = false;
     clearExtensionCommandRegistrations();
     languageRegistryRef.current.clear();
-    populateRegistries([]);
+    viewerEditorRegistryRef.current.replaceExtensions([]);
     clearExtensionFssLayers();
     clearFsProviderCache();
     setLoadedExtensions([]);
@@ -431,7 +434,7 @@ export function useExtensionHost(): void {
         extensionsLoadedRef.current = true;
         latestExtensionsRef.current = exts;
         setLoadedExtensions(exts);
-        populateRegistries(exts);
+        viewerEditorRegistryRef.current.replaceExtensions(exts);
         clearFsProviderCache();
 
         // Pre-compile backend WASM providers so first navigation is fast.

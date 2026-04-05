@@ -6,6 +6,7 @@ import styles from "@/styles/terminal.module.css";
 import { cx } from "@/utils/cssModules";
 import { useAtomValue } from "jotai";
 import { useMemo } from "react";
+import { VscAdd } from "react-icons/vsc";
 
 export function TerminalToolbar() {
   const { sessions, activeSessionId, activeSession, activate, createSession, closeSession, switchActiveProfile, profiles, profilesLoaded } = useTerminal();
@@ -41,8 +42,10 @@ export function TerminalToolbar() {
             tabIndex={-1}
             className={styles["terminal-tab-add"]}
             onClick={() => createSession(activeProfileId ?? profiles[0]?.id)}
+            aria-label="New terminal session"
+            title="New terminal session"
           >
-            +
+            <VscAdd aria-hidden className={styles["terminal-tab-add-icon"]} />
           </button>
         }
         variant="terminal"

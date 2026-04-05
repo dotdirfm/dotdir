@@ -1,5 +1,6 @@
 import { cx } from "@/utils/cssModules";
 import { memo, useCallback, useRef, useState } from "react";
+import { VscClose } from "react-icons/vsc";
 import styles from "./Tabs.module.css";
 
 export type TabsVariant = "panel" | "subtle" | "terminal";
@@ -192,7 +193,7 @@ export const Tabs = memo(function Tabs<T extends TabsItem>({
                   }}
                   aria-label="Close tab"
                 >
-                  ×
+                  <VscClose aria-hidden className={styles["close-icon"]} />
                 </button>
               ) : null}
             </div>,

@@ -1,4 +1,4 @@
-import { useLanguageRegistry } from "@/languageRegistry";
+import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useEffect, useRef, useState } from "react";

@@ -14,10 +14,10 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import { FileSystemObserver, useFileSystemWatchRegistry, type FileSystemChangeRecord, type HandleMeta } from "@/features/file-system/fs";
 import { createPanelResolver, invalidateFssCache, syncLayers, useExtensionFssLayers } from "@/features/fss/fss";
-import { useLanguageRegistry } from "@/languageRegistry";
+import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { buildContainerPath, isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, isFileExecutable, isRootPath, join } from "@/utils/path";
-import { fsProviderRegistry } from "@/viewerEditorRegistry";
+import { useFsProviderRegistry } from "@/viewerEditorRegistry";
 import type { FsProviderEntry } from "@dotdirfm/extension-api";
 import type { FsNode, LayeredResolver } from "fss-lang";
 import { createFsNode } from "fss-lang/helpers";
@@ -122,6 +122,7 @@ export interface FileListPanelController {
 export function useFileListPanel() {
   const { showError } = useDialog();
   const bridge = useBridge();
+  const fsProviderRegistry = useFsProviderRegistry();
   const watchRegistry = useFileSystemWatchRegistry();
   const extensionLayers = useExtensionFssLayers();
   const languageRegistry = useLanguageRegistry();
@@ -275,7 +276,7 @@ export function useFileListPanel() {
         setNavigating(false);
       }
     },
-    [bridge, extensionLayers, languageRegistry, setupWatches],
+    [bridge, extensionLayers, fsProviderRegistry, languageRegistry, setupWatches],
   );
 
   const navigateTo = useCallback(

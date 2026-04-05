@@ -21,7 +21,7 @@ import { showHiddenAtom } from "@/features/settings/useUserSettings";
 import { useFocusContext } from "@/focusContext";
 import { cx } from "@/utils/cssModules";
 import { basename, dirname } from "@/utils/path";
-import { editorRegistry, viewerRegistry } from "@/viewerEditorRegistry";
+import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
 import type { FsNode } from "fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -35,7 +35,9 @@ interface PanelGroupProps {
 
 export function PanelGroup({ side }: PanelGroupProps) {
   const bridge = useBridge();
+  const editorRegistry = useEditorRegistry();
   const commandRegistry = useCommandRegistry();
+  const viewerRegistry = useViewerRegistry();
   const focusContext = useFocusContext();
   const { focusFileList, registerPanel } = usePanelControllerRegistry();
   const activePanel = useAtomValue(activePanelSideAtom);
@@ -440,7 +442,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
         </div>
       );
     },
-    [activeTabId, focusContext, focusFileList, handleCloseTab, setActivePanel, setActiveTabId, setTabs, side],
+    [activeTabId, editorRegistry, focusContext, focusFileList, handleCloseTab, setActivePanel, setActiveTabId, setTabs, side, viewerRegistry],
   );
 
   return (

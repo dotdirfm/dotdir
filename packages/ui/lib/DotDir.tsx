@@ -7,13 +7,14 @@ import { builtInCommandContributions } from "@/features/commands/builtInCommandC
 import { CommandRegistryProvider, useCommandRegistry } from "@/features/commands/commands";
 import { FileSystemWatchRegistryProvider } from "@/features/file-system/fs";
 import { FssProvider } from "@/features/fss/fss";
+import { LanguageRegistryProvider } from "@/features/languages/languageRegistry";
 import { PanelControllersProvider } from "@/features/panels/panelControllers";
 import { UserSettingsProvider } from "@/features/settings/useUserSettings";
 import { TerminalProvider } from "@/features/terminal/useTerminal";
 import { UiStateProvider } from "@/features/ui-state/uiState";
 import { FocusProvider } from "@/focusContext";
 import { InteractionProvider } from "@/interactionContext";
-import { LanguageRegistryProvider } from "@/languageRegistry";
+import { ViewerEditorRegistryProvider } from "@/viewerEditorRegistry";
 import { Provider as JotaiProvider } from "jotai";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { App, type AppHandle } from "./app";
@@ -98,15 +99,17 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
                 <FocusProvider>
                   <InteractionProvider>
                     <LanguageRegistryProvider>
-                      <FssProvider>
-                        <PanelControllersProvider>
-                          <UiStateProvider>
-                            <TerminalProvider>
-                              <DotDirContent widget={widget} appRef={appRef} />
-                            </TerminalProvider>
-                          </UiStateProvider>
-                        </PanelControllersProvider>
-                      </FssProvider>
+                      <ViewerEditorRegistryProvider>
+                        <FssProvider>
+                          <PanelControllersProvider>
+                            <UiStateProvider>
+                              <TerminalProvider>
+                                <DotDirContent widget={widget} appRef={appRef} />
+                              </TerminalProvider>
+                            </UiStateProvider>
+                          </PanelControllersProvider>
+                        </FssProvider>
+                      </ViewerEditorRegistryProvider>
                     </LanguageRegistryProvider>
                   </InteractionProvider>
                 </FocusProvider>

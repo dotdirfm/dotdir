@@ -5,7 +5,20 @@
  * based on glob patterns and priority.
  */
 
-import type { ExtensionEditorContribution, ExtensionFsProviderContribution, ExtensionViewerContribution, LoadedExtension } from "@/features/extensions/extensions";
+import type {
+  ExtensionEditorContribution,
+  ExtensionFsProviderContribution,
+  ExtensionViewerContribution,
+  LoadedExtension,
+} from "@/features/extensions/extensions";
+import {
+  createContext,
+  createElement,
+  useContext,
+  useRef,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 
 export interface ResolvedViewer {
   contribution: ExtensionViewerContribution;
@@ -31,11 +44,10 @@ function matchPattern(pattern: string, fileName: string): boolean {
   if (pattern === "*" || pattern === "*.*") return true;
 
   if (pattern.startsWith("*.")) {
-    const ext = pattern.slice(1); // e.g. ".png"
+    const ext = pattern.slice(1);
     return fileName.toLowerCase().endsWith(ext.toLowerCase());
   }
 
-  // Exact match
   return fileName.toLowerCase() === pattern.toLowerCase();
 }
 
@@ -43,7 +55,10 @@ function matchesAny(patterns: string[], fileName: string): boolean {
   return patterns.some((p) => matchPattern(p, fileName));
 }
 
-function resolve<T extends { patterns: string[]; priority?: number }>(entries: RegistryEntry<T>[], fileName: string): RegistryEntry<T> | null {
+function resolve<T extends { patterns: string[]; priority?: number }>(
+  entries: RegistryEntry<T>[],
+  fileName: string,
+): RegistryEntry<T> | null {
   const matches = entries.filter((e) => matchesAny(e.contribution.patterns, fileName));
   if (matches.length === 0) return null;
   matches.sort((a, b) => (b.contribution.priority ?? 0) - (a.contribution.priority ?? 0));
@@ -52,7 +67,7 @@ function resolve<T extends { patterns: string[]; priority?: number }>(entries: R
 
 type RegistryListener = () => void;
 
-class ViewerRegistry {
+export class ViewerRegistry {
   private entries: RegistryEntry<ExtensionViewerContribution>[] = [];
   private listeners = new Set<RegistryListener>();
 
@@ -68,10 +83,6 @@ class ViewerRegistry {
     return resolve(this.entries, fileName);
   }
 
-  getAll(): readonly RegistryEntry<ExtensionViewerContribution>[] {
-    return this.entries;
-  }
-
   onChange(listener: RegistryListener): () => void {
     this.listeners.add(listener);
     return () => {
@@ -84,7 +95,7 @@ class ViewerRegistry {
   }
 }
 
-class EditorRegistry {
+export class EditorRegistry {
   private entries: RegistryEntry<ExtensionEditorContribution>[] = [];
   private listeners = new Set<RegistryListener>();
 
@@ -100,10 +111,6 @@ class EditorRegistry {
     return resolve(this.entries, fileName);
   }
 
-  getAll(): readonly RegistryEntry<ExtensionEditorContribution>[] {
-    return this.entries;
-  }
-
   onChange(listener: RegistryListener): () => void {
     this.listeners.add(listener);
     return () => {
@@ -116,7 +123,7 @@ class EditorRegistry {
   }
 }
 
-class FsProviderRegistry {
+export class FsProviderRegistry {
   private entries: RegistryEntry<ExtensionFsProviderContribution>[] = [];
   private listeners = new Set<RegistryListener>();
 
@@ -144,35 +151,96 @@ class FsProviderRegistry {
   }
 }
 
-export const viewerRegistry = new ViewerRegistry();
-export const editorRegistry = new EditorRegistry();
-export const fsProviderRegistry = new FsProviderRegistry();
+export class ViewerEditorRegistryManager {
+  readonly viewerRegistry = new ViewerRegistry();
+  readonly editorRegistry = new EditorRegistry();
+  readonly fsProviderRegistry = new FsProviderRegistry();
+  private version = 0;
+  private listeners = new Set<RegistryListener>();
 
-/** Populate registries from loaded extensions. Called when extensions finish loading. */
-export function populateRegistries(extensions: LoadedExtension[]): void {
-  viewerRegistry.clear();
-  editorRegistry.clear();
-  fsProviderRegistry.clear();
-
-  for (const ext of extensions) {
-    if (ext.viewers) {
-      for (const v of ext.viewers) {
-        viewerRegistry.register(v, ext.dirPath);
-      }
-    }
-    if (ext.editors) {
-      for (const e of ext.editors) {
-        editorRegistry.register(e, ext.dirPath);
-      }
-    }
-    if (ext.fsProviders) {
-      for (const p of ext.fsProviders) {
-        fsProviderRegistry.register(p, ext.dirPath);
-      }
-    }
+  subscribe(listener: RegistryListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
-  viewerRegistry.notifyListeners();
-  editorRegistry.notifyListeners();
-  fsProviderRegistry.notifyListeners();
+  getVersion(): number {
+    return this.version;
+  }
+
+  replaceExtensions(extensions: LoadedExtension[]): void {
+    this.viewerRegistry.clear();
+    this.editorRegistry.clear();
+    this.fsProviderRegistry.clear();
+
+    for (const ext of extensions) {
+      if (ext.viewers) {
+        for (const viewer of ext.viewers) {
+          this.viewerRegistry.register(viewer, ext.dirPath);
+        }
+      }
+      if (ext.editors) {
+        for (const editor of ext.editors) {
+          this.editorRegistry.register(editor, ext.dirPath);
+        }
+      }
+      if (ext.fsProviders) {
+        for (const provider of ext.fsProviders) {
+          this.fsProviderRegistry.register(provider, ext.dirPath);
+        }
+      }
+    }
+
+    this.viewerRegistry.notifyListeners();
+    this.editorRegistry.notifyListeners();
+    this.fsProviderRegistry.notifyListeners();
+    this.version += 1;
+    for (const listener of this.listeners) listener();
+  }
+}
+
+const ViewerEditorRegistryContext = createContext<ViewerEditorRegistryManager | null>(null);
+
+export function ViewerEditorRegistryProvider({ children }: { children: ReactNode }) {
+  const managerRef = useRef<ViewerEditorRegistryManager | null>(null);
+  if (!managerRef.current) {
+    managerRef.current = new ViewerEditorRegistryManager();
+  }
+  return createElement(ViewerEditorRegistryContext.Provider, { value: managerRef.current }, children);
+}
+
+export function useViewerEditorRegistry(): ViewerEditorRegistryManager {
+  const value = useContext(ViewerEditorRegistryContext);
+  if (!value) {
+    throw new Error("useViewerEditorRegistry must be used within ViewerEditorRegistryProvider");
+  }
+  return value;
+}
+
+function useViewerEditorRegistryVersion(): number {
+  const manager = useViewerEditorRegistry();
+  return useSyncExternalStore(
+    (listener) => manager.subscribe(listener),
+    () => manager.getVersion(),
+    () => manager.getVersion(),
+  );
+}
+
+export function useViewerRegistry(): ViewerRegistry {
+  const manager = useViewerEditorRegistry();
+  void useViewerEditorRegistryVersion();
+  return manager.viewerRegistry;
+}
+
+export function useEditorRegistry(): EditorRegistry {
+  const manager = useViewerEditorRegistry();
+  void useViewerEditorRegistryVersion();
+  return manager.editorRegistry;
+}
+
+export function useFsProviderRegistry(): FsProviderRegistry {
+  const manager = useViewerEditorRegistry();
+  void useViewerEditorRegistryVersion();
+  return manager.fsProviderRegistry;
 }

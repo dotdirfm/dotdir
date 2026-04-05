@@ -26,7 +26,7 @@ import { isExistingDirectory } from "@/features/file-system/utils";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join } from "@/utils/path";
-import { fsProviderRegistry } from "@/viewerEditorRegistry";
+import { useFsProviderRegistry } from "@/viewerEditorRegistry";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
 
@@ -50,6 +50,7 @@ async function collectContainerFiles(
 
 export function useFileOperations() {
   const { showDialog, closeDialog, updateDialog } = useDialog();
+  const fsProviderRegistry = useFsProviderRegistry();
   const { refreshAll } = usePanelControllerRegistry();
 
   const activePanel = useAtomValue(activePanelSideAtom);
@@ -366,7 +367,7 @@ export function useFileOperations() {
         onCancel: () => {},
       });
     },
-    [bridge, closeDialog, setRecentPaths, showDialog, updateDialog],
+    [bridge, closeDialog, fsProviderRegistry, setRecentPaths, showDialog, updateDialog],
   );
 
   useEffect(() => {
