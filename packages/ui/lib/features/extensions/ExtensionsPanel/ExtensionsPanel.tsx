@@ -5,16 +5,17 @@ import { SmartLabel } from "@/dialogs/dialogHotkeys";
 import type { ExtensionInstallProgressEvent } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
-import { type LoadedColorTheme, type LoadedExtension, type MarketplaceExtension, colorThemeKey, extensionIconThemeId, fetchMarketplaceExtensionDetails, searchMarketplace, setExtensionAutoUpdate, uninstallExtension } from "@/features/extensions/extensions";
-import { readFileText } from "@/features/file-system/fs";
-import { useVfsUrlResolver } from "@/features/file-system/vfs";
+import { colorThemeKey, extensionIconThemeKey, setExtensionAutoUpdate, uninstallExtension } from "@/features/extensions/extensions";
 import {
   type OpenVsxExtension,
   fetchOpenVsxExtensionDetails,
   getOpenVsxDownloadUrl,
   getOpenVsxIconUrl,
   searchOpenVsxMarketplace,
-} from "@/features/marketplace/openVsxMarketplace";
+} from "@/features/extensions/marketplaces/openVsx";
+import { type LoadedColorTheme, type LoadedExtension, type MarketplaceExtension } from "@/features/extensions/types";
+import { readFileText } from "@/features/file-system/fs";
+import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import { activeColorThemeAtom, activeIconThemeAtom, useUserSettings } from "@/features/settings/useUserSettings";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
@@ -24,6 +25,7 @@ import { marked } from "marked";
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaGithub } from "react-icons/fa6";
 import { VscArrowLeft, VscCloudDownload, VscStarEmpty, VscStarFull, VscVerifiedFilled } from "react-icons/vsc";
+import { fetchDotDirExtensionDetails, searchDotDirMarketplace } from "../marketplaces/dotdir";
 import styles from "./ExtensionsPanel.module.css";
 
 type MarketplaceSource = "dotdir" | "open-vsx";
@@ -125,7 +127,7 @@ function normalizeInstalled(ext: LoadedExtension, resolveVfsUrl: (absPath: strin
     publisher: ext.manifest.publisher,
     description: ext.manifest.description || "",
     version: ext.ref.version,
-    iconUrl: ext.iconUrl ? resolveVfsUrl(ext.iconUrl) : null,
+    iconUrl: ext.manifest.icon ? resolveVfsUrl(ext.manifest.icon) : null,
     downloads: null,
     rating: null,
     categories: [],
@@ -307,10 +309,7 @@ function featureSectionsForInstalled(ext: LoadedExtension): Array<{ label: strin
   const languages = (ext.languages ?? []).map((item) => item.aliases?.[0] ?? item.id);
   const grammars = (ext.grammarRefs ?? []).map((item) => item.contribution.scopeName);
   const shells = (ext.shellIntegrations ?? []).map((item) => item.label);
-  const iconThemes = [
-    ...(ext.iconThemeFssPath ? ["FSS icon theme"] : []),
-    ...(ext.vscodeIconThemePath ? [`VS Code icon theme${ext.vscodeIconThemeId ? ` (${ext.vscodeIconThemeId})` : ""}`] : []),
-  ];
+  const iconThemes = (ext.iconThemes ?? []).map((item) => (item.kind === "vscode" && item.sourceId ? `${item.label} (${item.sourceId})` : item.label));
   const colorThemes = (ext.colorThemes ?? []).map((item) => item.label);
 
   return [
@@ -359,10 +358,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { updateSettings } = useUserSettings();
 
-  const installedItems = useMemo(
-    () => installed.map((ext) => normalizeInstalled(ext, resolveVfsUrl)),
-    [installed, resolveVfsUrl],
-  );
+  const installedItems = useMemo(() => installed.map((ext) => normalizeInstalled(ext, resolveVfsUrl)), [installed, resolveVfsUrl]);
   const installedByKey = useMemo(() => new Map(installed.map((ext) => [keyForInstalled(ext), ext])), [installed]);
 
   const doSearch = useCallback(async (q: string, source: MarketplaceSource) => {
@@ -374,7 +370,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
         setOpenVsxResults(data.extensions);
         setResults([]);
       } else {
-        const data = await searchMarketplace(q);
+        const data = await searchDotDirMarketplace(q);
         setResults(data.extensions);
         setOpenVsxResults([]);
       }
@@ -525,17 +521,22 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
       setMobileDetailOpen(false);
     }
   }, [selectedItem]);
-  const selectedInstalled = selectedItem ? installedByKey.get(selectedItem.key) ?? (selectedItem.kind === "installed" ? selectedItem.loaded : null) : null;
+  const selectedInstalled = selectedItem ? (installedByKey.get(selectedItem.key) ?? (selectedItem.kind === "installed" ? selectedItem.loaded : null)) : null;
   const selectedBusy = selectedItem ? busyByKey[selectedItem.key] : undefined;
-  const selectedAutoUpdate = selectedInstalled ? (pendingAutoUpdateByKey[selectedInstalled.ref.publisher + "." + selectedInstalled.ref.name] ?? selectedInstalled.ref.autoUpdate ?? true) : false;
-  const selectedIconThemeId = selectedInstalled ? extensionIconThemeId(selectedInstalled) : null;
+  const selectedAutoUpdate = selectedInstalled
+    ? (pendingAutoUpdateByKey[selectedInstalled.ref.publisher + "." + selectedInstalled.ref.name] ?? selectedInstalled.ref.autoUpdate ?? true)
+    : false;
+  const selectedIconThemes = selectedInstalled?.iconThemes ?? [];
+  const selectedIconThemeValue = selectedInstalled
+    ? (selectedIconThemes.find((theme) => extensionIconThemeKey(selectedInstalled, theme.id) === activeIconTheme)?.id ?? "")
+    : "";
   const selectedColorThemes = selectedInstalled?.colorThemes ?? [];
   const selectedColorThemeValue = selectedInstalled
-    ? selectedColorThemes.find((theme) => colorThemeKey(selectedInstalled, theme.id) === activeColorTheme)?.id ?? ""
+    ? (selectedColorThemes.find((theme) => colorThemeKey(selectedInstalled, theme.id) === activeColorTheme)?.id ?? "")
     : "";
   const selectedDocs = selectedItem ? docsByKey[selectedItem.key] : undefined;
   const selectedRemoteMeta = selectedItem ? remoteMetaByKey[selectedItem.key] : undefined;
-  const selectedReviewCount = selectedRemoteMeta?.reviewCount ?? (selectedItem?.kind === "dotdir" ? selectedItem.raw.reviewCount ?? 0 : 0);
+  const selectedReviewCount = selectedRemoteMeta?.reviewCount ?? (selectedItem?.kind === "dotdir" ? (selectedItem.raw.reviewCount ?? 0) : 0);
   const selectedHomepageLabel = formatHostLabel(selectedRemoteMeta?.homepage ?? null);
 
   const openExternalLink = useCallback(
@@ -594,7 +595,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
         const details =
           selectedItem.kind === "open-vsx"
             ? await fetchOpenVsxExtensionDetails(selectedItem.raw.namespace, selectedItem.raw.name)
-            : await fetchMarketplaceExtensionDetails(selectedItem.raw.namespace, selectedItem.raw.name);
+            : await fetchDotDirExtensionDetails(selectedItem.raw.namespace, selectedItem.raw.name);
         const [readme, changelog] = await Promise.all([
           details.files?.readme ? fetchRemoteText(details.files.readme, { openVsx: selectedItem.kind === "open-vsx" }) : Promise.resolve(null),
           details.files?.changelog ? fetchRemoteText(details.files.changelog, { openVsx: selectedItem.kind === "open-vsx" }) : Promise.resolve(null),
@@ -715,10 +716,9 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   );
 
   const handleSetIconTheme = useCallback(
-    (ext: LoadedExtension) => {
-      const themeId = extensionIconThemeId(ext);
-      if (!themeId) return;
-      const newId = themeId === activeIconTheme ? undefined : themeId;
+    (ext: LoadedExtension, themeId: string) => {
+      const key = extensionIconThemeKey(ext, themeId);
+      const newId = key === activeIconTheme ? undefined : key;
       updateSettings({ iconTheme: newId });
     },
     [activeIconTheme, updateSettings],
@@ -741,9 +741,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
         await setExtensionAutoUpdate(bridge, ext.ref.publisher, ext.ref.name, autoUpdate);
         setInstalled((current) =>
           current.map((item) =>
-            item.ref.publisher === ext.ref.publisher && item.ref.name === ext.ref.name
-              ? { ...item, ref: { ...item.ref, autoUpdate } }
-              : item,
+            item.ref.publisher === ext.ref.publisher && item.ref.name === ext.ref.name ? { ...item, ref: { ...item.ref, autoUpdate } } : item,
           ),
         );
       } catch (err) {
@@ -837,16 +835,13 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
 
   const selectedRenderedDocs = useMemo<RenderedDocs | undefined>(() => {
     if (!selectedItem) return undefined;
-    const detailsHtml =
-      !detailsSource
-        ? null
-        : selectedRemoteMeta?.readme && isProbablyHtml(selectedRemoteMeta.readme)
-          ? selectedRemoteMeta.readme
-          : (marked.parse(detailsSource) as string);
+    const detailsHtml = !detailsSource
+      ? null
+      : selectedRemoteMeta?.readme && isProbablyHtml(selectedRemoteMeta.readme)
+        ? selectedRemoteMeta.readme
+        : (marked.parse(detailsSource) as string);
     const changelogHtml =
-      selectedRemoteMeta?.changelog && isProbablyHtml(selectedRemoteMeta.changelog)
-        ? selectedRemoteMeta.changelog
-        : (marked.parse(changelogSource) as string);
+      selectedRemoteMeta?.changelog && isProbablyHtml(selectedRemoteMeta.changelog) ? selectedRemoteMeta.changelog : (marked.parse(changelogSource) as string);
     return {
       detailsSource,
       changelogSource,
@@ -855,16 +850,8 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
     };
   }, [changelogSource, detailsSource, selectedItem, selectedRemoteMeta?.changelog, selectedRemoteMeta?.readme]);
 
-  const detailsLoading =
-    !!selectedItem &&
-    docsLoadingKey === selectedItem.key &&
-    !selectedRemoteMeta?.readme &&
-    !selectedDocs?.readme;
-  const remoteMetaLoading =
-    !!selectedItem &&
-    docsLoadingKey === selectedItem.key &&
-    selectedItem.kind !== "installed" &&
-    !selectedRemoteMeta;
+  const detailsLoading = !!selectedItem && docsLoadingKey === selectedItem.key && !selectedRemoteMeta?.readme && !selectedDocs?.readme;
+  const remoteMetaLoading = !!selectedItem && docsLoadingKey === selectedItem.key && selectedItem.kind !== "installed" && !selectedRemoteMeta;
 
   return (
     <OverlayDialog className={styles["ext-dialog"]} onClose={onClose} initialFocusRef={searchInputRef}>
@@ -904,10 +891,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
               </select>
 
               <div className={styles["ext-filter-wrap"]} ref={filterMenuRef}>
-                <button
-                  className={cx(styles, "ext-filter-button", filterKind !== "none" && "active")}
-                  onClick={() => setFilterMenuOpen((open) => !open)}
-                >
+                <button className={cx(styles, "ext-filter-button", filterKind !== "none" && "active")} onClick={() => setFilterMenuOpen((open) => !open)}>
                   <SmartLabel>{formatFilterLabel(filterKind, selectedCategory)}</SmartLabel>
                 </button>
                 {filterMenuOpen && (
@@ -1030,9 +1014,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                       setMobileDetailOpen(true);
                     }}
                   >
-                    <div className={styles["ext-item-icon"]}>
-                      {item.iconUrl ? <img src={item.iconUrl} alt="" /> : (item.title[0]?.toUpperCase() ?? "?")}
-                    </div>
+                    <div className={styles["ext-item-icon"]}>{item.iconUrl ? <img src={item.iconUrl} alt="" /> : (item.title[0]?.toUpperCase() ?? "?")}</div>
                     <div className={styles["ext-item-copy"]}>
                       <div className={styles["ext-item-title"]}>{item.title}</div>
                       <div className={styles["ext-item-subtitle"]}>{item.publisher}</div>
@@ -1074,11 +1056,11 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                       {selectedItem.source === "installed" ? "Installed" : selectedItem.source === "dotdir" ? ".dir" : "Open VSX"}
                     </span>
                     {selectedItem.kind !== "installed" && selectedItem.publisher.toLowerCase().includes("github") && (
-                      <span className={styles["ext-meta-with-icon"]}><FaGithub aria-hidden="true" /> {selectedItem.publisher}</span>
+                      <span className={styles["ext-meta-with-icon"]}>
+                        <FaGithub aria-hidden="true" /> {selectedItem.publisher}
+                      </span>
                     )}
-                    {selectedItem.kind === "installed" && (
-                      <span className={styles["ext-meta-with-icon"]}>{selectedItem.publisher}</span>
-                    )}
+                    {selectedItem.kind === "installed" && <span className={styles["ext-meta-with-icon"]}>{selectedItem.publisher}</span>}
                     {selectedRemoteMeta?.homepage && (
                       <>
                         <span className={styles["ext-meta-separator"]}>|</span>
@@ -1114,7 +1096,12 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                   <div className={styles["ext-hero-actions"]}>
                     {selectedInstalled ? (
                       <>
-                        <button className={cx(styles, "ext-action")} disabled={selectedBusy?.kind === "uninstall"} onClick={() => handleUninstall(selectedInstalled)} type="button">
+                        <button
+                          className={cx(styles, "ext-action")}
+                          disabled={selectedBusy?.kind === "uninstall"}
+                          onClick={() => handleUninstall(selectedInstalled)}
+                          type="button"
+                        >
                           <SmartLabel>{selectedBusy?.kind === "uninstall" ? "Removing…" : "Uninstall"}</SmartLabel>
                         </button>
                         <label className={styles["ext-toggle"]}>
@@ -1129,31 +1116,41 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                         </label>
                       </>
                     ) : (
-                      <button className={cx(styles, "ext-action", "primary")} disabled={selectedBusy?.kind === "install"} onClick={() => handleInstall(selectedItem)} type="button">
-                        <SmartLabel>{selectedBusy?.kind === "install" ? (selectedBusy.phase === "finalize" ? "Finalizing…" : "Installing…") : "Install"}</SmartLabel>
+                      <button
+                        className={cx(styles, "ext-action", "primary")}
+                        disabled={selectedBusy?.kind === "install"}
+                        onClick={() => handleInstall(selectedItem)}
+                        type="button"
+                      >
+                        <SmartLabel>
+                          {selectedBusy?.kind === "install" ? (selectedBusy.phase === "finalize" ? "Finalizing…" : "Installing…") : "Install"}
+                        </SmartLabel>
                       </button>
                     )}
                   </div>
                 </div>
-                {selectedInstalled && (selectedIconThemeId || selectedColorThemes.length > 0) && (
+                {selectedInstalled && (selectedIconThemes.length > 0 || selectedColorThemes.length > 0) && (
                   <div className={styles["ext-hero-side-controls"]}>
-                    {selectedIconThemeId && (
+                    {selectedIconThemes.length > 0 && (
                       <label className={styles["ext-select-wrap"]}>
                         <span className={styles["ext-select-label"]}>Icon Theme</span>
                         <select
                           className={styles["ext-select"]}
-                          value={selectedIconThemeId === activeIconTheme ? selectedIconThemeId : ""}
+                          value={selectedIconThemeValue}
                           onChange={(event) => {
-                            if (!selectedIconThemeId) return;
                             if (!event.target.value) {
                               updateSettings({ iconTheme: undefined });
                               return;
                             }
-                            handleSetIconTheme(selectedInstalled);
+                            handleSetIconTheme(selectedInstalled, event.target.value);
                           }}
                         >
                           <option value="">Default</option>
-                          <option value={selectedIconThemeId}>{selectedInstalled.manifest.displayName || selectedInstalled.manifest.name}</option>
+                          {selectedIconThemes.map((theme) => (
+                            <option key={theme.id} value={theme.id}>
+                              {theme.label}
+                            </option>
+                          ))}
                         </select>
                       </label>
                     )}
@@ -1189,15 +1186,18 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
               <div className={styles["ext-content-body"]}>
                 <div className={styles["ext-content-layout"]}>
                   <div className={styles["ext-content-main"]}>
-                    {contentTab === "details" && (
-                      detailsLoading ? (
+                    {contentTab === "details" &&
+                      (detailsLoading ? (
                         <div className={styles["ext-empty-panel"]}>Loading README…</div>
                       ) : selectedRenderedDocs?.detailsHtml ? (
-                        <div className={styles["ext-markdown"]} onClick={handleExternalLinkClick} dangerouslySetInnerHTML={{ __html: selectedRenderedDocs.detailsHtml }} />
+                        <div
+                          className={styles["ext-markdown"]}
+                          onClick={handleExternalLinkClick}
+                          dangerouslySetInnerHTML={{ __html: selectedRenderedDocs.detailsHtml }}
+                        />
                       ) : (
                         <div className={styles["ext-empty-panel"]}>No README available.</div>
-                      )
-                    )}
+                      ))}
 
                     {contentTab === "features" && (
                       <div className={styles["ext-features"]}>
@@ -1222,15 +1222,18 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                       </div>
                     )}
 
-                    {contentTab === "changelog" && (
-                      docsLoadingKey === selectedItem.key && !selectedRemoteMeta?.changelog && !selectedDocs?.changelog ? (
+                    {contentTab === "changelog" &&
+                      (docsLoadingKey === selectedItem.key && !selectedRemoteMeta?.changelog && !selectedDocs?.changelog ? (
                         <div className={styles["ext-empty-panel"]}>Loading changelog…</div>
                       ) : selectedRenderedDocs?.changelogHtml ? (
-                        <div className={styles["ext-markdown"]} onClick={handleExternalLinkClick} dangerouslySetInnerHTML={{ __html: selectedRenderedDocs.changelogHtml }} />
+                        <div
+                          className={styles["ext-markdown"]}
+                          onClick={handleExternalLinkClick}
+                          dangerouslySetInnerHTML={{ __html: selectedRenderedDocs.changelogHtml }}
+                        />
                       ) : (
                         <div className={styles["ext-empty-panel"]}>Loading changelog…</div>
-                      )
-                    )}
+                      ))}
                   </div>
 
                   {infoSections.length > 0 && (

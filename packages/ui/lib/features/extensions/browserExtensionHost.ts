@@ -1,5 +1,5 @@
 import { type CommandRegistry, useCommandRegistry } from "@/features/commands/commands";
-import type { LoadedExtension } from "@/features/extensions/extensions";
+import type { LoadedExtension } from "@/features/extensions/types";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import { join, normalizePath } from "@/utils/path";
 import { useEffect, useMemo, useRef } from "react";

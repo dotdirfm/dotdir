@@ -43,10 +43,7 @@ interface OpenVsxSearchResult {
   extensions: OpenVsxExtension[];
 }
 
-export async function searchOpenVsxMarketplace(
-  query: string,
-  page = 1,
-): Promise<{ extensions: OpenVsxExtension[]; total: number }> {
+export async function searchOpenVsxMarketplace(query: string, page = 1): Promise<{ extensions: OpenVsxExtension[]; total: number }> {
   const pageSize = 30;
   const params = new URLSearchParams({
     size: String(pageSize),
@@ -54,9 +51,7 @@ export async function searchOpenVsxMarketplace(
   });
   if (query) params.set("query", query);
 
-  const res = await fetch(
-    `${OPEN_VSX_MARKETPLACE_URL}/api/-/search?${params.toString()}`,
-  );
+  const res = await fetch(`${OPEN_VSX_MARKETPLACE_URL}/api/-/search?${params.toString()}`);
 
   if (!res.ok) throw new Error("Open VSX marketplace request failed");
   const data: OpenVsxSearchResult = await res.json();

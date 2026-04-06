@@ -12,7 +12,7 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { readFileText } from "@/features/file-system/fs";
 import { normalizePath } from "@/utils/path";
 import worker2 from "./extensionHost.worker.ts?worker&inline";
-import type { LoadedExtension } from "./extensions";
+import type { LoadedExtension } from "./types";
 
 type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
 
@@ -89,8 +89,8 @@ export class ExtensionHostClient {
         this.handleFileRead(worker, msg.id, msg.path);
       } else if (msg.type === "loaded") {
         const extensions: LoadedExtension[] = msg.extensions;
-        const fss = extensions.filter((e) => e.iconThemeFss).map((e) => `${e.ref.publisher}.${e.ref.name}`);
-        const vscode = extensions.filter((e) => e.vscodeIconThemePath).map((e) => `${e.ref.publisher}.${e.ref.name}`);
+        const fss = extensions.flatMap((e) => (e.iconThemes ?? []).filter((theme) => theme.kind === "fss").map((theme) => `${e.ref.publisher}.${e.ref.name}:${theme.id}`));
+        const vscode = extensions.flatMap((e) => (e.iconThemes ?? []).filter((theme) => theme.kind === "vscode").map((theme) => `${e.ref.publisher}.${e.ref.name}:${theme.id}`));
         console.log("[ExtHost] loaded", extensions.length, "extensions; FSS:", fss, "vscode:", vscode);
         for (const cb of this.listeners) {
           cb(extensions);

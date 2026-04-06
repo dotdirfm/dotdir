@@ -5,20 +5,8 @@
  * based on glob patterns and priority.
  */
 
-import type {
-  ExtensionEditorContribution,
-  ExtensionFsProviderContribution,
-  ExtensionViewerContribution,
-  LoadedExtension,
-} from "@/features/extensions/extensions";
-import {
-  createContext,
-  createElement,
-  useContext,
-  useRef,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react";
+import type { ExtensionEditorContribution, ExtensionFsProviderContribution, ExtensionViewerContribution, LoadedExtension } from "@/features/extensions/types";
+import { createContext, createElement, useContext, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 export interface ResolvedViewer {
   contribution: ExtensionViewerContribution;
@@ -55,10 +43,7 @@ function matchesAny(patterns: string[], fileName: string): boolean {
   return patterns.some((p) => matchPattern(p, fileName));
 }
 
-function resolve<T extends { patterns: string[]; priority?: number }>(
-  entries: RegistryEntry<T>[],
-  fileName: string,
-): RegistryEntry<T> | null {
+function resolve<T extends { patterns: string[]; priority?: number }>(entries: RegistryEntry<T>[], fileName: string): RegistryEntry<T> | null {
   const matches = entries.filter((e) => matchesAny(e.contribution.patterns, fileName));
   if (matches.length === 0) return null;
   matches.sort((a, b) => (b.contribution.priority ?? 0) - (a.contribution.priority ?? 0));

@@ -165,11 +165,15 @@ export interface WorkerLoadedExtension {
   manifest: ExtensionManifest;
   dirPath: string;
   iconUrl?: string;
-  iconThemeFss?: string;
-  iconThemeFssPath?: string;
-  iconThemeBasePath?: string;
-  vscodeIconThemePath?: string;
-  vscodeIconThemeId?: string;
+  iconThemes?: Array<{
+    id: string;
+    label: string;
+    kind: "fss" | "vscode";
+    path: string;
+    basePath?: string;
+    sourceId?: string;
+    fss?: string;
+  }>;
   colorThemes?: WorkerLoadedColorTheme[];
   languages?: ExtensionLanguage[];
   /** Grammar contributions (lazy JSON loading for editor). */
@@ -348,25 +352,41 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
       version: manifest.version || "0.0.0",
     };
 
-    let iconThemeFssPath: string | undefined;
-    let iconThemeBasePath: string | undefined;
-    let vscodeIconThemePath: string | undefined;
-    let vscodeIconThemeId: string | undefined;
+    const iconThemes: NonNullable<WorkerLoadedExtension["iconThemes"]> = [];
     if (manifest.contributes?.iconTheme?.path) {
-      const themePath = join(extDir, manifest.contributes.iconTheme.path);
+      const theme = manifest.contributes.iconTheme;
+      const themePath = join(extDir, theme.path);
       if (themePath.endsWith(".json")) {
-        vscodeIconThemePath = themePath;
-        vscodeIconThemeId = manifest.contributes.iconTheme.id;
+        iconThemes.push({
+          id: theme.id || "default",
+          label: theme.label || manifest.displayName || manifest.name,
+          kind: "vscode",
+          path: themePath,
+          sourceId: theme.id,
+        });
       } else {
-        iconThemeFssPath = themePath;
-        iconThemeBasePath = dirname(themePath);
+        iconThemes.push({
+          id: theme.id || "default",
+          label: theme.label || manifest.displayName || manifest.name,
+          kind: "fss",
+          path: themePath,
+          basePath: dirname(themePath),
+          sourceId: theme.id,
+        });
       }
     }
 
-    if (manifest.contributes?.iconThemes?.length && !vscodeIconThemePath) {
-      const firstTheme = manifest.contributes.iconThemes[0];
-      vscodeIconThemePath = join(extDir, firstTheme.path);
-      vscodeIconThemeId = firstTheme.id;
+    if (manifest.contributes?.iconThemes?.length) {
+      iconThemes.push(
+        ...manifest.contributes.iconThemes.map((theme, index) => ({
+          id: theme.id || `${theme.label}#${index}`,
+          label: theme.label,
+          kind: theme.path.endsWith(".json") ? "vscode" as const : "fss" as const,
+          path: join(extDir, theme.path),
+          basePath: theme.path.endsWith(".json") ? undefined : dirname(join(extDir, theme.path)),
+          sourceId: theme.id,
+        })),
+      );
     }
 
     const languages = manifest.contributes?.languages;
@@ -428,10 +448,7 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
       manifest,
       dirPath: extDir,
       iconUrl: manifest.icon ? join(extDir, normalizePath(manifest.icon).replace(/^\/+/, "")) : undefined,
-      iconThemeFssPath,
-      iconThemeBasePath,
-      vscodeIconThemePath,
-      vscodeIconThemeId,
+      iconThemes: iconThemes.length > 0 ? iconThemes : undefined,
       colorThemes,
       languages,
       grammarRefs,
@@ -472,9 +489,9 @@ async function loadExtensions(dataDir: string): Promise<WorkerLoadedExtension[]>
     "[ExtHost] loaded",
     loaded.length,
     "extensions; FSS:",
-    loaded.filter((e) => e.iconThemeFss).map((e) => `${e.ref.publisher}.${e.ref.name}`),
+    loaded.flatMap((e) => (e.iconThemes ?? []).filter((theme) => theme.kind === "fss").map((theme) => `${e.ref.publisher}.${e.ref.name}:${theme.id}`)),
     "vscode:",
-    loaded.filter((e) => e.vscodeIconThemePath).map((e) => `${e.ref.publisher}.${e.ref.name}`),
+    loaded.flatMap((e) => (e.iconThemes ?? []).filter((theme) => theme.kind === "vscode").map((theme) => `${e.ref.publisher}.${e.ref.name}:${theme.id}`)),
   );
   loadedExtensions.clear();
   for (const ext of loaded) {

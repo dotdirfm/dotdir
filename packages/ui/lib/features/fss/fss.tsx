@@ -1,5 +1,5 @@
 import type { Bridge } from "@/features/bridge";
-import type { LoadedExtension } from "@/features/extensions/extensions";
+import type { LoadedExtension } from "@/features/extensions/types";
 import { readFileText } from "@/features/file-system/fs";
 import type { ResolvedEntryStyle } from "@/features/fss/types";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
@@ -42,17 +42,24 @@ function resolveIconUrls(source: string, basePath: string): string {
 }
 
 function buildExtensionLayers(extensions: LoadedExtension[], activeIconTheme?: string): StyleLayer[] {
-  const withFss = extensions.filter(
-    (ext): ext is LoadedExtension & { iconThemeFss: string; iconThemeBasePath: string } => ext.iconThemeFss != null && ext.iconThemeBasePath != null,
+  const withFss = extensions.flatMap((ext) =>
+    (ext.iconThemes ?? [])
+      .filter((theme): theme is NonNullable<LoadedExtension["iconThemes"]>[number] & { kind: "fss"; fss: string; basePath: string } =>
+        theme.kind === "fss" && theme.fss != null && theme.basePath != null)
+      .map((theme) => ({
+        ext,
+        theme,
+        key: `${ext.ref.publisher}.${ext.ref.name}:${theme.id}`,
+      })),
   );
-  const filtered = activeIconTheme ? withFss.filter((ext) => `${ext.ref.publisher}.${ext.ref.name}` === activeIconTheme) : [];
+  const filtered = activeIconTheme ? withFss.filter((entry) => entry.key === activeIconTheme) : [];
   console.log("[FSS] setExtensionLayers", {
     total: extensions.length,
-    withFss: withFss.map((e) => `${e.ref.publisher}.${e.ref.name}`),
+    withFss: withFss.map((e) => e.key),
     activeIconTheme: activeIconTheme ?? "(all)",
-    layersAdded: filtered.map((e) => `${e.ref.publisher}.${e.ref.name}`),
+    layersAdded: filtered.map((e) => e.key),
   });
-  return filtered.map((ext) => createLayer(resolveIconUrls(ext.iconThemeFss, normalizePath(ext.iconThemeBasePath)), "/", LayerPriority.USER));
+  return filtered.map((entry) => createLayer(resolveIconUrls(entry.theme.fss, normalizePath(entry.theme.basePath)), "/", LayerPriority.USER));
 }
 
 export function FssProvider({ children }: { children: ReactNode }) {

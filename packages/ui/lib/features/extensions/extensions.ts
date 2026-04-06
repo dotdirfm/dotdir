@@ -1,284 +1,9 @@
-import type { Bridge} from "@/features/bridge";
+import type { Bridge } from "@/features/bridge";
 import { getAppDirs } from "@/features/bridge/appDirs";
-import { type CwdEscapeMode, type DeleteProgressEvent } from "@/features/bridge";
-import { readFileBuffer, readFileText } from "@/features/file-system/fs";
+import { readFileText } from "@/features/file-system/fs";
+import { deleteFilesystemPathRecursive } from "@/features/file-system/utils";
 import { dirname, join, normalizePath } from "@/utils/path";
-
-export const MARKETPLACE_URL = "https://dotdir.dev";
-
-// FSS-based icon theme (.dir format)
-export interface ExtensionIconThemeFss {
-  id: string;
-  label: string;
-  path: string;
-}
-
-// VS Code icon theme format
-export interface ExtensionIconThemeVSCode {
-  id: string;
-  label: string;
-  path: string; // path to JSON file
-}
-
-export type ExtensionIconTheme = ExtensionIconThemeFss | ExtensionIconThemeVSCode;
-
-export interface ExtensionLanguage {
-  id: string;
-  aliases?: string[];
-  extensions?: string[];
-  filenames?: string[];
-  configuration?: string; // relative path to language-configuration.json
-}
-
-export interface ExtensionGrammar {
-  language: string;
-  scopeName: string;
-  path: string; // relative path to .tmLanguage.json / .plist
-  embeddedLanguages?: Record<string, string>;
-}
-
-export interface ExtensionCommand {
-  command: string;
-  title: string;
-  category?: string;
-  icon?: string;
-}
-
-export interface ExtensionKeybinding {
-  command: string;
-  key: string;
-  mac?: string;
-  when?: string;
-  args?: unknown;
-}
-
-export interface ExtensionMenu {
-  command: string;
-  group?: string;
-  when?: string;
-}
-
-export interface ExtensionViewerContribution {
-  id: string;
-  label: string;
-  patterns: string[];
-  mimeTypes?: string[];
-  entry: string;
-  priority?: number;
-}
-
-export interface ExtensionEditorContribution {
-  id: string;
-  label: string;
-  patterns: string[];
-  mimeTypes?: string[];
-  langId?: string;
-  entry: string;
-  priority?: number;
-}
-
-/**
- * An fsProvider contribution allows an extension to expose the contents of a
- * file (e.g. a ZIP archive) as a browsable directory tree.
- * Patterns match the container file name (same glob syntax as viewers/editors).
- */
-export interface ExtensionFsProviderContribution {
-  id: string;
-  label: string;
-  patterns: string[];
-  entry: string;
-  priority?: number;
-  /**
-   * Where the provider runs.
-   * - 'frontend' (default): a JS/CJS bundle loaded in the browser context.
-   * - 'backend': a WASM module executed by the Rust host via wasmtime.
-   */
-  runtime?: "frontend" | "backend";
-}
-
-export interface ExtensionColorTheme {
-  id?: string;
-  label: string;
-  uiTheme: string; // 'vs-dark' | 'vs' | 'hc-black' | 'hc-light'
-  path: string; // relative path to JSON file
-}
-
-/**
- * A shellIntegration contribution declares a shell that .dir can spawn:
- * how to find its executable and what init script to inject.
- *
- * The `shell` value matches the executable basename (without .exe on Windows),
- * e.g. "bash", "zsh", "fish", "pwsh", "cmd".
- */
-export interface ExtensionShellIntegration {
-  shell: string;
-  /** Display label shown in the shell picker dropdown. */
-  label: string;
-  /** Relative path to the init script file within the extension directory. */
-  scriptPath: string;
-  /**
-   * Ordered list of filesystem paths to check for the shell executable.
-   * Supports $VAR substitution from environment variables.
-   * The first existing path wins for each platform.
-   */
-  executableCandidates: string[];
-  /** Optional platform filter. If omitted, applies to all platforms. */
-  platforms?: ("darwin" | "linux" | "unix" | "windows")[];
-  /** Hidden `cd` line before running a command from the UI; must contain `{{cwd}}`. */
-  hiddenCdTemplate?: string;
-  cwdEscape?: CwdEscapeMode;
-  lineEnding?: "\n" | "\r\n";
-  /** Extra argv after the shell executable (e.g. `--noprofile` for bash). */
-  spawnArgs?: string[];
-  /**
-   * When true, the init script is passed as the last CLI argument (after spawnArgs)
-   * rather than written to PTY stdin. Use for shells like pwsh that accept `-Command <script>`.
-   */
-  scriptArg?: boolean;
-}
-
-export interface ExtensionContributions {
-  iconTheme?: ExtensionIconTheme; // FSS format (single)
-  iconThemes?: ExtensionIconThemeVSCode[]; // VS Code format (array)
-  themes?: ExtensionColorTheme[]; // VS Code color themes
-  languages?: ExtensionLanguage[];
-  grammars?: ExtensionGrammar[];
-  commands?: ExtensionCommand[];
-  keybindings?: ExtensionKeybinding[];
-  menus?: {
-    commandPalette?: ExtensionMenu[];
-    "explorer/context"?: ExtensionMenu[];
-  };
-  viewers?: ExtensionViewerContribution[];
-  editors?: ExtensionEditorContribution[];
-  fsProviders?: ExtensionFsProviderContribution[];
-  shellIntegrations?: ExtensionShellIntegration[];
-}
-
-export interface ExtensionManifest {
-  name: string;
-  version: string;
-  publisher: string;
-  displayName?: string;
-  description?: string;
-  icon?: string; // relative path to icon image
-  /**
-   * Optional browser activation script entry.
-   * If present, the host will load it and call its exported `activate()` / `deactivate()`.
-   */
-  browser?: string;
-  contributes?: ExtensionContributions;
-}
-
-export type ExtensionInstallSource = "dotdir-marketplace" | "open-vsx-marketplace";
-
-export interface ExtensionRef {
-  publisher: string;
-  name: string;
-  version: string;
-  source?: ExtensionInstallSource;
-  autoUpdate?: boolean;
-  /** Optional absolute path for development; when set, load extension from this dir instead of ~/.dotdir/extensions/<publisher>-<name>-<version>. */
-  path?: string;
-}
-
-export interface LoadedGrammar {
-  contribution: ExtensionGrammar;
-  content: object; // parsed TextMate grammar JSON
-}
-
-export interface LoadedGrammarRef {
-  contribution: ExtensionGrammar;
-  /** Absolute path to the grammar JSON file on disk. */
-  path: string;
-}
-
-export interface LoadedColorTheme {
-  id: string;
-  label: string;
-  uiTheme: string;
-  jsonPath: string; // absolute path to theme JSON
-}
-
-export interface LoadedExtension {
-  ref: ExtensionRef;
-  manifest: ExtensionManifest;
-  dirPath: string;
-  iconUrl?: string;
-  /** FSS-based icon theme content (lazy-loaded when active). */
-  iconThemeFss?: string;
-  /** Absolute path to the FSS icon theme file on disk (lazy-loaded). */
-  iconThemeFssPath?: string;
-  /** Directory containing the icon theme FSS file, for resolving relative url() paths */
-  iconThemeBasePath?: string;
-  /** VS Code icon theme JSON path (absolute) */
-  vscodeIconThemePath?: string;
-  /** VS Code icon theme ID */
-  vscodeIconThemeId?: string;
-  /** Color theme contributions from this extension */
-  colorThemes?: LoadedColorTheme[];
-  /** Language contributions from this extension */
-  languages?: ExtensionLanguage[];
-  /** Grammar contributions (lazy JSON loading for editor). */
-  grammarRefs?: LoadedGrammarRef[];
-  /** Previously loaded grammars (kept for compatibility). */
-  grammars?: LoadedGrammar[];
-  /** Command contributions from this extension */
-  commands?: ExtensionCommand[];
-  /** Keybinding contributions from this extension */
-  keybindings?: ExtensionKeybinding[];
-  /** Viewer contributions from this extension */
-  viewers?: ExtensionViewerContribution[];
-  /** Editor contributions from this extension */
-  editors?: ExtensionEditorContribution[];
-  /** FsProvider contributions from this extension */
-  fsProviders?: ExtensionFsProviderContribution[];
-  /** Shell integration contributions from this extension (fully resolved). */
-  shellIntegrations?: Array<{
-    shell: string;
-    label: string;
-    script: string;
-    executableCandidates: string[];
-    platforms?: ("darwin" | "linux" | "unix" | "windows")[];
-    hiddenCdTemplate?: string;
-    cwdEscape?: CwdEscapeMode;
-    lineEnding?: "\n" | "\r\n";
-    spawnArgs?: string[];
-    scriptArg?: boolean;
-  }>;
-}
-
-export interface MarketplaceExtension {
-  namespace: string;
-  name: string;
-  version: string;
-  displayName: string;
-  namespaceDisplayName?: string;
-  description: string;
-  downloadCount: number;
-  averageRating?: number;
-  reviewCount?: number;
-  categories?: string[];
-  tags?: string[];
-  timestamp?: string;
-  homepage?: string;
-  repository?: string;
-  bugs?: string;
-  files?: {
-    download?: string;
-    icon?: string;
-    readme?: string;
-    changelog?: string;
-  };
-}
-
-export interface MarketplaceUpdateInfo {
-  publisher: string;
-  name: string;
-  currentVersion: string;
-  latestVersion: string | null;
-  hasUpdate: boolean;
-}
+import type { ExtensionManifest, ExtensionRef, LoadedColorTheme, LoadedExtension, LoadedIconTheme } from "./types";
 
 function extensionDirName(ref: ExtensionRef): string {
   return `${ref.publisher}-${ref.name}-${ref.version}`;
@@ -302,9 +27,7 @@ async function readRefs(bridge: Bridge): Promise<ExtensionRef[]> {
 
 async function writeRefs(bridge: Bridge, refs: ExtensionRef[]): Promise<void> {
   const extensionsDir = await getExtensionsDir(bridge);
-  if (bridge.fs.createDir) {
-    await bridge.fs.createDir(extensionsDir);
-  }
+  await bridge.fs.createDir(extensionsDir);
   await bridge.fs.writeFile(join(extensionsDir, "extensions.json"), JSON.stringify(refs, null, 2));
 }
 
@@ -325,37 +48,47 @@ export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]>
       const extDir = ref.path ? normalizePath(ref.path) : join(extensionsDir, extensionDirName(ref));
       const manifest: ExtensionManifest = JSON.parse(await readFileText(bridge, join(extDir, "package.json")));
 
-      let iconThemeFssPath: string | undefined;
-      let iconThemeBasePath: string | undefined;
-      let vscodeIconThemePath: string | undefined;
-      let vscodeIconThemeId: string | undefined;
-
-      // Check for FSS-based icon theme (.dir format)
+      const iconThemes: LoadedExtension["iconThemes"] = [];
       if (manifest.contributes?.iconTheme?.path) {
-        const themePath = join(extDir, manifest.contributes.iconTheme.path);
-        // Detect if it's FSS or JSON based on extension
+        const theme = manifest.contributes.iconTheme;
+        const themePath = join(extDir, theme.path);
         if (themePath.endsWith(".json")) {
-          vscodeIconThemePath = themePath;
-          vscodeIconThemeId = manifest.contributes.iconTheme.id;
+          iconThemes.push({
+            id: theme.id || "default",
+            label: theme.label || manifest.displayName || manifest.name,
+            kind: "vscode",
+            path: themePath,
+            sourceId: theme.id,
+          });
         } else {
-          // Lazy: don't read FSS contents for all extensions.
-          iconThemeFssPath = themePath;
-          iconThemeBasePath = dirname(themePath);
+          iconThemes.push({
+            id: theme.id || "default",
+            label: theme.label || manifest.displayName || manifest.name,
+            kind: "fss",
+            path: themePath,
+            basePath: dirname(themePath),
+            sourceId: theme.id,
+          });
         }
       }
-
-      // Check for VS Code icon themes (array format)
-      if (manifest.contributes?.iconThemes?.length && !vscodeIconThemePath) {
-        const firstTheme = manifest.contributes.iconThemes[0];
-        vscodeIconThemePath = join(extDir, firstTheme.path);
-        vscodeIconThemeId = firstTheme.id;
+      if (manifest.contributes?.iconThemes?.length) {
+        iconThemes.push(
+          ...manifest.contributes.iconThemes.map((theme, index) => ({
+            id: theme.id || `${theme.label}#${index}`,
+            label: theme.label,
+            kind: theme.path.endsWith(".json") ? "vscode" as const : "fss" as const,
+            path: join(extDir, theme.path),
+            basePath: theme.path.endsWith(".json") ? undefined : dirname(join(extDir, theme.path)),
+            sourceId: theme.id,
+          })),
+        );
       }
 
       // Load language contributions
       const languages = manifest.contributes?.languages;
 
       // Load grammar contributions
-      let grammarRefs: LoadedGrammarRef[] | undefined;
+      let grammarRefs: LoadedExtension['grammarRefs'];
       if (manifest.contributes?.grammars?.length) {
         grammarRefs = [];
         for (const grammarContrib of manifest.contributes.grammars) {
@@ -371,31 +104,8 @@ export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]>
         }
       }
 
-      // Load extension icon
-      let iconUrl: string | undefined;
-      if (manifest.icon) {
-        try {
-          const iconPath = join(extDir, manifest.icon);
-          const buf = await readFileBuffer(bridge, iconPath);
-          const ext = manifest.icon.split(".").pop()?.toLowerCase() ?? "";
-          const mime =
-            ext === "svg"
-              ? "image/svg+xml"
-              : ext === "png"
-                ? "image/png"
-                : ext === "jpg" || ext === "jpeg"
-                  ? "image/jpeg"
-                  : ext === "webp"
-                    ? "image/webp"
-                    : "application/octet-stream";
-          iconUrl = URL.createObjectURL(new Blob([buf], { type: mime }));
-        } catch {
-          // Icon file not found — ignore
-        }
-      }
-
       // Load color theme contributions
-      let colorThemes: LoadedColorTheme[] | undefined;
+      let colorThemes: LoadedExtension['colorThemes'];
       if (manifest.contributes?.themes?.length) {
         colorThemes = manifest.contributes.themes.map((t, i) => ({
           id: t.id || `${t.label}#${i}`,
@@ -443,11 +153,7 @@ export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]>
         ref,
         manifest,
         dirPath: extDir,
-        iconUrl,
-        iconThemeFssPath,
-        iconThemeBasePath,
-        vscodeIconThemePath,
-        vscodeIconThemeId,
+        iconThemes: iconThemes.length > 0 ? iconThemes : undefined,
         colorThemes,
         languages,
         grammarRefs,
@@ -466,153 +172,6 @@ export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]>
   return loaded;
 }
 
-export async function searchMarketplace(query = "", page = 1): Promise<{ extensions: MarketplaceExtension[]; total: number }> {
-  const pageSize = 30;
-  const params = new URLSearchParams({
-    size: String(pageSize),
-    offset: String((page - 1) * pageSize),
-  });
-  if (query) params.set("query", query);
-  const res = await fetch(`${MARKETPLACE_URL}/api/-/search?${params}`);
-  if (!res.ok) throw new Error("Failed to search marketplace");
-  const data = (await res.json()) as { extensions?: MarketplaceExtension[]; totalSize?: number };
-  return {
-    extensions: Array.isArray(data.extensions) ? data.extensions : [],
-    total: data.totalSize ?? 0,
-  };
-}
-
-export async function fetchMarketplaceExtensionDetails(namespace: string, name: string): Promise<MarketplaceExtension> {
-  const res = await fetch(`${MARKETPLACE_URL}/api/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/latest`);
-  if (!res.ok) throw new Error("Failed to fetch marketplace extension details");
-  return res.json() as Promise<MarketplaceExtension>;
-}
-
-export async function checkMarketplaceUpdates(
-  extensions: Array<{ publisher: string; name: string; version: string }>,
-): Promise<MarketplaceUpdateInfo[]> {
-  return Promise.all(
-    extensions.map(async (ext) => {
-      try {
-        const latest = await fetchMarketplaceExtensionDetails(ext.publisher, ext.name);
-        const latestVersion = latest.version || null;
-        return {
-          publisher: ext.publisher,
-          name: ext.name,
-          currentVersion: ext.version,
-          latestVersion,
-          hasUpdate: latestVersion ? compareExtensionVersions(latestVersion, ext.version) > 0 : false,
-        };
-      } catch {
-        return {
-          publisher: ext.publisher,
-          name: ext.name,
-          currentVersion: ext.version,
-          latestVersion: null,
-          hasUpdate: false,
-        };
-      }
-    }),
-  );
-}
-
-export function compareExtensionVersions(left: string, right: string): number {
-  if (left === right) return 0;
-
-  const parse = (value: string) =>
-    value
-      .split(/[.+-]/)
-      .map((part) => {
-        const numeric = Number(part);
-        return Number.isFinite(numeric) ? numeric : part;
-      });
-
-  const leftParts = parse(left);
-  const rightParts = parse(right);
-  const length = Math.max(leftParts.length, rightParts.length);
-
-  for (let index = 0; index < length; index += 1) {
-    const a = leftParts[index];
-    const b = rightParts[index];
-    if (a == null) return -1;
-    if (b == null) return 1;
-    if (typeof a === "number" && typeof b === "number") {
-      if (a !== b) return a > b ? 1 : -1;
-      continue;
-    }
-    const cmp = String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
-    if (cmp !== 0) return cmp > 0 ? 1 : -1;
-  }
-
-  return 0;
-}
-
-/**
- * Recursively delete a path using the same engine as permanent delete (no UI).
- */
-async function deleteFilesystemPathRecursive(bridge: Bridge, absPath: string): Promise<void> {
-  if (!(await bridge.fs.exists(absPath))) return;
-  await new Promise<void>((resolve, reject) => {
-    let activeDeleteId: number | null = null;
-    let finished = false;
-    let pollTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const cleanup = () => {
-      if (finished) return;
-      finished = true;
-      if (pollTimer) {
-        clearTimeout(pollTimer);
-        pollTimer = null;
-      }
-      unsub();
-    };
-
-    const resolveDone = () => {
-      cleanup();
-      resolve();
-    };
-
-    const rejectWith = (error: unknown) => {
-      cleanup();
-      reject(error instanceof Error ? error : new Error(String(error)));
-    };
-
-    const unsub = bridge.fs.delete.onProgress((payload: DeleteProgressEvent) => {
-      if (finished) return;
-      if (activeDeleteId == null) return;
-      if (payload.deleteId !== activeDeleteId) return;
-      const ev = payload.event;
-      if (ev.kind === "done") {
-        resolveDone();
-      } else if (ev.kind === "error") {
-        rejectWith(new Error(ev.message));
-      }
-    });
-
-    const pollUntilGone = () => {
-      if (finished) return;
-      void bridge.fs
-        .exists(absPath)
-        .then((exists) => {
-          if (!exists) {
-            resolveDone();
-            return;
-          }
-          pollTimer = setTimeout(pollUntilGone, 50);
-        })
-        .catch(rejectWith);
-    };
-
-    void bridge.fs.delete
-      .start([absPath])
-      .then((deleteId) => {
-        activeDeleteId = deleteId;
-        pollUntilGone();
-      })
-      .catch(rejectWith);
-  });
-}
-
 export async function uninstallExtension(bridge: Bridge, publisherUsername: string, extName: string): Promise<void> {
   const refs = await readRefs(bridge);
   const target = refs.find((r) => r.publisher === publisherUsername && r.name === extName);
@@ -626,14 +185,23 @@ export async function uninstallExtension(bridge: Bridge, publisherUsername: stri
 }
 
 export function extensionIconThemeId(ext: LoadedExtension): string | null {
-  if (ext.iconThemeFss || ext.iconThemeFssPath || ext.vscodeIconThemePath) {
-    return `${ext.ref.publisher}.${ext.ref.name}`;
-  }
-  return null;
+  return ext.iconThemes?.[0] ? `${ext.ref.publisher}.${ext.ref.name}:${ext.iconThemes[0].id}` : null;
 }
 
-export function isVSCodeIconTheme(ext: LoadedExtension): boolean {
-  return ext.vscodeIconThemePath != null;
+export function extensionIconThemeKey(ext: LoadedExtension, themeId: string): string {
+  return `${ext.ref.publisher}.${ext.ref.name}:${themeId}`;
+}
+
+export function findIconTheme(exts: LoadedExtension[], key: string): { ext: LoadedExtension; theme: LoadedIconTheme & { fss?: string } } | null {
+  for (const ext of exts) {
+    if (!ext.iconThemes) continue;
+    for (const theme of ext.iconThemes) {
+      if (extensionIconThemeKey(ext, theme.id) === key) {
+        return { ext, theme };
+      }
+    }
+  }
+  return null;
 }
 
 export function colorThemeKey(ext: LoadedExtension, themeId: string): string {

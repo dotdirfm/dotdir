@@ -5,12 +5,12 @@ import { registerExtensionKeybindings } from "@/features/commands/registerKeybin
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
 import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
-import { checkMarketplaceUpdates, compareExtensionVersions, findColorTheme, type ExtensionInstallSource, type LoadedExtension } from "@/features/extensions/extensions";
+import { findColorTheme, findIconTheme } from "@/features/extensions/extensions";
+import { fetchOpenVsxExtensionDetails } from "@/features/extensions/marketplaces/openVsx";
 import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
 import { readFileText } from "@/features/file-system/fs";
 import { useClearExtensionFssLayers, useSetExtensionFssLayers } from "@/features/fss/fss";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
-import { fetchOpenVsxExtensionDetails } from "@/features/marketplace/openVsxMarketplace";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { activeColorThemeAtom, activeIconThemeAtom, extensionsAutoUpdateAtom, settingsReadyAtom } from "@/features/settings/useUserSettings";
 import { resolveShellProfiles } from "@/features/terminal/shellProfiles";
@@ -21,6 +21,8 @@ import { getStyleHostElement } from "@/utils/styleHost";
 import { useViewerEditorRegistry } from "@/viewerEditorRegistry";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
+import { checkDotDirUpdates, compareExtensionVersions } from "./marketplaces/dotdir";
+import type { ExtensionInstallSource, LoadedExtension } from "./types";
 
 const AUTO_UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const AUTO_UPDATE_INITIAL_DELAY_MS = 60 * 1000;
@@ -177,7 +179,7 @@ export function useExtensionHost(): void {
 
       const dotdirExtensions = bySource("dotdir-marketplace");
       if (dotdirExtensions.length > 0) {
-        const updates = await checkMarketplaceUpdates(
+        const updates = await checkDotDirUpdates(
           dotdirExtensions.map((ext) => ({
             publisher: ext.ref.publisher,
             name: ext.ref.name,
@@ -261,12 +263,12 @@ export function useExtensionHost(): void {
   const ensureActiveIconThemeFssLoaded = useCallback(
     async (exts: LoadedExtension[], themeId: string | undefined): Promise<void> => {
       if (!themeId) return;
-      const ext = exts.find((e) => `${e.ref.publisher}.${e.ref.name}` === themeId);
-      if (!ext?.iconThemeFssPath) return;
-      if (ext.iconThemeFss) return;
+      const match = findIconTheme(exts, themeId);
+      if (!match || match.theme.kind !== "fss") return;
+      if (match.theme.fss) return;
       try {
-        ext.iconThemeFss = await readFileText(bridgeRef.current, ext.iconThemeFssPath);
-        if (!ext.iconThemeBasePath) ext.iconThemeBasePath = dirname(ext.iconThemeFssPath);
+        match.theme.fss = await readFileText(bridgeRef.current, match.theme.path);
+        if (!match.theme.basePath) match.theme.basePath = dirname(match.theme.path);
       } catch {
         // Ignore; resolver will fall back
       }
@@ -284,10 +286,10 @@ export function useExtensionHost(): void {
       if (!themeId) {
         await setIconThemeRef.current("fss");
       } else {
-        const ext = extensions.find((e) => `${e.ref.publisher}.${e.ref.name}` === themeId);
-        if (ext?.vscodeIconThemePath) {
-          await setIconThemeRef.current("vscode", ext.vscodeIconThemePath);
-        } else if (ext?.iconThemeFssPath) {
+        const match = findIconTheme(extensions, themeId);
+        if (match?.theme.kind === "vscode") {
+          await setIconThemeRef.current("vscode", match.theme.path);
+        } else if (match?.theme.kind === "fss") {
           await setIconThemeRef.current("fss");
         } else {
           await setIconThemeRef.current("none");
@@ -341,10 +343,10 @@ export function useExtensionHost(): void {
       if (!activeIconTheme) {
         await setIconThemeRef.current("fss");
       } else {
-        const ext = exts.find((e) => `${e.ref.publisher}.${e.ref.name}` === activeIconTheme);
-        if (ext?.vscodeIconThemePath) {
-          await setIconThemeRef.current("vscode", ext.vscodeIconThemePath);
-        } else if (ext?.iconThemeFssPath) {
+        const match = findIconTheme(exts, activeIconTheme);
+        if (match?.theme.kind === "vscode") {
+          await setIconThemeRef.current("vscode", match.theme.path);
+        } else if (match?.theme.kind === "fss") {
           await setIconThemeRef.current("fss");
         } else {
           await setIconThemeRef.current("none");
