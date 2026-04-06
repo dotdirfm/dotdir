@@ -7,7 +7,6 @@ import {
   useEffect,
   useId,
   useImperativeHandle,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -73,7 +72,9 @@ interface MenuView {
   renderView?: (props: { close: () => void; goBack: () => void }) => React.ReactNode;
 }
 
-const ANIMATION_MS = 200;
+type ViewTransitionDocument = Document & {
+  startViewTransition?: Document["startViewTransition"];
+};
 
 function measureElementSize(element: HTMLElement | null): { width: number; height: number } | null {
   if (!element) return null;
@@ -119,11 +120,9 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   const anchorRef = useRef<HTMLElement | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const currentContentRef = useRef<HTMLDivElement | null>(null);
-  const prevContentRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef(new Map<string, HTMLAnchorElement | null>());
   const previousFocusedRef = useRef<HTMLElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const animationTimeoutRef = useRef<number | null>(null);
   const generatedId = useId().replace(/:/g, "");
   const popoverId = `nested-menu-${generatedId}`;
   const anchorName = `--nested-menu-anchor-${generatedId}`;
@@ -140,11 +139,9 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   const [open, setOpen] = useState(false);
   const [stack, setStack] = useState<MenuView[]>([rootView]);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([getFirstEnabledIndex(rootView.items)]);
-  const [prevView, setPrevView] = useState<MenuView | null>(null);
-  const [prevViewCanGoBack, setPrevViewCanGoBack] = useState(false);
-  const [direction, setDirection] = useState<1 | -1>(1);
   const [contentSize, setContentSize] = useState<{ width: number; height: number } | undefined>(undefined);
   const rootViewSizeRef = useRef<{ width: number; height: number } | undefined>(undefined);
+  const [sizeAnimating, setSizeAnimating] = useState(false);
   const currentView = stack[stack.length - 1] ?? rootView;
   const currentViewHasList = !currentView.renderView;
   const selectedIndex = currentViewHasList
@@ -164,9 +161,6 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
     });
     return () => {
       resizeObserverRef.current?.disconnect();
-      if (animationTimeoutRef.current != null) {
-        window.clearTimeout(animationTimeoutRef.current);
-      }
     };
   }, []);
 
@@ -187,60 +181,30 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
     }
   }, [rootView, stack]);
 
-  const finishPreviousView = useCallback(() => {
-    prevContentRef.current = null;
-    setPrevView(null);
-    setPrevViewCanGoBack(false);
-  }, []);
-
-  const runAnimation = useCallback(() => {
-    const previous = prevContentRef.current;
-    const current = currentContentRef.current;
-    if (!previous || !current) {
-      finishPreviousView();
+  const runViewTransition = useCallback((direction: "forward" | "backward", update: () => void) => {
+    const html = document.documentElement;
+    html.dataset.nestedMenuDirection = direction;
+    setSizeAnimating(true);
+    const clear = () => {
+      delete html.dataset.nestedMenuDirection;
+      setSizeAnimating(false);
+    };
+    const transition = (document as ViewTransitionDocument).startViewTransition?.(() => {
+      update();
+    });
+    if (transition) {
+      void transition.finished.finally(clear);
       return;
     }
-
-    previous.getAnimations().forEach((animation) => animation.cancel());
-    current.getAnimations().forEach((animation) => animation.cancel());
-
-    previous.animate(
-      [
-        { transform: "translateX(0)", opacity: 1 },
-        { transform: `translateX(${-direction * 40}px)`, opacity: 0 },
-      ],
-      { duration: ANIMATION_MS, easing: "ease-out", fill: "forwards" },
-    );
-
-    current.animate(
-      [
-        { transform: `translateX(${direction * 40}px)`, opacity: 0 },
-        { transform: "translateX(0)", opacity: 1 },
-      ],
-      { duration: ANIMATION_MS, easing: "ease-out", fill: "forwards" },
-    );
-
-    if (animationTimeoutRef.current != null) {
-      window.clearTimeout(animationTimeoutRef.current);
-    }
-    animationTimeoutRef.current = window.setTimeout(() => {
-      finishPreviousView();
-    }, ANIMATION_MS + 20);
-  }, [direction, finishPreviousView]);
-
-  useLayoutEffect(() => {
-    if (!prevView) return;
-    requestAnimationFrame(() => {
-      runAnimation();
-    });
-  }, [prevView, runAnimation]);
+    update();
+    requestAnimationFrame(clear);
+  }, []);
 
   const resetToRoot = useCallback(() => {
     setStack([rootView]);
     setSelectedIndices([getFirstEnabledIndex(rootView.items)]);
     setContentSize(rootViewSizeRef.current);
-    finishPreviousView();
-  }, [finishPreviousView, rootView]);
+  }, [rootView]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -276,34 +240,30 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
 
   const pushView = useCallback((item: NestedPopoverMenuItem) => {
     if (!item.items?.length && !item.renderView) return;
-    setDirection(1);
-    setPrevView(currentView);
-    setPrevViewCanGoBack(stack.length > 1);
-    prevContentRef.current = currentContentRef.current;
-    setStack((views) => [
-      ...views,
-      {
-        id: item.id,
-        title: item.label,
-        items: item.items ?? [],
-        showHeader: item.showHeader,
-        renderView: item.renderView,
-      },
-    ]);
-    setSelectedIndices((indices) => [...indices, item.renderView ? -1 : getFirstEnabledIndex(item.items ?? [])]);
-  }, [currentView, stack.length]);
+    runViewTransition("forward", () => {
+      setStack((views) => [
+        ...views,
+        {
+          id: item.id,
+          title: item.label,
+          items: item.items ?? [],
+          showHeader: item.showHeader,
+          renderView: item.renderView,
+        },
+      ]);
+      setSelectedIndices((indices) => [...indices, item.renderView ? -1 : getFirstEnabledIndex(item.items ?? [])]);
+    });
+  }, [runViewTransition]);
 
   const popView = useCallback(() => {
-    setStack((views) => {
-      if (views.length <= 1) return views;
-      setDirection(-1);
-      setPrevView(views[views.length - 1] ?? null);
-      setPrevViewCanGoBack(true);
-      prevContentRef.current = currentContentRef.current;
-      return views.slice(0, -1);
+    runViewTransition("backward", () => {
+      setStack((views) => {
+        if (views.length <= 1) return views;
+        return views.slice(0, -1);
+      });
+      setSelectedIndices((indices) => (indices.length > 1 ? indices.slice(0, -1) : indices));
     });
-    setSelectedIndices((indices) => (indices.length > 1 ? indices.slice(0, -1) : indices));
-  }, []);
+  }, [runViewTransition]);
 
   const handleItemClick = useCallback(async (item: NestedPopoverMenuItem, alternate = false) => {
     if (item.disabled) return;
@@ -524,7 +484,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
         className={cx(
           styles,
           "popover",
-          prevView && "popoverSizeAnimated",
+          sizeAnimating && "popoverSizeAnimated",
           `placement-${placement}`,
           className,
           popoverClassName,
@@ -536,36 +496,20 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
         } as React.CSSProperties}
       >
         <div className={styles.viewport}>
-          {currentView ? (
-            <div key={currentView.id} ref={observeCurrentContent} className={styles["screen-current"]}>
-              <MenuViewBody
-                view={currentView}
-                canGoBack={stack.length > 1}
-                onBack={popView}
-                onItemClick={handleItemClick}
-                selectedItemId={selectedItemId}
-                setItemRef={(itemId, element) => {
-                  itemRefs.current.set(itemId, element);
-                }}
-                onItemPointerMove={updateSelectedIndex}
-                close={close}
-              />
-            </div>
-          ) : null}
-          {prevView && prevView.id !== currentView.id ? (
-            <div key={`prev-${prevView.id}`} ref={prevContentRef} className={styles["screen-previous"]}>
-              <MenuViewBody
-                view={prevView}
-                canGoBack={prevViewCanGoBack}
-                onBack={popView}
-                onItemClick={handleItemClick}
-                selectedItemId={null}
-                setItemRef={() => {}}
-                onItemPointerMove={() => {}}
-                close={close}
-              />
-            </div>
-          ) : null}
+          <div key={currentView.id} ref={observeCurrentContent} className={styles["screen-current"]}>
+            <MenuViewBody
+              view={currentView}
+              canGoBack={stack.length > 1}
+              onBack={popView}
+              onItemClick={handleItemClick}
+              selectedItemId={selectedItemId}
+              setItemRef={(itemId, element) => {
+                itemRefs.current.set(itemId, element);
+              }}
+              onItemPointerMove={updateSelectedIndex}
+              close={close}
+            />
+          </div>
         </div>
       </div>
     </>

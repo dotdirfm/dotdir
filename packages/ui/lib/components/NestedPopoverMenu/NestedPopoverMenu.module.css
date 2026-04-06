@@ -110,17 +110,85 @@
 .viewport {
   position: relative;
   overflow: hidden;
-}
-
-.screen-current,
-.screen-previous {
-  position: absolute;
-  inset: 0;
-  width: max-content;
+  view-transition-name: nested-popover-menu-view;
 }
 
 .screen-current {
   position: relative;
+  width: max-content;
+  overflow: hidden;
+}
+
+:global(html[data-nested-menu-direction="forward"]::view-transition-old(nested-popover-menu-view)) {
+  animation: nested-menu-old-forward 180ms ease-out both;
+}
+
+:global(html[data-nested-menu-direction="forward"]::view-transition-new(nested-popover-menu-view)) {
+  animation: nested-menu-new-forward 180ms ease-out both;
+}
+
+:global(html[data-nested-menu-direction="backward"]::view-transition-old(nested-popover-menu-view)) {
+  animation: nested-menu-old-backward 180ms ease-out both;
+}
+
+:global(html[data-nested-menu-direction="backward"]::view-transition-new(nested-popover-menu-view)) {
+  animation: nested-menu-new-backward 180ms ease-out both;
+}
+
+:global(::view-transition-group(nested-popover-menu-view)),
+:global(::view-transition-image-pair(nested-popover-menu-view)),
+:global(::view-transition-old(nested-popover-menu-view)),
+:global(::view-transition-new(nested-popover-menu-view)) {
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+@keyframes nested-menu-old-forward {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translateX(-40px);
+    opacity: 0;
+  }
+}
+
+@keyframes nested-menu-new-forward {
+  from {
+    transform: translateX(40px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes nested-menu-old-backward {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+
+  to {
+    transform: translateX(40px);
+    opacity: 0;
+  }
+}
+
+@keyframes nested-menu-new-backward {
+  from {
+    transform: translateX(-40px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 .menu-view {
