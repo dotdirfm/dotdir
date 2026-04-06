@@ -133,6 +133,7 @@ interface ExtensionManifest {
   publisher: string;
   displayName?: string;
   description?: string;
+  icon?: string;
   activationEvents?: string[];
   /**
    * Optional browser activation script entry.
@@ -163,6 +164,7 @@ export interface WorkerLoadedExtension {
   ref: ExtensionRef;
   manifest: ExtensionManifest;
   dirPath: string;
+  iconUrl?: string;
   iconThemeFss?: string;
   iconThemeFssPath?: string;
   iconThemeBasePath?: string;
@@ -425,6 +427,7 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
       ref,
       manifest,
       dirPath: extDir,
+      iconUrl: manifest.icon ? join(extDir, normalizePath(manifest.icon).replace(/^\/+/, "")) : undefined,
       iconThemeFssPath,
       iconThemeBasePath,
       vscodeIconThemePath,

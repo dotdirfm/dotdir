@@ -4,7 +4,7 @@
 /// The app uses the custom URI scheme `dotdir://` as the redirect target so
 /// the browser can hand control back after the user consents.
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { AuthUser } from "./atoms";
 
@@ -19,6 +19,18 @@ export interface StoredTokens {
   userSub: string;
   userName: string | null;
   userEmail: string | null;
+}
+
+function parseAuthCallbackUrl(urlString: string): URL | null {
+  try {
+    const url = new URL(urlString);
+    if (url.protocol !== "dotdir:" || url.hostname !== "auth" || url.pathname !== "/callback") {
+      return null;
+    }
+    return url;
+  } catch {
+    return null;
+  }
 }
 
 // ── PKCE helpers ─────────────────────────────────────────────────────
@@ -158,52 +170,58 @@ export function startSignIn(opts: {
     }, 5 * 60 * 1000);
 
     // Register callback listener BEFORE opening the browser to avoid any race.
-    authListener.unlisten = await listen<string>("auth:callback", async (event) => {
+    authListener.unlisten = await onOpenUrl((urls) => {
+      const callbackUrl = urls.map(parseAuthCallbackUrl).find((value) => value != null);
+      if (!callbackUrl) {
+        return;
+      }
+
       clearTimeout(timeoutId);
       authListener.unlisten?.();
-      try {
-        const url = new URL(event.payload);
-        if (url.searchParams.get("state") !== state) {
-          opts.onEnd();
-          opts.onError("OAuth state mismatch. Please try again.");
-          return;
-        }
-        const errorParam = url.searchParams.get("error");
-        if (errorParam) {
-          opts.onEnd();
-          opts.onError(
-            url.searchParams.get("error_description") ?? errorParam,
-          );
-          return;
-        }
-        const code = url.searchParams.get("code");
-        if (!code) {
-          opts.onEnd();
-          opts.onError("No authorization code in callback.");
-          return;
-        }
+      void (async () => {
+        try {
+          if (callbackUrl.searchParams.get("state") !== state) {
+            opts.onEnd();
+            opts.onError("OAuth state mismatch. Please try again.");
+            return;
+          }
+          const errorParam = callbackUrl.searchParams.get("error");
+          if (errorParam) {
+            opts.onEnd();
+            opts.onError(
+              callbackUrl.searchParams.get("error_description") ?? errorParam,
+            );
+            return;
+          }
+          const code = callbackUrl.searchParams.get("code");
+          if (!code) {
+            opts.onEnd();
+            opts.onError("No authorization code in callback.");
+            return;
+          }
 
-        const tokens = await exchangeCode(code, codeVerifier);
-        const userInfo = await fetchUserInfo(tokens.access_token);
+          const tokens = await exchangeCode(code, codeVerifier);
+          const userInfo = await fetchUserInfo(tokens.access_token);
 
-        await invoke("auth_store_tokens", {
-          tokens: {
-            accessToken: tokens.access_token,
-            refreshToken: tokens.refresh_token,
-            expiresAt:
-              Math.floor(Date.now() / 1000) + (tokens.expires_in ?? 3600),
-            userSub: userInfo.sub,
-            userName: userInfo.name ?? null,
-            userEmail: userInfo.email ?? null,
-          },
-        });
+          await invoke("auth_store_tokens", {
+            tokens: {
+              accessToken: tokens.access_token,
+              refreshToken: tokens.refresh_token,
+              expiresAt:
+                Math.floor(Date.now() / 1000) + (tokens.expires_in ?? 3600),
+              userSub: userInfo.sub,
+              userName: userInfo.name ?? null,
+              userEmail: userInfo.email ?? null,
+            },
+          });
 
-        opts.onSuccess(userInfo);
-        opts.onEnd();
-      } catch (err) {
-        opts.onEnd();
-        opts.onError(err instanceof Error ? err.message : String(err));
-      }
+          opts.onSuccess(userInfo);
+          opts.onEnd();
+        } catch (err) {
+          opts.onEnd();
+          opts.onError(err instanceof Error ? err.message : String(err));
+        }
+      })();
     });
 
     const params = new URLSearchParams({

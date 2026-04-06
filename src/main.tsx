@@ -2,7 +2,6 @@ import "@dotdirfm/ui/dotdir.css";
 
 import { defaultResolveVfsUrl, DotDir } from "@dotdirfm/ui";
 import { invoke, isTauri as isTauriApp } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { createRoot } from "react-dom/client";
 import { AccountWidget } from "./components/AccountWidget";
 import { tauriBridge } from "./tauriBridge";
@@ -103,10 +102,26 @@ try {
   const bridge = await initBridge();
   await writeBootLog("bridge initialized");
 
+  let pendingInstallDeepLink: InstallDeepLinkDetail | null = null;
+
   if (isTauriApp()) {
-    await listen<string>("deep-link", (event) => {
-      const detail = parseInstallDeepLink(event.payload);
-      if (!detail) return;
+    const { getCurrent, onOpenUrl } = await import("@tauri-apps/plugin-deep-link");
+
+    try {
+      const currentDeepLinks = await getCurrent();
+      const currentUrl = currentDeepLinks?.[0];
+      if (currentUrl) {
+        pendingInstallDeepLink = parseInstallDeepLink(currentUrl);
+      }
+    } catch {
+      // Ignore missing deep-link startup payloads.
+    }
+
+    await onOpenUrl((urls) => {
+      const detail = urls.map(parseInstallDeepLink).find((value) => value != null);
+      if (!detail) {
+        return;
+      }
       window.dispatchEvent(new CustomEvent("dotdir:install-extension", { detail }));
     });
   }
@@ -125,6 +140,12 @@ try {
       resolveVfsUrl={defaultResolveVfsUrl}
     />,
   );
+
+  if (pendingInstallDeepLink) {
+    queueMicrotask(() => {
+      window.dispatchEvent(new CustomEvent("dotdir:install-extension", { detail: pendingInstallDeepLink }));
+    });
+  }
   appBooted = true;
   await writeBootLog("React render started");
 } catch (error) {

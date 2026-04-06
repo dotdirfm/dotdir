@@ -25,7 +25,6 @@ use runtime_ops::{
     start_extension_install_job, start_move_job, PtySpawnInfo,
 };
 use serde::{Deserialize, Serialize};
-use tauri_plugin_deep_link::DeepLinkExt;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -1159,20 +1158,6 @@ pub fn run() {
                     },
                 )?;
             }
-
-            // Forward deep-link callbacks (e.g. dotdir://auth/callback?code=…)
-            // to the frontend as an "auth:callback" event.
-            let deep_link_handle = app.handle().clone();
-            app.deep_link().on_open_url(move |event| {
-                let h = deep_link_handle.clone();
-                let urls: Vec<String> = event.urls().iter().map(|u| u.to_string()).collect();
-                std::thread::spawn(move || {
-                    for url in urls {
-                        let _ = h.emit("deep-link", url.clone());
-                        let _ = h.emit("auth:callback", url);
-                    }
-                });
-            });
 
             write_debug_log("tauri setup completed");
             Ok(())

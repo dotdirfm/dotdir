@@ -93,25 +93,33 @@ export function useExtensionHost(): void {
     extensionContributionDisposersRef.current = [];
   }, []);
 
-  const resetExtensionRuntimeState = useCallback(() => {
-    latestExtensionsRef.current = [];
-    themesReadyRef.current = false;
+  const prepareExtensionHostReload = useCallback((mode: "hard" | "soft") => {
     clearExtensionCommandRegistrations();
     languageRegistryRef.current.clear();
     viewerEditorRegistryRef.current.replaceExtensions([]);
-    clearExtensionFssLayers();
     clearFsProviderCache();
-    setLoadedExtensions([]);
-    setAvailableProfiles([]);
-    setProfilesLoaded(false);
-    setThemesReady(false);
+    if (mode === "hard") {
+      latestExtensionsRef.current = [];
+      themesReadyRef.current = false;
+      clearExtensionFssLayers();
+      setLoadedExtensions([]);
+      setAvailableProfiles([]);
+      setProfilesLoaded(false);
+      setThemesReady(false);
+    }
   }, [clearExtensionCommandRegistrations, clearExtensionFssLayers, setAvailableProfiles, setLoadedExtensions, setProfilesLoaded, setThemesReady]);
 
   const restartExtensionHost = useCallback(async () => {
-    resetExtensionRuntimeState();
+    prepareExtensionHostReload("hard");
     extensionsLoadedRef.current = false;
     await extensionHostRef.current.restart();
-  }, [resetExtensionRuntimeState]);
+  }, [prepareExtensionHostReload]);
+
+  const reloadExtensionHostInPlace = useCallback(async () => {
+    prepareExtensionHostReload("soft");
+    extensionsLoadedRef.current = false;
+    await extensionHostRef.current.restart();
+  }, [prepareExtensionHostReload]);
 
   const installExtensionAndWait = useCallback(
     async (
@@ -210,11 +218,11 @@ export function useExtensionHost(): void {
         await installExtensionAndWait(request);
       }
 
-      await restartExtensionHost();
+      await reloadExtensionHostInPlace();
     } finally {
       autoUpdateInFlightRef.current = false;
     }
-  }, [installExtensionAndWait, restartExtensionHost]);
+  }, [installExtensionAndWait, reloadExtensionHostInPlace]);
 
   useEffect(() => {
     const handleInstallRequest = (event: Event) => {
@@ -227,7 +235,7 @@ export function useExtensionHost(): void {
       void (async () => {
         try {
           await installExtensionAndWait(request);
-          await restartExtensionHost();
+          await reloadExtensionHostInPlace();
         } catch (error) {
           console.error("[ExtHost] Deep-link install failed", error);
         }
@@ -238,7 +246,7 @@ export function useExtensionHost(): void {
     return () => {
       window.removeEventListener("dotdir:install-extension", handleInstallRequest as EventListener);
     };
-  }, [installExtensionAndWait, restartExtensionHost]);
+  }, [installExtensionAndWait, reloadExtensionHostInPlace]);
 
   // OS theme + active color theme → keep iconThemeKind in sync
   useEffect(() => {

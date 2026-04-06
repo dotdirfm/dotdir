@@ -15,6 +15,7 @@ import {
 } from "@/features/marketplace/openVsxMarketplace";
 import { activeColorThemeAtom, activeIconThemeAtom, useUserSettings } from "@/features/settings/useUserSettings";
 import { readFileText } from "@/features/file-system/fs";
+import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import { join } from "@/utils/path";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
@@ -116,7 +117,7 @@ function keyForInstalled(ext: LoadedExtension): string {
   return `${ext.ref.publisher}.${ext.ref.name}`;
 }
 
-function normalizeInstalled(ext: LoadedExtension): SidebarItem {
+function normalizeInstalled(ext: LoadedExtension, resolveVfsUrl: (absPath: string) => string): SidebarItem {
   return {
     kind: "installed",
     key: keyForInstalled(ext),
@@ -124,7 +125,7 @@ function normalizeInstalled(ext: LoadedExtension): SidebarItem {
     publisher: ext.manifest.publisher,
     description: ext.manifest.description || "",
     version: ext.ref.version,
-    iconUrl: ext.iconUrl ?? null,
+    iconUrl: ext.iconUrl ? resolveVfsUrl(ext.iconUrl) : null,
     downloads: null,
     rating: null,
     categories: [],
@@ -327,6 +328,7 @@ function featureSectionsForInstalled(ext: LoadedExtension): Array<{ label: strin
 }
 
 export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
+  const resolveVfsUrl = useVfsUrlResolver();
   const bridge = useBridge();
   const activeIconTheme = useAtomValue(activeIconThemeAtom);
   const activeColorTheme = useAtomValue(activeColorThemeAtom);
@@ -357,7 +359,10 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { updateSettings } = useUserSettings();
 
-  const installedItems = useMemo(() => installed.map(normalizeInstalled), [installed]);
+  const installedItems = useMemo(
+    () => installed.map((ext) => normalizeInstalled(ext, resolveVfsUrl)),
+    [installed, resolveVfsUrl],
+  );
   const installedByKey = useMemo(() => new Map(installed.map((ext) => [keyForInstalled(ext), ext])), [installed]);
 
   const doSearch = useCallback(async (q: string, source: MarketplaceSource) => {
