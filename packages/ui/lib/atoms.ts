@@ -1,8 +1,6 @@
 import type { SystemThemeKind } from "@/features/bridge";
-import type { LoadedExtension } from "@/features/extensions/types";
 import { atom } from "jotai";
 
-export const loadedExtensionsAtom = atom<LoadedExtension[]>([]);
 export const themesReadyAtom = atom(false);
 
 export const systemThemeAtom = atom<SystemThemeKind>("dark");

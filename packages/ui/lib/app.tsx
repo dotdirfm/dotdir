@@ -8,7 +8,7 @@ import { CommandLine } from "@/features/command-line/CommandLine/CommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useBuiltInCommands } from "@/features/commands/useBuiltInCommands";
 import { useCommandRouting } from "@/features/commands/useCommandRouting";
-import { useExtensionHost } from "@/features/extensions/useExtensionHost";
+import { useExtensionRuntime } from "@/features/extensions/useExtensionRuntime";
 import { FileOperationHandlersProvider } from "@/features/file-ops/fileOperationHandlers";
 import { useFileOperations } from "@/features/file-ops/useFileOperations";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
@@ -98,7 +98,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     });
   }, [bridge.window, themesReady, uiStateLoaded]);
 
-  useExtensionHost();
+  useExtensionRuntime();
 
   useBuiltInCommands({
     onOpenCreateFileConfirm: handleOpenCreateFileConfirm,

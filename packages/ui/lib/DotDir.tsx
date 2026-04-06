@@ -6,6 +6,7 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { CommandLineProvider } from "@/features/command-line/useCommandLine";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { CommandRegistryProvider, useCommandRegistry } from "@/features/commands/commands";
+import { ExtensionsProvider } from "@/features/extensions/useExtensions";
 import { FileSystemWatchRegistryProvider } from "@/features/file-system/fs";
 import { FssProvider } from "@/features/fss/fss";
 import { LanguageRegistryProvider } from "@/features/languages/languageRegistry";
@@ -111,6 +112,7 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
                     <LanguageRegistryProvider>
                       <ViewerEditorRegistryProvider>
                         <FssProvider>
+                          <ExtensionsProvider>
                           <PanelControllersProvider>
                             <UiStateProvider>
                               <TerminalProvider>
@@ -118,6 +120,7 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
                               </TerminalProvider>
                             </UiStateProvider>
                           </PanelControllersProvider>
+                          </ExtensionsProvider>
                         </FssProvider>
                       </ViewerEditorRegistryProvider>
                     </LanguageRegistryProvider>

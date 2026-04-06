@@ -4,7 +4,6 @@
  * Loads viewer/editor extensions inside an iframe (VFS origin) and bridges HostApi via postMessage RPC.
  */
 
-import { loadedExtensionsAtom } from "@/atoms";
 import type { Bridge } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
@@ -12,6 +11,7 @@ import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
 import { extensionGrammarRefs, extensionLanguages } from "@/features/extensions/types";
+import { useLoadedExtensions } from "@/features/extensions/useExtensions";
 import { readFileText as readFileTextFromFs } from "@/features/file-system/fs";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
@@ -22,7 +22,6 @@ import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
 import { getStyleHostElement } from "@/utils/styleHost";
 import { useFsProviderRegistry } from "@/viewerEditorRegistry";
-import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // ── Container props ─────────────────────────────────────────────────────
@@ -994,7 +993,7 @@ interface EditorContainerWrapperProps {
 export function EditorContainer({ extensionDirPath, entry, filePath, fileName, langId, inline, visible, onClose, onDirtyChange, onInteract }: EditorContainerWrapperProps) {
   const focusContext = useFocusContext();
   const { focusActiveFileList } = useActivePanelNavigation();
-  const loadedExtensions = useAtomValue(loadedExtensionsAtom);
+  const loadedExtensions = useLoadedExtensions();
 
   const languages = loadedExtensions.flatMap((e) => extensionLanguages(e));
   const allGrammarRefs = loadedExtensions.flatMap((e) => extensionGrammarRefs(e));

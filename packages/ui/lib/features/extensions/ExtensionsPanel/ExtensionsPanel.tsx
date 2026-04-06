@@ -1,4 +1,3 @@
-import { loadedExtensionsAtom } from "@/atoms";
 import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import { OverlayDialog } from "@/dialogs/OverlayDialog";
 import { SmartLabel } from "@/dialogs/dialogHotkeys";
@@ -7,6 +6,7 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { colorThemeKey, extensionIconThemeKey, setExtensionAutoUpdate, uninstallExtension } from "@/features/extensions/extensions";
 import { getMarketplaceProvider, type MarketplaceDetails, type MarketplaceProviderId, type MarketplaceSearchItem } from "@/features/extensions/marketplaces";
+import { useLoadedExtensions, useSetLoadedExtensions } from "@/features/extensions/useExtensions";
 import {
   extensionColorThemes,
   extensionCommands,
@@ -30,7 +30,7 @@ import { activeColorThemeAtom, activeIconThemeAtom, useUserSettings } from "@/fe
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { join } from "@/utils/path";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { marked } from "marked";
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaGithub } from "react-icons/fa6";
@@ -300,8 +300,8 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const bridge = useBridge();
   const activeIconTheme = useAtomValue(activeIconThemeAtom);
   const activeColorTheme = useAtomValue(activeColorThemeAtom);
-  const installed = useAtomValue(loadedExtensionsAtom);
-  const setInstalled = useSetAtom(loadedExtensionsAtom);
+  const installed = useLoadedExtensions();
+  const setInstalled = useSetLoadedExtensions();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const filterMenuRef = useRef<HTMLDivElement>(null);
   const extensionHost = useExtensionHostClient();

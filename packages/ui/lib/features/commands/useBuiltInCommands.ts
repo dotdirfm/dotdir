@@ -1,6 +1,5 @@
 import {
   commandPaletteOpenAtom,
-  loadedExtensionsAtom,
   panelsVisibleAtom,
   terminalFocusRequestKeyAtom,
 } from "@/atoms";
@@ -23,6 +22,7 @@ import { useCommandRegistry } from "@/features/commands/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
 import { runCommandSequence, type RunCommandsArgs } from "@/features/commands/runCommands";
 import { extensionLanguages } from "@/features/extensions/types";
+import { useLoadedExtensions } from "@/features/extensions/useExtensions";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
 import { useUserSettings } from "@/features/settings/useUserSettings";
@@ -74,7 +74,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   depsRef.current = deps;
 
   // loadedExtensions changes as extensions load; keep a ref for call-time reads.
-  const loadedExtensions = useAtomValue(loadedExtensionsAtom);
+  const loadedExtensions = useLoadedExtensions();
   const loadedExtensionsRef = useRef(loadedExtensions);
   loadedExtensionsRef.current = loadedExtensions;
 
