@@ -1,5 +1,11 @@
+.anchor {
+  display: inline-flex;
+  anchor-name: --nested-menu-anchor;
+}
+
 .popover {
-  box-sizing: border-box;
+  position-anchor: --nested-menu-anchor;
+  box-sizing: content-box;
   margin: 0;
   padding: 0;
   border: 1px solid var(--border);
@@ -11,24 +17,93 @@
   transition:
     transform 180ms ease,
     opacity 180ms ease,
-    width 200ms ease,
-    height 200ms ease,
     display 180ms allow-discrete,
     overlay 180ms allow-discrete;
   transform-origin: top right;
   opacity: 0;
-  transform: translateY(-4px) scale(0.98);
+  transform: translateY(-4px);
+}
+
+.popoverSizeAnimated {
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease,
+    width 200ms ease,
+    height 200ms ease,
+    display 180ms allow-discrete,
+    overlay 180ms allow-discrete;
+}
+
+.placement-bottom-start {
+  position-area: span-right bottom;
+  translate: 0 6px;
+}
+
+.placement-bottom-end {
+  position-area: span-left bottom;
+  translate: 0 6px;
+}
+
+.placement-bottom-center {
+  position-area: center bottom;
+  translate: 0 6px;
+}
+
+.placement-top-start {
+  position-area: span-right top;
+  translate: 0 -6px;
+}
+
+.placement-top-end {
+  position-area: span-left top;
+  translate: 0 -6px;
+}
+
+.placement-top-center {
+  position-area: center top;
+  translate: 0 -6px;
+}
+
+.placement-right-start {
+  position-area: right span-bottom;
+  translate: 6px 0;
+}
+
+.placement-right-end {
+  position-area: right span-top;
+  translate: 6px 0;
+}
+
+.placement-right-center {
+  position-area: right center;
+  translate: 6px 0;
+}
+
+.placement-left-start {
+  position-area: left span-bottom;
+  translate: -6px 0;
+}
+
+.placement-left-end {
+  position-area: left span-top;
+  translate: -6px 0;
+}
+
+.placement-left-center {
+  position-area: left center;
+  translate: -6px 0;
 }
 
 .popover:popover-open {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translateY(0);
 }
 
 @starting-style {
   .popover:popover-open {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+    transform-origin: top right;
+    transform: translateY(-4px);
   }
 }
 

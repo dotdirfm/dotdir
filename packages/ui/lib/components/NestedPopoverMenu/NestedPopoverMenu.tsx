@@ -1,6 +1,6 @@
-import { cx } from "@/utils/cssModules";
 import { useFocusContext } from "@/focusContext";
 import { useInteractionContext, type InteractionIntent } from "@/interactionContext";
+import { cx } from "@/utils/cssModules";
 import {
   forwardRef,
   useCallback,
@@ -75,59 +75,6 @@ interface MenuView {
 
 const ANIMATION_MS = 200;
 
-function parsePlacement(placement: NestedPopoverMenuPlacement): {
-  direction: NestedPopoverMenuDirection;
-  align: NestedPopoverMenuAlign;
-} {
-  const [direction, align = "start"] = placement.split("-") as [
-    NestedPopoverMenuDirection,
-    NestedPopoverMenuAlign?,
-  ];
-  return { direction, align };
-}
-
-function toFixedPosition(
-  anchorRect: DOMRect,
-  popoverSize: { width: number; height: number },
-  placement: NestedPopoverMenuPlacement,
-): React.CSSProperties {
-  const gap = 6;
-  const { direction, align } = parsePlacement(placement);
-  let top = 0;
-  let left = 0;
-
-  if (direction === "bottom") {
-    top = anchorRect.bottom + gap;
-    if (align === "end") left = anchorRect.right - popoverSize.width;
-    else if (align === "center") left = anchorRect.left + (anchorRect.width - popoverSize.width) / 2;
-    else left = anchorRect.left;
-  } else if (direction === "top") {
-    top = anchorRect.top - popoverSize.height - gap;
-    if (align === "end") left = anchorRect.right - popoverSize.width;
-    else if (align === "center") left = anchorRect.left + (anchorRect.width - popoverSize.width) / 2;
-    else left = anchorRect.left;
-  } else if (direction === "right") {
-    left = anchorRect.right + gap;
-    if (align === "end") top = anchorRect.bottom - popoverSize.height;
-    else if (align === "center") top = anchorRect.top + (anchorRect.height - popoverSize.height) / 2;
-    else top = anchorRect.top;
-  } else {
-    left = anchorRect.left - popoverSize.width - gap;
-    if (align === "end") top = anchorRect.bottom - popoverSize.height;
-    else if (align === "center") top = anchorRect.top + (anchorRect.height - popoverSize.height) / 2;
-    else top = anchorRect.top;
-  }
-
-  const maxLeft = Math.max(8, window.innerWidth - popoverSize.width - 8);
-  const maxTop = Math.max(8, window.innerHeight - popoverSize.height - 8);
-
-  return {
-    position: "fixed",
-    left: Math.max(8, Math.min(maxLeft, left)),
-    top: Math.max(8, Math.min(maxTop, top)),
-  };
-}
-
 function measureElementSize(element: HTMLElement | null): { width: number; height: number } | null {
   if (!element) return null;
   const rect = element.getBoundingClientRect();
@@ -168,6 +115,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
 }, ref) {
   const focusContext = useFocusContext();
   const interactionContext = useInteractionContext();
+  const anchorContainerRef = useRef<HTMLSpanElement | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const currentContentRef = useRef<HTMLDivElement | null>(null);
@@ -178,6 +126,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   const animationTimeoutRef = useRef<number | null>(null);
   const generatedId = useId().replace(/:/g, "");
   const popoverId = `nested-menu-${generatedId}`;
+  const anchorName = `--nested-menu-anchor-${generatedId}`;
 
   const rootView = useMemo<MenuView>(
     () => ({
@@ -195,8 +144,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   const [prevViewCanGoBack, setPrevViewCanGoBack] = useState(false);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [contentSize, setContentSize] = useState<{ width: number; height: number } | undefined>(undefined);
-  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties | null>(null);
-
+  const rootViewSizeRef = useRef<{ width: number; height: number } | undefined>(undefined);
   const currentView = stack[stack.length - 1] ?? rootView;
   const currentViewHasList = !currentView.renderView;
   const selectedIndex = currentViewHasList
@@ -206,21 +154,13 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   const selectedItemId = selectedItem ? `${currentView.id}:${selectedItem.id}` : null;
 
   useEffect(() => {
-    if (open) return;
-    setStack([rootView]);
-    setSelectedIndices([getFirstEnabledIndex(rootView.items)]);
-    setPrevView(null);
-  }, [open, rootView]);
-
-  useEffect(() => {
     resizeObserverRef.current = new ResizeObserver((entries) => {
       const entry = entries[0];
-      if (!entry) return;
-      const { width, height } = entry.contentRect;
-      setContentSize({
-        width: Math.ceil(width),
-        height: Math.ceil(height),
-      });
+      const element = entry?.target;
+      if (!(element instanceof HTMLElement)) return;
+      const measured = measureElementSize(element);
+      if (!measured) return;
+      setContentSize(measured);
     });
     return () => {
       resizeObserverRef.current?.disconnect();
@@ -238,9 +178,14 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
     if (element && resizeObserverRef.current) {
       resizeObserverRef.current.observe(element);
       const measured = measureElementSize(element);
-      if (measured) setContentSize(measured);
+      if (measured) {
+        setContentSize(measured);
+        if ((stack[stack.length - 1] ?? rootView).id === rootView.id) {
+          rootViewSizeRef.current = measured;
+        }
+      }
     }
-  }, []);
+  }, [rootView, stack]);
 
   const finishPreviousView = useCallback(() => {
     prevContentRef.current = null;
@@ -293,13 +238,13 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   const resetToRoot = useCallback(() => {
     setStack([rootView]);
     setSelectedIndices([getFirstEnabledIndex(rootView.items)]);
+    setContentSize(rootViewSizeRef.current);
     finishPreviousView();
   }, [finishPreviousView, rootView]);
 
   const close = useCallback(() => {
     setOpen(false);
-    resetToRoot();
-  }, [resetToRoot]);
+  }, []);
 
   const openMenu = useCallback(() => {
     setOpen((value) => {
@@ -312,9 +257,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   const toggle = useCallback(() => {
     setOpen((value) => {
       const next = !value;
-      if (!next) {
-        resetToRoot();
-      } else {
+      if (next) {
         resetToRoot();
       }
       return next;
@@ -399,34 +342,26 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
       const nextState = (event as ToggleEvent).newState;
       if (nextState === "closed") {
         setOpen(false);
-        resetToRoot();
       }
     };
     popover.addEventListener("toggle", onToggle);
     return () => {
       popover.removeEventListener("toggle", onToggle);
     };
-  }, [resetToRoot]);
+  }, []);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!open) return;
 
-    const updatePosition = () => {
-      const anchor = anchorRef.current;
-      if (!anchor) return;
-      const anchorRect = anchor.getBoundingClientRect();
-      const size = contentSize ?? { width: 220, height: 160 };
-      setPopoverStyle(toFixedPosition(anchorRect, size, placement));
+    const handleWindowBlur = () => {
+      close();
     };
 
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("blur", handleWindowBlur);
     return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("blur", handleWindowBlur);
     };
-  }, [contentSize, open, placement]);
+  }, [close, open]);
 
   useEffect(() => {
     const container = popoverRef.current;
@@ -448,7 +383,11 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
         anchorRef.current?.focus();
       },
       contains(node) {
-        return node instanceof Node ? container.contains(node) || anchorRef.current?.contains(node) === true : false;
+        return node instanceof Node
+          ? container.contains(node) ||
+              anchorRef.current?.contains(node) === true ||
+              anchorContainerRef.current?.contains(node) === true
+          : false;
       },
       allowCommandRouting: true,
     });
@@ -549,7 +488,9 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
       contains(node) {
         const popover = popoverRef.current;
         return node instanceof Node
-          ? (popover?.contains(node) ?? false) || (anchorRef.current?.contains(node) ?? false)
+          ? (popover?.contains(node) ?? false) ||
+              (anchorRef.current?.contains(node) ?? false) ||
+              (anchorContainerRef.current?.contains(node) ?? false)
           : false;
       },
       isActive() {
@@ -563,23 +504,36 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
 
   return (
     <>
-      {renderAnchor({
-        ref: anchorRef,
-        id: popoverId,
-        open,
-        toggle,
-        close,
-      })}
+      <span
+        ref={anchorContainerRef}
+        className={styles.anchor}
+        style={{ anchorName } as React.CSSProperties}
+      >
+        {renderAnchor({
+          ref: anchorRef,
+          id: popoverId,
+          open,
+          toggle,
+          close,
+        })}
+      </span>
       <div
         ref={popoverRef}
         popover="auto"
         id={popoverId}
-        className={cx(styles, "popover", className, popoverClassName)}
+        className={cx(
+          styles,
+          "popover",
+          prevView && "popoverSizeAnimated",
+          `placement-${placement}`,
+          className,
+          popoverClassName,
+        )}
         style={{
-          ...(popoverStyle ?? {}),
+          positionAnchor: anchorName,
           width: contentSize?.width,
           height: contentSize?.height,
-        }}
+        } as React.CSSProperties}
       >
         <div className={styles.viewport}>
           {currentView ? (

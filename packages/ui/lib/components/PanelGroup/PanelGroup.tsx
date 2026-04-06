@@ -18,7 +18,7 @@ import { useCommandRegistry } from "@/features/commands/commands";
 import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { type FileListPanelController } from "@/features/panels/useFileListPanel";
-import { showHiddenAtom } from "@/features/settings/useUserSettings";
+import { showHiddenAtom, useUserSettings } from "@/features/settings/useUserSettings";
 import { useFocusContext } from "@/focusContext";
 import { cx } from "@/utils/cssModules";
 import { basename, dirname } from "@/utils/path";
@@ -63,10 +63,18 @@ export function PanelGroup({ side }: PanelGroupProps) {
   const [activeTabId, setActiveTabId] = useAtom(side === "left" ? leftActiveTabIdAtom : rightActiveTabIdAtom);
   const activeIndex = useAtomValue(side === "left" ? leftActiveIndexAtom : rightActiveIndexAtom);
   const activeTab = tabs[activeIndex];
+  const { settings } = useUserSettings();
 
   const showHidden = useAtomValue(showHiddenAtom);
   const [activeFileListNavigating, setActiveFileListNavigating] = useState(false);
   const [mountedRoots, setMountedRoots] = useState<string[]>([]);
+  const bookmarkEntries = useMemo(
+    () =>
+      Object.entries(settings.pathAliases ?? {})
+        .filter(([, path]) => typeof path === "string" && path.length > 0)
+        .sort(([leftAlias], [rightAlias]) => leftAlias.localeCompare(rightAlias)),
+    [settings.pathAliases],
+  );
   const visibleSortedActiveEntries = useMemo(() => {
     if (!activeTab || activeTab.type !== "filelist") return [];
     const visibleEntries = showHidden ? activeTab.entries : activeTab.entries.filter((entry) => !entry.meta.hidden);
@@ -444,6 +452,24 @@ export function PanelGroup({ side }: PanelGroupProps) {
               openFileListTab(await bridge.utils.getHomePath());
             },
           },
+          ...(bookmarkEntries.length > 0
+            ? [
+                {
+                  id: "go-to-bookmarks-label",
+                  label: "Bookmarks",
+                  sectionLabel: true,
+                } satisfies NestedPopoverMenuItem,
+                ...bookmarkEntries.map(
+                  ([alias, path]) =>
+                    ({
+                      id: `go-to-bookmark-${alias}`,
+                      label: alias,
+                      onSelect: () => openPathInCurrentTab(path),
+                      onOpenInNewTab: () => openFileListTab(path),
+                    }) satisfies NestedPopoverMenuItem,
+                ),
+              ]
+            : []),
           ...(mountedRoots.length > 0
             ? [
                 {
@@ -484,7 +510,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
         ),
       },
     ],
-    [activeTab?.type, bridge, commandRegistry, duplicateCurrentTab, mountedRoots, openFileListTab, openPathInCurrentTab, oppositePanelPath, quickSearchTo, visibleSortedActiveEntries],
+    [activeTab?.type, bookmarkEntries, bridge, commandRegistry, duplicateCurrentTab, mountedRoots, openFileListTab, openPathInCurrentTab, oppositePanelPath, quickSearchTo, visibleSortedActiveEntries],
   );
 
   usePanelCommands({
