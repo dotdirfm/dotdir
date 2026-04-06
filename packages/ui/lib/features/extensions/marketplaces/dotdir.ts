@@ -1,7 +1,43 @@
 import { coerce, compare, valid } from "semver";
 import type { MarketplaceExtension, MarketplaceUpdateInfo } from "../types";
+import type { MarketplaceDetails, MarketplaceProvider, MarketplaceSearchItem } from "./provider";
 
 export const MARKETPLACE_URL = "https://dotdir.dev";
+
+function normalizeDotDirItem(ext: MarketplaceExtension): MarketplaceSearchItem {
+  return {
+    provider: "dotdir",
+    key: `${ext.namespace}.${ext.name}`,
+    publisher: ext.namespace,
+    publisherDisplayName: ext.namespaceDisplayName ?? ext.namespace,
+    name: ext.name,
+    version: ext.version,
+    title: ext.displayName,
+    description: ext.description,
+    iconUrl: ext.files?.icon ?? null,
+    downloads: ext.downloadCount ?? null,
+    rating: ext.averageRating ?? null,
+    reviewCount: ext.reviewCount ?? null,
+    categories: ext.categories ?? [],
+    tags: ext.tags ?? [],
+    publishedAt: ext.timestamp ?? null,
+  };
+}
+
+function normalizeDotDirDetails(ext: MarketplaceExtension): MarketplaceDetails {
+  const base = normalizeDotDirItem(ext);
+  return {
+    ...base,
+    namespaceDisplayName: ext.namespaceDisplayName ?? null,
+    timestamp: ext.timestamp ?? null,
+    homepage: ext.homepage ?? null,
+    repository: ext.repository ?? null,
+    bugs: ext.bugs ?? null,
+    readmeUrl: ext.files?.readme ?? null,
+    changelogUrl: ext.files?.changelog ?? null,
+    downloadUrl: ext.files?.download ?? null,
+  };
+}
 
 export async function searchDotDirMarketplace(query = "", page = 1): Promise<{ extensions: MarketplaceExtension[]; total: number }> {
   const pageSize = 30;
@@ -60,3 +96,27 @@ export function compareExtensionVersions(left: string, right: string): number {
   }
   return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
 }
+
+export const dotdirMarketplaceProvider: MarketplaceProvider = {
+  id: "dotdir",
+  label: ".dir",
+  async search(query, page = 1) {
+    const result = await searchDotDirMarketplace(query, page);
+    return {
+      items: result.extensions.map(normalizeDotDirItem),
+      total: result.total,
+    };
+  },
+  async getDetails(publisher, name) {
+    return normalizeDotDirDetails(await fetchDotDirExtensionDetails(publisher, name));
+  },
+  getInstallRequest(item) {
+    return {
+      source: "dotdir-marketplace",
+      publisher: item.publisher,
+      name: item.name,
+      version: item.version,
+    };
+  },
+  checkUpdates: checkDotDirUpdates,
+};

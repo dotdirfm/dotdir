@@ -12,9 +12,40 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { readFileText } from "@/features/file-system/fs";
 import { normalizePath } from "@/utils/path";
 import worker2 from "./extensionHost.worker.ts?worker&inline";
-import type { LoadedExtension } from "./types";
+import { extensionIconThemes, extensionRef, type LoadedExtension } from "./types";
 
 type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
+
+function normalizeLoadedExtensionPayload(raw: unknown): LoadedExtension {
+  const value = raw as Record<string, unknown>;
+  if ("identity" in value && "location" in value && "assets" in value && "contributions" in value) {
+    return raw as unknown as LoadedExtension;
+  }
+  return {
+    identity: {
+      ref: value.ref as LoadedExtension["identity"]["ref"],
+      manifest: value.manifest as LoadedExtension["identity"]["manifest"],
+    },
+    location: {
+      dirPath: String(value.dirPath ?? ""),
+    },
+    assets: {
+      iconThemes: value.iconThemes as LoadedExtension["assets"]["iconThemes"],
+      colorThemes: value.colorThemes as LoadedExtension["assets"]["colorThemes"],
+    },
+    contributions: {
+      languages: value.languages as LoadedExtension["contributions"]["languages"],
+      grammarRefs: value.grammarRefs as LoadedExtension["contributions"]["grammarRefs"],
+      grammars: value.grammars as LoadedExtension["contributions"]["grammars"],
+      commands: value.commands as LoadedExtension["contributions"]["commands"],
+      keybindings: value.keybindings as LoadedExtension["contributions"]["keybindings"],
+      viewers: value.viewers as LoadedExtension["contributions"]["viewers"],
+      editors: value.editors as LoadedExtension["contributions"]["editors"],
+      fsProviders: value.fsProviders as LoadedExtension["contributions"]["fsProviders"],
+      shellIntegrations: value.shellIntegrations as LoadedExtension["contributions"]["shellIntegrations"],
+    },
+  };
+}
 
 export class ExtensionHostClient {
   private worker: Worker | null = null;
@@ -88,9 +119,11 @@ export class ExtensionHostClient {
       if (msg.type === "readFile") {
         this.handleFileRead(worker, msg.id, msg.path);
       } else if (msg.type === "loaded") {
-        const extensions: LoadedExtension[] = msg.extensions;
-        const fss = extensions.flatMap((e) => (e.iconThemes ?? []).filter((theme) => theme.kind === "fss").map((theme) => `${e.ref.publisher}.${e.ref.name}:${theme.id}`));
-        const vscode = extensions.flatMap((e) => (e.iconThemes ?? []).filter((theme) => theme.kind === "vscode").map((theme) => `${e.ref.publisher}.${e.ref.name}:${theme.id}`));
+        const extensions: LoadedExtension[] = Array.isArray(msg.extensions)
+          ? msg.extensions.map(normalizeLoadedExtensionPayload)
+          : [];
+        const fss = extensions.flatMap((e) => extensionIconThemes(e).filter((theme) => theme.kind === "fss").map((theme) => `${extensionRef(e).publisher}.${extensionRef(e).name}:${theme.id}`));
+        const vscode = extensions.flatMap((e) => extensionIconThemes(e).filter((theme) => theme.kind === "vscode").map((theme) => `${extensionRef(e).publisher}.${extensionRef(e).name}:${theme.id}`));
         console.log("[ExtHost] loaded", extensions.length, "extensions; FSS:", fss, "vscode:", vscode);
         for (const cb of this.listeners) {
           cb(extensions);

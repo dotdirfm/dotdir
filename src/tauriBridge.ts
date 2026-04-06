@@ -24,6 +24,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const ptyWriteEncoder = new TextEncoder();
+const extensionInstallRequestListeners = new Set<(request: ExtensionInstallRequest) => void>();
 
 interface RustFsChangeEvent {
   watch_id: string;
@@ -385,6 +386,17 @@ export const tauriBridge: Bridge = {
         return () => {
           unlisten?.();
         };
+      },
+      onRequest(callback: (request: ExtensionInstallRequest) => void): () => void {
+        extensionInstallRequestListeners.add(callback);
+        return () => {
+          extensionInstallRequestListeners.delete(callback);
+        };
+      },
+      emitRequest(request: ExtensionInstallRequest): void {
+        for (const listener of extensionInstallRequestListeners) {
+          listener(request);
+        }
       },
     },
   },

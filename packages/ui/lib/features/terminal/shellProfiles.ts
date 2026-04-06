@@ -1,5 +1,5 @@
 import type { Bridge, CwdEscapeMode, TerminalProfile } from "@/features/bridge";
-import type { LoadedExtension } from "@/features/extensions/types";
+import { extensionShellIntegrations, type LoadedExtension } from "@/features/extensions/types";
 
 export interface ShellProfilesResult {
   profiles: TerminalProfile[];
@@ -104,7 +104,7 @@ export async function resolveShellProfiles(bridge: Bridge, extensions: LoadedExt
   }> = [];
 
   for (const ext of extensions) {
-    for (const si of ext.shellIntegrations ?? []) {
+    for (const si of extensionShellIntegrations(ext)) {
       if (!matchesPlatform(si.platforms, platform)) continue;
       contributions.push(si);
     }

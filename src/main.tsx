@@ -122,7 +122,7 @@ try {
       if (!detail) {
         return;
       }
-      window.dispatchEvent(new CustomEvent("dotdir:install-extension", { detail }));
+      bridge.extensions.install.emitRequest?.(detail);
     });
   }
 
@@ -143,7 +143,7 @@ try {
 
   if (pendingInstallDeepLink) {
     queueMicrotask(() => {
-      window.dispatchEvent(new CustomEvent("dotdir:install-extension", { detail: pendingInstallDeepLink }));
+      bridge.extensions.install.emitRequest?.(pendingInstallDeepLink);
     });
   }
   appBooted = true;

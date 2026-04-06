@@ -5,7 +5,16 @@
  * based on glob patterns and priority.
  */
 
-import type { ExtensionEditorContribution, ExtensionFsProviderContribution, ExtensionViewerContribution, LoadedExtension } from "@/features/extensions/types";
+import {
+  extensionDirPath,
+  extensionEditors,
+  extensionFsProviders,
+  extensionViewers,
+  type ExtensionEditorContribution,
+  type ExtensionFsProviderContribution,
+  type ExtensionViewerContribution,
+  type LoadedExtension,
+} from "@/features/extensions/types";
 import { createContext, createElement, useContext, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 export interface ResolvedViewer {
@@ -160,20 +169,14 @@ export class ViewerEditorRegistryManager {
     this.fsProviderRegistry.clear();
 
     for (const ext of extensions) {
-      if (ext.viewers) {
-        for (const viewer of ext.viewers) {
-          this.viewerRegistry.register(viewer, ext.dirPath);
-        }
+      for (const viewer of extensionViewers(ext)) {
+        this.viewerRegistry.register(viewer, extensionDirPath(ext));
       }
-      if (ext.editors) {
-        for (const editor of ext.editors) {
-          this.editorRegistry.register(editor, ext.dirPath);
-        }
+      for (const editor of extensionEditors(ext)) {
+        this.editorRegistry.register(editor, extensionDirPath(ext));
       }
-      if (ext.fsProviders) {
-        for (const provider of ext.fsProviders) {
-          this.fsProviderRegistry.register(provider, ext.dirPath);
-        }
+      for (const provider of extensionFsProviders(ext)) {
+        this.fsProviderRegistry.register(provider, extensionDirPath(ext));
       }
     }
 

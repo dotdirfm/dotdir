@@ -6,14 +6,24 @@ import type { ExtensionInstallProgressEvent } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { colorThemeKey, extensionIconThemeKey, setExtensionAutoUpdate, uninstallExtension } from "@/features/extensions/extensions";
+import { getMarketplaceProvider, type MarketplaceDetails, type MarketplaceProviderId, type MarketplaceSearchItem } from "@/features/extensions/marketplaces";
 import {
-  type OpenVsxExtension,
-  fetchOpenVsxExtensionDetails,
-  getOpenVsxDownloadUrl,
-  getOpenVsxIconUrl,
-  searchOpenVsxMarketplace,
-} from "@/features/extensions/marketplaces/openVsx";
-import { type LoadedColorTheme, type LoadedExtension, type MarketplaceExtension } from "@/features/extensions/types";
+  extensionColorThemes,
+  extensionCommands,
+  extensionDirPath,
+  extensionEditors,
+  extensionFsProviders,
+  extensionGrammarRefs,
+  extensionIconThemes,
+  extensionKeybindings,
+  extensionLanguages,
+  extensionManifest,
+  extensionRef,
+  extensionShellIntegrations,
+  extensionViewers,
+  type LoadedColorTheme,
+  type LoadedExtension,
+} from "@/features/extensions/types";
 import { readFileText } from "@/features/file-system/fs";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import { activeColorThemeAtom, activeIconThemeAtom, useUserSettings } from "@/features/settings/useUserSettings";
@@ -25,10 +35,9 @@ import { marked } from "marked";
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaGithub } from "react-icons/fa6";
 import { VscArrowLeft, VscCloudDownload, VscStarEmpty, VscStarFull, VscVerifiedFilled } from "react-icons/vsc";
-import { fetchDotDirExtensionDetails, searchDotDirMarketplace } from "../marketplaces/dotdir";
 import styles from "./ExtensionsPanel.module.css";
 
-type MarketplaceSource = "dotdir" | "open-vsx";
+type MarketplaceSource = MarketplaceProviderId;
 type InstallPhase = "download" | "extract" | "write" | "finalize";
 type BusyState = { kind: "install"; phase: InstallPhase } | { kind: "uninstall" };
 type FilterKind = "none" | "featured" | "recent" | "recommended" | "category";
@@ -51,7 +60,7 @@ type SidebarItem =
       loaded: LoadedExtension;
     }
   | {
-      kind: "dotdir";
+      kind: "marketplace";
       key: string;
       title: string;
       publisher: string;
@@ -64,22 +73,7 @@ type SidebarItem =
       tags: string[];
       publishedAt: string | null;
       source: MarketplaceSource;
-      raw: MarketplaceExtension;
-    }
-  | {
-      kind: "open-vsx";
-      key: string;
-      title: string;
-      publisher: string;
-      description: string;
-      version: string;
-      iconUrl: string | null;
-      downloads: number | null;
-      rating: number | null;
-      categories: string[];
-      tags: string[];
-      source: MarketplaceSource;
-      raw: OpenVsxExtension;
+      remote: MarketplaceSearchItem;
     };
 
 type LoadedDocs = {
@@ -94,17 +88,7 @@ type RenderedDocs = {
   changelogHtml: string | null;
 };
 
-type RemoteMetadata = {
-  averageRating: number | null;
-  reviewCount: number | null;
-  downloadCount: number | null;
-  categories: string[];
-  tags: string[];
-  timestamp: string | null;
-  namespaceDisplayName: string | null;
-  homepage: string | null;
-  repository: string | null;
-  bugs: string | null;
+type RemoteMetadata = MarketplaceDetails & {
   readme: string | null;
   changelog: string | null;
 };
@@ -116,18 +100,21 @@ function errMsg(err: unknown): string {
 }
 
 function keyForInstalled(ext: LoadedExtension): string {
-  return `${ext.ref.publisher}.${ext.ref.name}`;
+  const ref = extensionRef(ext);
+  return `${ref.publisher}.${ref.name}`;
 }
 
 function normalizeInstalled(ext: LoadedExtension, resolveVfsUrl: (absPath: string) => string): SidebarItem {
+  const manifest = extensionManifest(ext);
+  const ref = extensionRef(ext);
   return {
     kind: "installed",
     key: keyForInstalled(ext),
-    title: ext.manifest.displayName || ext.manifest.name,
-    publisher: ext.manifest.publisher,
-    description: ext.manifest.description || "",
-    version: ext.ref.version,
-    iconUrl: ext.manifest.icon ? resolveVfsUrl(ext.manifest.icon) : null,
+    title: manifest.displayName || manifest.name,
+    publisher: manifest.publisher,
+    description: manifest.description || "",
+    version: ref.version,
+    iconUrl: manifest.icon ? resolveVfsUrl(manifest.icon) : null,
     downloads: null,
     rating: null,
     categories: [],
@@ -137,40 +124,22 @@ function normalizeInstalled(ext: LoadedExtension, resolveVfsUrl: (absPath: strin
   };
 }
 
-function normalizeDotdir(ext: MarketplaceExtension): SidebarItem {
+function normalizeMarketplaceItem(ext: MarketplaceSearchItem): SidebarItem {
   return {
-    kind: "dotdir",
-    key: `${ext.namespace}.${ext.name}`,
-    title: ext.displayName,
-    publisher: ext.namespaceDisplayName || ext.namespace,
+    kind: "marketplace",
+    key: ext.key,
+    title: ext.title,
+    publisher: ext.publisherDisplayName || ext.publisher,
     description: ext.description,
     version: ext.version,
-    iconUrl: ext.files?.icon ?? null,
-    downloads: ext.downloadCount,
-    rating: ext.averageRating ?? null,
-    categories: ext.categories ?? [],
-    tags: ext.tags ?? [],
-    publishedAt: ext.timestamp ?? null,
-    source: "dotdir",
-    raw: ext,
-  };
-}
-
-function normalizeOpenVsx(ext: OpenVsxExtension): SidebarItem {
-  return {
-    kind: "open-vsx",
-    key: `${ext.namespace}.${ext.name}`,
-    title: ext.displayName,
-    publisher: ext.namespace,
-    description: ext.description,
-    version: ext.version,
-    iconUrl: getOpenVsxIconUrl(ext),
-    downloads: ext.downloadCount,
-    rating: null,
-    categories: [],
-    tags: [],
-    source: "open-vsx",
-    raw: ext,
+    iconUrl: ext.iconUrl,
+    downloads: ext.downloads,
+    rating: ext.rating,
+    categories: ext.categories,
+    tags: ext.tags,
+    publishedAt: ext.publishedAt,
+    source: ext.provider,
+    remote: ext,
   };
 }
 
@@ -301,16 +270,16 @@ function openVsxNamespaceUrl(namespace: string): string {
 }
 
 function featureSectionsForInstalled(ext: LoadedExtension): Array<{ label: string; items: string[] }> {
-  const commands = (ext.commands ?? []).map((item) => item.title || item.command);
-  const keybindings = (ext.keybindings ?? []).map((item) => `${item.key} → ${item.command}`);
-  const viewers = (ext.viewers ?? []).map((item) => item.label);
-  const editors = (ext.editors ?? []).map((item) => item.label);
-  const fsProviders = (ext.fsProviders ?? []).map((item) => item.label);
-  const languages = (ext.languages ?? []).map((item) => item.aliases?.[0] ?? item.id);
-  const grammars = (ext.grammarRefs ?? []).map((item) => item.contribution.scopeName);
-  const shells = (ext.shellIntegrations ?? []).map((item) => item.label);
-  const iconThemes = (ext.iconThemes ?? []).map((item) => (item.kind === "vscode" && item.sourceId ? `${item.label} (${item.sourceId})` : item.label));
-  const colorThemes = (ext.colorThemes ?? []).map((item) => item.label);
+  const commands = extensionCommands(ext).map((item) => item.title || item.command);
+  const keybindings = extensionKeybindings(ext).map((item) => `${item.key} → ${item.command}`);
+  const viewers = extensionViewers(ext).map((item) => item.label);
+  const editors = extensionEditors(ext).map((item) => item.label);
+  const fsProviders = extensionFsProviders(ext).map((item) => item.label);
+  const languages = extensionLanguages(ext).map((item) => item.aliases?.[0] ?? item.id);
+  const grammars = extensionGrammarRefs(ext).map((item) => item.contribution.scopeName);
+  const shells = extensionShellIntegrations(ext).map((item) => item.label);
+  const iconThemes = extensionIconThemes(ext).map((item) => (item.kind === "vscode" && item.sourceId ? `${item.label} (${item.sourceId})` : item.label));
+  const colorThemes = extensionColorThemes(ext).map((item) => item.label);
 
   return [
     { label: "Icon Themes", items: iconThemes },
@@ -338,8 +307,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const extensionHost = useExtensionHostClient();
   const [marketplaceSource, setMarketplaceSource] = useState<MarketplaceSource>("open-vsx");
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<MarketplaceExtension[]>([]);
-  const [openVsxResults, setOpenVsxResults] = useState<OpenVsxExtension[]>([]);
+  const [marketplaceResults, setMarketplaceResults] = useState<MarketplaceSearchItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyByKey, setBusyByKey] = useState<Record<string, BusyState>>({});
   const [pendingAutoUpdateByKey, setPendingAutoUpdateByKey] = useState<Record<string, boolean>>({});
@@ -360,20 +328,12 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
 
   const installedItems = useMemo(() => installed.map((ext) => normalizeInstalled(ext, resolveVfsUrl)), [installed, resolveVfsUrl]);
   const installedByKey = useMemo(() => new Map(installed.map((ext) => [keyForInstalled(ext), ext])), [installed]);
-
   const doSearch = useCallback(async (q: string, source: MarketplaceSource) => {
     setLoading(true);
     setError("");
     try {
-      if (source === "open-vsx") {
-        const data = await searchOpenVsxMarketplace(q);
-        setOpenVsxResults(data.extensions);
-        setResults([]);
-      } else {
-        const data = await searchDotDirMarketplace(q);
-        setResults(data.extensions);
-        setOpenVsxResults([]);
-      }
+      const data = await getMarketplaceProvider(source).search(q);
+      setMarketplaceResults(data.items);
     } catch {
       setError(`Could not reach ${source === "open-vsx" ? "Open VSX" : ".dir"} marketplace`);
     }
@@ -466,10 +426,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
     }, 250);
   };
 
-  const marketplaceItems = useMemo(() => {
-    if (marketplaceSource === "dotdir") return results.map(normalizeDotdir);
-    return openVsxResults.map(normalizeOpenVsx);
-  }, [marketplaceSource, openVsxResults, results]);
+  const marketplaceItems = useMemo(() => marketplaceResults.map(normalizeMarketplaceItem), [marketplaceResults]);
 
   const availableCategories = useMemo(() => {
     const all = new Set<string>();
@@ -492,8 +449,8 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
       items = [...items].sort((a, b) => (b.downloads ?? 0) - (a.downloads ?? 0));
     } else if (filterKind === "recent") {
       items = [...items].sort((a, b) => {
-        const left = a.kind === "dotdir" && a.publishedAt ? Date.parse(a.publishedAt) : 0;
-        const right = b.kind === "dotdir" && b.publishedAt ? Date.parse(b.publishedAt) : 0;
+        const left = a.kind === "marketplace" && a.publishedAt ? Date.parse(a.publishedAt) : 0;
+        const right = b.kind === "marketplace" && b.publishedAt ? Date.parse(b.publishedAt) : 0;
         return right - left;
       });
     }
@@ -524,19 +481,21 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const selectedInstalled = selectedItem ? (installedByKey.get(selectedItem.key) ?? (selectedItem.kind === "installed" ? selectedItem.loaded : null)) : null;
   const selectedBusy = selectedItem ? busyByKey[selectedItem.key] : undefined;
   const selectedAutoUpdate = selectedInstalled
-    ? (pendingAutoUpdateByKey[selectedInstalled.ref.publisher + "." + selectedInstalled.ref.name] ?? selectedInstalled.ref.autoUpdate ?? true)
+    ? (pendingAutoUpdateByKey[`${extensionRef(selectedInstalled).publisher}.${extensionRef(selectedInstalled).name}`]
+        ?? extensionRef(selectedInstalled).autoUpdate
+        ?? true)
     : false;
-  const selectedIconThemes = selectedInstalled?.iconThemes ?? [];
+  const selectedIconThemes = selectedInstalled ? extensionIconThemes(selectedInstalled) : [];
   const selectedIconThemeValue = selectedInstalled
     ? (selectedIconThemes.find((theme) => extensionIconThemeKey(selectedInstalled, theme.id) === activeIconTheme)?.id ?? "")
     : "";
-  const selectedColorThemes = selectedInstalled?.colorThemes ?? [];
+  const selectedColorThemes = selectedInstalled ? extensionColorThemes(selectedInstalled) : [];
   const selectedColorThemeValue = selectedInstalled
     ? (selectedColorThemes.find((theme) => colorThemeKey(selectedInstalled, theme.id) === activeColorTheme)?.id ?? "")
     : "";
   const selectedDocs = selectedItem ? docsByKey[selectedItem.key] : undefined;
   const selectedRemoteMeta = selectedItem ? remoteMetaByKey[selectedItem.key] : undefined;
-  const selectedReviewCount = selectedRemoteMeta?.reviewCount ?? (selectedItem?.kind === "dotdir" ? (selectedItem.raw.reviewCount ?? 0) : 0);
+  const selectedReviewCount = selectedRemoteMeta?.reviewCount ?? (selectedItem?.kind === "marketplace" ? (selectedItem.remote.reviewCount ?? 0) : 0);
   const selectedHomepageLabel = formatHostLabel(selectedRemoteMeta?.homepage ?? null);
 
   const openExternalLink = useCallback(
@@ -569,8 +528,8 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
     let cancelled = false;
     setDocsLoadingKey(selectedItem.key);
     void (async () => {
-      const readme = await tryReadOptionalDoc(bridge, selectedInstalled.dirPath, ["README.md", "readme.md"]);
-      const changelog = await tryReadOptionalDoc(bridge, selectedInstalled.dirPath, ["CHANGELOG.md", "Changelog.md", "changelog.md"]);
+      const readme = await tryReadOptionalDoc(bridge, extensionDirPath(selectedInstalled), ["README.md", "readme.md"]);
+      const changelog = await tryReadOptionalDoc(bridge, extensionDirPath(selectedInstalled), ["CHANGELOG.md", "Changelog.md", "changelog.md"]);
       if (cancelled) return;
       setDocsByKey((current) => ({
         ...current,
@@ -584,7 +543,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   }, [bridge, contentTab, docsByKey, selectedInstalled, selectedItem]);
 
   useEffect(() => {
-    if (!selectedItem || (selectedItem.kind !== "open-vsx" && selectedItem.kind !== "dotdir")) return;
+    if (!selectedItem || selectedItem.kind !== "marketplace") return;
     if (remoteMetaByKey[selectedItem.key]) return;
 
     let cancelled = false;
@@ -592,13 +551,11 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
 
     void (async () => {
       try {
-        const details =
-          selectedItem.kind === "open-vsx"
-            ? await fetchOpenVsxExtensionDetails(selectedItem.raw.namespace, selectedItem.raw.name)
-            : await fetchDotDirExtensionDetails(selectedItem.raw.namespace, selectedItem.raw.name);
+        const provider = getMarketplaceProvider(selectedItem.source);
+        const details = await provider.getDetails(selectedItem.remote.publisher, selectedItem.remote.name);
         const [readme, changelog] = await Promise.all([
-          details.files?.readme ? fetchRemoteText(details.files.readme, { openVsx: selectedItem.kind === "open-vsx" }) : Promise.resolve(null),
-          details.files?.changelog ? fetchRemoteText(details.files.changelog, { openVsx: selectedItem.kind === "open-vsx" }) : Promise.resolve(null),
+          details.readmeUrl ? fetchRemoteText(details.readmeUrl, { openVsx: selectedItem.source === "open-vsx" }) : Promise.resolve(null),
+          details.changelogUrl ? fetchRemoteText(details.changelogUrl, { openVsx: selectedItem.source === "open-vsx" }) : Promise.resolve(null),
         ]);
 
         if (cancelled) return;
@@ -606,16 +563,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
         setRemoteMetaByKey((current) => ({
           ...current,
           [selectedItem.key]: {
-            averageRating: details.averageRating ?? null,
-            reviewCount: details.reviewCount ?? null,
-            downloadCount: details.downloadCount ?? null,
-            categories: details.categories ?? [],
-            tags: details.tags ?? [],
-            timestamp: details.timestamp ?? null,
-            namespaceDisplayName: details.namespaceDisplayName ?? null,
-            homepage: details.homepage ?? null,
-            repository: details.repository ?? null,
-            bugs: ("bugs" in details ? details.bugs : null) ?? null,
+            ...details,
             readme,
             changelog,
           },
@@ -625,16 +573,29 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
         setRemoteMetaByKey((current) => ({
           ...current,
           [selectedItem.key]: {
-            averageRating: null,
+            provider: selectedItem.source,
+            key: selectedItem.key,
+            publisher: selectedItem.remote.publisher,
+            publisherDisplayName: selectedItem.publisher,
+            name: selectedItem.remote.name,
+            version: selectedItem.version,
+            title: selectedItem.title,
+            description: selectedItem.description,
+            iconUrl: selectedItem.iconUrl,
+            downloads: selectedItem.downloads,
+            rating: selectedItem.rating,
             reviewCount: null,
-            downloadCount: selectedItem.downloads,
             categories: selectedItem.categories,
             tags: selectedItem.tags,
-            timestamp: null,
+            publishedAt: selectedItem.publishedAt,
             namespaceDisplayName: selectedItem.publisher,
+            timestamp: null,
             homepage: null,
             repository: null,
             bugs: null,
+            readmeUrl: null,
+            changelogUrl: null,
+            downloadUrl: selectedItem.remote.downloadUrl ?? null,
             readme: null,
             changelog: null,
           },
@@ -655,24 +616,10 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
     async (item: SidebarItem) => {
       setError("");
       try {
-        if (item.kind === "dotdir") {
-          await runBridgeInstall(item.key, {
-            source: "dotdir-marketplace",
-            publisher: item.raw.namespace,
-            name: item.raw.name,
-            version: item.raw.version,
-          });
-          return;
-        }
-        if (item.kind === "open-vsx") {
-          const downloadUrl = getOpenVsxDownloadUrl(item.raw);
-          if (!downloadUrl) return;
-          await runBridgeInstall(item.key, {
-            source: "open-vsx-marketplace",
-            publisher: item.raw.namespace,
-            name: item.raw.name,
-            downloadUrl,
-          });
+        if (item.kind === "marketplace") {
+          const request = getMarketplaceProvider(item.source).getInstallRequest(item.remote);
+          if (!request) return;
+          await runBridgeInstall(item.key, request);
         }
       } catch (err) {
         setError(`Install failed: ${errMsg(err)}`);
@@ -695,7 +642,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
       }));
       setError("");
       try {
-        await uninstallExtension(bridge, ext.ref.publisher, ext.ref.name);
+        await uninstallExtension(bridge, extensionRef(ext).publisher, extensionRef(ext).name);
         if (activeIconTheme === key) {
           updateSettings({ iconTheme: undefined });
         }
@@ -735,13 +682,15 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
 
   const handleSetAutoUpdate = useCallback(
     async (ext: LoadedExtension, autoUpdate: boolean) => {
-      const key = `${ext.ref.publisher}.${ext.ref.name}`;
+      const key = `${extensionRef(ext).publisher}.${extensionRef(ext).name}`;
       setPendingAutoUpdateByKey((current) => ({ ...current, [key]: autoUpdate }));
       try {
-        await setExtensionAutoUpdate(bridge, ext.ref.publisher, ext.ref.name, autoUpdate);
+        await setExtensionAutoUpdate(bridge, extensionRef(ext).publisher, extensionRef(ext).name, autoUpdate);
         setInstalled((current) =>
           current.map((item) =>
-            item.ref.publisher === ext.ref.publisher && item.ref.name === ext.ref.name ? { ...item, ref: { ...item.ref, autoUpdate } } : item,
+            extensionRef(item).publisher === extensionRef(ext).publisher && extensionRef(item).name === extensionRef(ext).name
+              ? { ...item, identity: { ...item.identity, ref: { ...item.identity.ref, autoUpdate } } }
+              : item,
           ),
         );
       } catch (err) {
@@ -765,8 +714,8 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
       let changed = false;
       const next = { ...current };
       for (const ext of installed) {
-        const key = `${ext.ref.publisher}.${ext.ref.name}`;
-        if (key in next && next[key] === (ext.ref.autoUpdate ?? true)) {
+        const key = `${extensionRef(ext).publisher}.${extensionRef(ext).name}`;
+        if (key in next && next[key] === (extensionRef(ext).autoUpdate ?? true)) {
           delete next[key];
           changed = true;
         }
@@ -808,7 +757,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
     ].filter((row) => row.value);
 
     const marketplaceRows = [
-      { label: "Published", value: selectedItem.kind === "dotdir" ? formatRelativeDate(selectedItem.publishedAt) : null },
+      { label: "Published", value: selectedItem.kind === "marketplace" ? formatRelativeDate(selectedItem.publishedAt) : null },
       { label: "Last Released", value: selectedRemoteMeta?.timestamp ? formatRelativeDate(selectedRemoteMeta.timestamp) : null },
     ].filter((row) => row.value);
 
@@ -817,8 +766,12 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
       selectedRemoteMeta?.repository ? { label: "Repository", href: selectedRemoteMeta.repository } : null,
       selectedRemoteMeta?.homepage ? { label: selectedRemoteMeta.namespaceDisplayName ?? selectedItem.publisher, href: selectedRemoteMeta.homepage } : null,
       selectedRemoteMeta?.bugs ? { label: "Issues", href: selectedRemoteMeta.bugs } : null,
-      selectedItem.kind === "open-vsx" ? { label: "Marketplace", href: openVsxExtensionUrl(selectedItem.raw.namespace, selectedItem.raw.name) } : null,
-      selectedItem.kind === "open-vsx" ? { label: selectedItem.publisher, href: openVsxNamespaceUrl(selectedItem.raw.namespace) } : null,
+      selectedItem.kind === "marketplace" && selectedItem.source === "open-vsx"
+        ? { label: "Marketplace", href: openVsxExtensionUrl(selectedItem.remote.publisher, selectedItem.remote.name) }
+        : null,
+      selectedItem.kind === "marketplace" && selectedItem.source === "open-vsx"
+        ? { label: selectedItem.publisher, href: openVsxNamespaceUrl(selectedItem.remote.publisher) }
+        : null,
     ].filter((row): row is { label: string; href: string } => Boolean(row));
 
     return [
@@ -1069,7 +1022,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                         </a>
                       </>
                     )}
-                    {selectedItem.kind === "dotdir" && (
+                    {selectedItem.kind === "marketplace" && selectedItem.source === "dotdir" && (
                       <>
                         <span className={styles["ext-meta-separator"]}>|</span>
                         <span className={styles["ext-meta-with-icon"]}>
@@ -1078,18 +1031,18 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                         </span>
                       </>
                     )}
-                    {(selectedRemoteMeta?.downloadCount ?? selectedItem.downloads) != null && (
+                    {(selectedRemoteMeta?.downloads ?? selectedItem.downloads) != null && (
                       <>
                         <span className={styles["ext-meta-separator"]}>|</span>
                         <span className={styles["ext-meta-with-icon"]}>
                           <VscCloudDownload aria-hidden="true" />
-                          {formatNumber(selectedRemoteMeta?.downloadCount ?? selectedItem.downloads)}
+                          {formatNumber(selectedRemoteMeta?.downloads ?? selectedItem.downloads)}
                         </span>
                       </>
                     )}
                     <>
                       <span className={styles["ext-meta-separator"]}>|</span>
-                      {renderStars(selectedRemoteMeta?.averageRating ?? selectedItem.rating, selectedReviewCount, remoteMetaLoading)}
+                      {renderStars(selectedRemoteMeta?.rating ?? selectedItem.rating, selectedReviewCount, remoteMetaLoading)}
                     </>
                   </div>
                   <p className={styles["ext-hero-description"]}>{selectedItem.description || "No description available."}</p>

@@ -22,6 +22,7 @@ import { useCommandLine } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
 import { runCommandSequence, type RunCommandsArgs } from "@/features/commands/runCommands";
+import { extensionLanguages } from "@/features/extensions/types";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
 import { useUserSettings } from "@/features/settings/useUserSettings";
@@ -262,7 +263,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         if (activeTabRef.current?.type !== "filelist") return;
         const currentPath = activeTabRef.current.path;
         const { onOpenCreateFileConfirm } = depsRef.current;
-        const langList = loadedExtensionsRef.current.flatMap((e) => e.languages ?? []);
+        const langList = loadedExtensionsRef.current.flatMap((e) => extensionLanguages(e));
         const seen = new Set<string>();
         const languages: LanguageOption[] = langList
           .filter((l) => {

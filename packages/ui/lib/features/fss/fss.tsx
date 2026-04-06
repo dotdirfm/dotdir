@@ -1,5 +1,5 @@
 import type { Bridge } from "@/features/bridge";
-import type { LoadedExtension } from "@/features/extensions/types";
+import { extensionIconThemes, extensionRef, type LoadedExtension } from "@/features/extensions/types";
 import { readFileText } from "@/features/file-system/fs";
 import type { ResolvedEntryStyle } from "@/features/fss/types";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
@@ -43,13 +43,13 @@ function resolveIconUrls(source: string, basePath: string): string {
 
 function buildExtensionLayers(extensions: LoadedExtension[], activeIconTheme?: string): StyleLayer[] {
   const withFss = extensions.flatMap((ext) =>
-    (ext.iconThemes ?? [])
-      .filter((theme): theme is NonNullable<LoadedExtension["iconThemes"]>[number] & { kind: "fss"; fss: string; basePath: string } =>
+    extensionIconThemes(ext)
+      .filter((theme): theme is NonNullable<LoadedExtension["assets"]["iconThemes"]>[number] & { kind: "fss"; fss: string; basePath: string } =>
         theme.kind === "fss" && theme.fss != null && theme.basePath != null)
       .map((theme) => ({
         ext,
         theme,
-        key: `${ext.ref.publisher}.${ext.ref.name}:${theme.id}`,
+        key: `${extensionRef(ext).publisher}.${extensionRef(ext).name}:${theme.id}`,
       })),
   );
   const filtered = activeIconTheme ? withFss.filter((entry) => entry.key === activeIconTheme) : [];

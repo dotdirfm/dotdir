@@ -195,14 +195,23 @@ export interface LoadedIconTheme {
 
 export type LoadedShellIntegration = Omit<ExtensionShellIntegration, "scriptPath"> & { script: string };
 
-export interface LoadedExtension {
+export interface LoadedExtensionIdentity {
   ref: ExtensionRef;
   manifest: ExtensionManifest;
+}
+
+export interface LoadedExtensionLocation {
   dirPath: string;
+}
+
+export interface LoadedExtensionAssets {
   /** Icon theme contributions from this extension. */
   iconThemes?: Array<LoadedIconTheme & { fss?: string }>;
   /** Color theme contributions from this extension */
   colorThemes?: LoadedColorTheme[];
+}
+
+export interface LoadedExtensionContributions {
   /** Language contributions from this extension */
   languages?: ExtensionLanguage[];
   /** Grammar contributions (lazy JSON loading for editor). */
@@ -221,6 +230,65 @@ export interface LoadedExtension {
   fsProviders?: ExtensionFsProviderContribution[];
   /** Shell integration contributions from this extension (fully resolved). */
   shellIntegrations?: Array<LoadedShellIntegration>;
+}
+
+export interface LoadedExtension {
+  identity: LoadedExtensionIdentity;
+  location: LoadedExtensionLocation;
+  assets: LoadedExtensionAssets;
+  contributions: LoadedExtensionContributions;
+}
+
+export function extensionRef(ext: LoadedExtension): ExtensionRef {
+  return ext.identity.ref;
+}
+
+export function extensionManifest(ext: LoadedExtension): ExtensionManifest {
+  return ext.identity.manifest;
+}
+
+export function extensionDirPath(ext: LoadedExtension): string {
+  return ext.location.dirPath;
+}
+
+export function extensionIconThemes(ext: LoadedExtension): NonNullable<LoadedExtensionAssets["iconThemes"]> {
+  return ext.assets.iconThemes ?? [];
+}
+
+export function extensionColorThemes(ext: LoadedExtension): NonNullable<LoadedExtensionAssets["colorThemes"]> {
+  return ext.assets.colorThemes ?? [];
+}
+
+export function extensionLanguages(ext: LoadedExtension): NonNullable<LoadedExtensionContributions["languages"]> {
+  return ext.contributions.languages ?? [];
+}
+
+export function extensionGrammarRefs(ext: LoadedExtension): NonNullable<LoadedExtensionContributions["grammarRefs"]> {
+  return ext.contributions.grammarRefs ?? [];
+}
+
+export function extensionCommands(ext: LoadedExtension): NonNullable<LoadedExtensionContributions["commands"]> {
+  return ext.contributions.commands ?? [];
+}
+
+export function extensionKeybindings(ext: LoadedExtension): NonNullable<LoadedExtensionContributions["keybindings"]> {
+  return ext.contributions.keybindings ?? [];
+}
+
+export function extensionViewers(ext: LoadedExtension): NonNullable<LoadedExtensionContributions["viewers"]> {
+  return ext.contributions.viewers ?? [];
+}
+
+export function extensionEditors(ext: LoadedExtension): NonNullable<LoadedExtensionContributions["editors"]> {
+  return ext.contributions.editors ?? [];
+}
+
+export function extensionFsProviders(ext: LoadedExtension): NonNullable<LoadedExtensionContributions["fsProviders"]> {
+  return ext.contributions.fsProviders ?? [];
+}
+
+export function extensionShellIntegrations(ext: LoadedExtension): NonNullable<LoadedExtensionContributions["shellIntegrations"]> {
+  return ext.contributions.shellIntegrations ?? [];
 }
 
 export interface MarketplaceExtension {

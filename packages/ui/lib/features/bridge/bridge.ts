@@ -235,6 +235,8 @@ export interface Bridge {
       start(request: ExtensionInstallRequest): Promise<number>;
       cancel?(installId: number): Promise<void>;
       onProgress(callback: (event: ExtensionInstallProgressEvent) => void): Unsubscribe;
+      onRequest?(callback: (request: ExtensionInstallRequest) => void): Unsubscribe;
+      emitRequest?(request: ExtensionInstallRequest): void;
     };
   };
   window?: {

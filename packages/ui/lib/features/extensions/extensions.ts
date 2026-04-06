@@ -3,7 +3,16 @@ import { getAppDirs } from "@/features/bridge/appDirs";
 import { readFileText } from "@/features/file-system/fs";
 import { deleteFilesystemPathRecursive } from "@/features/file-system/utils";
 import { dirname, join, normalizePath } from "@/utils/path";
-import type { ExtensionManifest, ExtensionRef, LoadedColorTheme, LoadedExtension, LoadedIconTheme } from "./types";
+import {
+  type ExtensionManifest,
+  type ExtensionRef,
+  type LoadedColorTheme,
+  type LoadedExtension,
+  type LoadedIconTheme,
+  extensionColorThemes,
+  extensionIconThemes,
+  extensionRef,
+} from "./types";
 
 function extensionDirName(ref: ExtensionRef): string {
   return `${ref.publisher}-${ref.name}-${ref.version}`;
@@ -48,7 +57,7 @@ export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]>
       const extDir = ref.path ? normalizePath(ref.path) : join(extensionsDir, extensionDirName(ref));
       const manifest: ExtensionManifest = JSON.parse(await readFileText(bridge, join(extDir, "package.json")));
 
-      const iconThemes: LoadedExtension["iconThemes"] = [];
+      const iconThemes: LoadedExtension["assets"]["iconThemes"] = [];
       if (manifest.contributes?.iconTheme?.path) {
         const theme = manifest.contributes.iconTheme;
         const themePath = join(extDir, theme.path);
@@ -88,7 +97,7 @@ export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]>
       const languages = manifest.contributes?.languages;
 
       // Load grammar contributions
-      let grammarRefs: LoadedExtension['grammarRefs'];
+      let grammarRefs: LoadedExtension["contributions"]["grammarRefs"];
       if (manifest.contributes?.grammars?.length) {
         grammarRefs = [];
         for (const grammarContrib of manifest.contributes.grammars) {
@@ -105,7 +114,7 @@ export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]>
       }
 
       // Load color theme contributions
-      let colorThemes: LoadedExtension['colorThemes'];
+      let colorThemes: LoadedExtension["assets"]["colorThemes"];
       if (manifest.contributes?.themes?.length) {
         colorThemes = manifest.contributes.themes.map((t, i) => ({
           id: t.id || `${t.label}#${i}`,
@@ -125,7 +134,7 @@ export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]>
       const fsProviders = manifest.contributes?.fsProviders;
 
       // Load shell integration contributions
-      let shellIntegrations: LoadedExtension["shellIntegrations"];
+      let shellIntegrations: LoadedExtension["contributions"]["shellIntegrations"];
       if (manifest.contributes?.shellIntegrations?.length) {
         shellIntegrations = [];
         for (const si of manifest.contributes.shellIntegrations) {
@@ -150,19 +159,27 @@ export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]>
       }
 
       loaded.push({
-        ref,
-        manifest,
-        dirPath: extDir,
-        iconThemes: iconThemes.length > 0 ? iconThemes : undefined,
-        colorThemes,
-        languages,
-        grammarRefs,
-        commands,
-        keybindings,
-        viewers,
-        editors,
-        fsProviders,
-        shellIntegrations,
+        identity: {
+          ref,
+          manifest,
+        },
+        location: {
+          dirPath: extDir,
+        },
+        assets: {
+          iconThemes: iconThemes.length > 0 ? iconThemes : undefined,
+          colorThemes,
+        },
+        contributions: {
+          languages,
+          grammarRefs,
+          commands,
+          keybindings,
+          viewers,
+          editors,
+          fsProviders,
+          shellIntegrations,
+        },
       });
     } catch {
       continue;
@@ -185,17 +202,17 @@ export async function uninstallExtension(bridge: Bridge, publisherUsername: stri
 }
 
 export function extensionIconThemeId(ext: LoadedExtension): string | null {
-  return ext.iconThemes?.[0] ? `${ext.ref.publisher}.${ext.ref.name}:${ext.iconThemes[0].id}` : null;
+  const firstTheme = extensionIconThemes(ext)[0];
+  return firstTheme ? `${extensionRef(ext).publisher}.${extensionRef(ext).name}:${firstTheme.id}` : null;
 }
 
 export function extensionIconThemeKey(ext: LoadedExtension, themeId: string): string {
-  return `${ext.ref.publisher}.${ext.ref.name}:${themeId}`;
+  return `${extensionRef(ext).publisher}.${extensionRef(ext).name}:${themeId}`;
 }
 
 export function findIconTheme(exts: LoadedExtension[], key: string): { ext: LoadedExtension; theme: LoadedIconTheme & { fss?: string } } | null {
   for (const ext of exts) {
-    if (!ext.iconThemes) continue;
-    for (const theme of ext.iconThemes) {
+    for (const theme of extensionIconThemes(ext)) {
       if (extensionIconThemeKey(ext, theme.id) === key) {
         return { ext, theme };
       }
@@ -205,13 +222,12 @@ export function findIconTheme(exts: LoadedExtension[], key: string): { ext: Load
 }
 
 export function colorThemeKey(ext: LoadedExtension, themeId: string): string {
-  return `${ext.ref.publisher}.${ext.ref.name}:${themeId}`;
+  return `${extensionRef(ext).publisher}.${extensionRef(ext).name}:${themeId}`;
 }
 
 export function findColorTheme(exts: LoadedExtension[], key: string): { ext: LoadedExtension; theme: LoadedColorTheme } | null {
   for (const ext of exts) {
-    if (!ext.colorThemes) continue;
-    for (const theme of ext.colorThemes) {
+    for (const theme of extensionColorThemes(ext)) {
       if (colorThemeKey(ext, theme.id) === key) {
         return { ext, theme };
       }

@@ -1,5 +1,5 @@
 import { type CommandRegistry, useCommandRegistry } from "@/features/commands/commands";
-import type { LoadedExtension } from "@/features/extensions/types";
+import { extensionDirPath, extensionManifest, extensionRef, type LoadedExtension } from "@/features/extensions/types";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import { join, normalizePath } from "@/utils/path";
 import { useEffect, useMemo, useRef } from "react";
@@ -40,7 +40,8 @@ export interface BrowserExtensionHost {
 }
 
 function extActivationKey(ext: LoadedExtension): string {
-  return `${ext.ref.publisher}.${ext.ref.name}.${ext.ref.version}`;
+  const ref = extensionRef(ext);
+  return `${ref.publisher}.${ref.name}.${ref.version}`;
 }
 
 async function loadBrowserModule(scriptUrl: string): Promise<BrowserExtensionModule> {
@@ -159,8 +160,8 @@ export function useBrowserExtensionHost(): BrowserExtensionHost {
 
     const activateOne = async (ext: LoadedExtension): Promise<void> => {
       const key = extActivationKey(ext);
-      const scriptRel = ext.manifest.browser!;
-      const absScriptPath = join(ext.dirPath, normalizePath(scriptRel).replace(/^\//, ""));
+      const scriptRel = extensionManifest(ext).browser!;
+      const absScriptPath = join(extensionDirPath(ext), normalizePath(scriptRel).replace(/^\//, ""));
       const scriptUrl = resolveVfsUrl(absScriptPath);
 
       const module = await loadBrowserModule(scriptUrl);
@@ -196,7 +197,7 @@ export function useBrowserExtensionHost(): BrowserExtensionHost {
             for (const ext of extensions) {
               const key = extActivationKey(ext);
               if (activeRef.current.has(key)) continue;
-              if (!ext.manifest.browser) continue;
+              if (!extensionManifest(ext).browser) continue;
               await activateOne(ext);
             }
           })

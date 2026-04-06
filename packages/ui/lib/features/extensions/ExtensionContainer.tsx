@@ -11,6 +11,7 @@ import { useCommandRegistry } from "@/features/commands/commands";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
+import { extensionGrammarRefs, extensionLanguages } from "@/features/extensions/types";
 import { readFileText as readFileTextFromFs } from "@/features/file-system/fs";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
@@ -995,8 +996,8 @@ export function EditorContainer({ extensionDirPath, entry, filePath, fileName, l
   const { focusActiveFileList } = useActivePanelNavigation();
   const loadedExtensions = useAtomValue(loadedExtensionsAtom);
 
-  const languages = loadedExtensions.flatMap((e) => e.languages ?? []);
-  const allGrammarRefs = loadedExtensions.flatMap((e) => e.grammarRefs ?? []);
+  const languages = loadedExtensions.flatMap((e) => extensionLanguages(e));
+  const allGrammarRefs = loadedExtensions.flatMap((e) => extensionGrammarRefs(e));
   const grammars = allGrammarRefs.map((gr) => ({
     contribution: gr.contribution,
     path: gr.path,

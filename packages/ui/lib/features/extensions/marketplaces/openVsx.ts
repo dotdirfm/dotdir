@@ -1,3 +1,4 @@
+import type { MarketplaceProvider, MarketplaceDetails, MarketplaceSearchItem } from "./provider";
 const OPEN_VSX_MARKETPLACE_URL = "https://open-vsx.org";
 
 export interface OpenVsxExtension {
@@ -74,3 +75,77 @@ export function getOpenVsxDownloadUrl(ext: OpenVsxExtension): string | null {
 export function getOpenVsxIconUrl(ext: OpenVsxExtension): string | null {
   return ext.files?.icon ?? null;
 }
+
+function normalizeOpenVsxItem(ext: OpenVsxExtension): MarketplaceSearchItem {
+  return {
+    provider: "open-vsx",
+    key: `${ext.namespace}.${ext.name}`,
+    publisher: ext.namespace,
+    publisherDisplayName: ext.namespace,
+    name: ext.name,
+    version: ext.version,
+    title: ext.displayName,
+    description: ext.description,
+    iconUrl: getOpenVsxIconUrl(ext),
+    downloads: ext.downloadCount ?? null,
+    rating: null,
+    reviewCount: null,
+    categories: [],
+    tags: [],
+    publishedAt: null,
+    downloadUrl: ext.files?.download ?? null,
+  };
+}
+
+function normalizeOpenVsxDetails(ext: OpenVsxExtensionDetails): MarketplaceDetails {
+  return {
+    provider: "open-vsx",
+    key: `${ext.namespace}.${ext.name}`,
+    publisher: ext.namespace,
+    publisherDisplayName: ext.namespaceDisplayName ?? ext.namespace,
+    name: ext.name,
+    version: ext.version,
+    title: ext.displayName,
+    description: ext.description,
+    iconUrl: ext.files?.icon ?? null,
+    downloads: ext.downloadCount ?? null,
+    rating: ext.averageRating ?? null,
+    reviewCount: ext.reviewCount ?? null,
+    categories: ext.categories ?? [],
+    tags: ext.tags ?? [],
+    publishedAt: ext.timestamp ?? null,
+    namespaceDisplayName: ext.namespaceDisplayName ?? null,
+    timestamp: ext.timestamp ?? null,
+    homepage: ext.homepage ?? null,
+    repository: ext.repository ?? null,
+    bugs: ext.bugs ?? null,
+    readmeUrl: ext.files?.readme ?? null,
+    changelogUrl: ext.files?.changelog ?? null,
+    downloadUrl: ext.files?.download ?? null,
+  };
+}
+
+export const openVsxMarketplaceProvider: MarketplaceProvider = {
+  id: "open-vsx",
+  label: "Open VSX",
+  async search(query, page = 1) {
+    const result = await searchOpenVsxMarketplace(query, page);
+    return {
+      items: result.extensions.map(normalizeOpenVsxItem),
+      total: result.total,
+    };
+  },
+  async getDetails(publisher, name) {
+    return normalizeOpenVsxDetails(await fetchOpenVsxExtensionDetails(publisher, name));
+  },
+  getInstallRequest(item) {
+    return item.downloadUrl
+      ? {
+          source: "open-vsx-marketplace",
+          publisher: item.publisher,
+          name: item.name,
+          downloadUrl: item.downloadUrl,
+        }
+      : null;
+  },
+};

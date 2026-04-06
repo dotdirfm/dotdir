@@ -455,6 +455,7 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
             extensionInstallProgressListeners.delete(callback);
           };
         },
+        onRequest: () => () => {},
       },
     },
     onReconnect(callback: () => void): () => void {

@@ -6,7 +6,7 @@ import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
 import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { findColorTheme, findIconTheme } from "@/features/extensions/extensions";
-import { fetchOpenVsxExtensionDetails } from "@/features/extensions/marketplaces/openVsx";
+import { getMarketplaceProvider } from "@/features/extensions/marketplaces";
 import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
 import { readFileText } from "@/features/file-system/fs";
 import { useClearExtensionFssLayers, useSetExtensionFssLayers } from "@/features/fss/fss";
@@ -21,8 +21,17 @@ import { getStyleHostElement } from "@/utils/styleHost";
 import { useViewerEditorRegistry } from "@/viewerEditorRegistry";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
-import { checkDotDirUpdates, compareExtensionVersions } from "./marketplaces/dotdir";
-import type { ExtensionInstallSource, LoadedExtension } from "./types";
+import { compareExtensionVersions } from "./marketplaces/dotdir";
+import {
+  extensionCommands,
+  extensionDirPath,
+  extensionFsProviders,
+  extensionKeybindings,
+  extensionLanguages,
+  extensionRef,
+  type ExtensionInstallSource,
+  type LoadedExtension,
+} from "./types";
 
 const AUTO_UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const AUTO_UPDATE_INITIAL_DELAY_MS = 60 * 1000;
@@ -166,7 +175,7 @@ export function useExtensionHost(): void {
     autoUpdateInFlightRef.current = true;
     try {
       const installedForUpdate = latestExtensionsRef.current.filter(
-        (ext) => !ext.ref.path && ext.ref.source && (ext.ref.autoUpdate ?? true),
+        (ext) => !extensionRef(ext).path && extensionRef(ext).source && (extensionRef(ext).autoUpdate ?? true),
       );
       if (installedForUpdate.length === 0) return;
 
@@ -175,15 +184,16 @@ export function useExtensionHost(): void {
         | { source: "open-vsx-marketplace"; publisher: string; name: string; downloadUrl: string }
       > = [];
 
-      const bySource = (source: ExtensionInstallSource) => installedForUpdate.filter((ext) => ext.ref.source === source);
+      const bySource = (source: ExtensionInstallSource) => installedForUpdate.filter((ext) => extensionRef(ext).source === source);
 
+      const dotdirProvider = getMarketplaceProvider("dotdir");
       const dotdirExtensions = bySource("dotdir-marketplace");
-      if (dotdirExtensions.length > 0) {
-        const updates = await checkDotDirUpdates(
+      if (dotdirExtensions.length > 0 && dotdirProvider.checkUpdates) {
+        const updates = await dotdirProvider.checkUpdates(
           dotdirExtensions.map((ext) => ({
-            publisher: ext.ref.publisher,
-            name: ext.ref.name,
-            version: ext.ref.version,
+            publisher: extensionRef(ext).publisher,
+            name: extensionRef(ext).name,
+            version: extensionRef(ext).version,
           })),
         );
         for (const update of updates) {
@@ -198,19 +208,22 @@ export function useExtensionHost(): void {
       }
 
       const openVsxExtensions = bySource("open-vsx-marketplace");
+      const openVsxProvider = getMarketplaceProvider("open-vsx");
       for (const ext of openVsxExtensions) {
         try {
-          const details = await fetchOpenVsxExtensionDetails(ext.ref.publisher, ext.ref.name);
-          if (!details.version || compareExtensionVersions(details.version, ext.ref.version) <= 0) continue;
-          if (!details.files?.download) continue;
+          const ref = extensionRef(ext);
+          const details = await openVsxProvider.getDetails(ref.publisher, ref.name);
+          if (!details.version || compareExtensionVersions(details.version, ref.version) <= 0) continue;
+          if (!details.downloadUrl) continue;
           pendingInstalls.push({
             source: "open-vsx-marketplace",
-            publisher: ext.ref.publisher,
-            name: ext.ref.name,
-            downloadUrl: details.files.download,
+            publisher: ref.publisher,
+            name: ref.name,
+            downloadUrl: details.downloadUrl,
           });
         } catch (error) {
-          console.warn("[ExtHost] Failed to check Open VSX update for", `${ext.ref.publisher}.${ext.ref.name}`, error);
+          const ref = extensionRef(ext);
+          console.warn("[ExtHost] Failed to check Open VSX update for", `${ref.publisher}.${ref.name}`, error);
         }
       }
 
@@ -227,12 +240,9 @@ export function useExtensionHost(): void {
   }, [installExtensionAndWait, reloadExtensionHostInPlace]);
 
   useEffect(() => {
-    const handleInstallRequest = (event: Event) => {
-      const customEvent = event as CustomEvent<
-        | { source: "dotdir-marketplace"; publisher: string; name: string; version: string }
-        | { source: "open-vsx-marketplace"; publisher: string; name: string; downloadUrl: string }
-      >;
-      const request = customEvent.detail;
+    const onRequest = bridge.extensions.install.onRequest;
+    if (!onRequest) return;
+    const unsubscribe = onRequest((request) => {
       if (!request) return;
       void (async () => {
         try {
@@ -242,13 +252,9 @@ export function useExtensionHost(): void {
           console.error("[ExtHost] Deep-link install failed", error);
         }
       })();
-    };
-
-    window.addEventListener("dotdir:install-extension", handleInstallRequest as EventListener);
-    return () => {
-      window.removeEventListener("dotdir:install-extension", handleInstallRequest as EventListener);
-    };
-  }, [installExtensionAndWait, reloadExtensionHostInPlace]);
+    });
+    return unsubscribe;
+  }, [bridge, installExtensionAndWait, reloadExtensionHostInPlace]);
 
   // OS theme + active color theme → keep iconThemeKind in sync
   useEffect(() => {
@@ -396,7 +402,7 @@ export function useExtensionHost(): void {
     if (!settingsReady) return;
     if (!extensionsAutoUpdateEnabled) return;
     if (loadedExtensions.length === 0) return;
-    if (!loadedExtensions.some((ext) => ext.ref.autoUpdate ?? true)) return;
+    if (!loadedExtensions.some((ext) => extensionRef(ext).autoUpdate ?? true)) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -432,10 +438,8 @@ export function useExtensionHost(): void {
     const registerLanguages = async (exts: LoadedExtension[]) => {
       languageRegistryRef.current.clear();
       for (const ext of exts) {
-        if (ext.languages) {
-          for (const lang of ext.languages) {
-            languageRegistryRef.current.registerLanguage(lang);
-          }
+        for (const lang of extensionLanguages(ext)) {
+          languageRegistryRef.current.registerLanguage(lang);
         }
       }
       await languageRegistryRef.current.activateGrammars();
@@ -445,10 +449,11 @@ export function useExtensionHost(): void {
       clearExtensionCommandRegistrations();
 
       for (const ext of exts) {
-        if (ext.commands) {
-          const disposeContributions = commandRegistryRef.current.registerContributions(ext.commands);
+        const commands = extensionCommands(ext);
+        if (commands.length > 0) {
+          const disposeContributions = commandRegistryRef.current.registerContributions(commands);
           extensionContributionDisposersRef.current.push(disposeContributions);
-          for (const cmd of ext.commands) {
+          for (const cmd of commands) {
             const disposeCmd = commandRegistryRef.current.registerCommand(cmd.command, async (...args: unknown[]) => {
               const handled = await executeMountedExtensionCommand(cmd.command, args);
               if (handled) return;
@@ -457,8 +462,9 @@ export function useExtensionHost(): void {
             extensionContributionDisposersRef.current.push(disposeCmd);
           }
         }
-        if (ext.keybindings?.length) {
-          extensionContributionDisposersRef.current.push(...registerExtensionKeybindings(commandRegistryRef.current, ext.keybindings));
+        const keybindings = extensionKeybindings(ext);
+        if (keybindings.length > 0) {
+          extensionContributionDisposersRef.current.push(...registerExtensionKeybindings(commandRegistryRef.current, keybindings));
         }
       }
     };
@@ -474,9 +480,9 @@ export function useExtensionHost(): void {
         // Pre-compile backend WASM providers so first navigation is fast.
         if (bridgeRef.current.fsProvider) {
           for (const ext of exts) {
-            for (const p of ext.fsProviders ?? []) {
+            for (const p of extensionFsProviders(ext)) {
               if (p.runtime === "backend") {
-                const wasmPath = join(ext.dirPath, p.entry);
+                const wasmPath = join(extensionDirPath(ext), p.entry);
                 bridgeRef.current.fsProvider!.load(wasmPath).catch(() => {});
               }
             }
