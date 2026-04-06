@@ -51,6 +51,8 @@ export const builtInCommandContributions: CommandContribution[] = [
   { command: "editFile", title: "Edit File", shortTitle: "Edit", category: "File", palette: false },
 
   // ── Application ───────────────────────────────────────────────────────────
+  { command: "dotdir.newWindow", title: "New Window", category: "Application", when: "supportsWindowManagement" },
+  { command: "dotdir.closeWindow", title: "Close Window", category: "Application", when: "supportsWindowManagement" },
   { command: "dotdir.restartExtensionHost", title: "Restart Extension Host", category: "Application" },
   { command: "dotdir.exit", title: "Exit", shortTitle: "Quit", category: "Application" },
 

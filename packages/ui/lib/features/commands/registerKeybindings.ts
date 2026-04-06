@@ -17,6 +17,7 @@ const appBuiltInKeybindings: Keybinding[] = [
   { command: "showExtensions", key: "f11" },
   { command: "dotdir.openLeftPanelMenu", key: "alt+f1", when: "!dialogOpen" },
   { command: "dotdir.openRightPanelMenu", key: "alt+f2", when: "!dialogOpen" },
+  { command: "dotdir.newWindow", key: "ctrl+n", mac: "cmd+n", when: "supportsWindowManagement && !dialogOpen" },
 
   // Navigation commands
   { command: "switchPanel", key: "tab", when: "focusPanel && !dialogOpen" },
@@ -44,7 +45,8 @@ const appBuiltInKeybindings: Keybinding[] = [
   { command: "closeEditor", key: "escape", when: "focusEditor" },
 
   // Exit command
-  { command: "dotdir.exit", key: "f10" },
+  { command: "dotdir.closeWindow", key: "f10", when: "supportsWindowManagement" },
+  { command: "dotdir.exit", key: "f10", when: "!supportsWindowManagement" },
   { command: "dotdir.exit", key: "cmd+q", mac: "cmd+q" },
 ];
 

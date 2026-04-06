@@ -31,7 +31,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, Position, Size, State, WebviewUrl, WebviewWindowBuilder};
 use tauri::http::header as http_header;
 use tauri::http::StatusCode as HttpStatusCode;
 
@@ -164,6 +164,117 @@ fn is_eacces(e: &FsError) -> bool {
     matches!(e, FsError::PermissionDenied)
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct UiLayoutIndex {
+    #[serde(default)]
+    window_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct PersistedWindowState {
+    x: Option<i32>,
+    y: Option<i32>,
+    width: Option<u32>,
+    height: Option<u32>,
+    is_maximized: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CreateWindowOptions {
+    id: String,
+    x: Option<i32>,
+    y: Option<i32>,
+    width: Option<u32>,
+    height: Option<u32>,
+    is_maximized: Option<bool>,
+}
+
+fn app_data_dir() -> PathBuf {
+    PathBuf::from(backend_get_app_dirs().data_dir)
+}
+
+fn ui_layout_index_path() -> PathBuf {
+    app_data_dir().join("ui-layout.json")
+}
+
+fn window_state_path(window_id: &str) -> PathBuf {
+    app_data_dir().join(format!("window-state-{window_id}.json"))
+}
+
+fn read_ui_layout_index() -> UiLayoutIndex {
+    fs::read(ui_layout_index_path())
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<UiLayoutIndex>(&bytes).ok())
+        .unwrap_or_default()
+}
+
+fn read_window_state(window_id: &str) -> PersistedWindowState {
+    fs::read(window_state_path(window_id))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<PersistedWindowState>(&bytes).ok())
+        .unwrap_or_default()
+}
+
+fn cleanup_unused_window_files(index: &UiLayoutIndex) {
+    let keep: std::collections::HashSet<String> = index.window_ids.iter().cloned().collect();
+    let data_dir = app_data_dir();
+    if let Ok(entries) = fs::read_dir(data_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+
+            let matched = file_name
+                .strip_prefix("window-layout-")
+                .and_then(|rest| rest.strip_suffix(".json"))
+                .or_else(|| {
+                    file_name
+                        .strip_prefix("window-state-")
+                        .and_then(|rest| rest.strip_suffix(".json"))
+                });
+
+            let Some(window_id) = matched else {
+                continue;
+            };
+
+            if !keep.contains(window_id) {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+}
+
+fn create_app_window<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    options: &CreateWindowOptions,
+) -> tauri::Result<()> {
+    let builder = WebviewWindowBuilder::new(app, &options.id, WebviewUrl::default())
+        .title(".dir")
+        .inner_size(1200.0, 700.0);
+
+    let window = builder.build()?;
+
+    if let (Some(width), Some(height)) = (options.width, options.height) {
+        window.set_size(Size::Physical(PhysicalSize::new(width, height)))?;
+    }
+
+    if let (Some(x), Some(y)) = (options.x, options.y) {
+        window.set_position(Position::Physical(PhysicalPosition::new(x, y)))?;
+    }
+
+    if options.is_maximized.unwrap_or(false) {
+        window.maximize()?;
+    } else {
+        let _ = window.unmaximize();
+    }
+
+    Ok(())
+}
+
 // ── Managed state ────────────────────────────────────────────────────
 
 pub struct AppState {
@@ -239,6 +350,15 @@ fn fs_stat(file_path: String, state: State<'_, AppState>) -> CmdResult<FsStat> {
 #[tauri::command]
 fn fs_exists(file_path: String) -> bool {
     backend_fs_exists(&file_path)
+}
+
+#[tauri::command]
+fn fs_remove_file(file_path: String) -> CmdResult<()> {
+    match fs::remove_file(&file_path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(FsError::from_io(err).into()),
+    }
 }
 
 #[tauri::command]
@@ -647,6 +767,16 @@ fn rename_item(source: String, new_name: String) -> CmdResult<()> {
     backend_rename_item(&source, &new_name).map_err(Into::into)
 }
 
+#[tauri::command]
+fn create_window(options: CreateWindowOptions, app_handle: tauri::AppHandle) -> Result<(), String> {
+    create_app_window(&app_handle, &options).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn app_exit(app_handle: tauri::AppHandle) {
+    app_handle.exit(0);
+}
+
 // ── Auth token storage ───────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1009,6 +1139,27 @@ pub fn run() {
             };
             app.manage(state);
 
+            let mut index = read_ui_layout_index();
+            if index.window_ids.is_empty() {
+                index.window_ids.push("window-1".to_string());
+            }
+            cleanup_unused_window_files(&index);
+
+            for window_id in &index.window_ids {
+                let saved = read_window_state(window_id);
+                create_app_window(
+                    &app.handle(),
+                    &CreateWindowOptions {
+                        id: window_id.clone(),
+                        x: saved.x,
+                        y: saved.y,
+                        width: saved.width,
+                        height: saved.height,
+                        is_maximized: saved.is_maximized,
+                    },
+                )?;
+            }
+
             // Forward deep-link callbacks (e.g. dotdir://auth/callback?code=…)
             // to the frontend as an "auth:callback" event.
             let deep_link_handle = app.handle().clone();
@@ -1017,6 +1168,7 @@ pub fn run() {
                 let urls: Vec<String> = event.urls().iter().map(|u| u.to_string()).collect();
                 std::thread::spawn(move || {
                     for url in urls {
+                        let _ = h.emit("deep-link", url.clone());
                         let _ = h.emit("auth:callback", url);
                     }
                 });
@@ -1033,6 +1185,7 @@ pub fn run() {
             fs_write_text,
             fs_write_binary,
             fs_create_dir,
+            fs_remove_file,
             fs_open,
             fs_read,
             fs_close,
@@ -1061,12 +1214,14 @@ pub fn run() {
             extensions_install_start,
             extensions_install_cancel,
             rename_item,
+            create_window,
             fsp_load,
             fsp_list_entries,
             fsp_read_file_range,
             auth_store_tokens,
             auth_load_tokens,
             auth_clear_tokens,
+            app_exit,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

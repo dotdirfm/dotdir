@@ -4,6 +4,7 @@
 /// Uses Tauri's invoke() for commands and listen() for events.
 import type {
   Bridge,
+  CreateWindowOptions,
   ConflictResolution,
   CopyOptions,
   CopyProgressEvent,
@@ -20,6 +21,7 @@ import { normalizePath } from "@dotdirfm/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const ptyWriteEncoder = new TextEncoder();
 
@@ -72,6 +74,9 @@ export const tauriBridge: Bridge = {
     },
     async createDir(dirPath: string): Promise<void> {
       return invoke<void>("fs_create_dir", { dirPath });
+    },
+    async removeFile(filePath: string): Promise<void> {
+      return invoke<void>("fs_remove_file", { filePath });
     },
     async moveToTrash(paths: string[]): Promise<void> {
       return invoke<void>("move_to_trash", { paths });
@@ -381,6 +386,65 @@ export const tauriBridge: Bridge = {
           unlisten?.();
         };
       },
+    },
+  },
+  window: {
+    async getCurrentState() {
+      const currentWindow = getCurrentWindow();
+      const [position, size, isMaximized] = await Promise.all([
+        currentWindow.outerPosition(),
+        currentWindow.innerSize(),
+        currentWindow.isMaximized(),
+      ]);
+      return {
+        id: currentWindow.label,
+        x: position.x,
+        y: position.y,
+        width: size.width,
+        height: size.height,
+        isMaximized,
+      };
+    },
+    async create(options: CreateWindowOptions) {
+      return invoke<void>("create_window", { options });
+    },
+    async closeCurrent() {
+      await getCurrentWindow().close();
+    },
+    async exitApp() {
+      return invoke<void>("app_exit");
+    },
+    onStateChanged(callback: () => void) {
+      let disposed = false;
+      const unlisteners: Array<() => void> = [];
+
+      const register = async () => {
+        const currentWindow = getCurrentWindow();
+        const handlers = await Promise.all([
+          currentWindow.onMoved(() => {
+            callback();
+          }),
+          currentWindow.onResized(() => {
+            callback();
+          }),
+        ]);
+        if (disposed) {
+          for (const unlisten of handlers) {
+            unlisten();
+          }
+          return;
+        }
+        unlisteners.push(...handlers);
+      };
+
+      void register();
+
+      return () => {
+        disposed = true;
+        for (const unlisten of unlisteners.splice(0)) {
+          unlisten();
+        }
+      };
     },
   },
   fsProvider: {

@@ -216,6 +216,30 @@ export function useExtensionHost(): void {
     }
   }, [installExtensionAndWait, restartExtensionHost]);
 
+  useEffect(() => {
+    const handleInstallRequest = (event: Event) => {
+      const customEvent = event as CustomEvent<
+        | { source: "dotdir-marketplace"; publisher: string; name: string; version: string }
+        | { source: "open-vsx-marketplace"; publisher: string; name: string; downloadUrl: string }
+      >;
+      const request = customEvent.detail;
+      if (!request) return;
+      void (async () => {
+        try {
+          await installExtensionAndWait(request);
+          await restartExtensionHost();
+        } catch (error) {
+          console.error("[ExtHost] Deep-link install failed", error);
+        }
+      })();
+    };
+
+    window.addEventListener("dotdir:install-extension", handleInstallRequest as EventListener);
+    return () => {
+      window.removeEventListener("dotdir:install-extension", handleInstallRequest as EventListener);
+    };
+  }, [installExtensionAndWait, restartExtensionHost]);
+
   // OS theme + active color theme → keep iconThemeKind in sync
   useEffect(() => {
     const colorThemeMatch = activeColorTheme ? findColorTheme(latestExtensionsRef.current, activeColorTheme) : null;

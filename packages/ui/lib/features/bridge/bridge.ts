@@ -154,6 +154,24 @@ export interface TerminalProfile {
   spawnArgs: string[];
 }
 
+export interface WindowStateSnapshot {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  isMaximized: boolean;
+}
+
+export interface CreateWindowOptions {
+  id: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  isMaximized?: boolean;
+}
+
 export interface Bridge {
   fs: {
     entries(dirPath: string): Promise<FsEntry[]>;
@@ -169,6 +187,7 @@ export interface Bridge {
     writeFile(filePath: string, data: string): Promise<void>;
     writeBinaryFile(filePath: string, data: Uint8Array): Promise<void>;
     createDir(dirPath: string): Promise<void>;
+    removeFile?(filePath: string): Promise<void>;
     moveToTrash(paths: string[]): Promise<void>;
     copy: {
       start(sources: string[], destDir: string, options: CopyOptions): Promise<number>;
@@ -217,6 +236,13 @@ export interface Bridge {
       cancel?(installId: number): Promise<void>;
       onProgress(callback: (event: ExtensionInstallProgressEvent) => void): Unsubscribe;
     };
+  };
+  window?: {
+    getCurrentState(): Promise<WindowStateSnapshot>;
+    create(options: CreateWindowOptions): Promise<void>;
+    closeCurrent(): Promise<void>;
+    exitApp?(): Promise<void>;
+    onStateChanged?(callback: () => void): Unsubscribe;
   };
   onReconnect?(callback: () => void): Unsubscribe;
   fsProvider?: {

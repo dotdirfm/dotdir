@@ -26,10 +26,10 @@ import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
 import { useUserSettings } from "@/features/settings/useUserSettings";
 import { useTerminal } from "@/features/terminal/useTerminal";
+import { useUiState } from "@/features/ui-state/uiState";
 import { useFocusContext } from "@/focusContext";
 import { basename } from "@/utils/path";
 import { isTauri as isTauriApp } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useEffect, useRef } from "react";
 
@@ -44,6 +44,7 @@ export interface BuiltInCommandDeps {
 
 export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const bridge = useBridge();
+  const { ensureWindow, flushCurrentWindowLayout, flushCurrentWindowState, getCurrentWindowId, getWindowIds, removeWindow } = useUiState();
   const bridgeRef = useRef(bridge);
   bridgeRef.current = bridge;
   const { navigateTo, cancelNavigation, getPanel, activePanelSide } = useActivePanelNavigation();
@@ -309,12 +310,64 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // ── Application ───────────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand("dotdir.exit", async () => {
-        if (isTauriApp()) {
-          await getCurrentWindow().close();
-        } else {
-          window.close();
+      commandRegistry.registerCommand("dotdir.newWindow", async () => {
+        if (!bridgeRef.current.window) return;
+        const current = await bridgeRef.current.window.getCurrentState();
+        const windowId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `window-${Date.now()}`;
+
+        await ensureWindow(windowId);
+        try {
+          await bridgeRef.current.window.create({
+            id: windowId,
+            width: current.width,
+            height: current.height,
+            x: current.x + 40,
+            y: current.y + 40,
+            isMaximized: false,
+          });
+        } catch (err) {
+          await removeWindow(windowId);
+          throw err;
         }
+      }),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand("dotdir.closeWindow", async () => {
+        await Promise.all([flushCurrentWindowLayout(), flushCurrentWindowState()]);
+
+        if (bridgeRef.current.window) {
+          const currentWindowId = await getCurrentWindowId();
+          const windowIds = await getWindowIds();
+          if (windowIds.length > 1) {
+            await removeWindow(currentWindowId);
+          } else {
+            await ensureWindow(currentWindowId);
+          }
+          await bridgeRef.current.window.closeCurrent();
+          return;
+        }
+
+        window.close();
+      }),
+    );
+
+    disposables.push(
+      commandRegistry.registerCommand("dotdir.exit", async () => {
+        await Promise.all([flushCurrentWindowLayout(), flushCurrentWindowState()]);
+
+        if (bridgeRef.current.window?.exitApp) {
+          await bridgeRef.current.window.exitApp();
+          return;
+        }
+
+        if (bridgeRef.current.window) {
+          await bridgeRef.current.window.closeCurrent();
+          return;
+        }
+
+        if (isTauriApp()) return;
+        window.close();
       }),
     );
 

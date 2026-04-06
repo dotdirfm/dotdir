@@ -7,9 +7,23 @@ export interface PanelPersistedState {
   activeTabIndex?: number;
 }
 
-/** UI state persisted across launches (tabs, active panel). Not watched — read once on startup. */
-export interface DotDirUiState {
+export interface WindowGeometryState {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  isMaximized?: boolean;
+}
+
+/** Per-window UI state persisted across launches. Not watched — read once on startup. */
+export interface DotDirWindowLayout {
   leftPanel?: PanelPersistedState;
   rightPanel?: PanelPersistedState;
   activePanel?: "left" | "right";
 }
+
+export interface DotDirUiLayoutIndex {
+  windowIds?: string[];
+}
+
+export type DotDirWindowState = WindowGeometryState;

@@ -2,6 +2,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DialogProvider } from "@/dialogs/dialogContext";
 import type { Bridge } from "@/features/bridge";
 import { BridgeProvider } from "@/features/bridge/useBridge";
+import { useBridge } from "@/features/bridge/useBridge";
 import { CommandLineProvider } from "@/features/command-line/useCommandLine";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { CommandRegistryProvider, useCommandRegistry } from "@/features/commands/commands";
@@ -28,6 +29,7 @@ import baseStyles from "./styles/base.module.css";
 
 export type {
   Bridge,
+  CreateWindowOptions,
   ConflictResolution,
   CopyOptions,
   CopyProgressEvent,
@@ -57,10 +59,18 @@ export type DotDirHandle = {
 
 function DotDirContent({ widget, appRef }: { widget: React.ReactNode; appRef: React.RefObject<AppHandle | null> }) {
   const commandRegistry = useCommandRegistry();
+  const bridge = useBridge();
 
   useEffect(() => {
     return commandRegistry.registerContributions(builtInCommandContributions);
   }, [commandRegistry]);
+
+  useEffect(() => {
+    commandRegistry.setContext("supportsWindowManagement", Boolean(bridge.window));
+    return () => {
+      commandRegistry.setContext("supportsWindowManagement", false);
+    };
+  }, [bridge.window, commandRegistry]);
 
   return (
     <ErrorBoundary>

@@ -2,7 +2,7 @@ import { activePanelSideAtom, genTabId, leftActiveIndexAtom, leftActiveTabIdAtom
 import type { PanelTab } from "@/entities/tab/model/types";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useUiState } from "@/features/ui-state/uiState";
-import type { DotDirUiState, PanelPersistedState, PersistedTab } from "@/features/ui-state/types";
+import type { DotDirWindowLayout, PanelPersistedState, PersistedTab } from "@/features/ui-state/types";
 import { basename, dirname, join } from "@/utils/path";
 import type { FsNode } from "fss-lang";
 import { useAtomValue, useSetAtom } from "jotai";
@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 export function useWorkspaceRestoreProcess() {
   const bridge = useBridge();
-  const { loadUiState } = useUiState();
+  const { loadCurrentWindowLayout } = useUiState();
 
   const setLeftTabs = useSetAtom(leftTabsAtom);
   const setRightTabs = useSetAtom(rightTabsAtom);
@@ -24,7 +24,7 @@ export function useWorkspaceRestoreProcess() {
     let cancelled = false;
 
     void (async () => {
-      const state = await loadUiState();
+      const state = await loadCurrentWindowLayout();
       if (cancelled) return;
 
       const home = await bridge.utils.getHomePath();
@@ -101,7 +101,7 @@ export function useWorkspaceRestoreProcess() {
     return () => {
       cancelled = true;
     };
-  }, [bridge, loadUiState, setLeftActiveTabId, setLeftTabs, setRightActiveTabId, setRightTabs]);
+  }, [bridge, loadCurrentWindowLayout, setLeftActiveTabId, setLeftTabs, setRightActiveTabId, setRightTabs]);
 
   return {
     uiStateLoaded,
@@ -109,7 +109,8 @@ export function useWorkspaceRestoreProcess() {
 }
 
 export function useWorkspacePersistenceProcess() {
-  const { flushUiState, updateUiState } = useUiState();
+  const { flushCurrentWindowLayout, flushCurrentWindowState, updateCurrentWindowLayout, updateCurrentWindowState } = useUiState();
+  const bridge = useBridge();
 
   const activePanelSide = useAtomValue(activePanelSideAtom);
   const leftTabs = useAtomValue(leftTabsAtom);
@@ -136,7 +137,7 @@ export function useWorkspacePersistenceProcess() {
     [],
   );
 
-  const persistedState = useMemo<DotDirUiState>(
+  const persistedLayout = useMemo<DotDirWindowLayout>(
     () => ({
       activePanel: activePanelSide,
       leftPanel: buildPersistedTabs(leftTabs, leftActiveIndex),
@@ -145,17 +146,53 @@ export function useWorkspacePersistenceProcess() {
     [activePanelSide, buildPersistedTabs, leftActiveIndex, leftTabs, rightActiveIndex, rightTabs],
   );
 
+  const saveWindowStateSnapshot = useCallback(async () => {
+    if (!bridge.window) return;
+    try {
+      const state = await bridge.window.getCurrentState();
+      updateCurrentWindowState({
+        x: state.x,
+        y: state.y,
+        width: state.width,
+        height: state.height,
+        isMaximized: state.isMaximized,
+      });
+    } catch (err) {
+      console.error("[workspace] Failed to capture window state:", err);
+    }
+  }, [bridge.window, updateCurrentWindowState]);
+
+  useEffect(() => {
+    if (!bridge.window?.onStateChanged) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = bridge.window.onStateChanged(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        void saveWindowStateSnapshot();
+      }, 200);
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [bridge.window, saveWindowStateSnapshot]);
+
   const flushPanelState = useCallback(() => {
-    updateUiState(persistedState);
-    void flushUiState();
-  }, [flushUiState, persistedState, updateUiState]);
+    updateCurrentWindowLayout(persistedLayout);
+    void flushCurrentWindowLayout();
+    void saveWindowStateSnapshot().finally(() => {
+      void flushCurrentWindowState();
+    });
+  }, [flushCurrentWindowLayout, flushCurrentWindowState, persistedLayout, saveWindowStateSnapshot, updateCurrentWindowLayout]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      updateUiState(persistedState);
+      updateCurrentWindowLayout(persistedLayout);
+      void saveWindowStateSnapshot();
     }, 10_000);
     return () => clearTimeout(timer);
-  }, [persistedState, updateUiState]);
+  }, [persistedLayout, saveWindowStateSnapshot, updateCurrentWindowLayout]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {

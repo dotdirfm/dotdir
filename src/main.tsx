@@ -2,6 +2,7 @@ import "@dotdirfm/ui/dotdir.css";
 
 import { defaultResolveVfsUrl, DotDir } from "@dotdirfm/ui";
 import { invoke, isTauri as isTauriApp } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { createRoot } from "react-dom/client";
 import { AccountWidget } from "./components/AccountWidget";
 import { tauriBridge } from "./tauriBridge";
@@ -29,6 +30,39 @@ async function initBridge() {
     return tauriBridge;
   } else {
     return await createWsBridge(`ws://${location.host}/ws`);
+  }
+}
+
+type InstallDeepLinkDetail =
+  | { source: "dotdir-marketplace"; publisher: string; name: string; version: string }
+  | { source: "open-vsx-marketplace"; publisher: string; name: string; downloadUrl: string };
+
+function parseInstallDeepLink(urlString: string): InstallDeepLinkDetail | null {
+  try {
+    const url = new URL(urlString);
+    if (url.protocol !== "dotdir:" || url.hostname !== "extensions" || url.pathname !== "/install") {
+      return null;
+    }
+    const source = url.searchParams.get("source");
+    const publisher = url.searchParams.get("publisher");
+    const name = url.searchParams.get("name");
+    if (!source || !publisher || !name) return null;
+
+    if (source === "dotdir-marketplace") {
+      const version = url.searchParams.get("version");
+      if (!version) return null;
+      return { source, publisher, name, version };
+    }
+
+    if (source === "open-vsx-marketplace") {
+      const downloadUrl = url.searchParams.get("downloadUrl");
+      if (!downloadUrl) return null;
+      return { source, publisher, name, downloadUrl };
+    }
+
+    return null;
+  } catch {
+    return null;
   }
 }
 
@@ -68,6 +102,14 @@ try {
   await writeBootLog("main.tsx starting");
   const bridge = await initBridge();
   await writeBootLog("bridge initialized");
+
+  if (isTauriApp()) {
+    await listen<string>("deep-link", (event) => {
+      const detail = parseInstallDeepLink(event.payload);
+      if (!detail) return;
+      window.dispatchEvent(new CustomEvent("dotdir:install-extension", { detail }));
+    });
+  }
 
   const container = document.getElementById("app");
   if (!container) {
