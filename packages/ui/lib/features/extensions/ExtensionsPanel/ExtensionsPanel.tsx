@@ -1,11 +1,13 @@
 import { loadedExtensionsAtom } from "@/atoms";
+import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import { OverlayDialog } from "@/dialogs/OverlayDialog";
 import { SmartLabel } from "@/dialogs/dialogHotkeys";
-import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import type { ExtensionInstallProgressEvent } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
-import { type LoadedColorTheme, type LoadedExtension, type MarketplaceExtension, colorThemeKey, extensionIconThemeId, fetchMarketplaceExtensionDetails, searchMarketplace, setExtensionAutoUpdate, uninstallExtension } from "@/features/extensions/extensions";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
+import { type LoadedColorTheme, type LoadedExtension, type MarketplaceExtension, colorThemeKey, extensionIconThemeId, fetchMarketplaceExtensionDetails, searchMarketplace, setExtensionAutoUpdate, uninstallExtension } from "@/features/extensions/extensions";
+import { readFileText } from "@/features/file-system/fs";
+import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import {
   type OpenVsxExtension,
   fetchOpenVsxExtensionDetails,
@@ -14,14 +16,12 @@ import {
   searchOpenVsxMarketplace,
 } from "@/features/marketplace/openVsxMarketplace";
 import { activeColorThemeAtom, activeIconThemeAtom, useUserSettings } from "@/features/settings/useUserSettings";
-import { readFileText } from "@/features/file-system/fs";
-import { useVfsUrlResolver } from "@/features/file-system/vfs";
-import { join } from "@/utils/path";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
+import { join } from "@/utils/path";
 import { useAtomValue, useSetAtom } from "jotai";
 import { marked } from "marked";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaGithub } from "react-icons/fa6";
 import { VscArrowLeft, VscCloudDownload, VscStarEmpty, VscStarFull, VscVerifiedFilled } from "react-icons/vsc";
 import styles from "./ExtensionsPanel.module.css";
@@ -1114,7 +1114,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                   <div className={styles["ext-hero-actions"]}>
                     {selectedInstalled ? (
                       <>
-                        <button className={cx(styles, "ext-action", "danger")} disabled={selectedBusy?.kind === "uninstall"} onClick={() => handleUninstall(selectedInstalled)} type="button">
+                        <button className={cx(styles, "ext-action")} disabled={selectedBusy?.kind === "uninstall"} onClick={() => handleUninstall(selectedInstalled)} type="button">
                           <SmartLabel>{selectedBusy?.kind === "uninstall" ? "Removing…" : "Uninstall"}</SmartLabel>
                         </button>
                         <label className={styles["ext-toggle"]}>

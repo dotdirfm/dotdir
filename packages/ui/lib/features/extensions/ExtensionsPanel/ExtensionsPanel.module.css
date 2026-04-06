@@ -253,6 +253,7 @@
   font-size: 12px;
   display: -webkit-box;
   -webkit-box-orient: vertical;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
@@ -434,10 +435,6 @@
 .ext-action.active {
   border-color: var(--border-active);
   background: color-mix(in oklab, var(--border-active) 16%, var(--bg-secondary));
-}
-
-.ext-action.danger {
-  color: var(--error-fg);
 }
 
 .ext-action:disabled {

@@ -240,6 +240,7 @@ export interface Bridge {
   window?: {
     getCurrentState(): Promise<WindowStateSnapshot>;
     create(options: CreateWindowOptions): Promise<void>;
+    showCurrent?(): Promise<void>;
     closeCurrent(): Promise<void>;
     exitApp?(): Promise<void>;
     onStateChanged?(callback: () => void): Unsubscribe;

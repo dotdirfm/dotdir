@@ -408,6 +408,9 @@ export const tauriBridge: Bridge = {
     async create(options: CreateWindowOptions) {
       return invoke<void>("create_window", { options });
     },
+    async showCurrent() {
+      return invoke<void>("show_current_window");
+    },
     async closeCurrent() {
       await getCurrentWindow().close();
     },

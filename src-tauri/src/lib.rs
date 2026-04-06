@@ -253,7 +253,8 @@ fn create_app_window<R: tauri::Runtime>(
 ) -> tauri::Result<()> {
     let builder = WebviewWindowBuilder::new(app, &options.id, WebviewUrl::default())
         .title(".dir")
-        .inner_size(1200.0, 700.0);
+        .inner_size(1200.0, 700.0)
+        .visible(false);
 
     let window = builder.build()?;
 
@@ -772,6 +773,13 @@ fn create_window(options: CreateWindowOptions, app_handle: tauri::AppHandle) -> 
 }
 
 #[tauri::command]
+fn show_current_window(window: tauri::Window) -> Result<(), String> {
+    window.show().map_err(|err| err.to_string())?;
+    let _ = window.set_focus();
+    Ok(())
+}
+
+#[tauri::command]
 fn app_exit(app_handle: tauri::AppHandle) {
     app_handle.exit(0);
 }
@@ -1200,6 +1208,7 @@ pub fn run() {
             extensions_install_cancel,
             rename_item,
             create_window,
+            show_current_window,
             fsp_load,
             fsp_list_entries,
             fsp_read_file_range,
