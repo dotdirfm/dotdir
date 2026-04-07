@@ -6,6 +6,7 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { CommandLineProvider } from "@/features/command-line/useCommandLine";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { CommandRegistryProvider, useCommandRegistry } from "@/features/commands/commands";
+import { ExtensionHostClientProvider } from "@/features/extensions/extensionHostClient";
 import { ExtensionsProvider } from "@/features/extensions/useExtensions";
 import { FileSystemWatchRegistryProvider } from "@/features/file-system/fs";
 import { FssProvider } from "@/features/fss/fss";
@@ -112,15 +113,17 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
                     <LanguageRegistryProvider>
                       <ViewerEditorRegistryProvider>
                         <FssProvider>
-                          <ExtensionsProvider>
-                          <PanelControllersProvider>
-                            <UiStateProvider>
-                              <TerminalProvider>
-                                <DotDirContent widget={widget} appRef={appRef} />
-                              </TerminalProvider>
-                            </UiStateProvider>
-                          </PanelControllersProvider>
-                          </ExtensionsProvider>
+                          <ExtensionHostClientProvider>
+                            <ExtensionsProvider>
+                              <PanelControllersProvider>
+                                <UiStateProvider>
+                                  <TerminalProvider>
+                                    <DotDirContent widget={widget} appRef={appRef} />
+                                  </TerminalProvider>
+                                </UiStateProvider>
+                              </PanelControllersProvider>
+                            </ExtensionsProvider>
+                          </ExtensionHostClientProvider>
                         </FssProvider>
                       </ViewerEditorRegistryProvider>
                     </LanguageRegistryProvider>

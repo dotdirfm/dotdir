@@ -256,13 +256,13 @@ pub(crate) struct AppDirs {
 }
 
 const APP_DIR_NAME: &str = "dev.dotdir";
+const CONFIG_DIR_NAME: &str = "dotdir";
 
 pub(crate) fn get_app_dirs() -> AppDirs {
     let home_dir = get_home_path();
-    let config_dir = dirs::config_dir()
-        .or_else(dirs::home_dir)
-        .unwrap_or_default()
-        .join(APP_DIR_NAME)
+    let config_dir = PathBuf::from(&home_dir)
+        .join(".config")
+        .join(CONFIG_DIR_NAME)
         .to_string_lossy()
         .into_owned();
     let data_dir = dirs::data_dir()

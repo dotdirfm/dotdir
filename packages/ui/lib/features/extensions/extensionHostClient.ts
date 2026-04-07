@@ -11,6 +11,7 @@ import { getAppDirs } from "@/features/bridge/appDirs";
 import { useBridge } from "@/features/bridge/useBridge";
 import { readFileText } from "@/features/file-system/fs";
 import { normalizePath } from "@/utils/path";
+import { createContext, createElement, useContext, useEffect, useMemo, type ReactNode } from "react";
 import worker2 from "./extensionHost.worker.ts?worker&inline";
 import { extensionIconThemes, extensionRef, type LoadedExtension } from "./types";
 
@@ -183,19 +184,25 @@ export class ExtensionHostClient {
   }
 }
 
-let sharedBridge: Bridge | null = null;
-let sharedClient: ExtensionHostClient | null = null;
+const ExtensionHostClientContext = createContext<ExtensionHostClient | null>(null);
 
-function getSharedExtensionHostClient(bridge: Bridge): ExtensionHostClient {
-  if (!sharedClient || sharedBridge !== bridge) {
-    sharedClient?.dispose();
-    sharedBridge = bridge;
-    sharedClient = new ExtensionHostClient(bridge);
-  }
-  return sharedClient;
+export function ExtensionHostClientProvider({ children }: { children: ReactNode }) {
+  const bridge = useBridge();
+  const client = useMemo(() => new ExtensionHostClient(bridge), [bridge]);
+
+  useEffect(() => {
+    return () => {
+      client.dispose();
+    };
+  }, [client]);
+
+  return createElement(ExtensionHostClientContext.Provider, { value: client }, children);
 }
 
 export function useExtensionHostClient(): ExtensionHostClient {
-  const bridge = useBridge();
-  return getSharedExtensionHostClient(bridge);
+  const value = useContext(ExtensionHostClientContext);
+  if (!value) {
+    throw new Error("useExtensionHostClient must be used within ExtensionHostClientProvider");
+  }
+  return value;
 }

@@ -34,8 +34,6 @@ export class LanguageRegistry {
   private extToLang = new Map<string, string>();
   private filenameToLang = new Map<string, string>();
 
-  async initialize(): Promise<void> {}
-
   registerLanguage(lang: LanguageContribution): void {
     if (lang.extensions) {
       for (const ext of lang.extensions) {
@@ -57,8 +55,6 @@ export class LanguageRegistry {
       this.languageToScope.set(contribution.language, contribution.scopeName);
     }
   }
-
-  async activateGrammars(): Promise<void> {}
 
   clear(): void {
     this.grammarContents.clear();

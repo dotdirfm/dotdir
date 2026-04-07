@@ -1,53 +1,55 @@
-import type { Bridge } from "@/features/bridge";
+import { useBridge } from "@/features/bridge/useBridge";
 import { findColorTheme, findIconTheme } from "@/features/extensions/extensions";
 import type { LoadedExtension } from "@/features/extensions/types";
+import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
 import { readFileText } from "@/features/file-system/fs";
+import { useActivePanelNavigation } from "@/features/panels/panelControllers";
+import { settingsReadyAtom } from "@/features/settings/useUserSettings";
 import { clearColorTheme, loadAndApplyColorTheme, uiThemeToKind } from "@/features/themes/vscodeColorTheme";
 import { dirname } from "@/utils/path";
 import { getStyleHostElement } from "@/utils/styleHost";
+import { useAtomValue } from "jotai";
 import { type RefObject, useCallback, useEffect } from "react";
+import { useLoadedExtensions } from "../useExtensions";
 import { useLatestRef } from "./shared";
 
 type ThemeRuntimeParams = {
   activeIconTheme: string | undefined;
   activeColorTheme: string | undefined;
   systemTheme: "light" | "dark";
-  settingsReady: boolean;
   themesReady: boolean;
-  latestExtensionsRef: RefObject<LoadedExtension[]>;
   themesReadyRef: RefObject<boolean>;
   iconThemeApplyGenerationRef: RefObject<number>;
   colorThemeApplyGenerationRef: RefObject<number>;
   setThemesReady: (value: boolean) => void;
-  bridgeRef: RefObject<Bridge>;
   setExtensionFssLayers: (extensions: LoadedExtension[], themeId: string | undefined) => void;
-  setIconTheme: (kind: "fss" | "vscode" | "none", path?: string) => Promise<void>;
-  setIconThemeKind: (kind: "light" | "dark") => void;
-  refreshAll: () => void;
 };
 
 export function useExtensionThemeRuntime({
   activeIconTheme,
   activeColorTheme,
   systemTheme,
-  settingsReady,
   themesReady,
-  latestExtensionsRef,
   themesReadyRef,
   iconThemeApplyGenerationRef,
   colorThemeApplyGenerationRef,
   setThemesReady,
-  bridgeRef,
   setExtensionFssLayers,
-  setIconTheme,
-  setIconThemeKind,
-  refreshAll,
 }: ThemeRuntimeParams) {
+  const bridge = useBridge();
   const activeIconThemeRef = useLatestRef(activeIconTheme);
   const activeColorThemeRef = useLatestRef(activeColorTheme);
   const systemThemeRef = useLatestRef(systemTheme);
+  const settingsReady = useAtomValue(settingsReadyAtom);
+  const { refreshAll } = useActivePanelNavigation();
   const refreshAllRef = useLatestRef(refreshAll);
+  const loadedExtensions = useLoadedExtensions();
+  const latestExtensionsRef = useLatestRef(loadedExtensions);
+
+  const { setIconTheme } = useSetIconTheme();
   const setIconThemeRef = useLatestRef(setIconTheme);
+
+  const { setIconThemeKind } = useSetIconThemeKind();
   const setIconThemeKindRef = useLatestRef(setIconThemeKind);
 
   useEffect(() => {
@@ -63,13 +65,13 @@ export function useExtensionThemeRuntime({
       const match = findIconTheme(exts, themeId);
       if (!match || match.theme.kind !== "fss" || match.theme.fss) return;
       try {
-        match.theme.fss = await readFileText(bridgeRef.current, match.theme.path);
+        match.theme.fss = await readFileText(bridge, match.theme.path);
         if (!match.theme.basePath) match.theme.basePath = dirname(match.theme.path);
       } catch {
         // Ignore; resolver will fall back.
       }
     },
-    [bridgeRef],
+    [bridge],
   );
 
   const applyInitialThemes = useCallback(async () => {
@@ -113,7 +115,7 @@ export function useExtensionThemeRuntime({
       getStyleHostElement().dataset.theme = kind;
       setIconThemeKindRef.current(kind);
       try {
-        await loadAndApplyColorTheme(bridgeRef.current, match.theme.jsonPath, match.theme.uiTheme);
+        await loadAndApplyColorTheme(bridge, match.theme.jsonPath, match.theme.uiTheme);
       } catch (error) {
         if (generation !== colorThemeApplyGenerationRef.current) return;
         console.warn("[ExtHost] Failed to load color theme:", themeKey, error);
@@ -128,7 +130,7 @@ export function useExtensionThemeRuntime({
   }, [
     activeColorThemeRef,
     activeIconThemeRef,
-    bridgeRef,
+    bridge,
     colorThemeApplyGenerationRef,
     ensureActiveIconThemeFssLoaded,
     iconThemeApplyGenerationRef,
@@ -186,13 +188,13 @@ export function useExtensionThemeRuntime({
     const kind = uiThemeToKind(match.theme.uiTheme);
     getStyleHostElement().dataset.theme = kind;
     setIconThemeKindRef.current(kind);
-    loadAndApplyColorTheme(bridgeRef.current, match.theme.jsonPath, match.theme.uiTheme).catch(() => {
+    loadAndApplyColorTheme(bridge, match.theme.jsonPath, match.theme.uiTheme).catch(() => {
       if (generation !== colorThemeApplyGenerationRef.current) return;
       getStyleHostElement().dataset.theme = systemTheme;
       setIconThemeKindRef.current(systemTheme);
       clearColorTheme();
     });
-  }, [activeColorTheme, bridgeRef, colorThemeApplyGenerationRef, latestExtensionsRef, setIconThemeKindRef, systemTheme, themesReady]);
+  }, [activeColorTheme, bridge, colorThemeApplyGenerationRef, latestExtensionsRef, setIconThemeKindRef, systemTheme, themesReady]);
 
   useEffect(() => {
     if (!settingsReady || !themesReadyRef.current) return;

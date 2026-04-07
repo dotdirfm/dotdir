@@ -1,27 +1,26 @@
 import { getMarketplaceProvider } from "@/features/extensions/marketplaces";
 import { compareExtensionVersions } from "@/features/extensions/marketplaces/dotdir";
-import { extensionRef, type ExtensionInstallSource, type LoadedExtension } from "@/features/extensions/types";
+import { extensionRef, type ExtensionInstallSource } from "@/features/extensions/types";
+import { extensionsAutoUpdateAtom, settingsReadyAtom } from "@/features/settings/useUserSettings";
+import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
-import { AUTO_UPDATE_INITIAL_DELAY_MS, AUTO_UPDATE_INTERVAL_MS, type InstallRequest } from "./shared";
+import { useLoadedExtensions } from "../useExtensions";
+import { AUTO_UPDATE_INITIAL_DELAY_MS, AUTO_UPDATE_INTERVAL_MS, useLatestRef, type InstallRequest } from "./shared";
 
 type AutoUpdateRuntimeParams = {
-  settingsReady: boolean;
-  enabled: boolean;
-  loadedExtensions: LoadedExtension[];
-  latestExtensionsRef: React.MutableRefObject<LoadedExtension[]>;
   installExtensionAndWait: (request: InstallRequest) => Promise<void>;
   reloadExtensionRuntimeInPlace: () => Promise<void>;
 };
 
 export function useExtensionAutoUpdateRuntime({
-  settingsReady,
-  enabled,
-  loadedExtensions,
-  latestExtensionsRef,
   installExtensionAndWait,
   reloadExtensionRuntimeInPlace,
 }: AutoUpdateRuntimeParams) {
   const autoUpdateInFlightRef = useRef(false);
+  const enabled = useAtomValue(extensionsAutoUpdateAtom);
+  const loadedExtensions = useLoadedExtensions();
+  const latestExtensionsRef = useLatestRef(loadedExtensions);
+  const settingsReady = useAtomValue(settingsReadyAtom);
 
   const runAutoUpdatePass = useCallback(async (): Promise<void> => {
     if (autoUpdateInFlightRef.current) return;

@@ -1,9 +1,10 @@
-import type { Bridge, TerminalProfile } from "@/features/bridge";
-import { type CommandRegistry } from "@/features/commands/commands";
+import type { TerminalProfile } from "@/features/bridge";
+import { useBridge } from "@/features/bridge/useBridge";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { registerExtensionKeybindings } from "@/features/commands/registerKeybindings";
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
 import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
-import { type ExtensionHostClient } from "@/features/extensions/extensionHostClient";
+import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import {
   extensionCommands,
   extensionDirPath,
@@ -12,21 +13,17 @@ import {
   extensionLanguages,
   type LoadedExtension,
 } from "@/features/extensions/types";
-import type { LanguageRegistry } from "@/features/languages/languageRegistry";
+import { useLanguageRegistry } from "@/features/languages/languageRegistry";
+import { settingsReadyAtom } from "@/features/settings/useUserSettings";
 import { resolveShellProfiles } from "@/features/terminal/shellProfiles";
 import { join } from "@/utils/path";
-import { type ViewerEditorRegistryManager } from "@/viewerEditorRegistry";
-import { type RefObject, useEffect } from "react";
+import { useViewerEditorRegistry } from "@/viewerEditorRegistry";
+import { useAtomValue } from "jotai";
+import { useEffect, type RefObject } from "react";
+import { useLatestRef } from "./shared";
 
 type LifecycleRuntimeParams = {
-  bridgeRef: RefObject<Bridge>;
-  extensionHostRef: RefObject<ExtensionHostClient>;
-  commandRegistryRef: RefObject<CommandRegistry>;
-  viewerEditorRegistryRef: RefObject<ViewerEditorRegistryManager>;
-  languageRegistryRef: RefObject<LanguageRegistry>;
-  latestExtensionsRef: RefObject<LoadedExtension[]>;
   extensionsLoadedRef: RefObject<boolean>;
-  settingsReadyRef: RefObject<boolean>;
   extensionContributionDisposersRef: RefObject<Array<() => void>>;
   clearExtensionCommandRegistrations: () => void;
   setLoadedExtensions: React.Dispatch<React.SetStateAction<LoadedExtension[]>>;
@@ -36,14 +33,7 @@ type LifecycleRuntimeParams = {
 };
 
 export function useExtensionLifecycleRuntime({
-  bridgeRef,
-  extensionHostRef,
-  commandRegistryRef,
-  viewerEditorRegistryRef,
-  languageRegistryRef,
-  latestExtensionsRef,
   extensionsLoadedRef,
-  settingsReadyRef,
   extensionContributionDisposersRef,
   clearExtensionCommandRegistrations,
   setLoadedExtensions,
@@ -51,17 +41,22 @@ export function useExtensionLifecycleRuntime({
   setProfilesLoaded,
   applyInitialThemes,
 }: LifecycleRuntimeParams) {
-  useEffect(() => {
-    languageRegistryRef.current.initialize();
+  const bridge = useBridge();
+  const extensionHost = useExtensionHostClient();
+  const languageRegistry = useLanguageRegistry();
+  const commandRegistry = useCommandRegistry();
+  const settingsReady = useAtomValue(settingsReadyAtom);
+  const settingsReadyRef = useLatestRef(settingsReady);
+  const viewerEditorRegistry = useViewerEditorRegistry();
 
+  useEffect(() => {
     const registerLanguages = async (exts: LoadedExtension[]) => {
-      languageRegistryRef.current.clear();
+      languageRegistry.clear();
       for (const ext of exts) {
         for (const lang of extensionLanguages(ext)) {
-          languageRegistryRef.current.registerLanguage(lang);
+          languageRegistry.registerLanguage(lang);
         }
       }
-      await languageRegistryRef.current.activateGrammars();
     };
 
     const registerExtensionCommands = (exts: LoadedExtension[]) => {
@@ -69,56 +64,53 @@ export function useExtensionLifecycleRuntime({
       for (const ext of exts) {
         const commands = extensionCommands(ext);
         if (commands.length > 0) {
-          const disposeContributions = commandRegistryRef.current.registerContributions(commands);
+          const disposeContributions = commandRegistry.registerContributions(commands);
           extensionContributionDisposersRef.current.push(disposeContributions);
           for (const cmd of commands) {
-            const disposeCommand = commandRegistryRef.current.registerCommand(cmd.command, async (...args: unknown[]) => {
+            const disposeCommand = commandRegistry.registerCommand(cmd.command, async (...args: unknown[]) => {
               const handled = await executeMountedExtensionCommand(cmd.command, args);
               if (handled) return;
-              await extensionHostRef.current.executeCommand(cmd.command, args);
+              await extensionHost.executeCommand(cmd.command, args);
             });
             extensionContributionDisposersRef.current.push(disposeCommand);
           }
         }
         const keybindings = extensionKeybindings(ext);
         if (keybindings.length > 0) {
-          extensionContributionDisposersRef.current.push(...registerExtensionKeybindings(commandRegistryRef.current, keybindings));
+          extensionContributionDisposersRef.current.push(...registerExtensionKeybindings(commandRegistry, keybindings));
         }
       }
     };
 
-    const unsubscribe = extensionHostRef.current.onLoaded((exts) => {
+    const unsubscribe = extensionHost.onLoaded((exts) => {
       void (async () => {
         extensionsLoadedRef.current = true;
-        latestExtensionsRef.current = exts;
         setLoadedExtensions(exts);
-        viewerEditorRegistryRef.current.replaceExtensions(exts);
+        viewerEditorRegistry.replaceExtensions(exts);
         clearFsProviderCache();
 
-        if (bridgeRef.current.fsProvider) {
+        if (bridge.fsProvider) {
           for (const ext of exts) {
             for (const provider of extensionFsProviders(ext)) {
               if (provider.runtime !== "backend") continue;
               const wasmPath = join(extensionDirPath(ext), provider.entry);
-              bridgeRef.current.fsProvider.load(wasmPath).catch(() => {});
+              bridge.fsProvider.load(wasmPath).catch(() => {});
             }
           }
         }
 
-        bridgeRef.current.utils
+        bridge.utils
           .getEnv()
           .then((env) =>
-            resolveShellProfiles(bridgeRef.current, exts, env).then(({ profiles, shellScripts }) => {
+            resolveShellProfiles(bridge, exts, env).then(({ profiles, shellScripts }) => {
               setAvailableProfiles(profiles);
               setProfilesLoaded(true);
-              if (bridgeRef.current.pty.setShellIntegrations && Object.keys(shellScripts).length > 0) {
-                bridgeRef.current.pty.setShellIntegrations(shellScripts).catch(() => {});
+              if (bridge.pty.setShellIntegrations && Object.keys(shellScripts).length > 0) {
+                bridge.pty.setShellIntegrations(shellScripts).catch(() => {});
               }
             }),
           )
-          .catch(() => {
-            setProfilesLoaded(true);
-          });
+          .catch(() => setProfilesLoaded(true));
 
         registerLanguages(exts);
         registerExtensionCommands(exts);
@@ -126,12 +118,12 @@ export function useExtensionLifecycleRuntime({
         await applyInitialThemes();
       })();
     });
-    void extensionHostRef.current.start();
+    void extensionHost.start();
 
     return () => {
       unsubscribe();
       clearExtensionCommandRegistrations();
-      extensionHostRef.current.dispose();
+      extensionHost.dispose();
     };
     // Registered once; mutable refs keep callbacks current.
     // eslint-disable-next-line react-hooks/exhaustive-deps
