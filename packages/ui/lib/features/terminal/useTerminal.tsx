@@ -1,3 +1,4 @@
+import { useAppRuntimeContext } from "@/appRuntimeContext";
 import {
   panelsVisibleAtom,
   terminalFocusRequestKeyAtom,
@@ -13,10 +14,7 @@ import { useFocusContext } from "@/focusContext";
 import { normalizePath } from "@/utils/path";
 import { useAtomValue, useSetAtom } from "jotai";
 import {
-  createContext,
-  createElement,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -34,11 +32,9 @@ export interface TerminalController {
   runCommand: (cmd: string, cwd: string, options?: { restorePanels?: boolean }) => Promise<void>;
 }
 
-type TerminalContextValue = TerminalController & TerminalState;
+export type TerminalContextValue = TerminalController & TerminalState;
 
-const TerminalContext = createContext<TerminalContextValue | null>(null);
-
-function useProvideTerminal(): TerminalContextValue {
+export function useProvideTerminal(): TerminalContextValue {
   const bridge = useBridge();
   const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
@@ -180,12 +176,9 @@ function useProvideTerminal(): TerminalContextValue {
 }
 
 export function TerminalProvider({ children }: { children: ReactNode }) {
-  const value = useProvideTerminal();
-  return createElement(TerminalContext.Provider, { value }, children);
+  return <>{children}</>;
 }
 
 export function useTerminal(): TerminalContextValue {
-  const value = useContext(TerminalContext);
-  if (!value) throw new Error("useTerminal must be used within TerminalProvider");
-  return value;
+  return useAppRuntimeContext().terminal;
 }

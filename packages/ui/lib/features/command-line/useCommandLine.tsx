@@ -1,3 +1,4 @@
+import { useAppRuntimeContext } from "@/appRuntimeContext";
 import { useDialog } from "@/dialogs/dialogContext";
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
@@ -6,28 +7,23 @@ import { isExistingDirectory } from "@/features/file-system/utils";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { useUserSettings } from "@/features/settings/useUserSettings";
 import { normalizeTerminalPath } from "@/features/terminal/path";
-import { useTerminal } from "@/features/terminal/useTerminal";
+import type { TerminalContextValue } from "@/features/terminal/useTerminal";
 import { normalizePath, resolveDotSegments } from "@/utils/path";
 import { useAtomValue } from "jotai";
 import {
-  createContext,
-  createElement,
   useCallback,
-  useContext,
   useMemo,
   useRef,
   type ReactNode,
 } from "react";
 
-type CommandLineContextValue = {
+export type CommandLineContextValue = {
   execute: (cmd: string) => Promise<void>;
   paste: (text: string) => void;
   setPasteHandler: (handler: ((text: string) => void) | null) => void;
 };
 
-const CommandLineContext = createContext<CommandLineContextValue | null>(null);
-
-function useProvideCommandLine(): CommandLineContextValue {
+export function useProvideCommandLine(terminal: Pick<TerminalContextValue, "activeCwd" | "runCommand">): CommandLineContextValue {
   const bridge = useBridge();
   const { settings, updateSettings } = useUserSettings();
   const settingsRef = useRef(settings);
@@ -35,7 +31,7 @@ function useProvideCommandLine(): CommandLineContextValue {
   const activeTab = useAtomValue(activeTabAtom);
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
-  const { activeCwd, runCommand } = useTerminal();
+  const { activeCwd, runCommand } = terminal;
   const activeCwdRef = useRef(activeCwd);
   activeCwdRef.current = activeCwd;
   const runCommandRef = useRef(runCommand);
@@ -138,23 +134,20 @@ function useProvideCommandLine(): CommandLineContextValue {
 }
 
 export function CommandLineProvider({ children }: { children: ReactNode }) {
-  const value = useProvideCommandLine();
-  return createElement(CommandLineContext.Provider, { value }, children);
+  return <>{children}</>;
 }
 
 export function useCommandLine() {
-  const value = useContext(CommandLineContext);
-  if (!value) throw new Error("useCommandLine must be used within CommandLineProvider");
+  const { commandLine } = useAppRuntimeContext();
   return {
-    execute: value.execute,
-    paste: value.paste,
+    execute: commandLine.execute,
+    paste: commandLine.paste,
   };
 }
 
 export function useCommandLineRegistration() {
-  const value = useContext(CommandLineContext);
-  if (!value) throw new Error("useCommandLineRegistration must be used within CommandLineProvider");
+  const { commandLine } = useAppRuntimeContext();
   return {
-    setPasteHandler: value.setPasteHandler,
+    setPasteHandler: commandLine.setPasteHandler,
   };
 }

@@ -1,12 +1,10 @@
+import { useAppRuntimeContext } from "@/appRuntimeContext";
 import type { Bridge } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { readFileText } from "@/features/file-system/fs";
 import { dirname, join } from "@/utils/path";
 import {
-  createContext,
-  createElement,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -15,7 +13,7 @@ import {
 } from "react";
 import type { DotDirUiLayoutIndex, DotDirWindowLayout, DotDirWindowState } from "./types";
 
-type UiStateContextValue = {
+export type UiStateContextValue = {
   getCurrentWindowId(): Promise<string>;
   getWindowIds(): Promise<string[]>;
   ensureWindow(windowId?: string): Promise<void>;
@@ -27,8 +25,6 @@ type UiStateContextValue = {
   updateCurrentWindowState(partial: Partial<DotDirWindowState>): void;
   flushCurrentWindowState(): Promise<void>;
 };
-
-const UiStateContext = createContext<UiStateContextValue | null>(null);
 
 const DEFAULT_WINDOW_ID = "window-1";
 
@@ -94,7 +90,7 @@ async function writeJsonFile(bridge: Bridge, filePath: string, value: object): P
   await bridge.fs.writeFile(filePath, JSON.stringify(value, null, 2));
 }
 
-export function UiStateProvider({ children }: { children: ReactNode }) {
+export function useProvideUiState(): UiStateContextValue {
   const bridge = useBridge();
   const dataDirRef = useRef<string | null>(null);
   const currentWindowIdRef = useRef<string | null>(null);
@@ -283,13 +279,13 @@ export function UiStateProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return createElement(UiStateContext.Provider, { value }, children);
+  return value;
+}
+
+export function UiStateProvider({ children }: { children: ReactNode }) {
+  return children;
 }
 
 export function useUiState(): UiStateContextValue {
-  const value = useContext(UiStateContext);
-  if (!value) {
-    throw new Error("useUiState must be used within UiStateProvider");
-  }
-  return value;
+  return useAppRuntimeContext().uiState;
 }

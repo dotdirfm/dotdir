@@ -3,23 +3,16 @@ import { DialogProvider } from "@/dialogs/dialogContext";
 import type { Bridge } from "@/features/bridge";
 import { BridgeProvider } from "@/features/bridge/useBridge";
 import { useBridge } from "@/features/bridge/useBridge";
-import { CommandLineProvider } from "@/features/command-line/useCommandLine";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
-import { CommandRegistryProvider, useCommandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { ExtensionHostClientProvider } from "@/features/extensions/extensionHostClient";
-import { ExtensionsProvider } from "@/features/extensions/useExtensions";
-import { FileSystemWatchRegistryProvider } from "@/features/file-system/fs";
 import { FssProvider } from "@/features/fss/fss";
-import { LanguageRegistryProvider } from "@/features/languages/languageRegistry";
 import { PanelControllersProvider } from "@/features/panels/panelControllers";
 import { UserSettingsProvider } from "@/features/settings/useUserSettings";
-import { TerminalProvider } from "@/features/terminal/useTerminal";
-import { UiStateProvider } from "@/features/ui-state/uiState";
-import { FocusProvider } from "@/focusContext";
-import { InteractionProvider } from "@/interactionContext";
-import { ViewerEditorRegistryProvider } from "@/viewerEditorRegistry";
 import { Provider as JotaiProvider } from "jotai";
 import { Suspense, forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { AppRuntimeProvider } from "./appRuntime";
+import { AppServicesProvider } from "./appServices";
 import { App, type AppHandle } from "./app";
 import {
   defaultResolveVfsUrl,
@@ -79,9 +72,9 @@ function DotDirContent({ widget, appRef }: { widget: React.ReactNode; appRef: Re
       <Suspense fallback={<div className={baseStyles["loading"]}>Loading...</div>}>
         <DialogProvider>
           <UserSettingsProvider>
-            <CommandLineProvider>
+            <AppRuntimeProvider>
               <App ref={appRef} widget={widget} />
-            </CommandLineProvider>
+            </AppRuntimeProvider>
           </UserSettingsProvider>
         </DialogProvider>
       </Suspense>
@@ -108,31 +101,15 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
       <VfsUrlResolverProvider resolveVfsUrl={resolveVfsUrl}>
         <JotaiProvider>
           <BridgeProvider bridge={bridge}>
-            <FileSystemWatchRegistryProvider>
-              <CommandRegistryProvider>
-                <FocusProvider>
-                  <InteractionProvider>
-                    <LanguageRegistryProvider>
-                      <ViewerEditorRegistryProvider>
-                        <FssProvider>
-                          <ExtensionHostClientProvider>
-                            <ExtensionsProvider>
-                              <PanelControllersProvider>
-                                <UiStateProvider>
-                                  <TerminalProvider>
-                                    <DotDirContent widget={widget} appRef={appRef} />
-                                  </TerminalProvider>
-                                </UiStateProvider>
-                              </PanelControllersProvider>
-                            </ExtensionsProvider>
-                          </ExtensionHostClientProvider>
-                        </FssProvider>
-                      </ViewerEditorRegistryProvider>
-                    </LanguageRegistryProvider>
-                  </InteractionProvider>
-                </FocusProvider>
-              </CommandRegistryProvider>
-            </FileSystemWatchRegistryProvider>
+            <AppServicesProvider>
+              <FssProvider>
+                <ExtensionHostClientProvider>
+                  <PanelControllersProvider>
+                    <DotDirContent widget={widget} appRef={appRef} />
+                  </PanelControllersProvider>
+                </ExtensionHostClientProvider>
+              </FssProvider>
+            </AppServicesProvider>
           </BridgeProvider>
         </JotaiProvider>
       </VfsUrlResolverProvider>

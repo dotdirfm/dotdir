@@ -1,41 +1,23 @@
 import type { LoadedExtension } from "@/features/extensions/types";
-import { createContext, createElement, useContext, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
-
-type ExtensionsContextValue = {
-  loadedExtensions: LoadedExtension[];
-  setLoadedExtensions: Dispatch<SetStateAction<LoadedExtension[]>>;
-};
-
-const ExtensionsContext = createContext<ExtensionsContextValue | null>(null);
+import { loadedExtensionsAtom } from "@/features/extensions/extensionsAtoms";
+import { useAtom } from "jotai";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 
 export function ExtensionsProvider({ children }: { children: ReactNode }) {
-  const [loadedExtensions, setLoadedExtensions] = useState<LoadedExtension[]>([]);
-  const value = useMemo<ExtensionsContextValue>(
-    () => ({
-      loadedExtensions,
-      setLoadedExtensions,
-    }),
-    [loadedExtensions],
-  );
-  return createElement(ExtensionsContext.Provider, { value }, children);
-}
-
-function useExtensionsContext(): ExtensionsContextValue {
-  const value = useContext(ExtensionsContext);
-  if (!value) {
-    throw new Error("useExtensionsContext must be used within ExtensionsProvider");
-  }
-  return value;
+  return <>{children}</>;
 }
 
 export function useLoadedExtensions(): LoadedExtension[] {
-  return useExtensionsContext().loadedExtensions;
+  const [loadedExtensions] = useAtom(loadedExtensionsAtom);
+  return loadedExtensions;
 }
 
 export function useSetLoadedExtensions(): Dispatch<SetStateAction<LoadedExtension[]>> {
-  return useExtensionsContext().setLoadedExtensions;
+  const [, setLoadedExtensions] = useAtom(loadedExtensionsAtom);
+  return setLoadedExtensions;
 }
 
 export function useExtensions() {
-  return useExtensionsContext();
+  const [loadedExtensions, setLoadedExtensions] = useAtom(loadedExtensionsAtom);
+  return { loadedExtensions, setLoadedExtensions };
 }
