@@ -19,7 +19,7 @@ import { FocusProvider } from "@/focusContext";
 import { InteractionProvider } from "@/interactionContext";
 import { ViewerEditorRegistryProvider } from "@/viewerEditorRegistry";
 import { Provider as JotaiProvider } from "jotai";
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { Suspense, forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { App, type AppHandle } from "./app";
 import {
   defaultResolveVfsUrl,
@@ -76,13 +76,15 @@ function DotDirContent({ widget, appRef }: { widget: React.ReactNode; appRef: Re
 
   return (
     <ErrorBoundary>
-      <DialogProvider>
-        <UserSettingsProvider>
-          <CommandLineProvider>
-            <App ref={appRef} widget={widget} />
-          </CommandLineProvider>
-        </UserSettingsProvider>
-      </DialogProvider>
+      <Suspense fallback={<div className={baseStyles["loading"]}>Loading...</div>}>
+        <DialogProvider>
+          <UserSettingsProvider>
+            <CommandLineProvider>
+              <App ref={appRef} widget={widget} />
+            </CommandLineProvider>
+          </UserSettingsProvider>
+        </DialogProvider>
+      </Suspense>
     </ErrorBoundary>
   );
 }

@@ -4,7 +4,6 @@ import type { LoadedExtension } from "@/features/extensions/types";
 import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
 import { readFileText } from "@/features/file-system/fs";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
-import { useSettingsReady } from "@/features/settings/useUserSettings";
 import { clearColorTheme, loadAndApplyColorTheme, uiThemeToKind } from "@/features/themes/vscodeColorTheme";
 import { dirname } from "@/utils/path";
 import { getStyleHostElement } from "@/utils/styleHost";
@@ -39,7 +38,6 @@ export function useExtensionThemeRuntime({
   const activeIconThemeRef = useLatestRef(activeIconTheme);
   const activeColorThemeRef = useLatestRef(activeColorTheme);
   const systemThemeRef = useLatestRef(systemTheme);
-  const settingsReady = useSettingsReady();
   const { refreshAll } = useActivePanelNavigation();
   const refreshAllRef = useLatestRef(refreshAll);
   const loadedExtensions = useLoadedExtensions();
@@ -194,11 +192,6 @@ export function useExtensionThemeRuntime({
       clearColorTheme();
     });
   }, [activeColorTheme, bridge, colorThemeApplyGenerationRef, latestExtensionsRef, setIconThemeKindRef, systemTheme, themesReady]);
-
-  useEffect(() => {
-    if (!settingsReady || !themesReadyRef.current) return;
-    void applyInitialThemes();
-  }, [applyInitialThemes, settingsReady, themesReadyRef]);
 
   return { applyInitialThemes };
 }

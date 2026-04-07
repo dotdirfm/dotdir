@@ -1,8 +1,4 @@
-import {
-  commandPaletteOpenAtom,
-  panelsVisibleAtom,
-  terminalFocusRequestKeyAtom,
-} from "@/atoms";
+import { commandPaletteOpenAtom, panelsVisibleAtom, terminalFocusRequestKeyAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { LanguageOption } from "@/dialogs/OpenCreateFileDialog";
 import {
@@ -25,7 +21,7 @@ import { extensionLanguages } from "@/features/extensions/types";
 import { useLoadedExtensions } from "@/features/extensions/useExtensions";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
-import { useUserSettings } from "@/features/settings/useUserSettings";
+import { useShowHidden, useUserSettings } from "@/features/settings/useUserSettings";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import { useUiState } from "@/features/ui-state/uiState";
 import { useFocusContext } from "@/focusContext";
@@ -78,9 +74,11 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const loadedExtensionsRef = useRef(loadedExtensions);
   loadedExtensionsRef.current = loadedExtensions;
 
-  const { settings, updateSettings } = useUserSettings();
+  const { settings } = useUserSettings();
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+
+  const { setShowHidden } = useShowHidden();
 
   // Atom setters are stable (Jotai guarantee) — safe to capture in the effect.
   const setActivePanel = useSetAtom(activePanelSideAtom);
@@ -176,7 +174,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     disposables.push(
       commandRegistry.registerCommand("toggleHiddenFiles", () => {
         const next = !settingsRef.current.showHidden;
-        updateSettings({ showHidden: next });
+        setShowHidden(next);
       }),
     );
 
@@ -432,7 +430,13 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     setRightActiveTabId,
     setPanelsVisible,
     setCommandPaletteOpen,
-    updateSettings,
     setTerminalFocusRequestKey,
+    ensureWindow,
+    removeWindow,
+    flushCurrentWindowLayout,
+    flushCurrentWindowState,
+    getCurrentWindowId,
+    getWindowIds,
+    setShowHidden,
   ]);
 }

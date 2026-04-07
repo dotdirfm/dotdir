@@ -14,12 +14,10 @@ import {
   type LoadedExtension,
 } from "@/features/extensions/types";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
-import { useSettingsReady } from "@/features/settings/useUserSettings";
 import { resolveShellProfiles } from "@/features/terminal/shellProfiles";
 import { join } from "@/utils/path";
 import { useViewerEditorRegistry } from "@/viewerEditorRegistry";
 import { useEffect, type RefObject } from "react";
-import { useLatestRef } from "./shared";
 
 type LifecycleRuntimeParams = {
   extensionsLoadedRef: RefObject<boolean>;
@@ -44,8 +42,6 @@ export function useExtensionLifecycleRuntime({
   const extensionHost = useExtensionHostClient();
   const languageRegistry = useLanguageRegistry();
   const commandRegistry = useCommandRegistry();
-  const settingsReady = useSettingsReady();
-  const settingsReadyRef = useLatestRef(settingsReady);
   const viewerEditorRegistry = useViewerEditorRegistry();
 
   useEffect(() => {
@@ -113,7 +109,6 @@ export function useExtensionLifecycleRuntime({
 
         registerLanguages(exts);
         registerExtensionCommands(exts);
-        if (!settingsReadyRef.current) return;
         await applyInitialThemes();
       })();
     });

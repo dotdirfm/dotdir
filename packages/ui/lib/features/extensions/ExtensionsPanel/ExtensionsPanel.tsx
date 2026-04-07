@@ -6,7 +6,6 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { colorThemeKey, extensionIconThemeKey, setExtensionAutoUpdate, uninstallExtension } from "@/features/extensions/extensions";
 import { getMarketplaceProvider, type MarketplaceDetails, type MarketplaceProviderId, type MarketplaceSearchItem } from "@/features/extensions/marketplaces";
-import { useLoadedExtensions, useSetLoadedExtensions } from "@/features/extensions/useExtensions";
 import {
   extensionColorThemes,
   extensionCommands,
@@ -24,9 +23,10 @@ import {
   type LoadedColorTheme,
   type LoadedExtension,
 } from "@/features/extensions/types";
+import { useLoadedExtensions, useSetLoadedExtensions } from "@/features/extensions/useExtensions";
 import { readFileText } from "@/features/file-system/fs";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
-import { useActiveColorTheme, useActiveIconTheme, useUserSettings } from "@/features/settings/useUserSettings";
+import { useActiveColorTheme, useActiveIconTheme } from "@/features/settings/useUserSettings";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { join } from "@/utils/path";
@@ -297,8 +297,8 @@ function featureSectionsForInstalled(ext: LoadedExtension): Array<{ label: strin
 export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const resolveVfsUrl = useVfsUrlResolver();
   const bridge = useBridge();
-  const activeIconTheme = useActiveIconTheme();
-  const activeColorTheme = useActiveColorTheme();
+  const { activeIconTheme, setActiveIconTheme } = useActiveIconTheme();
+  const { activeColorTheme, setActiveColorTheme } = useActiveColorTheme();
   const installed = useLoadedExtensions();
   const setInstalled = useSetLoadedExtensions();
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -323,7 +323,6 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const installIdToKeyRef = useRef(new Map<number, string>());
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { updateSettings } = useUserSettings();
 
   const installedItems = useMemo(() => installed.map((ext) => normalizeInstalled(ext, resolveVfsUrl)), [installed, resolveVfsUrl]);
   const installedByKey = useMemo(() => new Map(installed.map((ext) => [keyForInstalled(ext), ext])), [installed]);
@@ -480,9 +479,9 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const selectedInstalled = selectedItem ? (installedByKey.get(selectedItem.key) ?? (selectedItem.kind === "installed" ? selectedItem.loaded : null)) : null;
   const selectedBusy = selectedItem ? busyByKey[selectedItem.key] : undefined;
   const selectedAutoUpdate = selectedInstalled
-    ? (pendingAutoUpdateByKey[`${extensionRef(selectedInstalled).publisher}.${extensionRef(selectedInstalled).name}`]
-        ?? extensionRef(selectedInstalled).autoUpdate
-        ?? true)
+    ? (pendingAutoUpdateByKey[`${extensionRef(selectedInstalled).publisher}.${extensionRef(selectedInstalled).name}`] ??
+      extensionRef(selectedInstalled).autoUpdate ??
+      true)
     : false;
   const selectedIconThemes = selectedInstalled ? extensionIconThemes(selectedInstalled) : [];
   const selectedIconThemeValue = selectedInstalled
@@ -643,10 +642,10 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
       try {
         await uninstallExtension(bridge, extensionRef(ext).publisher, extensionRef(ext).name);
         if (activeIconTheme === key) {
-          updateSettings({ iconTheme: undefined });
+          setActiveIconTheme(undefined);
         }
         if (activeColorTheme?.startsWith(key + ":")) {
-          updateSettings({ colorTheme: undefined });
+          setActiveColorTheme(undefined);
         }
         await extensionHost.restart();
       } catch (err) {
@@ -658,25 +657,25 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
         return next;
       });
     },
-    [activeColorTheme, activeIconTheme, bridge, extensionHost, updateSettings],
+    [activeColorTheme, activeIconTheme, bridge, extensionHost, setActiveColorTheme, setActiveIconTheme],
   );
 
   const handleSetIconTheme = useCallback(
     (ext: LoadedExtension, themeId: string) => {
       const key = extensionIconThemeKey(ext, themeId);
       const newId = key === activeIconTheme ? undefined : key;
-      updateSettings({ iconTheme: newId });
+      setActiveIconTheme(newId);
     },
-    [activeIconTheme, updateSettings],
+    [activeIconTheme, setActiveIconTheme],
   );
 
   const handleSetColorTheme = useCallback(
     (ext: LoadedExtension, themeId: string) => {
       const key = colorThemeKey(ext, themeId);
       const newKey = key === activeColorTheme ? undefined : key;
-      updateSettings({ colorTheme: newKey });
+      setActiveColorTheme(newKey);
     },
-    [activeColorTheme, updateSettings],
+    [activeColorTheme, setActiveColorTheme],
   );
 
   const handleSetAutoUpdate = useCallback(
@@ -1091,7 +1090,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                           value={selectedIconThemeValue}
                           onChange={(event) => {
                             if (!event.target.value) {
-                              updateSettings({ iconTheme: undefined });
+                              setActiveIconTheme(undefined);
                               return;
                             }
                             handleSetIconTheme(selectedInstalled, event.target.value);
@@ -1114,7 +1113,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                           value={selectedColorThemeValue}
                           onChange={(event) => {
                             if (!event.target.value) {
-                              updateSettings({ colorTheme: undefined });
+                              setActiveColorTheme(undefined);
                               return;
                             }
                             handleSetColorTheme(selectedInstalled, event.target.value);

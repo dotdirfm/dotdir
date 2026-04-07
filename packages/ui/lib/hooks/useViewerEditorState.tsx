@@ -34,7 +34,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   const leftActiveTab = useAtomValue(leftActiveTabAtom);
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
   const [editorDirty, setEditorDirty] = useState(false);
-  const showHidden = useShowHidden();
+  const { showHidden } = useShowHidden();
   const { dialog, showDialog, replaceDialog, closeDialog } = useDialog();
 
   const activePanelSide = useAtomValue(activePanelSideAtom);

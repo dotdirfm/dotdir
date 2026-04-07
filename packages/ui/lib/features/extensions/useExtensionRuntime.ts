@@ -13,7 +13,7 @@ import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { useActiveColorTheme, useActiveIconTheme } from "@/features/settings/useUserSettings";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import { useViewerEditorRegistry } from "@/viewerEditorRegistry";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
 
 export function useExtensionRuntime(): void {
@@ -21,12 +21,11 @@ export function useExtensionRuntime(): void {
   const commandRegistry = useCommandRegistry();
   const extensionHost = useExtensionHostClient();
   const languageRegistry = useLanguageRegistry();
-  const activeIconTheme = useActiveIconTheme();
-  const activeColorTheme = useActiveColorTheme();
+  const { activeIconTheme } = useActiveIconTheme();
+  const { activeColorTheme } = useActiveColorTheme();
   const systemTheme = useAtomValue(systemThemeAtom);
-  const themesReady = useAtomValue(themesReadyAtom);
+  const [themesReady, setThemesReady] = useAtom(themesReadyAtom);
   const setLoadedExtensions = useSetLoadedExtensions();
-  const setThemesReady = useSetAtom(themesReadyAtom);
   const { setAvailableProfiles, setProfilesLoaded } = useTerminal();
   const setExtensionFssLayers = useSetExtensionFssLayers();
   const clearExtensionFssLayers = useClearExtensionFssLayers();

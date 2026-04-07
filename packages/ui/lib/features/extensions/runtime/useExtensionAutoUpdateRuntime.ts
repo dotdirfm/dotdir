@@ -1,7 +1,7 @@
 import { getMarketplaceProvider } from "@/features/extensions/marketplaces";
 import { compareExtensionVersions } from "@/features/extensions/marketplaces/dotdir";
 import { extensionRef, type ExtensionInstallSource } from "@/features/extensions/types";
-import { useExtensionsAutoUpdateEnabled, useSettingsReady } from "@/features/settings/useUserSettings";
+import { useExtensionsAutoUpdateEnabled } from "@/features/settings/useUserSettings";
 import { useCallback, useEffect, useRef } from "react";
 import { useLoadedExtensions } from "../useExtensions";
 import { AUTO_UPDATE_INITIAL_DELAY_MS, AUTO_UPDATE_INTERVAL_MS, useLatestRef, type InstallRequest } from "./shared";
@@ -16,10 +16,9 @@ export function useExtensionAutoUpdateRuntime({
   reloadExtensionRuntimeInPlace,
 }: AutoUpdateRuntimeParams) {
   const autoUpdateInFlightRef = useRef(false);
-  const enabled = useExtensionsAutoUpdateEnabled();
+  const { extensionsAutoUpdateEnabled } = useExtensionsAutoUpdateEnabled();
   const loadedExtensions = useLoadedExtensions();
   const latestExtensionsRef = useLatestRef(loadedExtensions);
-  const settingsReady = useSettingsReady();
 
   const runAutoUpdatePass = useCallback(async (): Promise<void> => {
     if (autoUpdateInFlightRef.current) return;
@@ -83,7 +82,7 @@ export function useExtensionAutoUpdateRuntime({
   }, [installExtensionAndWait, latestExtensionsRef, reloadExtensionRuntimeInPlace]);
 
   useEffect(() => {
-    if (!settingsReady || !enabled) return;
+    if (!extensionsAutoUpdateEnabled) return;
     if (loadedExtensions.length === 0) return;
     if (!loadedExtensions.some((ext) => extensionRef(ext).autoUpdate ?? true)) return;
 
@@ -109,5 +108,5 @@ export function useExtensionAutoUpdateRuntime({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [enabled, loadedExtensions, runAutoUpdatePass, settingsReady]);
+  }, [extensionsAutoUpdateEnabled, loadedExtensions, runAutoUpdatePass]);
 }

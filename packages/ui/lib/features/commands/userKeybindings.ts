@@ -6,7 +6,7 @@
 
 import { getAppDirs } from "@/features/bridge/appDirs";
 import { useBridge } from "@/features/bridge/useBridge";
-import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/jsoncFileWatcher";
+import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/features/file-system/jsoncFileWatcher";
 import { join } from "@/utils/path";
 import { useEffect } from "react";
 import { type Keybinding, useCommandRegistry } from "./commands";

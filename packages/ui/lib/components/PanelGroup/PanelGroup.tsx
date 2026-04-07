@@ -1,5 +1,5 @@
-import { PanelTabs } from "@/components/PanelTabs/PanelTabs";
 import type { NestedPopoverMenuHandle, NestedPopoverMenuItem } from "@/components/NestedPopoverMenu/NestedPopoverMenu";
+import { PanelTabs } from "@/components/PanelTabs/PanelTabs";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
 import {
@@ -65,7 +65,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
   const activeTab = tabs[activeIndex];
   const { settings } = useUserSettings();
 
-  const showHidden = useShowHidden();
+  const { showHidden } = useShowHidden();
   const [activeFileListNavigating, setActiveFileListNavigating] = useState(false);
   const [mountedRoots, setMountedRoots] = useState<string[]>([]);
   const bookmarkEntries = useMemo(

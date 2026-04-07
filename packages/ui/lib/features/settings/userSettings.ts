@@ -7,9 +7,9 @@
 import type { Bridge } from "@/features/bridge";
 import { getAppDirs } from "@/features/bridge/appDirs";
 import { readFileText } from "@/features/file-system/fs";
-import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/jsoncFileWatcher";
+import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/features/file-system/jsoncFileWatcher";
 import { dirname, join } from "@/utils/path";
-import { applyEdits, modify, type FormattingOptions, type ModificationOptions } from "jsonc-parser";
+import { applyEdits, modify, parse as parseJsonc, printParseErrorCode, type FormattingOptions, type ModificationOptions, type ParseError } from "jsonc-parser";
 import type { DotDirSettings } from "./types";
 
 // 0 disables the limit (allows editing any size file).
@@ -26,6 +26,25 @@ function validateSettings(parsed: unknown): DotDirSettings | null {
 export async function getSettingsPath(bridge: Bridge): Promise<string> {
   const { configDir } = await getAppDirs(bridge);
   return join(configDir, "settings.json");
+}
+
+export async function loadUserSettings(bridge: Bridge): Promise<DotDirSettings> {
+  try {
+    const path = await getSettingsPath(bridge);
+    const text = await readFileText(bridge, path);
+    const errors: ParseError[] = [];
+    const parsed = parseJsonc(text, errors, { allowTrailingComma: true });
+    if (errors.length > 0) {
+      console.error("[userSettings] Parse errors:");
+      for (const err of errors) {
+        console.error(`  - ${printParseErrorCode(err.error)} at offset ${err.offset}`);
+      }
+      return {};
+    }
+    return validateSettings(parsed) ?? {};
+  } catch {
+    return {};
+  }
 }
 
 function getFormattingOptions(text: string): FormattingOptions {
