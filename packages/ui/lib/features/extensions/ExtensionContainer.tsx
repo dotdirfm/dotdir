@@ -11,7 +11,7 @@ import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
 import { extensionGrammarRefs, extensionLanguages } from "@/features/extensions/types";
-import { useLoadedExtensions } from "@/features/extensions/useExtensions";
+import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { readFileText as readFileTextFromFs } from "@/features/file-system/fs";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";

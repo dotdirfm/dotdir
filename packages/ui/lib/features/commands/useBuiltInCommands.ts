@@ -18,7 +18,7 @@ import { useCommandRegistry } from "@/features/commands/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
 import { runCommandSequence, type RunCommandsArgs } from "@/features/commands/runCommands";
 import { extensionLanguages } from "@/features/extensions/types";
-import { useLoadedExtensions } from "@/features/extensions/useExtensions";
+import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
 import { useShowHidden, useUserSettings } from "@/features/settings/useUserSettings";

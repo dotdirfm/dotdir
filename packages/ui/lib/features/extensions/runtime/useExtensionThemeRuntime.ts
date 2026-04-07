@@ -8,7 +8,7 @@ import { clearColorTheme, loadAndApplyColorTheme, uiThemeToKind } from "@/featur
 import { dirname } from "@/utils/path";
 import { getStyleHostElement } from "@/utils/styleHost";
 import { type RefObject, useCallback, useEffect } from "react";
-import { useLoadedExtensions } from "../useExtensions";
+import { useLoadedExtensions } from "../useLoadedExtensions";
 import { useLatestRef } from "./shared";
 
 type ThemeRuntimeParams = {

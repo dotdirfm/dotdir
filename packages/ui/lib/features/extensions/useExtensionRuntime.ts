@@ -7,7 +7,7 @@ import { type InstallRequest } from "@/features/extensions/runtime/shared";
 import { useExtensionAutoUpdateRuntime } from "@/features/extensions/runtime/useExtensionAutoUpdateRuntime";
 import { useExtensionLifecycleRuntime } from "@/features/extensions/runtime/useExtensionLifecycleRuntime";
 import { useExtensionThemeRuntime } from "@/features/extensions/runtime/useExtensionThemeRuntime";
-import { useSetLoadedExtensions } from "@/features/extensions/useExtensions";
+import { useSetLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { useClearExtensionFssLayers, useSetExtensionFssLayers } from "@/features/fss/fss";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { useActiveColorTheme, useActiveIconTheme } from "@/features/settings/useUserSettings";

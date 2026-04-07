@@ -1,16 +1,55 @@
-import { useBridge } from "@/features/bridge/useBridge";
+import { bridgeAtom, useBridge } from "@/features/bridge/useBridge";
 import type { JsoncFileWatcher } from "@/features/file-system/jsoncFileWatcher";
 import type { DotDirSettings } from "@/features/settings/types";
 import { createUserSettingsWatcher, loadUserSettings, saveSettingsPatchToDisk } from "@/features/settings/userSettings";
-import { createContext, createElement, use, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { atom, useAtomValue, useSetAtom } from "jotai";
+import { use, useCallback, useEffect, useState, type ReactNode } from "react";
 
-type UserSettingsContextValue = {
-  settings: DotDirSettings;
-  updateSettings: (partial: Partial<DotDirSettings>) => void;
-};
-
-const UserSettingsContext = createContext<UserSettingsContextValue | null>(null);
 const initialSettingsCache = new WeakMap<object, Promise<DotDirSettings>>();
+
+const userSettingsAtom = atom<DotDirSettings>({});
+const userSettingsPendingPatchAtom = atom<Partial<DotDirSettings>>({});
+const userSettingsSaveTimerAtom = atom<ReturnType<typeof setTimeout> | null>(null);
+
+const userSettingsWriteAtom = atom(
+  null,
+  (get, set, partial: Partial<DotDirSettings>) => {
+    const bridge = get(bridgeAtom);
+    if (!bridge) return;
+
+    const current = get(userSettingsAtom);
+    const next = { ...current, ...partial };
+    set(userSettingsAtom, next);
+
+    void (async () => {
+      const watcher = await createUserSettingsWatcher(bridge);
+      try {
+        watcher.setValue(next);
+      } finally {
+        await watcher.dispose();
+      }
+    })();
+
+    const pendingPatch = get(userSettingsPendingPatchAtom);
+    set(userSettingsPendingPatchAtom, { ...pendingPatch, ...partial });
+
+    const activeTimer = get(userSettingsSaveTimerAtom);
+    if (activeTimer) {
+      clearTimeout(activeTimer);
+    }
+
+    const timer = setTimeout(() => {
+      const patch = get(userSettingsPendingPatchAtom);
+      set(userSettingsPendingPatchAtom, {});
+      set(userSettingsSaveTimerAtom, null);
+      void saveSettingsPatchToDisk(bridge, patch);
+    }, 500);
+
+    set(userSettingsSaveTimerAtom, timer);
+  },
+);
+
+const showHiddenAtom = atom((get) => get(userSettingsAtom).showHidden ?? false);
 
 function getInitialSettings(bridge: ReturnType<typeof useBridge>): Promise<DotDirSettings> {
   const cached = initialSettingsCache.get(bridge);
@@ -23,9 +62,15 @@ function getInitialSettings(bridge: ReturnType<typeof useBridge>): Promise<DotDi
 export function UserSettingsProvider({ children }: { children: ReactNode }) {
   const bridge = useBridge();
   const initialSettings = use(getInitialSettings(bridge));
-  const [settings, setSettings] = useState<DotDirSettings>(initialSettings);
-  const pendingPatchRef = useMemo(() => ({ current: {} as Partial<DotDirSettings> }), []);
-  const saveTimerRef = useMemo(() => ({ current: null as ReturnType<typeof setTimeout> | null }), []);
+  const setSettings = useSetAtom(userSettingsAtom);
+  const setPendingPatch = useSetAtom(userSettingsPendingPatchAtom);
+  const setSaveTimer = useSetAtom(userSettingsSaveTimerAtom);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setSettings(initialSettings);
+    setReady(true);
+  }, [initialSettings, setSettings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,77 +96,46 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
         void watcher.dispose();
       }
     };
-  }, [bridge]);
-
-  const updateSettings = useCallback(
-    (partial: Partial<DotDirSettings>) => {
-      setSettings((current) => {
-        const next = { ...current, ...partial };
-        void (async () => {
-          const watcher = await createUserSettingsWatcher(bridge);
-          try {
-            watcher.setValue(next);
-          } finally {
-            await watcher.dispose();
-          }
-        })();
-        pendingPatchRef.current = { ...pendingPatchRef.current, ...partial };
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = setTimeout(() => {
-          const patch = pendingPatchRef.current;
-          pendingPatchRef.current = {};
-          saveTimerRef.current = null;
-          void saveSettingsPatchToDisk(bridge, patch);
-        }, 500);
-        return next;
-      });
-    },
-    [bridge, pendingPatchRef, saveTimerRef],
-  );
+  }, [bridge, setSettings]);
 
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-      pendingPatchRef.current = {};
+      setSaveTimer((current) => {
+        if (current) {
+          clearTimeout(current);
+        }
+        return null;
+      });
+      setPendingPatch({});
     };
-  }, [pendingPatchRef, saveTimerRef]);
+  }, [setPendingPatch, setSaveTimer]);
 
-  const value = useMemo<UserSettingsContextValue>(
-    () => ({
-      settings,
-      updateSettings,
-    }),
-    [settings, updateSettings],
-  );
-
-  return createElement(UserSettingsContext.Provider, { value }, children);
-}
-
-function useUserSettingsContext(): UserSettingsContextValue {
-  const value = useContext(UserSettingsContext);
-  if (!value) {
-    throw new Error("useUserSettings must be used within UserSettingsProvider");
-  }
-  return value;
+  return ready ? children : null;
 }
 
 export function useUserSettings() {
-  return useUserSettingsContext();
+  const settings = useAtomValue(userSettingsAtom);
+  const writeSettings = useSetAtom(userSettingsWriteAtom);
+  const updateSettings = useCallback(
+    (partial: Partial<DotDirSettings>) => {
+      writeSettings(partial);
+    },
+    [writeSettings],
+  );
+  return { settings, updateSettings };
 }
 
 export function useShowHidden() {
-  const { settings, updateSettings } = useUserSettingsContext();
+  const showHidden = useAtomValue(showHiddenAtom);
+  const writeSettings = useSetAtom(userSettingsWriteAtom);
   return {
-    showHidden: settings.showHidden ?? false,
-    setShowHidden: (value: boolean) => updateSettings({ showHidden: value }),
+    showHidden,
+    setShowHidden: (value: boolean) => writeSettings({ showHidden: value }),
   };
 }
 
 export function useActiveIconTheme() {
-  const { settings, updateSettings } = useUserSettingsContext();
+  const { settings, updateSettings } = useUserSettings();
   return {
     activeIconTheme: settings.iconTheme,
     setActiveIconTheme: (value: string | undefined) => updateSettings({ iconTheme: value }),
@@ -129,7 +143,7 @@ export function useActiveIconTheme() {
 }
 
 export function useActiveColorTheme() {
-  const { settings, updateSettings } = useUserSettingsContext();
+  const { settings, updateSettings } = useUserSettings();
   return {
     activeColorTheme: settings.colorTheme,
     setActiveColorTheme: (value: string | undefined) => updateSettings({ colorTheme: value }),
@@ -137,7 +151,7 @@ export function useActiveColorTheme() {
 }
 
 export function useExtensionsAutoUpdateEnabled() {
-  const { settings, updateSettings } = useUserSettingsContext();
+  const { settings, updateSettings } = useUserSettings();
   return {
     extensionsAutoUpdateEnabled: settings.extensions?.autoUpdate ?? true,
     setExtensionsAutoUpdateEnabled: (value: boolean) =>

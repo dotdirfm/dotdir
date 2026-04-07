@@ -49,13 +49,6 @@ function makeSessionId(): string {
   return `term-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// ── Module-level non-reactive state ──────────────────────────────────────────
-// Profiles and cwd don't trigger re-renders; they are read synchronously
-// inside action callbacks. All reactive state lives in atoms.
-
-let _profiles: TerminalProfile[] = [];
-let _currentCwd = "";
-
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export interface TerminalState {
@@ -88,6 +81,8 @@ export function useTerminalState(): TerminalState {
   sessionsRef.current = sessions;
   const activeSessionIdRef = useRef(activeSessionId);
   activeSessionIdRef.current = activeSessionId;
+  const profilesRef = useRef<TerminalProfile[]>([]);
+  const currentCwdRef = useRef("");
 
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
 
@@ -139,8 +134,8 @@ export function useTerminalState(): TerminalState {
 
   const setProfiles = useCallback(
     (profiles: TerminalProfile[], cwd: string) => {
-      _profiles = profiles;
-      _currentCwd = cwd;
+      profilesRef.current = profiles;
+      currentCwdRef.current = cwd;
 
       const currentSessions = sessionsRef.current;
       if (currentSessions.length > 0) {
@@ -177,14 +172,14 @@ export function useTerminalState(): TerminalState {
   );
 
   const setCurrentCwd = useCallback((cwd: string) => {
-    _currentCwd = normalizeTerminalPath(cwd);
+    currentCwdRef.current = normalizeTerminalPath(cwd);
   }, []);
 
   const createSession = useCallback(
     (profileId?: string) => {
-      const profile = _profiles.find((p) => p.id === profileId) ?? _profiles[0];
+      const profile = profilesRef.current.find((p) => p.id === profileId) ?? profilesRef.current[0];
       if (!profile) return;
-      const managed = createManagedSession(profile, _currentCwd);
+      const managed = createManagedSession(profile, currentCwdRef.current);
       persistAndSet([...sessionsRef.current, managed], managed.id);
     },
     [createManagedSession, persistAndSet],
@@ -218,9 +213,9 @@ export function useTerminalState(): TerminalState {
     (profileId: string) => {
       const currentSessions = sessionsRef.current;
       const active = currentSessions.find((s) => s.id === activeSessionIdRef.current);
-      const profile = _profiles.find((p) => p.id === profileId) ?? _profiles[0];
+      const profile = profilesRef.current.find((p) => p.id === profileId) ?? profilesRef.current[0];
       if (!active || !profile || active.profileId === profile.id) return;
-      const replacement = createManagedSession(profile, active.cwd || _currentCwd);
+      const replacement = createManagedSession(profile, active.cwd || currentCwdRef.current);
       void active.session.dispose();
       persistAndSet(
         currentSessions.map((s) => (s.id === active.id ? replacement : s)),
@@ -233,8 +228,8 @@ export function useTerminalState(): TerminalState {
   const restartAll = useCallback(() => {
     const previous = sessionsRef.current;
     const newSessions = previous.map((s) => {
-      const profile = _profiles.find((p) => p.id === s.profileId) ?? s.profile;
-      return createManagedSession(profile, s.cwd || _currentCwd, s.id);
+      const profile = profilesRef.current.find((p) => p.id === s.profileId) ?? s.profile;
+      return createManagedSession(profile, s.cwd || currentCwdRef.current, s.id);
     });
     for (const s of previous) void s.session.dispose();
     persistAndSet(newSessions, activeSessionIdRef.current);

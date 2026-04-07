@@ -23,11 +23,13 @@ import panelsStyles from "@/styles/panels.module.css";
 import terminalStyles from "@/styles/terminal.module.css";
 import { cx } from "@/utils/cssModules";
 import { useAtomValue, useSetAtom } from "jotai";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 
 export type AppHandle = {
   focus(): void;
 };
+
+const THEME_STARTUP_TIMEOUT_MS = 5_000;
 
 export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function App({ widget }, ref) {
   const commandRegistry = useCommandRegistry();
@@ -50,8 +52,10 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const themesReady = useAtomValue(themesReadyAtom);
   const systemTheme = useSystemTheme();
   const windowShownRef = useRef(false);
+  const [themeStartupTimedOut, setThemeStartupTimedOut] = useState(false);
 
   const { uiStateLoaded } = useWorkspaceRestoreProcess();
+  const startupReady = uiStateLoaded && (themesReady || themeStartupTimedOut);
 
   useEffect(() => {
     commandRegistry.setFocusLayerGetter(() => focusContext.current);
@@ -89,14 +93,28 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   }, [setTheme, systemTheme]);
 
   useEffect(() => {
+    if (themesReady) {
+      setThemeStartupTimedOut(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      console.warn("[startup] Theme loading timed out after 5000ms; continuing without waiting for themes.");
+      setThemeStartupTimedOut(true);
+    }, THEME_STARTUP_TIMEOUT_MS);
+
+    return () => clearTimeout(timer);
+  }, [themesReady]);
+
+  useEffect(() => {
     if (windowShownRef.current) return;
-    if (!themesReady || !uiStateLoaded) return;
+    if (!startupReady) return;
     if (!bridge.window?.showCurrent) return;
     windowShownRef.current = true;
     void bridge.window.showCurrent().catch(() => {
       // Ignore show failures so startup can proceed.
     });
-  }, [bridge.window, themesReady, uiStateLoaded]);
+  }, [bridge.window, startupReady]);
 
   useExtensionRuntime();
 
@@ -140,7 +158,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
 
   let body = null;
 
-  if (!themesReady || !uiStateLoaded) {
+  if (!startupReady) {
     body = <div className={baseStyles["loading"]}>Loading...</div>;
   } else {
     body = (

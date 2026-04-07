@@ -3,7 +3,7 @@ import { compareExtensionVersions } from "@/features/extensions/marketplaces/dot
 import { extensionRef, type ExtensionInstallSource } from "@/features/extensions/types";
 import { useExtensionsAutoUpdateEnabled } from "@/features/settings/useUserSettings";
 import { useCallback, useEffect, useRef } from "react";
-import { useLoadedExtensions } from "../useExtensions";
+import { useLoadedExtensions } from "../useLoadedExtensions";
 import { AUTO_UPDATE_INITIAL_DELAY_MS, AUTO_UPDATE_INTERVAL_MS, useLatestRef, type InstallRequest } from "./shared";
 
 type AutoUpdateRuntimeParams = {

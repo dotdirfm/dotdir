@@ -23,7 +23,7 @@ import {
   type LoadedColorTheme,
   type LoadedExtension,
 } from "@/features/extensions/types";
-import { useLoadedExtensions, useSetLoadedExtensions } from "@/features/extensions/useExtensions";
+import { useLoadedExtensions, useSetLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { readFileText } from "@/features/file-system/fs";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import { useActiveColorTheme, useActiveIconTheme } from "@/features/settings/useUserSettings";

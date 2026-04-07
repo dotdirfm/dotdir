@@ -1,8 +1,7 @@
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DialogProvider } from "@/dialogs/dialogContext";
 import type { Bridge } from "@/features/bridge";
-import { BridgeProvider } from "@/features/bridge/useBridge";
-import { useBridge } from "@/features/bridge/useBridge";
+import { BridgeProvider, useBridge } from "@/features/bridge/useBridge";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { ExtensionHostClientProvider } from "@/features/extensions/extensionHostClient";
@@ -10,24 +9,19 @@ import { FssProvider } from "@/features/fss/fss";
 import { PanelControllersProvider } from "@/features/panels/panelControllers";
 import { UserSettingsProvider } from "@/features/settings/useUserSettings";
 import { Provider as JotaiProvider } from "jotai";
-import { Suspense, forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, Suspense, useEffect, useImperativeHandle, useRef } from "react";
+import { App, type AppHandle } from "./app";
 import { AppRuntimeProvider } from "./appRuntime";
 import { AppServicesProvider } from "./appServices";
-import { App, type AppHandle } from "./app";
-import {
-  defaultResolveVfsUrl,
-  VfsUrlResolverProvider,
-  type VfsUrlKind,
-  type VfsUrlResolver,
-} from "./features/file-system/vfs";
+import { defaultResolveVfsUrl, VfsUrlResolverProvider, type VfsUrlKind, type VfsUrlResolver } from "./features/file-system/vfs";
 import baseStyles from "./styles/base.module.css";
 
 export type {
   Bridge,
-  CreateWindowOptions,
   ConflictResolution,
   CopyOptions,
   CopyProgressEvent,
+  CreateWindowOptions,
   DeleteProgressEvent,
   ExtensionInstallProgressEvent,
   ExtensionInstallRequest,
