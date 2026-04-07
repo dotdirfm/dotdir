@@ -18,7 +18,7 @@ import { useCommandRegistry } from "@/features/commands/commands";
 import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { type FileListPanelController } from "@/features/panels/useFileListPanel";
-import { showHiddenAtom, useUserSettings } from "@/features/settings/useUserSettings";
+import { useShowHidden, useUserSettings } from "@/features/settings/useUserSettings";
 import { useFocusContext } from "@/focusContext";
 import { cx } from "@/utils/cssModules";
 import { basename, dirname } from "@/utils/path";
@@ -65,7 +65,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
   const activeTab = tabs[activeIndex];
   const { settings } = useUserSettings();
 
-  const showHidden = useAtomValue(showHiddenAtom);
+  const showHidden = useShowHidden();
   const [activeFileListNavigating, setActiveFileListNavigating] = useState(false);
   const [mountedRoots, setMountedRoots] = useState<string[]>([]);
   const bookmarkEntries = useMemo(

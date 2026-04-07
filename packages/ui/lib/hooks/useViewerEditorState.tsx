@@ -2,7 +2,7 @@ import { useDialog } from "@/dialogs/dialogContext";
 import { activePanelSideAtom, leftActiveTabAtom, leftActiveTabIdAtom, leftTabsAtom, rightActiveTabAtom, rightActiveTabIdAtom, rightTabsAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
-import { showHiddenAtom } from "@/features/settings/useUserSettings";
+import { useShowHidden } from "@/features/settings/useUserSettings";
 import { CONTAINER_SEP } from "@/utils/containerPath";
 import { isMediaFile } from "@/utils/mediaFiles";
 import { basename } from "@/utils/path";
@@ -34,7 +34,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   const leftActiveTab = useAtomValue(leftActiveTabAtom);
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
   const [editorDirty, setEditorDirty] = useState(false);
-  const showHidden = useAtomValue(showHiddenAtom);
+  const showHidden = useShowHidden();
   const { dialog, showDialog, replaceDialog, closeDialog } = useDialog();
 
   const activePanelSide = useAtomValue(activePanelSideAtom);

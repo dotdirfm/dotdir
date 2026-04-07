@@ -26,11 +26,10 @@ import {
 } from "@/features/extensions/types";
 import { readFileText } from "@/features/file-system/fs";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
-import { activeColorThemeAtom, activeIconThemeAtom, useUserSettings } from "@/features/settings/useUserSettings";
+import { useActiveColorTheme, useActiveIconTheme, useUserSettings } from "@/features/settings/useUserSettings";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { join } from "@/utils/path";
-import { useAtomValue } from "jotai";
 import { marked } from "marked";
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaGithub } from "react-icons/fa6";
@@ -298,8 +297,8 @@ function featureSectionsForInstalled(ext: LoadedExtension): Array<{ label: strin
 export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const resolveVfsUrl = useVfsUrlResolver();
   const bridge = useBridge();
-  const activeIconTheme = useAtomValue(activeIconThemeAtom);
-  const activeColorTheme = useAtomValue(activeColorThemeAtom);
+  const activeIconTheme = useActiveIconTheme();
+  const activeColorTheme = useActiveColorTheme();
   const installed = useLoadedExtensions();
   const setInstalled = useSetLoadedExtensions();
   const searchInputRef = useRef<HTMLInputElement>(null);

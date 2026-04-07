@@ -10,7 +10,7 @@ import { useExtensionThemeRuntime } from "@/features/extensions/runtime/useExten
 import { useSetLoadedExtensions } from "@/features/extensions/useExtensions";
 import { useClearExtensionFssLayers, useSetExtensionFssLayers } from "@/features/fss/fss";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
-import { activeColorThemeAtom, activeIconThemeAtom } from "@/features/settings/useUserSettings";
+import { useActiveColorTheme, useActiveIconTheme } from "@/features/settings/useUserSettings";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import { useViewerEditorRegistry } from "@/viewerEditorRegistry";
 import { useAtomValue, useSetAtom } from "jotai";
@@ -21,8 +21,8 @@ export function useExtensionRuntime(): void {
   const commandRegistry = useCommandRegistry();
   const extensionHost = useExtensionHostClient();
   const languageRegistry = useLanguageRegistry();
-  const activeIconTheme = useAtomValue(activeIconThemeAtom);
-  const activeColorTheme = useAtomValue(activeColorThemeAtom);
+  const activeIconTheme = useActiveIconTheme();
+  const activeColorTheme = useActiveColorTheme();
   const systemTheme = useAtomValue(systemThemeAtom);
   const themesReady = useAtomValue(themesReadyAtom);
   const setLoadedExtensions = useSetLoadedExtensions();

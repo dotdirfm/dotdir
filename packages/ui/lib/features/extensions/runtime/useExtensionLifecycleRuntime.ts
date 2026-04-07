@@ -14,11 +14,10 @@ import {
   type LoadedExtension,
 } from "@/features/extensions/types";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
-import { settingsReadyAtom } from "@/features/settings/useUserSettings";
+import { useSettingsReady } from "@/features/settings/useUserSettings";
 import { resolveShellProfiles } from "@/features/terminal/shellProfiles";
 import { join } from "@/utils/path";
 import { useViewerEditorRegistry } from "@/viewerEditorRegistry";
-import { useAtomValue } from "jotai";
 import { useEffect, type RefObject } from "react";
 import { useLatestRef } from "./shared";
 
@@ -45,7 +44,7 @@ export function useExtensionLifecycleRuntime({
   const extensionHost = useExtensionHostClient();
   const languageRegistry = useLanguageRegistry();
   const commandRegistry = useCommandRegistry();
-  const settingsReady = useAtomValue(settingsReadyAtom);
+  const settingsReady = useSettingsReady();
   const settingsReadyRef = useLatestRef(settingsReady);
   const viewerEditorRegistry = useViewerEditorRegistry();
 
