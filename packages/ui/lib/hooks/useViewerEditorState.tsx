@@ -104,6 +104,9 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
           default: true,
           onClick: () => {
             editorCloseConfirmOpenRef.current = false;
+            requestAnimationFrame(() => {
+              focusContext.request("editor");
+            });
           },
         },
         {
