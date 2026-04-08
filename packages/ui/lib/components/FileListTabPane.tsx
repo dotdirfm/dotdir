@@ -1,8 +1,10 @@
+import { themesReadyAtom } from "@/atoms";
 import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import type { FileListPanelController } from "@/features/panels/useFileListPanel";
 import { useFileListPanel } from "@/features/panels/useFileListPanel";
+import { useAtomValue } from "jotai";
 import { useEffect, useMemo, useRef } from "react";
 import { FileList } from "./FileList/FileList";
 
@@ -32,8 +34,10 @@ export function FileListTabPane({
   onActivePanelChange,
 }: FileListTabPaneProps) {
   const panel = useFileListPanel();
+  const themesReady = useAtomValue(themesReadyAtom);
   const { clearVisibleFileListTab, setVisibleFileListTab } = usePanelControllerRegistry();
   const lastRequestedPathRef = useRef<string | null>(null);
+  const lastThemeResyncedPathRef = useRef<string | null>(null);
   const lastReportedRef = useRef<string | null>(null);
   const lastSyncedStateRef = useRef<FileListTabState | null>(null);
   const pathsInSync = panel.state.path === path;
@@ -44,6 +48,13 @@ export function FileListTabPane({
     lastRequestedPathRef.current = path;
     void panel.navigateTo(path);
   }, [path, panel]);
+
+  useEffect(() => {
+    if (!themesReady || !path) return;
+    if (lastThemeResyncedPathRef.current === path) return;
+    lastThemeResyncedPathRef.current = path;
+    void panel.navigateTo(path);
+  }, [path, panel, themesReady]);
 
   useEffect(() => {
     if (!visible) return;

@@ -6,7 +6,7 @@
  * refreshes or navigates up automatically.
  */
 
-import { systemThemeAtom } from "@/atoms";
+import { systemThemeAtom, themesReadyAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { FileListTabState } from "@/entities/tab/model/types";
 import type { Bridge, FsChangeType, FsEntry } from "@/features/bridge";
@@ -127,6 +127,7 @@ export function useFileListPanel() {
   const extensionLayers = useExtensionFssLayers();
   const languageRegistry = useLanguageRegistry();
   const theme = useAtomValue(systemThemeAtom);
+  const themesReady = useAtomValue(themesReadyAtom);
   const [navigating, setNavigating] = useState(false);
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navAbortRef = useRef<AbortController | null>(null);
@@ -142,6 +143,7 @@ export function useFileListPanel() {
   const observerRef = useRef<FileSystemObserver | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentPathRef = useRef<string>("");
+  const rerunCurrentPathAfterNavigationRef = useRef(false);
 
   const showErrorRef = useRef(showError);
   showErrorRef.current = showError;
@@ -150,10 +152,26 @@ export function useFileListPanel() {
   // re-sync resolver layers for the current path. currentPathRef is used
   // instead of state to avoid a stale closure; skips mount (path is "").
   useEffect(() => {
-    if (currentPathRef.current) {
+    if (!currentPathRef.current) return;
+    if (navAbortRef.current) {
+      rerunCurrentPathAfterNavigationRef.current = true;
+    } else {
       refreshRef.current();
     }
   }, [resolver, extensionLayers]);
+
+  // Theme startup can complete after the panel has already kicked off its first
+  // directory load. Refresh once the extension/theme pipeline is ready so the
+  // initial view picks up the final icon theme and FSS layers even if an
+  // app-level refresh happened before this panel registered itself.
+  useEffect(() => {
+    if (!themesReady || !currentPathRef.current) return;
+    if (navAbortRef.current) {
+      rerunCurrentPathAfterNavigationRef.current = true;
+    } else {
+      refreshRef.current();
+    }
+  }, [themesReady]);
 
   const setupWatches = useCallback((dirPath: string) => {
     const observer = observerRef.current;
@@ -171,6 +189,7 @@ export function useFileListPanel() {
     async (path: string, force: boolean) => {
       // Skip if already navigating to this path
       if (!force && currentPathRef.current === path && navAbortRef.current) {
+        rerunCurrentPathAfterNavigationRef.current = true;
         return;
       }
       navAbortRef.current?.abort();
@@ -274,6 +293,13 @@ export function useFileListPanel() {
         clearTimeout(navTimerRef.current!);
         navTimerRef.current = null;
         setNavigating(false);
+
+        if (!abort.signal.aborted && !navAbortRef.current && rerunCurrentPathAfterNavigationRef.current && currentPathRef.current) {
+          rerunCurrentPathAfterNavigationRef.current = false;
+          queueMicrotask(() => {
+            refreshRef.current();
+          });
+        }
       }
     },
     [bridge, extensionLayers, fsProviderRegistry, languageRegistry, setupWatches],

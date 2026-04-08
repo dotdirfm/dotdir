@@ -144,10 +144,11 @@ export const FileList = memo(function FileList({
 
   const sorted = useMemo(() => {
     void iconThemeVersion;
+    void iconsVersion;
     const withStyle: DisplayEntry[] = entries.map((entry) => toDisplayEntry(entry));
     withStyle.sort(comparer);
     return withStyle;
-  }, [entries, comparer, iconThemeVersion, toDisplayEntry]);
+  }, [entries, comparer, iconThemeVersion, iconsVersion, toDisplayEntry]);
 
   const displayEntries: DisplayEntry[] = useMemo(() => {
     const result: DisplayEntry[] = [];
@@ -205,7 +206,7 @@ export const FileList = memo(function FileList({
     return () => {
       cancelled = true;
     };
-  }, [loadIconsForPaths, neededIcons, neededIconsKey]);
+  }, [loadIconsForPaths, neededIconsKey]);
 
   const onStateChangeRef = useRef(onStateChange);
   onStateChangeRef.current = onStateChange;

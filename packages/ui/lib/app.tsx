@@ -53,6 +53,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const themesReady = useAtomValue(themesReadyAtom);
   const systemTheme = useSystemTheme();
   const windowShownRef = useRef(false);
+  const initialThemeRefreshDoneRef = useRef(false);
   const [themeStartupTimedOut, setThemeStartupTimedOut] = useState(false);
 
   const { uiStateLoaded } = useWorkspaceRestoreProcess();
@@ -116,6 +117,13 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
       // Ignore show failures so startup can proceed.
     });
   }, [bridge.window, startupReady]);
+
+  useEffect(() => {
+    if (!startupReady || !themesReady) return;
+    if (initialThemeRefreshDoneRef.current) return;
+    initialThemeRefreshDoneRef.current = true;
+    refreshAll();
+  }, [refreshAll, startupReady, themesReady]);
 
   useExtensionRuntime();
 
