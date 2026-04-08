@@ -36,6 +36,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   const leftActiveTab = useAtomValue(leftActiveTabAtom);
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
   const [editorDirty, setEditorDirty] = useState(false);
+  const editorCloseConfirmOpenRef = useRef(false);
   const { showHidden } = useShowHidden();
   const { dialog, showDialog, replaceDialog, closeDialog } = useDialog();
 
@@ -85,21 +86,30 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   }, []);
 
   const requestCloseEditor = useCallback(() => {
+    if (editorCloseConfirmOpenRef.current) return;
     if (!editorDirty || !editorFile) {
       focusContext.restore();
       setEditorDirty(false);
       setEditorFile(null);
       return;
     }
+    editorCloseConfirmOpenRef.current = true;
     showDialog({
       type: "message",
       title: "Unsaved Changes",
       message: `Close "${editorFile.name}" and discard unsaved changes?`,
       buttons: [
-        { label: "Cancel", default: true },
+        {
+          label: "Cancel",
+          default: true,
+          onClick: () => {
+            editorCloseConfirmOpenRef.current = false;
+          },
+        },
         {
           label: "Discard",
           onClick: () => {
+            editorCloseConfirmOpenRef.current = false;
             focusContext.restore();
             setEditorDirty(false);
             setEditorFile(null);
@@ -198,15 +208,16 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   }, [leftActiveTabId, rightActiveTabId, setLeftTabs, setRightTabs, viewerFile]);
 
   useEffect(() => {
+    const topDialogType = dialog?.type;
     if (!viewerFile) {
-      if (dialog?.type === "viewer") {
+      if (topDialogType === "viewer") {
         closeDialog();
       }
       return;
     }
 
     if (!viewerResolved) {
-      if (dialog?.type !== "message") {
+      if (topDialogType !== "message") {
         showDialog({
           type: "message",
           title: "No viewer",
@@ -214,6 +225,10 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
           buttons: [{ label: "OK", default: true, onClick: () => setViewerFile(null) }],
         });
       }
+      return;
+    }
+
+    if (topDialogType && topDialogType !== "viewer") {
       return;
     }
 
@@ -232,15 +247,16 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   }, [closeDialog, dialog?.type, handleExecuteCommand, replaceDialog, requestCloseViewer, showDialog, viewerFile, viewerResolved]);
 
   useEffect(() => {
+    const topDialogType = dialog?.type;
     if (!editorFile) {
-      if (dialog?.type === "editor") {
+      if (topDialogType === "editor") {
         closeDialog();
       }
       return;
     }
 
     if (!editorResolved) {
-      if (dialog?.type !== "message") {
+      if (topDialogType !== "message") {
         showDialog({
           type: "message",
           title: "No editor",
@@ -248,6 +264,10 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
           buttons: [{ label: "OK", default: true, onClick: requestCloseEditor }],
         });
       }
+      return;
+    }
+
+    if (topDialogType && topDialogType !== "editor") {
       return;
     }
 

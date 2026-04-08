@@ -35,6 +35,18 @@ interface PanelGroupProps {
   side: PanelSide;
 }
 
+type ParkedPreviewSurface = {
+  reuseKey: string;
+  surfaceKey: string;
+  mode: "viewer" | "editor";
+  extensionDirPath: string;
+  entry: string;
+  path: string;
+  name: string;
+  size: number;
+  langId?: string;
+};
+
 export function PanelGroup({ side }: PanelGroupProps) {
   const bridge = useBridge();
   const editorRegistry = useEditorRegistry();
@@ -67,6 +79,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
 
   const { showHidden } = useShowHidden();
   const [activeFileListNavigating, setActiveFileListNavigating] = useState(false);
+  const [parkedPreviews, setParkedPreviews] = useState<ParkedPreviewSurface[]>([]);
   const [mountedRoots, setMountedRoots] = useState<string[]>([]);
   const bookmarkEntries = useMemo(
     () =>
@@ -99,6 +112,31 @@ export function PanelGroup({ side }: PanelGroupProps) {
   rightActiveTabIdRef.current = rightActiveTabId;
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
+  const parkedPreviewsRef = useRef(parkedPreviews);
+  parkedPreviewsRef.current = parkedPreviews;
+  const nextPreviewSurfaceIdRef = useRef(0);
+
+  const getResolvedPreviewTarget = useCallback(
+    (mode: "viewer" | "editor", name: string) => {
+      return mode === "editor" ? editorRegistry.resolve(name) : viewerRegistry.resolve(name);
+    },
+    [editorRegistry, viewerRegistry],
+  );
+
+  const getPreviewReuseKey = useCallback(
+    (mode: "viewer" | "editor", extensionDirPath: string, entry: string) => `${mode}:${extensionDirPath}:${entry}`,
+    [],
+  );
+
+  const getReusablePreviewSurfaceKey = useCallback(
+    (mode: "viewer" | "editor", name: string) => {
+      const resolved = getResolvedPreviewTarget(mode, name);
+      if (!resolved) return undefined;
+      const reuseKey = getPreviewReuseKey(mode, resolved.extensionDirPath, resolved.contribution.entry);
+      return parkedPreviewsRef.current.find((item) => item.reuseKey === reuseKey)?.surfaceKey;
+    },
+    [getPreviewReuseKey, getResolvedPreviewTarget],
+  );
 
   const handleSelectTab = useCallback((id: string) => setActiveTabId(id), [setActiveTabId]);
   const handlePinTab = useCallback((id: string) => {
@@ -106,6 +144,29 @@ export function PanelGroup({ side }: PanelGroupProps) {
   }, [setTabs]);
   const closeTabNow = useCallback(async (id: string) => {
     const currentTabs = tabsRef.current;
+    const closingTab = currentTabs.find((tab) => tab.id === id);
+    if (closingTab?.type === "preview") {
+      const mode = closingTab.mode ?? "viewer";
+      const resolved = getResolvedPreviewTarget(mode, closingTab.name);
+      if (resolved) {
+        const reuseKey = getPreviewReuseKey(mode, resolved.extensionDirPath, resolved.contribution.entry);
+        const surfaceKey = closingTab.surfaceKey ?? `preview-surface-${++nextPreviewSurfaceIdRef.current}`;
+        setParkedPreviews((prev) => [
+          {
+            reuseKey,
+            surfaceKey,
+            mode,
+            extensionDirPath: resolved.extensionDirPath,
+            entry: resolved.contribution.entry,
+            path: closingTab.path,
+            name: closingTab.name,
+            size: closingTab.size,
+            langId: closingTab.langId,
+          },
+          ...prev.filter((item) => item.reuseKey !== reuseKey && item.surfaceKey !== surfaceKey),
+        ]);
+      }
+    }
     if (currentTabs.length > 1) {
       const idx = currentTabs.findIndex((t) => t.id === id);
       const next = currentTabs.filter((t) => t.id !== id);
@@ -117,7 +178,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
     const newTab = createFilelistTab(home);
     setTabs([newTab]);
     setActiveTabId(newTab.id);
-  }, [bridge, setActiveTabId, setTabs]);
+  }, [bridge, getPreviewReuseKey, getResolvedPreviewTarget, setActiveTabId, setTabs]);
   const handleCloseTab = useCallback(
     async (id: string) => {
       const tab = tabsRef.current.find((t) => t.id === id);
@@ -528,11 +589,18 @@ export function PanelGroup({ side }: PanelGroupProps) {
     setActivePanel,
     handleNewTab,
     handleCloseActiveTab: () => handleCloseTab(activeTabIdRef.current),
+    getReusablePreviewSurfaceKey,
   });
+
+  const livePreviewSurfaceKeys = useMemo(
+    () => new Set(tabs.filter((tab): tab is Extract<(typeof tabs)[number], { type: "preview" }> => tab.type === "preview").map((tab) => tab.surfaceKey ?? tab.id)),
+    [tabs],
+  );
 
   const renderPreviewTab = useCallback(
     (tab: Extract<(typeof tabs)[number], { type: "preview" }>) => {
       const isVisible = tab.id === activeTabId;
+      const surfaceKey = tab.surfaceKey ?? tab.id;
       if (tab.mode === "editor") {
         const resolvedEditor = editorRegistry.resolve(tab.name);
         if (!resolvedEditor) {
@@ -554,7 +622,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
         const langId = tab.langId ?? "plaintext";
         return (
           <div
-            key={tab.id}
+            key={surfaceKey}
             inert={!isVisible}
             style={{
               visibility: isVisible ? "visible" : "hidden",
@@ -601,7 +669,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
         const quickViewSourcePanel = tab.isTemp ? tab.sourcePanel : undefined;
         return (
           <div
-            key={tab.id}
+            key={surfaceKey}
             inert={!isVisible}
             style={{
               visibility: isVisible ? "visible" : "hidden",
@@ -706,6 +774,45 @@ export function PanelGroup({ side }: PanelGroupProps) {
             );
           })}
         {tabs.filter((tab): tab is Extract<(typeof tabs)[number], { type: "preview" }> => tab.type === "preview").map(renderPreviewTab)}
+        {parkedPreviews
+          .filter((slot) => !livePreviewSurfaceKeys.has(slot.surfaceKey))
+          .map((slot) =>
+            slot.mode === "editor" ? (
+              <div
+                key={slot.surfaceKey}
+                inert
+                style={{ visibility: "hidden", position: "absolute", inset: 0, opacity: 0, pointerEvents: "none" }}
+              >
+                <EditorContainer
+                  extensionDirPath={slot.extensionDirPath}
+                  entry={slot.entry}
+                  filePath={slot.path}
+                  fileName={slot.name}
+                  langId={slot.langId ?? "plaintext"}
+                  inline
+                  visible={false}
+                  onClose={() => {}}
+                />
+              </div>
+            ) : (
+              <div
+                key={slot.surfaceKey}
+                inert
+                style={{ visibility: "hidden", position: "absolute", inset: 0, opacity: 0, pointerEvents: "none" }}
+              >
+                <ViewerContainer
+                  extensionDirPath={slot.extensionDirPath}
+                  entry={slot.entry}
+                  filePath={slot.path}
+                  fileName={slot.name}
+                  fileSize={slot.size}
+                  inline
+                  visible={false}
+                  onClose={() => {}}
+                />
+              </div>
+            ),
+          )}
       </div>
     </div>
   );

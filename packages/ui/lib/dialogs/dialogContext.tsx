@@ -127,6 +127,7 @@ export type DialogSpec =
     }
   | {
       type: "viewer";
+      surfaceKey?: string;
       extensionDirPath: string;
       entry: string;
       props: ViewerProps;
@@ -135,6 +136,7 @@ export type DialogSpec =
     }
   | {
       type: "editor";
+      surfaceKey?: string;
       extensionDirPath: string;
       entry: string;
       props: EditorProps;
@@ -150,6 +152,7 @@ export type DialogUpdate =
 interface DialogContextValue {
   dialog: DialogSpec | null;
   dialogs: DialogSpec[];
+  extensionSurfaces: Record<string, ExtensionSurfaceSlot>;
   showDialog: (spec: DialogSpec) => void;
   replaceDialog: (spec: DialogSpec) => void;
   showError: (message: string) => void;
@@ -160,10 +163,43 @@ interface DialogContextValue {
 
 const DialogContext = createContext<DialogContextValue | null>(null);
 
+type ExtensionDialogSpec = Extract<DialogSpec, { type: "viewer" | "editor" }>;
+type ExtensionSurfaceSlot = {
+  dialog: ExtensionDialogSpec;
+  visible: boolean;
+};
+
+function getExtensionDialogReuseKey(spec: ExtensionDialogSpec): string {
+  return `${spec.type}:${spec.extensionDirPath}:${spec.entry}`;
+}
+
+function assignExtensionDialogSurfaceKey(
+  spec: DialogSpec,
+  current: DialogSpec | null,
+  slots: Record<string, ExtensionSurfaceSlot>,
+  nextSurfaceIdRef: React.MutableRefObject<number>,
+): DialogSpec {
+  if (spec.type !== "viewer" && spec.type !== "editor") return spec;
+  if (spec.surfaceKey) return spec;
+  const reuseKey = getExtensionDialogReuseKey(spec);
+  const currentSurfaceKey =
+    current?.type === spec.type && current.extensionDirPath === spec.extensionDirPath && current.entry === spec.entry ? current.surfaceKey : undefined;
+  const parkedSurfaceKey = Object.entries(slots).find(([, slot]) => !slot.visible && getExtensionDialogReuseKey(slot.dialog) === reuseKey)?.[0];
+  return {
+    ...spec,
+    surfaceKey: currentSurfaceKey ?? parkedSurfaceKey ?? `dialog-surface-${++nextSurfaceIdRef.current}`,
+  };
+}
+
 export function DialogProvider({ children }: { children: ReactNode }) {
   const commandRegistry = useCommandRegistry();
-  const [dialogs, setDialogs] = useState<DialogSpec[]>([]);
+  const [state, setState] = useState<{ dialogs: DialogSpec[]; extensionSurfaces: Record<string, ExtensionSurfaceSlot> }>({
+    dialogs: [],
+    extensionSurfaces: {},
+  });
+  const { dialogs, extensionSurfaces } = state;
   const dialog = dialogs.length > 0 ? dialogs[dialogs.length - 1]! : null;
+  const nextSurfaceIdRef = React.useRef(0);
 
   useEffect(() => {
     commandRegistry.setContext("dialogOpen", dialogs.length > 0);
@@ -173,15 +209,50 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   }, [commandRegistry, dialogs.length]);
 
   const showDialog = useCallback((spec: DialogSpec) => {
-    setDialogs((prev) => [...prev, spec]);
+    setState((prev) => {
+      const nextSpec = assignExtensionDialogSurfaceKey(spec, prev.dialogs[prev.dialogs.length - 1] ?? null, prev.extensionSurfaces, nextSurfaceIdRef);
+      const nextSurfaces = { ...prev.extensionSurfaces };
+      if (nextSpec.type === "viewer" || nextSpec.type === "editor") {
+        const surfaceKey = nextSpec.surfaceKey;
+        if (surfaceKey) {
+          nextSurfaces[surfaceKey] = {
+            dialog: nextSpec,
+            visible: true,
+          };
+        }
+      }
+      return {
+        extensionSurfaces: nextSurfaces,
+        dialogs: [...prev.dialogs, nextSpec],
+      };
+    });
   }, []);
 
   const replaceDialog = useCallback((spec: DialogSpec) => {
-    setDialogs((prev) => {
-      if (prev.length === 0) return [spec];
-      const next = [...prev];
-      next[next.length - 1] = spec;
-      return next;
+    setState((prev) => {
+      const nextSpec = assignExtensionDialogSurfaceKey(spec, prev.dialogs.length > 0 ? prev.dialogs[prev.dialogs.length - 1]! : null, prev.extensionSurfaces, nextSurfaceIdRef);
+      const nextSurfaces = { ...prev.extensionSurfaces };
+      if (nextSpec.type === "viewer" || nextSpec.type === "editor") {
+        const surfaceKey = nextSpec.surfaceKey;
+        if (surfaceKey) {
+          nextSurfaces[surfaceKey] = {
+            dialog: nextSpec,
+            visible: true,
+          };
+        }
+      }
+      if (prev.dialogs.length === 0) {
+        return {
+          extensionSurfaces: nextSurfaces,
+          dialogs: [nextSpec],
+        };
+      }
+      const nextDialogs = [...prev.dialogs];
+      nextDialogs[nextDialogs.length - 1] = nextSpec;
+      return {
+        extensionSurfaces: nextSurfaces,
+        dialogs: nextDialogs,
+      };
     });
   }, []);
 
@@ -198,24 +269,47 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   );
 
   const closeDialog = useCallback(() => {
-    setDialogs((prev) => prev.slice(0, -1));
+    setState((prev) => {
+      const current = prev.dialogs.length > 0 ? prev.dialogs[prev.dialogs.length - 1]! : null;
+      const nextSurfaces = { ...prev.extensionSurfaces };
+      if (current?.type === "viewer" || current?.type === "editor") {
+        const surfaceKey = current.surfaceKey;
+        if (surfaceKey) {
+          nextSurfaces[surfaceKey] = {
+            dialog: current,
+            visible: false,
+          };
+        }
+        return {
+          extensionSurfaces: nextSurfaces,
+          dialogs: prev.dialogs.slice(0, -1),
+        };
+      }
+      return {
+        extensionSurfaces: nextSurfaces,
+        dialogs: prev.dialogs.slice(0, -1),
+      };
+    });
   }, []);
 
   const updateDialog = useCallback((update: DialogUpdate) => {
-    setDialogs((prev) => {
-      const current = prev.length > 0 ? prev[prev.length - 1]! : null;
+    setState((prev) => {
+      const current = prev.dialogs.length > 0 ? prev.dialogs[prev.dialogs.length - 1]! : null;
       if (current?.type === "deleteProgress" || current?.type === "copyProgress" || current?.type === "moveProgress") {
-        const next = [...prev];
-        next[next.length - 1] = { ...current, ...update } as DialogSpec;
-        return next;
+        const nextDialogs = [...prev.dialogs];
+        nextDialogs[nextDialogs.length - 1] = { ...current, ...update } as DialogSpec;
+        return {
+          ...prev,
+          dialogs: nextDialogs,
+        };
       }
       return prev;
     });
   }, []);
 
   const value = useMemo(
-    () => ({ dialog, dialogs, showDialog, replaceDialog, closeDialog, updateDialog, showError }),
-    [dialog, dialogs, showDialog, replaceDialog, closeDialog, updateDialog, showError],
+    () => ({ dialog, dialogs, extensionSurfaces, showDialog, replaceDialog, closeDialog, updateDialog, showError }),
+    [dialog, dialogs, extensionSurfaces, showDialog, replaceDialog, closeDialog, updateDialog, showError],
   );
 
   return <DialogContext.Provider value={value}>{children}</DialogContext.Provider>;
@@ -436,6 +530,46 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
   }
 }
 
+function renderExtensionDialogSurface(dialog: ExtensionDialogSpec, visible: boolean) {
+  if (dialog.type === "viewer") {
+    return (
+      <ViewerContainer
+        key={dialog.surfaceKey}
+        extensionDirPath={dialog.extensionDirPath}
+        entry={dialog.entry}
+        filePath={dialog.props.filePath}
+        fileName={dialog.props.fileName}
+        fileSize={dialog.props.fileSize}
+        visible={visible}
+        onClose={dialog.onClose}
+        onExecuteCommand={dialog.onExecuteCommand}
+      />
+    );
+  }
+
+  return (
+    <EditorContainer
+      key={dialog.surfaceKey}
+      extensionDirPath={dialog.extensionDirPath}
+      entry={dialog.entry}
+      filePath={dialog.props.filePath}
+      fileName={dialog.props.fileName}
+      langId={dialog.props.langId}
+      visible={visible}
+      onClose={dialog.onClose}
+      onDirtyChange={dialog.onDirtyChange}
+    />
+  );
+}
+
+function ExtensionDialogSurfaceHost({ extensionSurfaces }: { extensionSurfaces: Record<string, ExtensionSurfaceSlot> }) {
+  return (
+    <>
+      {Object.entries(extensionSurfaces).map(([, slot]) => renderExtensionDialogSurface(slot.dialog, slot.visible))}
+    </>
+  );
+}
+
 const HELP_TEXTS: Partial<Record<DialogSpec["type"], string>> = {
   copyConfig: `# Copy
 
@@ -572,12 +706,29 @@ Press **Cancel** to stop. Files already moved will remain at the destination and
 
 export function DialogHolder() {
   const ctx = useContext(DialogContext);
-  const dialog = ctx?.dialog ?? null;
-  if (!dialog) return null;
-  const content = renderDialogContent(dialog, ctx!);
-  if (!content) return null;
-  const helpText = HELP_TEXTS[dialog.type];
-  return <HotkeyProvider helpText={helpText}>{content}</HotkeyProvider>;
+  const dialogs = ctx?.dialogs ?? [];
+  const extensionSurfaces = ctx?.extensionSurfaces ?? {};
+
+  if (dialogs.length === 0) {
+    return Object.keys(extensionSurfaces).length > 0 ? <ExtensionDialogSurfaceHost extensionSurfaces={extensionSurfaces} /> : null;
+  }
+
+  const stackedDialogs = dialogs.map((item, index) => {
+    if (item.type === "viewer" || item.type === "editor") {
+      return null;
+    }
+    const content = renderDialogContent(item, ctx!);
+    if (!content) return null;
+    const helpText = index === dialogs.length - 1 ? HELP_TEXTS[item.type] : undefined;
+    return helpText ? <HotkeyProvider key={`dialog-${index}`} helpText={helpText}>{content}</HotkeyProvider> : <React.Fragment key={`dialog-${index}`}>{content}</React.Fragment>;
+  });
+
+  return (
+    <>
+      <ExtensionDialogSurfaceHost extensionSurfaces={extensionSurfaces} />
+      {stackedDialogs}
+    </>
+  );
 }
 
 export function useDialog(): DialogContextValue {

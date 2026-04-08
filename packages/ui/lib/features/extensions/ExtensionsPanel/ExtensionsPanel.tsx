@@ -106,6 +106,7 @@ function keyForInstalled(ext: LoadedExtension): string {
 function normalizeInstalled(ext: LoadedExtension, resolveVfsUrl: (absPath: string) => string): SidebarItem {
   const manifest = extensionManifest(ext);
   const ref = extensionRef(ext);
+  const iconPath = manifest.icon ? join(extensionDirPath(ext), manifest.icon.replace(/^\/+/, "")) : null;
   return {
     kind: "installed",
     key: keyForInstalled(ext),
@@ -113,7 +114,7 @@ function normalizeInstalled(ext: LoadedExtension, resolveVfsUrl: (absPath: strin
     publisher: manifest.publisher,
     description: manifest.description || "",
     version: ref.version,
-    iconUrl: manifest.icon ? resolveVfsUrl(manifest.icon) : null,
+    iconUrl: iconPath ? resolveVfsUrl(iconPath) : null,
     downloads: null,
     rating: null,
     categories: [],

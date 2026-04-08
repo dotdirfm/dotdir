@@ -35,6 +35,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelsOverlayRef = useRef<HTMLDivElement>(null);
   useImperativeHandle(
     ref,
     () => ({
@@ -138,7 +139,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
       focus() {
         focusActiveFileList();
         const active = document.activeElement as HTMLElement | null;
-        if (active && root.contains(active) && active !== root) return;
+        if (active && panelsOverlayRef.current?.contains(active) && active !== root) return;
         try {
           root.focus({ preventScroll: true });
         } catch {
@@ -170,7 +171,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
           <div inert={panelsVisible} className={cx(terminalStyles, "terminal-background", panelsVisible && "hidden")}>
             <Terminal />
           </div>
-          <div inert={!panelsVisible} className={cx(panelsStyles, "panels-overlay", !panelsVisible && "hidden")}>
+          <div ref={panelsOverlayRef} inert={!panelsVisible} className={cx(panelsStyles, "panels-overlay", !panelsVisible && "hidden")}>
             <div className={panelsStyles["side-by-side-panels"]}>
               <PanelGroup side="left" />
               <PanelGroup side="right" />

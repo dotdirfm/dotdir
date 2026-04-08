@@ -17,7 +17,7 @@ export function createPreviewTab(
   name: string,
   size: number,
   sourcePanel: PanelSide,
-  options?: { mode?: "viewer" | "editor"; langId?: string },
+  options?: { mode?: "viewer" | "editor"; langId?: string; surfaceKey?: string },
 ): PanelTab {
   return {
     id: genTabId(),
@@ -25,6 +25,7 @@ export function createPreviewTab(
     path,
     name,
     size,
+    surfaceKey: options?.surfaceKey,
     isTemp: true,
     sourcePanel,
     mode: options?.mode ?? "viewer",

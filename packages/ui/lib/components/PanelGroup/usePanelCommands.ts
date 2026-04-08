@@ -21,6 +21,7 @@ interface UsePanelCommandsArgs {
   setActivePanel: Dispatch<SetStateAction<PanelSide>>;
   handleNewTab: () => void;
   handleCloseActiveTab: () => Promise<void>;
+  getReusablePreviewSurfaceKey: (mode: "viewer" | "editor", name: string) => string | undefined;
 }
 
 export function usePanelCommands(args: UsePanelCommandsArgs): void {
@@ -98,13 +99,18 @@ export function usePanelCommands(args: UsePanelCommandsArgs): void {
       const path = entry.path as string;
       const name = entry.name;
       const size = Number(entry.meta.size);
+      const surfaceKey = argsRef.current.getReusablePreviewSurfaceKey("viewer", name);
       if (tempTab && tempTab.type === "preview") {
         setOppositeTabs((prev) =>
-          prev.map((tab) => (tab.id === tempTab.id ? { ...tab, path, name, size, sourcePanel: side, mode: "viewer", dirty: false } : tab)),
+          prev.map((tab) =>
+            tab.id === tempTab.id && tab.type === "preview"
+              ? { ...tab, path, name, size, surfaceKey: tab.surfaceKey ?? surfaceKey, sourcePanel: side, mode: "viewer", dirty: false }
+              : tab,
+          ),
         );
         setOppositeActiveTabId(tempTab.id);
       } else {
-        const newTab = createPreviewTab(path, name, size, side, { mode: "viewer" });
+        const newTab = createPreviewTab(path, name, size, side, { mode: "viewer", surfaceKey });
         setOppositeTabs((prev) => [...prev, newTab as PanelTab]);
         setOppositeActiveTabId(newTab.id);
       }
@@ -124,13 +130,18 @@ export function usePanelCommands(args: UsePanelCommandsArgs): void {
       const name = entry.name;
       const size = Number(entry.meta.size);
       const langId = typeof entry.lang === "string" && entry.lang ? entry.lang : "plaintext";
+      const surfaceKey = argsRef.current.getReusablePreviewSurfaceKey("editor", name);
       if (tempTab && tempTab.type === "preview") {
         setOppositeTabs((prev) =>
-          prev.map((tab) => (tab.id === tempTab.id ? { ...tab, path, name, size, sourcePanel: side, mode: "editor", langId, dirty: false } : tab)),
+          prev.map((tab) =>
+            tab.id === tempTab.id && tab.type === "preview"
+              ? { ...tab, path, name, size, surfaceKey: tab.surfaceKey ?? surfaceKey, sourcePanel: side, mode: "editor", langId, dirty: false }
+              : tab,
+          ),
         );
         setOppositeActiveTabId(tempTab.id);
       } else {
-        const newTab = createPreviewTab(path, name, size, side, { mode: "editor", langId });
+        const newTab = createPreviewTab(path, name, size, side, { mode: "editor", langId, surfaceKey });
         setOppositeTabs((prev) => [...prev, newTab as PanelTab]);
         setOppositeActiveTabId(newTab.id);
       }

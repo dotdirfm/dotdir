@@ -325,6 +325,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     }),
     [bridge, fsProviderRegistry],
   );
+  const buildHostApiRef = useRef(buildHostApi);
+  buildHostApiRef.current = buildHostApi;
 
   const getThemeVars = useCallback((): Record<string, string> => {
     const out: Record<string, string> = {};
@@ -343,6 +345,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     }
     return out;
   }, []);
+  const getThemeVarsRef = useRef(getThemeVars);
+  getThemeVarsRef.current = getThemeVars;
 
   useEffect(() => {
     let cancelled = false;
@@ -352,7 +356,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     setLoading(true);
     setError(null);
 
-    const hostApi = buildHostApi();
+    const hostApi = buildHostApiRef.current();
     const iframeWin = iframe.contentWindow;
     if (!iframeWin) return;
 
@@ -546,7 +550,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     // Keep iframe theme vars in sync with host theme changes.
     const pushThemeVars = () => {
       try {
-        iframe.contentWindow?.postMessage({ type: "dotdir:themeVars", themeVars: getThemeVars() }, "*");
+        iframe.contentWindow?.postMessage({ type: "dotdir:themeVars", themeVars: getThemeVarsRef.current() }, "*");
       } catch {
         // ignore
       }
@@ -590,7 +594,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           entryUrl,
           entryScript,
           props,
-          themeVars: getThemeVars(),
+          themeVars: getThemeVarsRef.current(),
           colorTheme: hostApi.getColorTheme?.() ?? null,
         },
         "*",
@@ -652,7 +656,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     };
     // `props` updates are sent via postMessage to avoid unnecessary iframe remounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extensionDirPath, entry, kind, buildHostApi, getThemeVars]);
+  }, [extensionDirPath, entry, kind, resolveVfsUrl]);
 
   // Re-mount when props change (e.g. file path). Skip when inactive.
   // Reset prevProps when hiding so the next activation always sends an update.

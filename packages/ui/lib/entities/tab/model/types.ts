@@ -19,6 +19,7 @@ export type PreviewTabState = {
   path: string;
   name: string;
   size: number;
+  surfaceKey?: string;
   isTemp: boolean;
   dirty?: boolean;
   mode?: "viewer" | "editor";
