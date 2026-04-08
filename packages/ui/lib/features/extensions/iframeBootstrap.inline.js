@@ -190,6 +190,12 @@ async function focusExtension() {
   if (!extApi) return;
   try {
     if (typeof extApi.focus === "function") {
+      try {
+        window.focus();
+        if (document.body && typeof document.body.focus === "function") {
+          document.body.focus();
+        }
+      } catch {}
       await extApi.focus();
     }
   } catch {}

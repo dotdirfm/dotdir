@@ -119,6 +119,36 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     }, 0);
   }, [shouldAutoFocusIframe, loading]);
 
+  useEffect(() => {
+    if (!shouldAutoFocusIframe) return;
+    if (loading) return;
+    if (active === false) return;
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const run = () => {
+      try {
+        iframe.focus();
+        iframe.contentWindow?.focus?.();
+        iframe.contentWindow?.postMessage({ type: "dotdir:focus" }, "*");
+      } catch {
+        // ignore
+      }
+    };
+
+    const frame = requestAnimationFrame(run);
+    const t1 = setTimeout(run, 0);
+    const t2 = setTimeout(run, 50);
+    const t3 = setTimeout(run, 150);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [active, loading, shouldAutoFocusIframe]);
+
   // Inline/preview viewer: keep panel focused until user presses Tab.
   // First Tab: focus preview iframe + route keybindings via focusViewer.
   // Second Tab: return focus to the panel + route keybindings back.
@@ -744,7 +774,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           src={iframeSrc}
           // Chromium/WebView2: loading `vfs://…` as iframe `src` is top navigation to a custom
           // scheme; without this token the sandbox blocks it (Windows).
-          sandbox="allow-scripts allow-top-navigation-to-custom-protocols"
+          sandbox="allow-same-origin allow-scripts allow-top-navigation-to-custom-protocols"
           style={{
             width: "100%",
             height: "100%",
@@ -792,13 +822,19 @@ function focusIframeWithin(root: HTMLElement | null): void {
   if (!root) return;
   const iframe = root.querySelector("iframe");
   if (!(iframe instanceof HTMLIFrameElement)) return;
-  try {
-    iframe.focus();
-    iframe.contentWindow?.focus?.();
-    iframe.contentWindow?.postMessage({ type: "dotdir:focus" }, "*");
-  } catch {
-    // ignore
-  }
+  const focusNow = () => {
+    try {
+      iframe.focus();
+      iframe.contentWindow?.focus?.();
+      iframe.contentWindow?.postMessage({ type: "dotdir:focus" }, "*");
+    } catch {
+      // ignore
+    }
+  };
+  focusNow();
+  requestAnimationFrame(focusNow);
+  setTimeout(focusNow, 0);
+  setTimeout(focusNow, 50);
 }
 
 function useExtensionSurfaceFocus({
