@@ -10,10 +10,8 @@ import {
   extensionDirPath,
   extensionFsProviders,
   extensionKeybindings,
-  extensionLanguages,
   type LoadedExtension,
 } from "@/features/extensions/types";
-import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { resolveShellProfiles } from "@/features/terminal/shellProfiles";
 import { join } from "@/utils/path";
 import { useViewerEditorRegistry } from "@/viewerEditorRegistry";
@@ -40,20 +38,10 @@ export function useExtensionLifecycleRuntime({
 }: LifecycleRuntimeParams) {
   const bridge = useBridge();
   const extensionHost = useExtensionHostClient();
-  const languageRegistry = useLanguageRegistry();
   const commandRegistry = useCommandRegistry();
   const viewerEditorRegistry = useViewerEditorRegistry();
 
   useEffect(() => {
-    const registerLanguages = async (exts: LoadedExtension[]) => {
-      languageRegistry.clear();
-      for (const ext of exts) {
-        for (const lang of extensionLanguages(ext)) {
-          languageRegistry.registerLanguage(lang);
-        }
-      }
-    };
-
     const registerExtensionCommands = (exts: LoadedExtension[]) => {
       clearExtensionCommandRegistrations();
       for (const ext of exts) {
@@ -107,7 +95,6 @@ export function useExtensionLifecycleRuntime({
           )
           .catch(() => setProfilesLoaded(true));
 
-        registerLanguages(exts);
         registerExtensionCommands(exts);
         await applyInitialThemes();
       })();

@@ -9,7 +9,6 @@ import { useExtensionLifecycleRuntime } from "@/features/extensions/runtime/useE
 import { useExtensionThemeRuntime } from "@/features/extensions/runtime/useExtensionThemeRuntime";
 import { useSetLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { useClearExtensionFssLayers, useSetExtensionFssLayers } from "@/features/fss/fss";
-import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { useActiveColorTheme, useActiveIconTheme } from "@/features/settings/useUserSettings";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import { useViewerEditorRegistry } from "@/viewerEditorRegistry";
@@ -20,7 +19,6 @@ export function useExtensionRuntime(): void {
   const bridge = useBridge();
   const commandRegistry = useCommandRegistry();
   const extensionHost = useExtensionHostClient();
-  const languageRegistry = useLanguageRegistry();
   const { activeIconTheme } = useActiveIconTheme();
   const { activeColorTheme } = useActiveColorTheme();
   const systemTheme = useAtomValue(systemThemeAtom);
@@ -51,7 +49,6 @@ export function useExtensionRuntime(): void {
   const prepareExtensionRuntimeReload = useCallback(
     (mode: "hard" | "soft") => {
       clearExtensionCommandRegistrations();
-      languageRegistry.clear();
       viewerEditorRegistry.replaceExtensions([]);
       clearFsProviderCache();
       if (mode !== "hard") return;
@@ -62,7 +59,7 @@ export function useExtensionRuntime(): void {
       setProfilesLoaded(false);
       setThemesReady(false);
     },
-    [clearExtensionCommandRegistrations, clearExtensionFssLayers, languageRegistry, setAvailableProfiles, setLoadedExtensions, setProfilesLoaded, setThemesReady, viewerEditorRegistry],
+    [clearExtensionCommandRegistrations, clearExtensionFssLayers, setAvailableProfiles, setLoadedExtensions, setProfilesLoaded, setThemesReady, viewerEditorRegistry],
   );
 
   const restartExtensionRuntime = useCallback(async () => {

@@ -69,7 +69,7 @@ function entryToFsNode(entry: FsEntry, dirPath: string, languageRegistry: Return
   return createFsNode({
     name: entry.name,
     type: isDir ? "folder" : "file",
-    lang: isDir ? "" : languageRegistry.detectLanguage(entry.name),
+    lang: isDir ? "" : languageRegistry.getLanguageForFilename(entry.name),
     meta: {
       size: meta.size,
       mtimeMs: meta.mtimeMs,
@@ -227,7 +227,7 @@ export function useFileListPanel() {
               return createFsNode({
                 name: entry.name,
                 type: entry.kind === "directory" ? "folder" : "file",
-                lang: entry.kind === "file" ? languageRegistry.detectLanguage(entry.name) : "",
+                lang: entry.kind === "file" ? languageRegistry.getLanguageForFilename(entry.name) : "",
                 meta: {
                   size: entry.size ?? 0,
                   mtimeMs: entry.mtimeMs ?? 0,

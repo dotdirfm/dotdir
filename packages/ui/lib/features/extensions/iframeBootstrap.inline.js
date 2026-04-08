@@ -110,6 +110,8 @@ let hostApi = null;
 let extApi = null;
 let iframeKind = null;
 let keyDownListener = null;
+let interactPointerListener = null;
+let interactFocusListener = null;
 let cachedColorTheme = null;
 let lastFilePath = null;
 let lastLangId = null;
@@ -152,6 +154,14 @@ function cleanupIFrameState() {
     if (keyDownListener) {
       window.removeEventListener("keydown", keyDownListener, true);
       keyDownListener = null;
+    }
+    if (interactPointerListener) {
+      document.removeEventListener("pointerdown", interactPointerListener, true);
+      interactPointerListener = null;
+    }
+    if (interactFocusListener) {
+      document.removeEventListener("focusin", interactFocusListener, true);
+      interactFocusListener = null;
     }
   } catch {}
 
@@ -232,6 +242,30 @@ function createDotdirApi() {
       },
     },
   };
+}
+
+function installInteractForwarding() {
+  if (!interactPointerListener) {
+    interactPointerListener = () => {
+      postToHost({
+        type: "dotdir:iframeInteract",
+        kind: iframeKind,
+        source: "pointerdown",
+      });
+    };
+    document.addEventListener("pointerdown", interactPointerListener, true);
+  }
+
+  if (!interactFocusListener) {
+    interactFocusListener = () => {
+      postToHost({
+        type: "dotdir:iframeInteract",
+        kind: iframeKind,
+        source: "focusin",
+      });
+    };
+    document.addEventListener("focusin", interactFocusListener, true);
+  }
 }
 
 window.addEventListener("message", async (e) => {
@@ -320,6 +354,8 @@ window.addEventListener("message", async (e) => {
           };
           window.addEventListener("keydown", keyDownListener, true);
         }
+
+        installInteractForwarding();
 
         await mountWithProps(data.props);
         postToHost({ type: "dotdir:ready" });

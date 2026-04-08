@@ -64,7 +64,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     };
   }, [commandRegistry, focusContext]);
 
-  const { refreshAll } = useActivePanelNavigation();
+  const { refreshAll, focusActiveFileList } = useActivePanelNavigation();
   const { handleCopy, handleMove, handleMoveToTrash, handlePermanentDelete, handleRename } = useFileOperations();
   const fileOperationHandlers = useMemo(
     () => ({
@@ -136,6 +136,9 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
 
     return focusContext.registerAdapter("panel", {
       focus() {
+        focusActiveFileList();
+        const active = document.activeElement as HTMLElement | null;
+        if (active && root.contains(active) && active !== root) return;
         try {
           root.focus({ preventScroll: true });
         } catch {
@@ -146,7 +149,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
         return node instanceof Node ? root.contains(node) : false;
       },
     });
-  }, [focusContext]);
+  }, [focusActiveFileList, focusContext]);
 
   useEffect(() => {
     if (bridge.onReconnect) {

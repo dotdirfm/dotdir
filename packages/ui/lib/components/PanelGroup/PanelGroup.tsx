@@ -575,7 +575,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
               onInteract={() => {
                 setActivePanel(side);
                 setActiveTabId(tab.id);
-                focusContext.request("editor");
+                focusContext.request("panel");
               }}
               onClose={() => handleCloseTab(tab.id)}
               onDirtyChange={(dirty) => {
@@ -623,7 +623,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
               onInteract={() => {
                 setActivePanel(side);
                 setActiveTabId(tab.id);
-                focusContext.request("viewer");
+                focusContext.request("panel");
               }}
               onClose={() => handleCloseTab(tab.id)}
               onTabBackToPanel={

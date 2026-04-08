@@ -10,13 +10,11 @@ import { useCommandRegistry } from "@/features/commands/commands";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
-import { extensionGrammarRefs, extensionLanguages } from "@/features/extensions/types";
-import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { readFileText as readFileTextFromFs } from "@/features/file-system/fs";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
-import { useActivePanelNavigation } from "@/features/panels/panelControllers";
+import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { getActiveColorThemeData, onColorThemeChange } from "@/features/themes/vscodeColorTheme";
-import { useFocusContext } from "@/focusContext";
+import { useFocusContext, useManagedFocusLayer } from "@/focusContext";
 import styles from "@/styles/viewers.module.css";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
@@ -32,11 +30,6 @@ interface ExtensionContainerProps {
   active?: boolean;
   className?: string;
   style?: React.CSSProperties;
-}
-
-interface ViewerContainerProps extends ExtensionContainerProps {
-  kind: "viewer";
-  props: ViewerProps;
   onClose: () => void;
   onExecuteCommand?: (command: string, args?: unknown) => Promise<unknown>;
   inlineFocusMode?: "panel-first" | "viewer-first";
@@ -44,12 +37,15 @@ interface ViewerContainerProps extends ExtensionContainerProps {
   onInteract?: () => void;
 }
 
+interface ViewerContainerProps extends ExtensionContainerProps {
+  kind: "viewer";
+  props: ViewerProps;
+}
+
 interface EditorContainerProps extends ExtensionContainerProps {
   kind: "editor";
   props: EditorProps;
-  onClose: () => void;
   onDirtyChange?: (dirty: boolean) => void;
-  onInteract?: () => void;
 }
 
 export type ContainerProps = ViewerContainerProps | EditorContainerProps;
@@ -89,19 +85,19 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   onCloseRef.current = onClose;
   const onInteractRef = useRef(containerProps.onInteract);
   onInteractRef.current = containerProps.onInteract;
-  const isInlineViewer = kind === "viewer" && !!(props as ViewerProps).inline;
-  const inlineFocusMode = containerProps.kind === "viewer" ? (containerProps.inlineFocusMode ?? "panel-first") : "panel-first";
-  const shouldAutoFocusIframe = kind === "viewer" && !isInlineViewer;
+  const isInline = !!props.inline;
+  const shouldAutoFocusIframe = !isInline;
+  const inlineFocusMode = containerProps.inlineFocusMode ?? "panel-first";
   const panelFocusElRef = useRef<HTMLElement | null>(null);
   const inlineIframeFocusedRef = useRef(false);
   const autoFocusOnceRef = useRef(false);
 
   useEffect(() => {
-    if (!isInlineViewer) return;
+    if (!isInline) return;
     panelFocusElRef.current = document.activeElement as HTMLElement | null;
     inlineIframeFocusedRef.current = inlineFocusMode === "viewer-first";
     autoFocusOnceRef.current = false;
-  }, [focusContext, inlineFocusMode, isInlineViewer]);
+  }, [focusContext, inlineFocusMode, isInline]);
 
   // For non-preview viewer/editor, focus iframe automatically when it appears.
   useEffect(() => {
@@ -127,7 +123,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   // First Tab: focus preview iframe + route keybindings via focusViewer.
   // Second Tab: return focus to the panel + route keybindings back.
   useEffect(() => {
-    if (!isInlineViewer) return;
+    if (!isInline) return;
     if (inlineFocusMode !== "panel-first") return;
 
     const shouldIgnoreTarget = (t: EventTarget | null) => {
@@ -169,7 +165,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
 
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [focusContext, inlineFocusMode, isInlineViewer]);
+  }, [focusContext, inlineFocusMode, isInline]);
 
   // Single open file descriptor per container (viewer/editor).
   // Bound to the currently viewed/edited file and closed on unmount or when file changes.
@@ -497,13 +493,15 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           setError(String(data.message ?? "Extension error"));
           setLoading(false);
         }
+      } else if (data.type === "dotdir:iframeInteract") {
+        onInteractRef.current?.();
       } else if (data.type === "dotdir:iframeKeyDown") {
         try {
           const key = String(data.key ?? "").toLowerCase();
           // Inline/preview viewer tab switching:
           // - Tab while panel-focused (host listener) moves focus into iframe (first Tab)
           // - Tab while iframe-focused (message handler) moves focus back to panel (second Tab)
-          if (isInlineViewer && key === "tab" && inlineIframeFocusedRef.current) {
+          if (isInline && key === "tab" && inlineIframeFocusedRef.current) {
             inlineIframeFocusedRef.current = false;
             const tabBackHandler =
               containerProps.kind === "viewer" ? (containerProps as ViewerContainerProps & { onTabBackToPanel?: () => void }).onTabBackToPanel : undefined;
@@ -525,7 +523,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
           }
 
           // When inline preview isn't focused, ignore forwarded keys from the iframe.
-          if (isInlineViewer && !inlineIframeFocusedRef.current) return;
+          if (isInline && !inlineIframeFocusedRef.current) return;
 
           const synthetic = {
             key: data.key,
@@ -652,8 +650,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         currentFileRef.current = null;
       }
     };
-  // `props` updates are sent via postMessage to avoid unnecessary iframe remounts.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `props` updates are sent via postMessage to avoid unnecessary iframe remounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extensionDirPath, entry, kind, buildHostApi, getThemeVars]);
 
   // Re-mount when props change (e.g. file path). Skip when inactive.
@@ -760,6 +758,16 @@ interface ViewerContainerWrapperProps {
   onInteract?: () => void;
 }
 
+interface ExtensionShellLayoutProps {
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  inline?: boolean;
+  visible: boolean;
+  inlineClassName: string;
+  overlayClassName: string;
+  frameClassName: string;
+  children: React.ReactNode;
+}
+
 function focusIframeWithin(root: HTMLElement | null): void {
   if (!root) return;
   const iframe = root.querySelector("iframe");
@@ -770,6 +778,82 @@ function focusIframeWithin(root: HTMLElement | null): void {
   } catch {
     // ignore
   }
+}
+
+function useExtensionSurfaceFocus({
+  focusLayer,
+  inline,
+  isVisible,
+  isEditableTarget,
+}: {
+  focusLayer: "viewer" | "editor";
+  inline?: boolean;
+  isVisible: boolean;
+  isEditableTarget?: (node: EventTarget | null) => boolean;
+}) {
+  const focusContext = useFocusContext();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const restorePanelFocus = useCallback(() => {
+    focusContext.restore();
+  }, [focusContext]);
+
+  useManagedFocusLayer(focusLayer, !inline && isVisible);
+
+  useEffect(() => {
+    if (!isVisible) return;
+    const root = containerRef.current;
+    if (!root) return;
+    return focusContext.registerAdapter(focusLayer, {
+      focus() {
+        focusIframeWithin(root);
+      },
+      contains(node) {
+        return node instanceof Node ? root.contains(node) : false;
+      },
+      isEditableTarget,
+    });
+  }, [focusContext, focusLayer, isEditableTarget, isVisible]);
+
+  useEffect(() => {
+    if (!inline) return;
+    if (isVisible) return;
+    if (focusContext.is(focusLayer)) {
+      focusContext.request("panel");
+    }
+  }, [focusContext, focusLayer, inline, isVisible]);
+
+  return { containerRef, restorePanelFocus };
+}
+
+function ExtensionShellLayout({
+  containerRef,
+  inline,
+  visible,
+  inlineClassName,
+  overlayClassName,
+  frameClassName,
+  children,
+}: ExtensionShellLayoutProps) {
+  if (inline) {
+    return (
+      <div
+        ref={containerRef}
+        className={inlineClassName}
+        style={{ display: "flex", flexDirection: "column", height: "100%", padding: 0 }}
+      >
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className={overlayClassName} style={{ display: visible ? "flex" : "none" }}>
+      <div className={frameClassName} style={{ display: "flex", flexDirection: "column", padding: 0 }}>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export function ViewerContainer({
@@ -786,89 +870,17 @@ export function ViewerContainer({
   onTabBackToPanel,
   onInteract,
 }: ViewerContainerWrapperProps) {
-  const focusContext = useFocusContext();
-  const { focusActiveFileList } = useActivePanelNavigation();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const focusPushedRef = useRef(false);
-  const restoreFocusElRef = useRef<HTMLElement | null>(null);
   const isVisible = visible ?? true;
-  const restorePanelFocus = useCallback(() => {
-    focusContext.request("panel");
-    const attemptFocus = (attempt = 0) => {
-      const restoreEl = restoreFocusElRef.current;
-      if (restoreEl && restoreEl.isConnected) {
-        try {
-          restoreEl.focus({ preventScroll: true });
-          return;
-        } catch {
-          try {
-            restoreEl.focus();
-            return;
-          } catch {
-            // ignore and fall through
-          }
-        }
-      }
-      focusActiveFileList();
-      if (attempt < 2) {
-        requestAnimationFrame(() => attemptFocus(attempt + 1));
-      }
-    };
-    requestAnimationFrame(() => attemptFocus());
-  }, [focusActiveFileList, focusContext]);
+  const focusContext = useFocusContext();
+  const { containerRef, restorePanelFocus } = useExtensionSurfaceFocus({
+    focusLayer: "viewer",
+    inline,
+    isVisible,
+  });
   const handleClose = useCallback(() => {
     onClose();
     restorePanelFocus();
   }, [onClose, restorePanelFocus]);
-
-  useEffect(() => {
-    if (!isVisible) return;
-    const root = containerRef.current;
-    if (!root) return;
-    return focusContext.registerAdapter("viewer", {
-      focus() {
-        focusIframeWithin(root);
-      },
-      contains(node) {
-        return node instanceof Node ? root.contains(node) : false;
-      },
-    });
-  }, [focusContext, isVisible]);
-
-  // Manage focus context for non-inline overlay mode.
-  useEffect(() => {
-    if (inline) return;
-    if (isVisible) {
-      if (!focusPushedRef.current) {
-        restoreFocusElRef.current = document.activeElement as HTMLElement | null;
-        focusContext.push("viewer");
-        focusPushedRef.current = true;
-      }
-    } else {
-      if (focusPushedRef.current) {
-        try {
-          focusContext.pop("viewer");
-        } catch {
-          /* ignore */
-        }
-        focusPushedRef.current = false;
-      }
-    }
-  }, [focusContext, inline, isVisible]);
-
-  // Cleanup focus context on unmount.
-  useEffect(() => {
-    return () => {
-      if (focusPushedRef.current) {
-        try {
-          focusContext.pop("viewer");
-        } catch {
-          /* ignore */
-        }
-        focusPushedRef.current = false;
-      }
-    };
-  }, [focusContext]);
 
   // Keep props identity stable across app rerenders (e.g. opening command palette),
   // so the iframe doesn't get a `dotdir:update` and remount/reload the extension.
@@ -952,26 +964,18 @@ export function ViewerContainer({
       style={{ width: "100%", height: "100%" }}
     />
   );
-
-  if (inline) {
-    return (
-      <div
-        ref={containerRef}
-        className={`${styles["file-viewer"]} ${styles["file-viewer-inline"]}`}
-        style={{ display: "flex", flexDirection: "column", height: "100%" }}
-      >
-        <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
-      </div>
-    );
-  }
-
   return (
-    <div ref={containerRef} className={styles["file-viewer-overlay"]} style={{ display: isVisible ? "flex" : "none" }}>
-      <div className={styles["file-viewer"]} style={{ display: "flex", flexDirection: "column", padding: 0 }}>
-        {toolbar}
-        <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
-      </div>
-    </div>
+    <ExtensionShellLayout
+      containerRef={containerRef}
+      inline={inline}
+      visible={isVisible}
+      inlineClassName={styles["file-viewer-inline"]}
+      overlayClassName={styles["file-viewer-overlay"]}
+      frameClassName={styles["file-viewer"]}
+    >
+      {!inline && toolbar}
+      <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
+    </ExtensionShellLayout>
   );
 }
 
@@ -990,47 +994,34 @@ interface EditorContainerWrapperProps {
   onInteract?: () => void;
 }
 
-export function EditorContainer({ extensionDirPath, entry, filePath, fileName, langId, inline, visible, onClose, onDirtyChange, onInteract }: EditorContainerWrapperProps) {
-  const focusContext = useFocusContext();
-  const { focusActiveFileList } = useActivePanelNavigation();
-  const loadedExtensions = useLoadedExtensions();
-
-  const languages = loadedExtensions.flatMap((e) => extensionLanguages(e));
-  const allGrammarRefs = loadedExtensions.flatMap((e) => extensionGrammarRefs(e));
-  const grammars = allGrammarRefs.map((gr) => ({
-    contribution: gr.contribution,
-    path: gr.path,
-  }));
-
-  const containerRef = useRef<HTMLDivElement>(null);
+export function EditorContainer({
+  extensionDirPath,
+  entry,
+  filePath,
+  fileName,
+  langId,
+  inline,
+  visible,
+  onClose,
+  onDirtyChange,
+  onInteract,
+}: EditorContainerWrapperProps) {
+  const languageRegistry = useLanguageRegistry();
+  const languages = languageRegistry.languages;
+  const grammars = languageRegistry.grammarRefs;
   const [currentLangId, setCurrentLangId] = useState(langId);
-  const focusPushedRef = useRef(false);
-  const restoreFocusElRef = useRef<HTMLElement | null>(null);
   const isVisible = visible ?? true;
-  const restorePanelFocus = useCallback(() => {
-    focusContext.request("panel");
-    const attemptFocus = (attempt = 0) => {
-      const restoreEl = restoreFocusElRef.current;
-      if (restoreEl && restoreEl.isConnected) {
-        try {
-          restoreEl.focus({ preventScroll: true });
-          return;
-        } catch {
-          try {
-            restoreEl.focus();
-            return;
-          } catch {
-            // ignore and fall through
-          }
-        }
-      }
-      focusActiveFileList();
-      if (attempt < 2) {
-        requestAnimationFrame(() => attemptFocus(attempt + 1));
-      }
-    };
-    requestAnimationFrame(() => attemptFocus());
-  }, [focusActiveFileList, focusContext]);
+  const { containerRef, restorePanelFocus } = useExtensionSurfaceFocus({
+    focusLayer: "editor",
+    inline,
+    isVisible,
+    isEditableTarget(node) {
+      const el = node as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName?.toLowerCase();
+      return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
+    },
+  });
   const handleClose = useCallback(() => {
     onClose();
     restorePanelFocus();
@@ -1039,72 +1030,6 @@ export function EditorContainer({ extensionDirPath, entry, filePath, fileName, l
   useEffect(() => {
     setCurrentLangId(langId);
   }, [langId]);
-
-  useEffect(() => {
-    if (!isVisible) return;
-    const root = containerRef.current;
-    if (!root) return;
-    return focusContext.registerAdapter("editor", {
-      focus() {
-        focusIframeWithin(root);
-      },
-      contains(node) {
-        return node instanceof Node ? root.contains(node) : false;
-      },
-      isEditableTarget(node) {
-        const el = node as HTMLElement | null;
-        if (!el) return false;
-        const tag = el.tagName?.toLowerCase();
-        return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
-      },
-    });
-  }, [focusContext, isVisible]);
-
-  // Manage focus context for overlay mode.
-  useEffect(() => {
-    if (inline) return;
-    if (isVisible) {
-      if (!focusPushedRef.current) {
-        restoreFocusElRef.current = document.activeElement as HTMLElement | null;
-        focusContext.push("editor");
-        focusPushedRef.current = true;
-      }
-    } else {
-      if (focusPushedRef.current) {
-        try {
-          focusContext.pop("editor");
-        } catch {
-          /* ignore */
-        }
-        focusPushedRef.current = false;
-      }
-    }
-  }, [focusContext, inline, isVisible]);
-
-  // Cleanup focus context on unmount.
-  useEffect(() => {
-    return () => {
-      if (focusPushedRef.current) {
-        try {
-          focusContext.pop("editor");
-        } catch {
-          /* ignore */
-        }
-        focusPushedRef.current = false;
-      }
-      if (inline && focusContext.is("editor")) {
-        focusContext.request("panel");
-      }
-    };
-  }, [focusContext, inline]);
-
-  useEffect(() => {
-    if (!inline) return;
-    if (isVisible) return;
-    if (focusContext.is("editor")) {
-      focusContext.request("panel");
-    }
-  }, [focusContext, inline, isVisible]);
 
   // Keep props identity stable to avoid unnecessary `dotdir:update`.
   const editorProps: EditorProps = useMemo(
@@ -1190,35 +1115,28 @@ export function EditorContainer({ extensionDirPath, entry, filePath, fileName, l
         <ExtensionContainer
           kind="editor"
           extensionDirPath={extensionDirPath}
-        entry={entry}
-        props={editorProps}
-        active={isVisible}
-        onClose={handleClose}
-        onDirtyChange={onDirtyChange}
-        onInteract={onInteract}
-        style={{ width: "100%", height: "100%" }}
-      />
+          entry={entry}
+          props={editorProps}
+          active={isVisible}
+          onClose={handleClose}
+          onDirtyChange={onDirtyChange}
+          onInteract={onInteract}
+          style={{ width: "100%", height: "100%" }}
+        />
       </div>
     </>
   );
 
-  if (inline) {
-    return (
-      <div
-        ref={containerRef}
-        className={`${styles["file-editor"]} ${styles["file-viewer-inline"]}`}
-        style={{ display: "flex", flexDirection: "column", height: "100%", padding: 0 }}
-      >
-        {content}
-      </div>
-    );
-  }
-
   return (
-    <div ref={containerRef} className={styles["file-editor-overlay"]} style={{ display: isVisible ? "flex" : "none" }}>
-      <div className={styles["file-editor"]} style={{ display: "flex", flexDirection: "column", padding: 0 }}>
-        {content}
-      </div>
-    </div>
+    <ExtensionShellLayout
+      containerRef={containerRef}
+      inline={inline}
+      visible={isVisible}
+      inlineClassName={styles["file-viewer-inline"]}
+      overlayClassName={styles["file-editor-overlay"]}
+      frameClassName={styles["file-editor"]}
+    >
+      {content}
+    </ExtensionShellLayout>
   );
 }

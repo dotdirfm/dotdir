@@ -739,7 +739,8 @@ async fn vfs_handler(Path(path): Path<String>) -> Response {
             None => return Response::builder().status(StatusCode::BAD_REQUEST).body(Body::empty()).unwrap(),
         };
 
-        let bootstrap_js = include_str!("vfs_virtual/inline_bootstrap_postmsg.js"); // postMessage RPC bootstrap
+        let bootstrap_js =
+            include_str!("../../packages/ui/lib/features/extensions/iframeBootstrap.inline.js"); // postMessage RPC bootstrap
         let html = r#"<!doctype html>
 <html>
   <head>

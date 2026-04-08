@@ -1,6 +1,5 @@
 import { commandPaletteOpenAtom, panelsVisibleAtom, terminalFocusRequestKeyAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
-import type { LanguageOption } from "@/dialogs/OpenCreateFileDialog";
 import {
   activePanelSideAtom,
   activeTabAtom,
@@ -17,7 +16,6 @@ import { useCommandLine } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
 import { runCommandSequence, type RunCommandsArgs } from "@/features/commands/runCommands";
-import { extensionLanguages } from "@/features/extensions/types";
 import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
@@ -261,19 +259,9 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         if (activeTabRef.current?.type !== "filelist") return;
         const currentPath = activeTabRef.current.path;
         const { onOpenCreateFileConfirm } = depsRef.current;
-        const langList = loadedExtensionsRef.current.flatMap((e) => extensionLanguages(e));
-        const seen = new Set<string>();
-        const languages: LanguageOption[] = langList
-          .filter((l) => {
-            if (seen.has(l.id)) return false;
-            seen.add(l.id);
-            return true;
-          })
-          .map((l) => ({ id: l.id, label: l.aliases?.[0] ?? l.id }));
         showDialogRef.current({
           type: "openCreateFile",
           currentPath,
-          languages,
           onConfirm: onOpenCreateFileConfirm,
           onCancel: () => {},
         });

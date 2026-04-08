@@ -12,7 +12,6 @@ import { HotkeyProvider } from "./dialogHotkeys";
 import { MakeFolderDialog, type MakeFolderResult } from "./MakeFolderDialog";
 import { ModalDialog } from "./ModalDialog";
 import { MoveConfigDialog } from "./MoveConfigDialog";
-import type { LanguageOption } from "./OpenCreateFileDialog";
 import { OpenCreateFileDialog } from "./OpenCreateFileDialog";
 import { RenameDialog } from "./RenameDialog";
 
@@ -33,7 +32,6 @@ export type DialogSpec =
   | {
       type: "openCreateFile";
       currentPath: string;
-      languages: LanguageOption[];
       onConfirm: (filePath: string, fileName: string, langId: string) => void;
       onCancel: () => void;
     }
@@ -231,7 +229,6 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
       return (
         <OpenCreateFileDialog
           currentPath={dialog.currentPath}
-          languages={dialog.languages}
           onConfirm={(path, name, langId) => {
             dialog.onConfirm(path, name, langId);
             ctx!.closeDialog();

@@ -37,7 +37,6 @@ function normalizeLoadedExtensionPayload(raw: unknown): LoadedExtension {
     contributions: {
       languages: value.languages as LoadedExtension["contributions"]["languages"],
       grammarRefs: value.grammarRefs as LoadedExtension["contributions"]["grammarRefs"],
-      grammars: value.grammars as LoadedExtension["contributions"]["grammars"],
       commands: value.commands as LoadedExtension["contributions"]["commands"],
       keybindings: value.keybindings as LoadedExtension["contributions"]["keybindings"],
       viewers: value.viewers as LoadedExtension["contributions"]["viewers"],

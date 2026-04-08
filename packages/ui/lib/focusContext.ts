@@ -1,4 +1,4 @@
-import { createContext, createElement, useContext, useRef, type ReactNode } from "react";
+import { createContext, createElement, useContext, useEffect, useRef, type ReactNode } from "react";
 
 export type FocusLayer =
   | "panel"
@@ -193,4 +193,29 @@ export function useFocusContext(): FocusContextManager {
   const value = useContext(FocusContextReact);
   if (!value) throw new Error("useFocusContext must be used within FocusProvider");
   return value;
+}
+
+export function useManagedFocusLayer(layer: FocusLayer, active = true): void {
+  const focusContext = useFocusContext();
+  const previousFocusedRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    previousFocusedRef.current = document.activeElement as HTMLElement | null;
+    focusContext.push(layer);
+    const frame = requestAnimationFrame(() => {
+      focusContext.focusCurrent();
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      focusContext.pop(layer);
+      requestAnimationFrame(() => {
+        focusContext.focusCurrent();
+        const activeElement = document.activeElement as HTMLElement | null;
+        if (activeElement && activeElement !== document.body) return;
+        previousFocusedRef.current?.focus?.();
+      });
+    };
+  }, [active, focusContext, layer]);
 }

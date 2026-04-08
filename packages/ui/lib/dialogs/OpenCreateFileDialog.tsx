@@ -6,19 +6,13 @@ import { SmartLabel } from "./dialogHotkeys";
 import styles from "./dialogs.module.css";
 import { OverlayDialog } from "./OverlayDialog";
 
-export interface LanguageOption {
-  id: string;
-  label: string;
-}
-
 export interface OpenCreateFileDialogProps {
   currentPath: string;
-  languages: LanguageOption[];
   onConfirm: (filePath: string, fileName: string, langId: string) => void;
   onCancel: () => void;
 }
 
-export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCancel }: OpenCreateFileDialogProps) {
+export function OpenCreateFileDialog({ currentPath, onConfirm, onCancel }: OpenCreateFileDialogProps) {
   const languageRegistry = useLanguageRegistry();
   const inputRef = useRef<HTMLInputElement>(null);
   const [filename, setFilename] = useState("");
@@ -76,7 +70,7 @@ export function OpenCreateFileDialog({ currentPath, languages, onConfirm, onCanc
               }}
             >
               <option value="plaintext">Plain Text</option>
-              {languages.map((lang) => (
+              {languageRegistry.options.map((lang) => (
                 <option key={lang.id} value={lang.id}>
                   {lang.label}
                 </option>

@@ -1,6 +1,5 @@
 import { CommandRegistryProvider } from "@/features/commands/commands";
 import { FileSystemWatchRegistryProvider } from "@/features/file-system/fs";
-import { LanguageRegistryProvider } from "@/features/languages/languageRegistry";
 import { FocusProvider } from "@/focusContext";
 import { InteractionProvider } from "@/interactionContext";
 import { ViewerEditorRegistryProvider } from "@/viewerEditorRegistry";
@@ -12,9 +11,7 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
       <CommandRegistryProvider>
         <FocusProvider>
           <InteractionProvider>
-            <LanguageRegistryProvider>
-              <ViewerEditorRegistryProvider>{children}</ViewerEditorRegistryProvider>
-            </LanguageRegistryProvider>
+            <ViewerEditorRegistryProvider>{children}</ViewerEditorRegistryProvider>
           </InteractionProvider>
         </FocusProvider>
       </CommandRegistryProvider>

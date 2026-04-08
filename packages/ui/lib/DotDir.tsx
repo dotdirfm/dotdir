@@ -34,6 +34,7 @@ export type {
 } from "@/features/bridge";
 export { basename, dirname, join, normalizePath } from "./utils/path";
 export { defaultResolveVfsUrl };
+export { extensionIframeBootstrapSource } from "./features/extensions/iframeBootstrap";
 export type { AppHandle, VfsUrlKind, VfsUrlResolver };
 
 export type DotDirProps = {

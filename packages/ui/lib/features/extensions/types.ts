@@ -216,8 +216,6 @@ export interface LoadedExtensionContributions {
   languages?: ExtensionLanguage[];
   /** Grammar contributions (lazy JSON loading for editor). */
   grammarRefs?: LoadedGrammarRef[];
-  /** Previously loaded grammars (kept for compatibility). */
-  grammars?: LoadedGrammar[];
   /** Command contributions from this extension */
   commands?: ExtensionCommand[];
   /** Keybinding contributions from this extension */

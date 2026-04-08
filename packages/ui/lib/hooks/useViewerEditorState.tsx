@@ -3,6 +3,7 @@ import { activePanelSideAtom, leftActiveTabAtom, leftActiveTabIdAtom, leftTabsAt
 import { useBridge } from "@/features/bridge/useBridge";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { useShowHidden } from "@/features/settings/useUserSettings";
+import { useFocusContext } from "@/focusContext";
 import { CONTAINER_SEP } from "@/utils/containerPath";
 import { isMediaFile } from "@/utils/mediaFiles";
 import { basename } from "@/utils/path";
@@ -24,6 +25,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   const viewerRegistry = useViewerRegistry();
   const editorRegistry = useEditorRegistry();
   const fsProviderRegistry = useFsProviderRegistry();
+  const focusContext = useFocusContext();
   const { navigateTo } = useActivePanelNavigation();
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: "left" | "right" } | null>(null);
   const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
@@ -84,6 +86,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
 
   const requestCloseEditor = useCallback(() => {
     if (!editorDirty || !editorFile) {
+      focusContext.restore();
       setEditorDirty(false);
       setEditorFile(null);
       return;
@@ -97,13 +100,14 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
         {
           label: "Discard",
           onClick: () => {
+            focusContext.restore();
             setEditorDirty(false);
             setEditorFile(null);
           },
         },
       ],
     });
-  }, [editorDirty, editorFile, setEditorFile, showDialog]);
+  }, [editorDirty, editorFile, focusContext, setEditorFile, showDialog]);
 
   const viewerPanelEntries = useMemo(() => {
     if (!viewerFile) return [];

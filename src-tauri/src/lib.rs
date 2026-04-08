@@ -976,7 +976,8 @@ fn vfs_virtual_response(path: &str) -> Option<tauri::http::Response<Vec<u8>>> {
     let meta_is_dir = fs::metadata(&os_path).map(|m| m.is_dir()).unwrap_or(false);
 
     if wants_index || meta_is_dir {
-        let bootstrap_js = include_str!("vfs_virtual/inline_bootstrap_postmsg.js"); // postMessage RPC bootstrap
+        let bootstrap_js =
+            include_str!("../../packages/ui/lib/features/extensions/iframeBootstrap.inline.js"); // postMessage RPC bootstrap
 
         let html = r#"<!doctype html>
 <html>

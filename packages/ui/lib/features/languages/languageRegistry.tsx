@@ -6,68 +6,25 @@
  * Syntax highlighting and tokenization are handled inside editor extensions.
  */
 
-import { createContext, createElement, useContext, useRef, type ReactNode } from "react";
-import { detectLang as detectLangFallback } from "./langDetect";
+import { extensionGrammarRefs, extensionLanguages, type ExtensionLanguage, type LoadedGrammarRef } from "@/features/extensions/types";
+import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
+import { useMemo } from "react";
 
-export interface LanguageContribution {
+export interface LanguageOption {
   id: string;
-  aliases?: string[];
-  extensions?: string[];
-  filenames?: string[];
-}
-
-export interface GrammarContribution {
-  language: string;
-  scopeName: string;
-  path: string;
-  embeddedLanguages?: Record<string, string>;
-}
-
-export interface GrammarData {
-  contribution: GrammarContribution;
-  content: object;
+  label: string;
 }
 
 export class LanguageRegistry {
-  private grammarContents = new Map<string, object>();
-  private languageToScope = new Map<string, string>();
-  private extToLang = new Map<string, string>();
-  private filenameToLang = new Map<string, string>();
+  constructor(
+    private extToLang: ReadonlyMap<string, string>,
+    private filenameToLang: ReadonlyMap<string, string>,
+    readonly options: LanguageOption[],
+    readonly languages: ExtensionLanguage[],
+    readonly grammarRefs: LoadedGrammarRef[],
+  ) {}
 
-  registerLanguage(lang: LanguageContribution): void {
-    if (lang.extensions) {
-      for (const ext of lang.extensions) {
-        this.extToLang.set(ext.toLowerCase(), lang.id);
-      }
-    }
-    if (lang.filenames) {
-      for (const fn of lang.filenames) {
-        this.filenameToLang.set(fn, lang.id);
-        this.filenameToLang.set(fn.toLowerCase(), lang.id);
-      }
-    }
-  }
-
-  registerGrammar(data: GrammarData): void {
-    const { contribution, content } = data;
-    this.grammarContents.set(contribution.scopeName, content);
-    if (contribution.language) {
-      this.languageToScope.set(contribution.language, contribution.scopeName);
-    }
-  }
-
-  clear(): void {
-    this.grammarContents.clear();
-    this.languageToScope.clear();
-    this.extToLang.clear();
-    this.filenameToLang.clear();
-  }
-
-  hasGrammar(langId: string): boolean {
-    return this.languageToScope.has(langId);
-  }
-
-  detectLanguage(filename: string): string {
+  getLanguageForFilename(filename: string): string {
     const byName = this.filenameToLang.get(filename) ?? this.filenameToLang.get(filename.toLowerCase());
     if (byName) return byName;
     const dotIndex = filename.lastIndexOf(".");
@@ -76,28 +33,46 @@ export class LanguageRegistry {
       const byExt = this.extToLang.get(ext);
       if (byExt) return byExt;
     }
-    return detectLangFallback(filename);
+    return "plaintext";
   }
-
-  getLanguageForFilename(filename: string): string {
-    return this.detectLanguage(filename) || "plaintext";
-  }
-}
-
-const LanguageRegistryContext = createContext<LanguageRegistry | null>(null);
-
-export function LanguageRegistryProvider({ children }: { children: ReactNode }) {
-  const registryRef = useRef<LanguageRegistry | null>(null);
-  if (!registryRef.current) {
-    registryRef.current = new LanguageRegistry();
-  }
-  return createElement(LanguageRegistryContext.Provider, { value: registryRef.current }, children);
 }
 
 export function useLanguageRegistry(): LanguageRegistry {
-  const value = useContext(LanguageRegistryContext);
-  if (!value) {
-    throw new Error("useLanguageRegistry must be used within LanguageRegistryProvider");
-  }
-  return value;
+  const loadedExtensions = useLoadedExtensions();
+
+  return useMemo(() => {
+    const extToLang = new Map<string, string>();
+    const filenameToLang = new Map<string, string>();
+    const seen = new Set<string>();
+    const options: LanguageOption[] = [];
+    const languages: ExtensionLanguage[] = [];
+    const grammarRefs: LoadedGrammarRef[] = [];
+
+    for (const extension of loadedExtensions) {
+      grammarRefs.push(...extensionGrammarRefs(extension));
+      for (const language of extensionLanguages(extension)) {
+        languages.push(language);
+        if (!seen.has(language.id)) {
+          seen.add(language.id);
+          options.push({
+            id: language.id,
+            label: language.aliases?.[0] ?? language.id,
+          });
+        }
+        if (language.extensions) {
+          for (const ext of language.extensions) {
+            extToLang.set(ext.toLowerCase(), language.id);
+          }
+        }
+        if (language.filenames) {
+          for (const filename of language.filenames) {
+            filenameToLang.set(filename, language.id);
+            filenameToLang.set(filename.toLowerCase(), language.id);
+          }
+        }
+      }
+    }
+
+    return new LanguageRegistry(extToLang, filenameToLang, options, languages, grammarRefs);
+  }, [loadedExtensions]);
 }

@@ -11,7 +11,7 @@ export default tseslint.config(
       "eslint.config.mjs",
       "src-tauri/target/**",
       "src-tauri/gen/**",
-      "src-tauri/src/vfs_virtual/inline_bootstrap_postmsg.js",
+      "packages/ui/lib/features/extensions/iframeBootstrap.inline.js",
     ],
   },
   js.configs.recommended,

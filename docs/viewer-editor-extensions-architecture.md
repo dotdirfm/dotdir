@@ -108,7 +108,7 @@ Viewer/editor UI runs in an **iframe**. The host and the iframe communicate via 
 Extension UI is loaded via our stateless VFS mount:
 
 1. The host sets the iframe `src` to `vfsUrl('/_ext/<abs extension dir>/')` (or the equivalent for the runtime).
-2. The VFS response returns a generated `index.html` that inlines the iframe bootstrap (`inline_bootstrap_postmsg.js`).
+2. The VFS response returns a generated `index.html` that inlines the shared iframe bootstrap from `packages/ui/lib/features/extensions/iframeBootstrap.inline.js`.
 3. The host then sends `dotdir:init` with the extension `entryUrl`.
 4. The iframe bootstrap creates a `<script src="entryUrl">` tag to load the extension entry JS, then calls `api.mount(...)`.
 
@@ -118,7 +118,7 @@ Extension UI is loaded via our stateless VFS mount:
 
 We use a lightweight message protocol between host and iframe:
 
-1. The iframe bootstrap installs a `message` listener and immediately notifies the host via `type: "dotdir:bootstrap-ready"`.
+1. The shared iframe bootstrap installs a `message` listener and immediately notifies the host via `type: "dotdir:bootstrap-ready"`.
 2. The host responds by sending `type: "dotdir:init"` with `{ kind, entryUrl, props, themeVars, colorTheme }`.
 3. The iframe loads the extension entry script (`entryUrl`), receives the extension API through `window.__dotdirHostReady(api)`, then calls `api.mount(root, hostApi, props)`.
 4. Subsequent host updates are sent as `type: "dotdir:update"`; cleanup as `type: "dotdir:dispose"`.

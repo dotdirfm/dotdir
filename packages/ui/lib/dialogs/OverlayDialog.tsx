@@ -1,6 +1,6 @@
 import { cx } from "@/utils/cssModules";
 import { useEffect, useRef } from "react";
-import { type FocusLayer, useFocusContext } from "@/focusContext";
+import { type FocusLayer, useFocusContext, useManagedFocusLayer } from "@/focusContext";
 import styles from "./dialogs.module.css";
 
 type Placement = "center" | "top";
@@ -39,6 +39,7 @@ export function OverlayDialog({
 }: OverlayDialogProps) {
   const focusContext = useFocusContext();
   const containerRef = useRef<HTMLDivElement>(null);
+  useManagedFocusLayer(focusLayer);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -65,25 +66,6 @@ export function OverlayDialog({
       allowCommandRouting,
     });
   }, [allowCommandRouting, focusContext, focusLayer, initialFocusRef]);
-
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    focusContext.push(focusLayer);
-    const frame = requestAnimationFrame(() => {
-      focusContext.focusCurrent();
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      focusContext.pop(focusLayer);
-      requestAnimationFrame(() => {
-        if (focusContext.is("panel")) {
-          focusContext.focusCurrent();
-          return;
-        }
-        previous?.focus?.();
-      });
-    };
-  }, [focusContext, focusLayer, initialFocusRef]);
 
   const handleKeyDownCapture: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
     onKeyDown?.(e);

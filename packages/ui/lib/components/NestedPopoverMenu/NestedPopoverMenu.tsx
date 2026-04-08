@@ -1,4 +1,4 @@
-import { useFocusContext } from "@/focusContext";
+import { useFocusContext, useManagedFocusLayer } from "@/focusContext";
 import { useInteractionContext, type InteractionIntent } from "@/interactionContext";
 import { cx } from "@/utils/cssModules";
 import {
@@ -121,7 +121,6 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   const popoverRef = useRef<HTMLDivElement>(null);
   const currentContentRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef(new Map<string, HTMLAnchorElement | null>());
-  const previousFocusedRef = useRef<HTMLElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const generatedId = useId().replace(/:/g, "");
   const popoverId = `nested-menu-${generatedId}`;
@@ -137,6 +136,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   );
 
   const [open, setOpen] = useState(false);
+  useManagedFocusLayer("menu", open);
   const [stack, setStack] = useState<MenuView[]>([rootView]);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([getFirstEnabledIndex(rootView.items)]);
   const [contentSize, setContentSize] = useState<{ width: number; height: number } | undefined>(undefined);
@@ -352,26 +352,6 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
       allowCommandRouting: true,
     });
   }, [focusContext, selectedItemId]);
-
-  useEffect(() => {
-    if (!open) return;
-    previousFocusedRef.current = document.activeElement as HTMLElement | null;
-    focusContext.push("menu");
-    const frame = requestAnimationFrame(() => {
-      focusContext.focusCurrent();
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      focusContext.pop("menu");
-      requestAnimationFrame(() => {
-        if (focusContext.is("panel")) {
-          focusContext.focusCurrent();
-          return;
-        }
-        previousFocusedRef.current?.focus?.();
-      });
-    };
-  }, [focusContext, open]);
 
   useEffect(() => {
     if (!open || !selectedItemId) return;
