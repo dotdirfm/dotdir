@@ -63,11 +63,13 @@ export interface HostApi {
 export interface ViewerExtensionApi {
   mount(root: HTMLElement, props: ViewerProps): Promise<void>;
   unmount(): Promise<void>;
+  focus?(): void | Promise<void>;
 }
 
 export interface EditorExtensionApi {
   mount(root: HTMLElement, props: EditorProps): Promise<void>;
   unmount(): Promise<void>;
+  focus?(): void | Promise<void>;
   setDirty?(dirty: boolean): void;
   setLanguage?(langId: string): void | Promise<void>;
 }

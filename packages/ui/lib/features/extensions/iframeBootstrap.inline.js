@@ -186,6 +186,15 @@ async function mountWithProps(props) {
   await extApi.mount(root, props);
 }
 
+async function focusExtension() {
+  if (!extApi) return;
+  try {
+    if (typeof extApi.focus === "function") {
+      await extApi.focus();
+    }
+  } catch {}
+}
+
 function createDotdirApi() {
   return {
     // File ops
@@ -408,6 +417,14 @@ window.addEventListener("message", async (e) => {
         }
       });
 
+      await lifecycleChain;
+      return;
+    }
+
+    if (data.type === "dotdir:focus") {
+      lifecycleChain = lifecycleChain.then(async () => {
+        await focusExtension();
+      });
       await lifecycleChain;
       return;
     }

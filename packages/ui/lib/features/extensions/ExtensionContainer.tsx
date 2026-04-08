@@ -491,7 +491,20 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       if (data.type === "dotdir:bootstrap-ready") {
         init();
       } else if (data.type === "dotdir:ready") {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          if (shouldAutoFocusIframe && active !== false) {
+            requestAnimationFrame(() => {
+              try {
+                iframe.focus();
+                iframe.contentWindow?.focus?.();
+                iframe.contentWindow?.postMessage({ type: "dotdir:focus" }, "*");
+              } catch {
+                // ignore
+              }
+            });
+          }
+        }
       } else if (data.type === "dotdir:error") {
         if (!cancelled) {
           setError(String(data.message ?? "Extension error"));
@@ -782,6 +795,7 @@ function focusIframeWithin(root: HTMLElement | null): void {
   try {
     iframe.focus();
     iframe.contentWindow?.focus?.();
+    iframe.contentWindow?.postMessage({ type: "dotdir:focus" }, "*");
   } catch {
     // ignore
   }
