@@ -71,24 +71,30 @@ function loadExtensionApiCjs(scriptUrl) {
   });
 }
 
-function loadExtensionApiEsm(scriptTextOrUrl, scriptText) {
-  // The sandbox (allow-scripts only, no allow-same-origin) gives the iframe an
-  // opaque origin, so import() of cross-origin URLs fails. The host sends the
-  // script content via postMessage; we create a local blob URL to import().
-  var text = scriptText ?? scriptTextOrUrl;
-  if (typeof text !== "string") {
-    return Promise.reject(new Error("ESM extensions require script content (entryScript)"));
-  }
-  var blob = new Blob([text], { type: "application/javascript" });
-  var blobUrl = URL.createObjectURL(blob);
-  return import(/* @vite-ignore */ blobUrl).then(
+function loadExtensionApiEsm(scriptUrl, scriptText) {
+  // Prefer loading the real extension URL so relative imports resolve against
+  // the extension directory. Keep the blob fallback for environments where the
+  // direct module import is rejected by the sandbox/custom protocol setup.
+  return import(/* @vite-ignore */ scriptUrl).then(
     function (mod) {
-      URL.revokeObjectURL(blobUrl);
       return mod.default || mod;
     },
-    function (err) {
-      URL.revokeObjectURL(blobUrl);
-      throw err;
+    function (directErr) {
+      if (typeof scriptText !== "string") {
+        throw directErr;
+      }
+      var blob = new Blob([scriptText], { type: "application/javascript" });
+      var blobUrl = URL.createObjectURL(blob);
+      return import(/* @vite-ignore */ blobUrl).then(
+        function (mod) {
+          URL.revokeObjectURL(blobUrl);
+          return mod.default || mod;
+        },
+        function (blobErr) {
+          URL.revokeObjectURL(blobUrl);
+          throw blobErr;
+        },
+      );
     },
   );
 }

@@ -568,23 +568,26 @@ export function ExtensionContainer(containerProps: ContainerProps) {
         currentFilePathRef.current = (props as EditorProps).filePath;
       }
 
-      // The sandboxed iframe (no allow-same-origin) is fragile around loading script
-      // URLs directly, so send the entry source through postMessage for all JS formats.
+      // ESM extensions are loaded from their real URL so relative imports can
+      // resolve from the extension directory. CJS/IIFE entries still receive
+      // their source text because the bootstrap evaluates them directly.
       let entryScript: string | undefined;
-      try {
-        entryScript = await readFileTextFromFs(bridge, entryPath);
-      } catch (err) {
-        if (!cancelled) {
-          const msg =
-            err instanceof Error
-              ? err.message
-              : err && typeof err === "object" && "message" in err
-                ? String((err as { message: unknown }).message)
-                : String(err);
-          setError(`Failed to read extension entry: ${msg}`);
-          setLoading(false);
+      if (!/\.mjs(?:\?|$)/i.test(entryUrl)) {
+        try {
+          entryScript = await readFileTextFromFs(bridge, entryPath);
+        } catch (err) {
+          if (!cancelled) {
+            const msg =
+              err instanceof Error
+                ? err.message
+                : err && typeof err === "object" && "message" in err
+                  ? String((err as { message: unknown }).message)
+                  : String(err);
+            setError(`Failed to read extension entry: ${msg}`);
+            setLoading(false);
+          }
+          return;
         }
-        return;
       }
 
       iframe.contentWindow?.postMessage(
