@@ -447,6 +447,7 @@ export const FileList = memo(function FileList({
   return (
     <div
       ref={rootRef}
+      tabIndex={-1}
       className={cx(styles, "file-list", isTouchscreen || keyboardNavMode ? "no-hover" : null, active ? "active-panel" : "inactive-panel")}
       onMouseMoveCapture={clearKeyboardNav}
       onWheelCapture={markKeyboardNav}

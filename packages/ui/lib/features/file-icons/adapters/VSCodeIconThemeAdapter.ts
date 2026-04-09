@@ -2,7 +2,6 @@ import type { Bridge } from "@/features/bridge";
 import { readFileText } from "@/features/file-system/fs";
 import { dirname, join } from "@/utils/path";
 import { parse as parseJsonc } from "jsonc-parser";
-import type { IconAssetStore } from "../iconCache";
 import type { IconLookupInput, IconThemeAdapter } from "./types";
 
 type VSCodeIconDefinition = {
@@ -38,10 +37,7 @@ export class VSCodeIconThemeAdapter implements IconThemeAdapter {
   private theme: LoadedVSCodeIconTheme | null = null;
   private themeKind: "dark" | "light" = "dark";
 
-  constructor(
-    private bridge: Bridge,
-    private iconAssets: IconAssetStore,
-  ) {}
+  constructor(private bridge: Bridge) {}
 
   async load(path: string): Promise<void> {
     const text = await readFileText(this.bridge, path);
@@ -117,15 +113,6 @@ export class VSCodeIconThemeAdapter implements IconThemeAdapter {
     if (!def?.iconPath) return null;
 
     return join(this.theme.basePath, def.iconPath);
-  }
-
-  async preload(keys: string[]): Promise<void> {
-    if (!this.theme) return;
-    await this.iconAssets.loadIcons(keys);
-  }
-
-  getCachedUrl(key: string): string | null {
-    return this.iconAssets.getCachedIconUrl(key) ?? null;
   }
 
   clear(): void {

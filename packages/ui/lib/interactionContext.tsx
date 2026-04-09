@@ -111,7 +111,6 @@ export class InteractionContextManager {
       case "PageDown":
         return event.shiftKey ? "selectPageDown" : "cursorPageDown";
       case "Enter":
-      case "Tab":
         return "accept";
       case "Escape":
         return "cancel";

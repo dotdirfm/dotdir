@@ -7,11 +7,5 @@ export class NoneIconThemeAdapter implements IconThemeAdapter {
     return null;
   }
 
-  async preload(): Promise<void> {}
-
-  getCachedUrl(): string | null {
-    return null;
-  }
-
   clear(): void {}
 }

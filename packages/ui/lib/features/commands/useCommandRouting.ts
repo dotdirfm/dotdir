@@ -19,7 +19,18 @@ export function useCommandRouting(rootRef: RefObject<HTMLElement | null>): void 
       commandRegistry.handleKeyboardEvent(event);
     };
 
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (!focusContext.is("panel")) return;
+      commandRegistry.handleKeyboardEvent(event);
+    };
+
     root.addEventListener("keydown", handleKeyDown, true);
-    return () => root.removeEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keydown", handleWindowKeyDown, true);
+    return () => {
+      root.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("keydown", handleWindowKeyDown, true);
+    };
   }, [commandRegistry, focusContext, interactionContext, rootRef]);
 }

@@ -25,9 +25,8 @@ const activeIconThemeAdapterAtom = atom<IconThemeAdapter>(new NoneIconThemeAdapt
 
 export function useSetIconTheme() {
   const bridge = useBridge();
-  const iconAssets = useIconAssetStore();
-  const fssTheme = useMemo(() => new FssIconThemeAdapter(iconAssets), [iconAssets]);
-  const vscodeTheme = useMemo(() => new VSCodeIconThemeAdapter(bridge, iconAssets), [bridge, iconAssets]);
+  const fssTheme = useMemo(() => new FssIconThemeAdapter(), []);
+  const vscodeTheme = useMemo(() => new VSCodeIconThemeAdapter(bridge), [bridge]);
   const noneTheme = useMemo(() => new NoneIconThemeAdapter(), []);
   const setActiveTheme = useSetAtom(activeIconThemeAdapterAtom);
   const bumpThemeVersion = useSetAtom(iconThemeVersionAtom);
@@ -88,10 +87,19 @@ export interface ResolvedIcon {
  */
 export function useResolveIcon() {
   const activeTheme = useAtomValue(activeIconThemeAdapterAtom);
+  const iconAssets = useIconAssetStore();
 
   return useCallback(
-    (name: string, isDirectory: boolean, isExpanded: boolean, isRoot: boolean, langId?: string, fssIconPath?: string | null): ResolvedIcon => {
+    (name: string, isDirectory: boolean, isExpanded: boolean, isRoot: boolean, langId?: string, resolvedFssIconPath?: string | null): ResolvedIcon => {
       const fallbackUrl = isDirectory ? (isExpanded ? DEFAULT_ICONS.folderOpen : DEFAULT_ICONS.folder) : DEFAULT_ICONS.file;
+
+      if (resolvedFssIconPath) {
+        return {
+          path: resolvedFssIconPath,
+          url: iconAssets.getCachedIconUrl(resolvedFssIconPath) ?? null,
+          fallbackUrl,
+        };
+      }
 
       const iconPath = activeTheme.resolve({
         name,
@@ -99,20 +107,19 @@ export function useResolveIcon() {
         isExpanded,
         isRoot,
         langId,
-        fssIconPath,
       } satisfies IconLookupInput);
 
       if (iconPath) {
         return {
           path: iconPath,
-          url: activeTheme.getCachedUrl(iconPath),
+          url: iconAssets.getCachedIconUrl(iconPath) ?? null,
           fallbackUrl,
         };
       }
 
       return { path: "_default", url: fallbackUrl, fallbackUrl };
     },
-    [activeTheme],
+    [activeTheme, iconAssets],
   );
 }
 
@@ -121,12 +128,12 @@ export function useResolveIcon() {
  * Handles both FSS (via iconCache) and VS Code (via vscodeIconTheme).
  */
 export function useLoadIconsForPaths() {
-  const activeTheme = useAtomValue(activeIconThemeAdapterAtom);
+  const iconAssets = useIconAssetStore();
   return useCallback(
     async (paths: string[]): Promise<void> => {
-      await activeTheme.preload(paths);
+      await iconAssets.loadIcons(paths);
     },
-    [activeTheme],
+    [iconAssets],
   );
 }
 
@@ -134,15 +141,15 @@ export function useLoadIconsForPaths() {
  * Get cached icon URL by path.
  */
 export function useGetCachedIcon() {
-  const activeTheme = useAtomValue(activeIconThemeAdapterAtom);
+  const iconAssets = useIconAssetStore();
   return useCallback(
     (path: string): string | null => {
       if (path === "_default_folder") return DEFAULT_ICONS.folder;
       if (path === "_default_folder_open") return DEFAULT_ICONS.folderOpen;
       if (path === "_default_file") return DEFAULT_ICONS.file;
 
-      return activeTheme.getCachedUrl(path);
+      return iconAssets.getCachedIconUrl(path) ?? null;
     },
-    [activeTheme],
+    [iconAssets],
   );
 }

@@ -42,7 +42,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const { ensureWindow, flushCurrentWindowLayout, flushCurrentWindowState, getCurrentWindowId, getWindowIds, removeWindow } = useUiState();
   const bridgeRef = useRef(bridge);
   bridgeRef.current = bridge;
-  const { navigateTo, cancelNavigation, getPanel, activePanelSide } = useActivePanelNavigation();
+  const { navigateTo, cancelNavigation, getPanel, focusFileList, activePanelSide } = useActivePanelNavigation();
   const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
   const focusContextRef = useRef(focusContext);
@@ -214,9 +214,34 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
     // ── Navigation ────────────────────────────────────────────────────────────
 
-    disposables.push(commandRegistry.registerCommand("switchPanel", () => setActivePanel((s) => (s === "left" ? "right" : "left"))));
-    disposables.push(commandRegistry.registerCommand("dotdir.focusLeftPanel", () => setActivePanel("left")));
-    disposables.push(commandRegistry.registerCommand("dotdir.focusRightPanel", () => setActivePanel("right")));
+    disposables.push(
+      commandRegistry.registerCommand("switchPanel", () => {
+        const nextSide = activePanelSideRef.current === "left" ? "right" : "left";
+        setActivePanel(nextSide);
+        requestAnimationFrame(() => {
+          focusContextRef.current.request("panel");
+          focusFileList(nextSide);
+        });
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerCommand("dotdir.focusLeftPanel", () => {
+        setActivePanel("left");
+        requestAnimationFrame(() => {
+          focusContextRef.current.request("panel");
+          focusFileList("left");
+        });
+      }),
+    );
+    disposables.push(
+      commandRegistry.registerCommand("dotdir.focusRightPanel", () => {
+        setActivePanel("right");
+        requestAnimationFrame(() => {
+          focusContextRef.current.request("panel");
+          focusFileList("right");
+        });
+      }),
+    );
 
     disposables.push(
       commandRegistry.registerCommand("dotdir.cancelNavigation", () => {
