@@ -19,6 +19,8 @@ import {
   type IconLookupInput,
   type IconThemeAdapter,
   type IconThemeType,
+  type ResolvedFontIcon,
+  type ResolvedThemeIcon,
 } from "./adapters";
 
 const activeIconThemeAdapterAtom = atom<IconThemeAdapter>(new NoneIconThemeAdapter());
@@ -76,14 +78,16 @@ export function useIconThemeVersion(): number {
 }
 
 export interface ResolvedIcon {
-  path: string;
+  kind: "image" | "font";
+  path: string | null;
   url: string | null;
   fallbackUrl: string; // Always available - show while real icon is loading
+  font?: ResolvedFontIcon;
 }
 
 /**
  * Resolve icon for a file or folder.
- * Returns the icon path (for loading), cached URL if available, and a fallback URL.
+ * Returns either an image icon or a font icon plus fallback metadata.
  */
 export function useResolveIcon() {
   const activeTheme = useAtomValue(activeIconThemeAdapterAtom);
@@ -95,13 +99,14 @@ export function useResolveIcon() {
 
       if (resolvedFssIconPath) {
         return {
+          kind: "image",
           path: resolvedFssIconPath,
           url: iconAssets.getCachedIconUrl(resolvedFssIconPath) ?? null,
           fallbackUrl,
         };
       }
 
-      const iconPath = activeTheme.resolve({
+      const resolved = activeTheme.resolve({
         name,
         isDirectory,
         isExpanded,
@@ -109,31 +114,47 @@ export function useResolveIcon() {
         langId,
       } satisfies IconLookupInput);
 
-      if (iconPath) {
+      if (resolved?.kind === "image") {
         return {
-          path: iconPath,
-          url: iconAssets.getCachedIconUrl(iconPath) ?? null,
+          kind: "image",
+          path: resolved.path,
+          url: iconAssets.getCachedIconUrl(resolved.path) ?? null,
           fallbackUrl,
         };
       }
 
-      return { path: "_default", url: fallbackUrl, fallbackUrl };
+      if (resolved?.kind === "font") {
+        return {
+          kind: "font",
+          path: null,
+          url: null,
+          fallbackUrl,
+          font: resolved,
+        };
+      }
+
+      return { kind: "image", path: "_default", url: fallbackUrl, fallbackUrl };
     },
     [activeTheme, iconAssets],
   );
 }
 
 /**
- * Load icons by path.
- * Handles both FSS (via iconCache) and VS Code (via vscodeIconTheme).
+ * Load any image assets and ensure any font families are ready.
  */
 export function useLoadIconsForPaths() {
+  const activeTheme = useAtomValue(activeIconThemeAdapterAtom);
   const iconAssets = useIconAssetStore();
   return useCallback(
-    async (paths: string[]): Promise<void> => {
+    async (icons: ResolvedThemeIcon[]): Promise<void> => {
+      if (activeTheme.prepareIcons) {
+        await activeTheme.prepareIcons(icons, iconAssets);
+        return;
+      }
+      const paths = icons.flatMap((icon) => (icon.kind === "image" ? [icon.path] : []));
       await iconAssets.loadIcons(paths);
     },
-    [iconAssets],
+    [activeTheme, iconAssets],
   );
 }
 

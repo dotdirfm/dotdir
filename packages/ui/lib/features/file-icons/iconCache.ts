@@ -115,6 +115,11 @@ export class IconAssetStore {
     }
     return url;
   }
+
+  setCachedIconUrl(name: string, url: string): void {
+    this.cache.set(name, url);
+    this.evictIfNeeded();
+  }
 }
 
 const iconAssetStoreAtom = atom((get) => {

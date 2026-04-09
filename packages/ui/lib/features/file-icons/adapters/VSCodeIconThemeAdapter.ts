@@ -1,11 +1,16 @@
 import type { Bridge } from "@/features/bridge";
-import { readFileText } from "@/features/file-system/fs";
+import { readFileBuffer, readFileText } from "@/features/file-system/fs";
 import { dirname, join } from "@/utils/path";
 import { parse as parseJsonc } from "jsonc-parser";
-import type { IconLookupInput, IconThemeAdapter } from "./types";
+import type { IconAssetStore } from "../iconCache";
+import type { IconLookupInput, IconThemeAdapter, ResolvedThemeIcon } from "./types";
 
 type VSCodeIconDefinition = {
-  iconPath: string;
+  iconPath?: string;
+  fontCharacter?: string;
+  fontColor?: string;
+  fontId?: string;
+  fontSize?: string;
 };
 
 type IconsSet = {
@@ -20,8 +25,17 @@ type IconsSet = {
   folderNamesExpanded?: Record<string, string>;
 };
 
+type VSCodeThemeFont = {
+  id: string;
+  src?: Array<{ path: string; format?: string }>;
+  weight?: string;
+  style?: string;
+  size?: string;
+};
+
 type VSCodeIconThemeJson = IconsSet & {
   iconDefinitions: Record<string, VSCodeIconDefinition>;
+  fonts?: VSCodeThemeFont[];
   languageIds?: Record<string, string>;
   light?: IconsSet;
   highContrast?: IconsSet;
@@ -36,6 +50,7 @@ export class VSCodeIconThemeAdapter implements IconThemeAdapter {
   readonly kind = "vscode" as const;
   private theme: LoadedVSCodeIconTheme | null = null;
   private themeKind: "dark" | "light" = "dark";
+  private loadedFonts = new Map<string, Promise<void>>();
 
   constructor(private bridge: Bridge) {}
 
@@ -46,16 +61,19 @@ export class VSCodeIconThemeAdapter implements IconThemeAdapter {
       json,
       basePath: dirname(path),
     };
+    this.loadedFonts.clear();
   }
 
-  private getEffectiveMap<T>(darkValue: T | undefined, lightValue: T | undefined): T | undefined {
-    if (this.themeKind === "light" && lightValue !== undefined) {
-      return lightValue;
-    }
-    return darkValue;
+  clear(): void {
+    this.theme = null;
+    this.loadedFonts.clear();
   }
 
-  resolve(input: IconLookupInput): string | null {
+  setThemeKind(kind: "dark" | "light"): void {
+    this.themeKind = kind;
+  }
+
+  resolve(input: IconLookupInput): ResolvedThemeIcon | null {
     if (!this.theme) return null;
     const { json } = this.theme;
     const light = this.themeKind === "light" ? json.light : undefined;
@@ -110,16 +128,87 @@ export class VSCodeIconThemeAdapter implements IconThemeAdapter {
     if (!iconKey) return null;
 
     const def = json.iconDefinitions[iconKey];
-    if (!def?.iconPath) return null;
+    if (!def) return null;
+    if (def.iconPath) {
+      return {
+        kind: "image",
+        path: join(this.theme.basePath, def.iconPath),
+      };
+    }
+    if (!def.fontCharacter) return null;
 
-    return join(this.theme.basePath, def.iconPath);
+    const font = this.resolveFontDefinition(def);
+    if (!font) return null;
+    return {
+      kind: "font",
+      character: this.decodeFontCharacter(def.fontCharacter),
+      fontFamily: font.id,
+      color: def.fontColor,
+      fontSize: def.fontSize ?? font.size,
+    };
   }
 
-  clear(): void {
-    this.theme = null;
+  async prepareIcons(icons: ResolvedThemeIcon[], iconAssets: IconAssetStore): Promise<void> {
+    const imagePaths: string[] = [];
+    const fontFamilies = new Set<string>();
+
+    for (const icon of icons) {
+      if (icon.kind === "image") {
+        imagePaths.push(icon.path);
+        continue;
+      }
+      fontFamilies.add(icon.fontFamily);
+    }
+
+    if (imagePaths.length > 0) {
+      await iconAssets.loadIcons(imagePaths);
+    }
+
+    await Promise.all([...fontFamilies].map(async (fontFamily) => this.ensureFontLoaded(fontFamily)));
   }
 
-  setThemeKind(kind: "dark" | "light"): void {
-    this.themeKind = kind;
+  private getEffectiveMap<T>(darkValue: T | undefined, lightValue: T | undefined): T | undefined {
+    if (this.themeKind === "light" && lightValue !== undefined) {
+      return lightValue;
+    }
+    return darkValue;
+  }
+
+  private resolveFontDefinition(def: VSCodeIconDefinition): VSCodeThemeFont | null {
+    if (!this.theme?.json.fonts?.length) return null;
+    if (def.fontId) {
+      return this.theme.json.fonts.find((font) => font.id === def.fontId) ?? null;
+    }
+    return this.theme.json.fonts[0] ?? null;
+  }
+
+  private decodeFontCharacter(raw: string): string {
+    const trimmed = raw.trim();
+    const withoutPrefix = trimmed.replace(/^\\u?/i, "");
+    const codePoint = Number.parseInt(withoutPrefix, 16);
+    return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : trimmed;
+  }
+
+  private async ensureFontLoaded(fontId: string): Promise<void> {
+    if (!this.theme?.json.fonts?.length) return;
+    const existing = this.loadedFonts.get(fontId);
+    if (existing) return existing;
+
+    const promise = (async () => {
+      const font = this.theme?.json.fonts?.find((item) => item.id === fontId);
+      const src = font?.src?.[0];
+      if (!font || !src?.path || !this.theme) return;
+      const fontPath = join(this.theme.basePath, src.path.replace(/^\/+/, ""));
+      const source = await readFileBuffer(this.bridge, fontPath);
+      const face = new FontFace(font.id, source, {
+        weight: font.weight ?? "normal",
+        style: font.style ?? "normal",
+      });
+      await face.load();
+      document.fonts.add(face);
+    })();
+
+    this.loadedFonts.set(fontId, promise);
+    return promise;
   }
 }

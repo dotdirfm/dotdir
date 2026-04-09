@@ -3,7 +3,7 @@ import type { IconLookupInput, IconThemeAdapter } from "./types";
 export class FssIconThemeAdapter implements IconThemeAdapter {
   readonly kind = "fss" as const;
 
-  resolve(_input: IconLookupInput): string | null {
+  resolve(_input: IconLookupInput) {
     return null;
   }
 

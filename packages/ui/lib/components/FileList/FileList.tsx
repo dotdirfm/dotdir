@@ -101,7 +101,9 @@ export const FileList = memo(function FileList({
       return {
         entry,
         style,
+        iconKind: resolved.kind,
         iconPath: resolved.path,
+        iconFont: resolved.font,
         iconFallbackUrl: resolved.fallbackUrl,
       };
     },
@@ -154,13 +156,40 @@ export const FileList = memo(function FileList({
   topmostIndexRef.current = topmostIndex;
 
   const neededIcons = useMemo(() => {
-    const paths = new Set<string>();
-    for (const { iconPath } of displayEntries) {
-      if (iconPath) paths.add(iconPath);
+    const imagePaths = new Set<string>();
+    const fontKeys = new Set<string>();
+    const fontIcons: NonNullable<DisplayEntry["iconFont"]>[] = [];
+
+    for (const { iconKind, iconPath, iconFont } of displayEntries) {
+      if (iconKind === "image" && iconPath) {
+        imagePaths.add(iconPath);
+      }
+      if (iconKind === "font" && iconFont) {
+        const key = `${iconFont.fontFamily}\0${iconFont.character}\0${iconFont.color ?? ""}\0${iconFont.fontSize ?? ""}`;
+        if (!fontKeys.has(key)) {
+          fontKeys.add(key);
+          fontIcons.push(iconFont);
+        }
+      }
     }
-    return [...paths];
+    return [
+      ...[...imagePaths].map((path) => ({ kind: "image" as const, path })),
+      ...fontIcons.map((font) => ({
+        kind: "font" as const,
+        character: font.character,
+        fontFamily: font.fontFamily,
+        color: font.color,
+        fontSize: font.fontSize,
+      })),
+    ];
   }, [displayEntries]);
-  const neededIconsKey = useMemo(() => neededIcons.join("\0"), [neededIcons]);
+  const neededIconsKey = useMemo(
+    () =>
+      neededIcons
+        .map((icon) => (icon.kind === "image" ? `image:${icon.path}` : `font:${icon.fontFamily}:${icon.character}:${icon.color ?? ""}:${icon.fontSize ?? ""}`))
+        .join("\0"),
+    [neededIcons],
+  );
 
   const loadIconsForPaths = useLoadIconsForPaths();
 
@@ -372,8 +401,8 @@ export const FileList = memo(function FileList({
       void iconsVersion;
       const item = displayEntriesRef.current[index];
       if (!item) return null;
-      const { entry, style, iconPath, iconFallbackUrl } = item;
-      const iconUrl = getIconUrl(iconPath) ?? iconFallbackUrl;
+      const { entry, style, iconKind, iconPath, iconFont, iconFallbackUrl } = item;
+      const iconUrl = iconKind === "image" ? (getIconUrl(iconPath) ?? iconFallbackUrl) : null;
 
       const isExecutable = entry.type === "file" && !!(entry.meta as { executable?: boolean }).executable;
       return (
@@ -398,7 +427,21 @@ export const FileList = memo(function FileList({
           }}
         >
           <span className={styles["entry-icon"]}>
-            <img src={iconUrl} width={16} height={16} alt="" />
+            {iconKind === "font" && iconFont ? (
+              <span
+                className={styles["entry-icon-font"]}
+                style={{
+                  fontFamily: iconFont.fontFamily,
+                  fontSize: iconFont.fontSize,
+                  color: iconFont.color,
+                }}
+                aria-hidden="true"
+              >
+                {iconFont.character}
+              </span>
+            ) : (
+              <img src={iconUrl ?? iconFallbackUrl} width={16} height={16} alt="" />
+            )}
           </span>
           <span
             className={styles["entry-name"]}
