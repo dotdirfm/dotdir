@@ -2,6 +2,7 @@ import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import { OverlayDialog } from "@/dialogs/OverlayDialog";
 import { SmartLabel } from "@/dialogs/dialogHotkeys";
 import type { ExtensionInstallProgressEvent } from "@/features/bridge";
+import { readAppDirs } from "@/features/bridge/appDirs";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { colorThemeKey, extensionIconThemeKey, setExtensionAutoUpdate, uninstallExtension } from "@/features/extensions/extensions";
@@ -298,6 +299,7 @@ function featureSectionsForInstalled(ext: LoadedExtension): Array<{ label: strin
 export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const resolveVfsUrl = useVfsUrlResolver();
   const bridge = useBridge();
+  const [dataDir, setDataDir] = useState<string | null>(null);
   const { activeIconTheme, setActiveIconTheme } = useActiveIconTheme();
   const { activeColorTheme, setActiveColorTheme } = useActiveColorTheme();
   const installed = useLoadedExtensions();
@@ -324,6 +326,19 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const installIdToKeyRef = useRef(new Map<number, string>());
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const dirs = await readAppDirs(bridge);
+      if (!cancelled) {
+        setDataDir(dirs.dataDir);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge]);
 
   const installedItems = useMemo(() => installed.map((ext) => normalizeInstalled(ext, resolveVfsUrl)), [installed, resolveVfsUrl]);
   const installedByKey = useMemo(() => new Map(installed.map((ext) => [keyForInstalled(ext), ext])), [installed]);
@@ -634,6 +649,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
 
   const handleUninstall = useCallback(
     async (ext: LoadedExtension) => {
+      if (!dataDir) return;
       const key = keyForInstalled(ext);
       setBusyByKey((current) => ({
         ...current,
@@ -641,7 +657,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
       }));
       setError("");
       try {
-        await uninstallExtension(bridge, extensionRef(ext).publisher, extensionRef(ext).name);
+        await uninstallExtension(bridge, dataDir, extensionRef(ext).publisher, extensionRef(ext).name);
         if (activeIconTheme === key) {
           setActiveIconTheme(undefined);
         }
@@ -658,7 +674,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
         return next;
       });
     },
-    [activeColorTheme, activeIconTheme, bridge, extensionHost, setActiveColorTheme, setActiveIconTheme],
+    [activeColorTheme, activeIconTheme, bridge, dataDir, extensionHost, setActiveColorTheme, setActiveIconTheme],
   );
 
   const handleSetIconTheme = useCallback(
@@ -681,10 +697,11 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
 
   const handleSetAutoUpdate = useCallback(
     async (ext: LoadedExtension, autoUpdate: boolean) => {
+      if (!dataDir) return;
       const key = `${extensionRef(ext).publisher}.${extensionRef(ext).name}`;
       setPendingAutoUpdateByKey((current) => ({ ...current, [key]: autoUpdate }));
       try {
-        await setExtensionAutoUpdate(bridge, extensionRef(ext).publisher, extensionRef(ext).name, autoUpdate);
+        await setExtensionAutoUpdate(bridge, dataDir, extensionRef(ext).publisher, extensionRef(ext).name, autoUpdate);
         setInstalled((current) =>
           current.map((item) =>
             extensionRef(item).publisher === extensionRef(ext).publisher && extensionRef(item).name === extensionRef(ext).name
@@ -701,7 +718,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
         throw err;
       }
     },
-    [bridge, setInstalled],
+    [bridge, dataDir, setInstalled],
   );
 
   useEffect(() => {

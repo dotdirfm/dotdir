@@ -1,17 +1,13 @@
+import { use, useMemo } from "react";
 import type { AppDirs, Bridge } from "./bridge";
+import { useBridge } from "./useBridge";
 
-const appDirsCache = new WeakMap<Bridge, Promise<AppDirs>>();
+export async function readAppDirs(bridge: Bridge): Promise<AppDirs> {
+  return await bridge.utils.getAppDirs();
+}
 
-export function getAppDirs(bridge: Bridge): Promise<AppDirs> {
-  const cached = appDirsCache.get(bridge);
-  if (cached) return cached;
-
-  const pending = bridge.utils.getAppDirs().then((dirs) => ({
-    homeDir: dirs.homeDir,
-    configDir: dirs.configDir,
-    dataDir: dirs.dataDir,
-    cacheDir: dirs.cacheDir,
-  }));
-  appDirsCache.set(bridge, pending);
-  return pending;
+export function useAppDirs(): AppDirs {
+  const bridge = useBridge();
+  const promise = useMemo(() => readAppDirs(bridge), [bridge]);
+  return use(promise);
 }

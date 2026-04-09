@@ -5,7 +5,6 @@
  */
 
 import type { Bridge } from "@/features/bridge";
-import { getAppDirs } from "@/features/bridge/appDirs";
 import { readFileText } from "@/features/file-system/fs";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/features/file-system/jsoncFileWatcher";
 import { dirname, join } from "@/utils/path";
@@ -23,14 +22,13 @@ function validateSettings(parsed: unknown): DotDirSettings | null {
   return parsed as DotDirSettings;
 }
 
-export async function getSettingsPath(bridge: Bridge): Promise<string> {
-  const { configDir } = await getAppDirs(bridge);
+export function getSettingsPath(configDir: string): string {
   return join(configDir, "settings.json");
 }
 
-export async function loadUserSettings(bridge: Bridge): Promise<DotDirSettings> {
+export async function loadUserSettings(bridge: Bridge, configDir: string): Promise<DotDirSettings> {
   try {
-    const path = await getSettingsPath(bridge);
+    const path = getSettingsPath(configDir);
     const text = await readFileText(bridge, path);
     const errors: ParseError[] = [];
     const parsed = parseJsonc(text, errors, { allowTrailingComma: true });
@@ -66,9 +64,9 @@ function applySettingsPatch(text: string, partial: Partial<DotDirSettings>): str
   return nextText;
 }
 
-export async function saveSettingsPatchToDisk(bridge: Bridge, partial: Partial<DotDirSettings>): Promise<void> {
+export async function saveSettingsPatchToDisk(bridge: Bridge, configDir: string, partial: Partial<DotDirSettings>): Promise<void> {
   try {
-    const path = await getSettingsPath(bridge);
+    const path = getSettingsPath(configDir);
     let currentText = "{}";
     try {
       currentText = await readFileText(bridge, path);
@@ -88,10 +86,10 @@ export async function saveSettingsPatchToDisk(bridge: Bridge, partial: Partial<D
   }
 }
 
-export async function createUserSettingsWatcher(bridge: Bridge): Promise<JsoncFileWatcher<DotDirSettings>> {
+export async function createUserSettingsWatcher(bridge: Bridge, configDir: string): Promise<JsoncFileWatcher<DotDirSettings>> {
   return createJsoncFileWatcher<DotDirSettings>(bridge, {
     name: "userSettings",
-    getPath: async () => getSettingsPath(bridge),
+    getPath: async () => getSettingsPath(configDir),
     validate: validateSettings,
     defaultValue: {},
   });

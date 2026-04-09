@@ -1,5 +1,4 @@
 import type { Bridge } from "@/features/bridge";
-import { getAppDirs } from "@/features/bridge/appDirs";
 import { readFileText } from "@/features/file-system/fs";
 import { deleteFilesystemPathRecursive } from "@/features/file-system/utils";
 import { dirname, join, normalizePath } from "@/utils/path";
@@ -18,13 +17,12 @@ function extensionDirName(ref: ExtensionRef): string {
   return `${ref.publisher}-${ref.name}-${ref.version}`;
 }
 
-async function getExtensionsDir(bridge: Bridge): Promise<string> {
-  const { dataDir } = await getAppDirs(bridge);
+async function getExtensionsDir(dataDir: string): Promise<string> {
   return join(dataDir, "extensions");
 }
 
-async function readRefs(bridge: Bridge): Promise<ExtensionRef[]> {
-  const extensionsDir = await getExtensionsDir(bridge);
+async function readRefs(bridge: Bridge, dataDir: string): Promise<ExtensionRef[]> {
+  const extensionsDir = await getExtensionsDir(dataDir);
   try {
     const text = await readFileText(bridge, join(extensionsDir, "extensions.json"));
     const refs = JSON.parse(text);
@@ -34,21 +32,21 @@ async function readRefs(bridge: Bridge): Promise<ExtensionRef[]> {
   }
 }
 
-async function writeRefs(bridge: Bridge, refs: ExtensionRef[]): Promise<void> {
-  const extensionsDir = await getExtensionsDir(bridge);
+async function writeRefs(bridge: Bridge, dataDir: string, refs: ExtensionRef[]): Promise<void> {
+  const extensionsDir = await getExtensionsDir(dataDir);
   await bridge.fs.createDir(extensionsDir);
   await bridge.fs.writeFile(join(extensionsDir, "extensions.json"), JSON.stringify(refs, null, 2));
 }
 
-export async function setExtensionAutoUpdate(bridge: Bridge, publisher: string, name: string, autoUpdate: boolean): Promise<void> {
-  const refs = await readRefs(bridge);
+export async function setExtensionAutoUpdate(bridge: Bridge, dataDir: string, publisher: string, name: string, autoUpdate: boolean): Promise<void> {
+  const refs = await readRefs(bridge, dataDir);
   const next = refs.map((ref) => (ref.publisher === publisher && ref.name === name ? { ...ref, autoUpdate } : ref));
-  await writeRefs(bridge, next);
+  await writeRefs(bridge, dataDir, next);
 }
 
-export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]> {
-  const extensionsDir = await getExtensionsDir(bridge);
-  const refs = await readRefs(bridge);
+export async function loadExtensions(bridge: Bridge, dataDir: string): Promise<LoadedExtension[]> {
+  const extensionsDir = await getExtensionsDir(dataDir);
+  const refs = await readRefs(bridge, dataDir);
 
   const loaded: LoadedExtension[] = [];
   for (const ref of refs) {
@@ -189,16 +187,16 @@ export async function loadExtensions(bridge: Bridge): Promise<LoadedExtension[]>
   return loaded;
 }
 
-export async function uninstallExtension(bridge: Bridge, publisherUsername: string, extName: string): Promise<void> {
-  const refs = await readRefs(bridge);
+export async function uninstallExtension(bridge: Bridge, dataDir: string, publisherUsername: string, extName: string): Promise<void> {
+  const refs = await readRefs(bridge, dataDir);
   const target = refs.find((r) => r.publisher === publisherUsername && r.name === extName);
   if (target && !target.path) {
-    const extensionsDir = await getExtensionsDir(bridge);
+    const extensionsDir = await getExtensionsDir(dataDir);
     const extDir = join(extensionsDir, extensionDirName(target));
     await deleteFilesystemPathRecursive(bridge, extDir);
   }
   const filtered = refs.filter((r) => !(r.publisher === publisherUsername && r.name === extName));
-  await writeRefs(bridge, filtered);
+  await writeRefs(bridge, dataDir, filtered);
 }
 
 export function extensionIconThemeId(ext: LoadedExtension): string | null {

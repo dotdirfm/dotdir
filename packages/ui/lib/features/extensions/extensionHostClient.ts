@@ -7,11 +7,11 @@
  */
 
 import type { Bridge } from "@/features/bridge";
-import { getAppDirs } from "@/features/bridge/appDirs";
+import { readAppDirs } from "@/features/bridge/appDirs";
 import { useBridge } from "@/features/bridge/useBridge";
 import { readFileText } from "@/features/file-system/fs";
 import { normalizePath } from "@/utils/path";
-import { createContext, createElement, useContext, useEffect, useMemo, type ReactNode } from "react";
+import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import worker2 from "./extensionHost.worker.ts?worker&inline";
 import { extensionIconThemes, extensionRef, type LoadedExtension } from "./types";
 
@@ -49,13 +49,15 @@ function normalizeLoadedExtensionPayload(raw: unknown): LoadedExtension {
 
 export class ExtensionHostClient {
   private worker: Worker | null = null;
-  private dataDir: string | null = null;
   private listeners: ExtensionsLoadedCallback[] = [];
   private starting = false;
   private nextRequestId = 1;
   private pendingRequests = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
 
-  constructor(private bridge: Bridge) {}
+  constructor(
+    private bridge: Bridge,
+    private dataDir: string,
+  ) {}
 
   /** Subscribe to extension load events. Returns an unsubscribe function. */
   onLoaded(cb: ExtensionsLoadedCallback): () => void {
@@ -70,10 +72,6 @@ export class ExtensionHostClient {
     if (this.worker || this.starting) return;
     this.starting = true;
     try {
-      if (!this.dataDir) {
-        const appDirs = await getAppDirs(this.bridge);
-        this.dataDir = appDirs.dataDir;
-      }
       this.spawnWorker();
     } finally {
       this.starting = false;
@@ -187,13 +185,36 @@ const ExtensionHostClientContext = createContext<ExtensionHostClient | null>(nul
 
 export function ExtensionHostClientProvider({ children }: { children: ReactNode }) {
   const bridge = useBridge();
-  const client = useMemo(() => new ExtensionHostClient(bridge), [bridge]);
+  const [dataDir, setDataDir] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const dirs = await readAppDirs(bridge);
+      if (!cancelled) {
+        setDataDir(dirs.dataDir);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bridge]);
+
+  const client = useMemo(() => {
+    if (!dataDir) return null;
+    return new ExtensionHostClient(bridge, dataDir);
+  }, [bridge, dataDir]);
+
+  useEffect(() => {
+    if (!client) return;
     return () => {
       client.dispose();
     };
   }, [client]);
+
+  if (!client) {
+    return null;
+  }
 
   return createElement(ExtensionHostClientContext.Provider, { value: client }, children);
 }

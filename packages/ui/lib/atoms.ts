@@ -4,7 +4,6 @@ import { atom } from "jotai";
 export const themesReadyAtom = atom(false);
 
 export const systemThemeAtom = atom<SystemThemeKind>("dark");
-export const iconThemeTypeAtom = atom<"fss" | "vscode" | "none">("fss");
 export const iconThemeVersionAtom = atom(0);
 
 export const panelsVisibleAtom = atom(true);

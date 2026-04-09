@@ -4,10 +4,8 @@ import type { FileListTabState } from "@/entities/tab/model/types";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useGetCachedIcon, useIconThemeVersion, useLoadIconsForPaths, useResolveIcon } from "@/features/file-icons/iconResolver";
 import { resolveEntryStyle } from "@/features/fss/fss";
-import type { ResolvedEntryStyle } from "@/features/fss/types";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { binarySearch } from "@/utils/binarySearch";
 import { cx } from "@/utils/cssModules";
 import { dirname, join } from "@/utils/path";
 import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
@@ -18,7 +16,9 @@ import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
 import { FileInfoFooter } from "./FileInfoFooter";
 import styles from "./FileList.module.css";
 import { useFileListActionHandlers } from "./fileListActions";
+import type { DisplayEntry } from "./types";
 import { useFileListCommands } from "./useFileListCommands";
+import { clamp, formatSize, getRequestedIndex } from "./utils";
 
 const ROW_HEIGHT = 26;
 
@@ -31,40 +31,6 @@ interface FileListProps {
   active: boolean;
   fssResolver: LayeredResolver;
   onStateChange?: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
-}
-
-interface DisplayEntry {
-  entry: FsNode;
-  style: ResolvedEntryStyle;
-  iconPath: string | null;
-  iconFallbackUrl: string;
-}
-
-function formatSize(sizeValue: unknown): string {
-  let size: number;
-  if (typeof sizeValue === "number") size = sizeValue;
-  else if (typeof sizeValue === "bigint") size = Number(sizeValue);
-  else return "";
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} K`;
-  if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} M`;
-  return `${(size / (1024 * 1024 * 1024)).toFixed(1)} G`;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function getRequestedIndex(entries: DisplayEntry[], requestedName: string, comparer: (a: DisplayEntry, b: DisplayEntry) => number): number {
-  const exact = entries.findIndex((item) => item.entry.name === requestedName);
-  if (exact >= 0) return exact;
-  const requested = {
-    entry: { name: requestedName },
-    style: { groupFirst: false, sortPriority: 0 },
-  } as DisplayEntry;
-  let idx = binarySearch(entries, requested, comparer);
-  if (idx < 0) idx = ~idx;
-  return clamp(idx, 0, Math.max(0, entries.length - 1));
 }
 
 export const FileList = memo(function FileList({

@@ -1,11 +1,10 @@
 import type { Bridge } from "@/features/bridge";
+import { bridgeAtom } from "@/features/bridge/useBridge";
 import { readFileBuffer } from "@/features/file-system/fs";
 import { normalizePath } from "@/utils/path";
+import { atom, useAtomValue } from "jotai";
 
 const MAX_SIZE = 200;
-
-const cache = new Map<string, string>();
-const pending = new Map<string, Promise<void>>();
 
 function isAbsolutePath(path: string): boolean {
   return path.startsWith("/") || /^[A-Za-z]:/.test(path);
@@ -15,98 +14,117 @@ function svgToDataUrl(svg: string): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-function touchKey(key: string): void {
-  const value = cache.get(key);
-  if (value !== undefined) {
-    cache.delete(key);
-    cache.set(key, value);
-  }
-}
+export class IconAssetStore {
+  private cache = new Map<string, string>();
+  private pending = new Map<string, Promise<void>>();
 
-function evictIfNeeded(): void {
-  while (cache.size > MAX_SIZE) {
-    const oldest = cache.keys().next().value!;
-    cache.delete(oldest);
-  }
-}
+  constructor(private bridge: Bridge) {}
 
-async function loadIconAbsolute(bridge: Bridge, path: string): Promise<void> {
-  const normalized = normalizePath(path);
-  try {
-    const content = new Uint8Array(await readFileBuffer(bridge, normalized));
-    const ext = normalized.split(".").pop()?.toLowerCase() ?? "";
-    let url: string;
-    if (ext === "svg") {
-      url = svgToDataUrl(new TextDecoder().decode(content));
-    } else {
-      const mime =
-        ext === "png"
-          ? "image/png"
-          : ext === "jpg" || ext === "jpeg"
-            ? "image/jpeg"
-            : ext === "webp"
-              ? "image/webp"
-              : "application/octet-stream";
-      const base64 = btoa(String.fromCharCode(...content));
-      url = `data:${mime};base64,${base64}`;
+  private touchKey(key: string): void {
+    const value = this.cache.get(key);
+    if (value !== undefined) {
+      this.cache.delete(key);
+      this.cache.set(key, value);
     }
-    cache.set(path, url);
-    evictIfNeeded();
-  } catch (err) {
-    console.warn("[IconCache] loadIconAbsolute failed", normalized, err);
-    throw err;
   }
-}
 
-async function loadIconViaHttp(name: string): Promise<void> {
-  const resp = await fetch(`/icons/${name}`);
-  if (!resp.ok) return;
-  const svg = await resp.text();
-  cache.set(name, svgToDataUrl(svg));
-  evictIfNeeded();
-}
-
-/** Sentinel paths that are fallbacks, not real icon files - skip loading to avoid ENOENT. */
-function isSentinelIconPath(name: string): boolean {
-  return name === "_default" || name.startsWith("_default_");
-}
-
-export async function loadIcons(bridge: Bridge, names: string[]): Promise<void> {
-  const promises: Promise<void>[] = [];
-
-  for (const name of names) {
-    if (isSentinelIconPath(name)) continue;
-    if (cache.has(name)) continue;
-
-    if (pending.has(name)) {
-      promises.push(pending.get(name)!);
-      continue;
+  private evictIfNeeded(): void {
+    while (this.cache.size > MAX_SIZE) {
+      const oldest = this.cache.keys().next().value!;
+      this.cache.delete(oldest);
     }
+  }
 
-    const p = (async () => {
-      try {
-        if (isAbsolutePath(name)) {
-          await loadIconAbsolute(bridge, name);
-        } else {
-          await loadIconViaHttp(name);
-        }
-      } catch (err) {
-        console.warn("[IconCache] loadIcons failed for", name.slice(-60), err);
-      } finally {
-        pending.delete(name);
+  private async loadIconAbsolute(path: string): Promise<void> {
+    const normalized = normalizePath(path);
+    try {
+      const content = new Uint8Array(await readFileBuffer(this.bridge, normalized));
+      const ext = normalized.split(".").pop()?.toLowerCase() ?? "";
+      let url: string;
+      if (ext === "svg") {
+        url = svgToDataUrl(new TextDecoder().decode(content));
+      } else {
+        const mime =
+          ext === "png"
+            ? "image/png"
+            : ext === "jpg" || ext === "jpeg"
+              ? "image/jpeg"
+              : ext === "webp"
+                ? "image/webp"
+                : "application/octet-stream";
+        const base64 = btoa(String.fromCharCode(...content));
+        url = `data:${mime};base64,${base64}`;
       }
-    })();
-    pending.set(name, p);
-    promises.push(p);
+      this.cache.set(path, url);
+      this.evictIfNeeded();
+    } catch (err) {
+      console.warn("[IconCache] loadIconAbsolute failed", normalized, err);
+      throw err;
+    }
   }
 
-  await Promise.all(promises);
+  private async loadIconViaHttp(name: string): Promise<void> {
+    const resp = await fetch(`/icons/${name}`);
+    if (!resp.ok) return;
+    const svg = await resp.text();
+    this.cache.set(name, svgToDataUrl(svg));
+    this.evictIfNeeded();
+  }
+
+  /** Sentinel paths that are fallbacks, not real icon files - skip loading to avoid ENOENT. */
+  private isSentinelIconPath(name: string): boolean {
+    return name === "_default" || name.startsWith("_default_");
+  }
+
+  async loadIcons(names: string[]): Promise<void> {
+    const promises: Promise<void>[] = [];
+
+    for (const name of names) {
+      if (this.isSentinelIconPath(name)) continue;
+      if (this.cache.has(name)) continue;
+
+      if (this.pending.has(name)) {
+        promises.push(this.pending.get(name)!);
+        continue;
+      }
+
+      const p = (async () => {
+        try {
+          if (isAbsolutePath(name)) {
+            await this.loadIconAbsolute(name);
+          } else {
+            await this.loadIconViaHttp(name);
+          }
+        } catch (err) {
+          console.warn("[IconCache] loadIcons failed for", name.slice(-60), err);
+        } finally {
+          this.pending.delete(name);
+        }
+      })();
+      this.pending.set(name, p);
+      promises.push(p);
+    }
+
+    await Promise.all(promises);
+  }
+
+  getCachedIconUrl(name: string): string | undefined {
+    const url = this.cache.get(name);
+    if (url !== undefined) {
+      this.touchKey(name);
+    }
+    return url;
+  }
 }
 
-export function getCachedIconUrl(name: string): string | undefined {
-  const url = cache.get(name);
-  if (url !== undefined) {
-    touchKey(name);
+const iconAssetStoreAtom = atom((get) => {
+  const bridge = get(bridgeAtom);
+  if (!bridge) {
+    throw new Error("Bridge not initialized.");
   }
-  return url;
+  return new IconAssetStore(bridge);
+});
+
+export function useIconAssetStore(): IconAssetStore {
+  return useAtomValue(iconAssetStoreAtom);
 }

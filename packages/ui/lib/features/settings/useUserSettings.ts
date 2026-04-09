@@ -1,3 +1,4 @@
+import { readAppDirs, useAppDirs } from "@/features/bridge/appDirs";
 import { bridgeAtom, useBridge } from "@/features/bridge/useBridge";
 import type { JsoncFileWatcher } from "@/features/file-system/jsoncFileWatcher";
 import type { DotDirSettings } from "@/features/settings/types";
@@ -22,7 +23,8 @@ const userSettingsWriteAtom = atom(
     set(userSettingsAtom, next);
 
     void (async () => {
-      const watcher = await createUserSettingsWatcher(bridge);
+      const { configDir } = await readAppDirs(bridge);
+      const watcher = await createUserSettingsWatcher(bridge, configDir);
       try {
         watcher.setValue(next);
       } finally {
@@ -42,7 +44,10 @@ const userSettingsWriteAtom = atom(
       const patch = get(userSettingsPendingPatchAtom);
       set(userSettingsPendingPatchAtom, {});
       set(userSettingsSaveTimerAtom, null);
-      void saveSettingsPatchToDisk(bridge, patch);
+      void (async () => {
+        const { configDir } = await readAppDirs(bridge);
+        await saveSettingsPatchToDisk(bridge, configDir, patch);
+      })();
     }, 500);
 
     set(userSettingsSaveTimerAtom, timer);
@@ -51,17 +56,18 @@ const userSettingsWriteAtom = atom(
 
 const showHiddenAtom = atom((get) => get(userSettingsAtom).showHidden ?? false);
 
-function getInitialSettings(bridge: ReturnType<typeof useBridge>): Promise<DotDirSettings> {
+function getInitialSettings(bridge: ReturnType<typeof useBridge>, configDir: string): Promise<DotDirSettings> {
   const cached = initialSettingsCache.get(bridge);
   if (cached) return cached;
-  const pending = loadUserSettings(bridge);
+  const pending = loadUserSettings(bridge, configDir);
   initialSettingsCache.set(bridge, pending);
   return pending;
 }
 
 export function UserSettingsProvider({ children }: { children: ReactNode }) {
   const bridge = useBridge();
-  const initialSettings = use(getInitialSettings(bridge));
+  const { configDir } = useAppDirs();
+  const initialSettings = use(getInitialSettings(bridge, configDir));
   const setSettings = useSetAtom(userSettingsAtom);
   const setPendingPatch = useSetAtom(userSettingsPendingPatchAtom);
   const setSaveTimer = useSetAtom(userSettingsSaveTimerAtom);
@@ -78,7 +84,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     let watcher: JsoncFileWatcher<DotDirSettings> | null = null;
 
     void (async () => {
-      watcher = await createUserSettingsWatcher(bridge);
+      watcher = await createUserSettingsWatcher(bridge, configDir);
       if (cancelled) {
         await watcher.dispose();
         return;
@@ -96,7 +102,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
         void watcher.dispose();
       }
     };
-  }, [bridge, setSettings]);
+  }, [bridge, configDir, setSettings]);
 
   useEffect(() => {
     return () => {

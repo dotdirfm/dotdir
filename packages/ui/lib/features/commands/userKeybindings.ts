@@ -4,7 +4,7 @@
  * Loads and watches user-defined keybindings from the host-provided config dir.
  */
 
-import { getAppDirs } from "@/features/bridge/appDirs";
+import { useAppDirs } from "@/features/bridge/appDirs";
 import { useBridge } from "@/features/bridge/useBridge";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/features/file-system/jsoncFileWatcher";
 import { join } from "@/utils/path";
@@ -34,6 +34,7 @@ function validateKeybindings(parsed: unknown): Keybinding[] | null {
 
 export function useUserKeybindings(): void {
   const bridge = useBridge();
+  const { configDir } = useAppDirs();
   const commandRegistry = useCommandRegistry();
 
   useEffect(() => {
@@ -42,10 +43,7 @@ export function useUserKeybindings(): void {
 
     void createJsoncFileWatcher<Keybinding[]>(bridge, {
       name: "userKeybindings",
-      getPath: async () => {
-        const { configDir } = await getAppDirs(bridge);
-        return join(configDir, "keybindings.json");
-      },
+      getPath: async () => join(configDir, "keybindings.json"),
       validate: validateKeybindings,
       defaultValue: [],
       onLoad: (keybindings) => {
@@ -64,5 +62,5 @@ export function useUserKeybindings(): void {
       cancelled = true;
       void watcher?.dispose();
     };
-  }, [bridge, commandRegistry]);
+  }, [bridge, commandRegistry, configDir]);
 }
