@@ -3,6 +3,7 @@ import { bridgeAtom } from "@/features/bridge/useBridge";
 import { readFileBuffer } from "@/features/file-system/fs";
 import { normalizePath } from "@/utils/path";
 import { atom, useAtomValue } from "jotai";
+import { useCallback, useSyncExternalStore } from "react";
 
 const MAX_SIZE = 200;
 
@@ -17,6 +18,7 @@ function svgToDataUrl(svg: string): string {
 export class IconAssetStore {
   private cache = new Map<string, string>();
   private pending = new Map<string, Promise<void>>();
+  private listeners = new Map<string, Set<() => void>>();
 
   constructor(private bridge: Bridge) {}
 
@@ -32,6 +34,15 @@ export class IconAssetStore {
     while (this.cache.size > MAX_SIZE) {
       const oldest = this.cache.keys().next().value!;
       this.cache.delete(oldest);
+      this.emit(oldest);
+    }
+  }
+
+  private emit(key: string): void {
+    const listeners = this.listeners.get(key);
+    if (!listeners) return;
+    for (const listener of listeners) {
+      listener();
     }
   }
 
@@ -57,6 +68,7 @@ export class IconAssetStore {
       }
       this.cache.set(path, url);
       this.evictIfNeeded();
+      this.emit(path);
     } catch (err) {
       console.warn("[IconCache] loadIconAbsolute failed", normalized, err);
       throw err;
@@ -69,6 +81,7 @@ export class IconAssetStore {
     const svg = await resp.text();
     this.cache.set(name, svgToDataUrl(svg));
     this.evictIfNeeded();
+    this.emit(name);
   }
 
   /** Sentinel paths that are fallbacks, not real icon files - skip loading to avoid ENOENT. */
@@ -119,6 +132,21 @@ export class IconAssetStore {
   setCachedIconUrl(name: string, url: string): void {
     this.cache.set(name, url);
     this.evictIfNeeded();
+    this.emit(name);
+  }
+
+  subscribe(name: string, listener: () => void): () => void {
+    const listeners = this.listeners.get(name) ?? new Set<() => void>();
+    listeners.add(listener);
+    this.listeners.set(name, listeners);
+    return () => {
+      const current = this.listeners.get(name);
+      if (!current) return;
+      current.delete(listener);
+      if (current.size === 0) {
+        this.listeners.delete(name);
+      }
+    };
   }
 }
 
@@ -132,4 +160,20 @@ const iconAssetStoreAtom = atom((get) => {
 
 export function useIconAssetStore(): IconAssetStore {
   return useAtomValue(iconAssetStoreAtom);
+}
+
+export function useIconAssetUrl(path: string | null): string | null {
+  const iconAssets = useIconAssetStore();
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      if (!path) return () => {};
+      return iconAssets.subscribe(path, listener);
+    },
+    [iconAssets, path],
+  );
+  const getSnapshot = useCallback(() => {
+    if (!path) return null;
+    return iconAssets.getCachedIconUrl(path) ?? null;
+  }, [iconAssets, path]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

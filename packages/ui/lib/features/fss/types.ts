@@ -1,3 +1,5 @@
+import type { ResolvedIcon } from "@/features/file-icons/iconResolver";
+
 export interface ResolvedEntryStyle {
   color?: string;
   opacity?: number;
@@ -9,4 +11,9 @@ export interface ResolvedEntryStyle {
   icon: string | null;
   sortPriority: number;
   groupFirst: boolean;
+}
+
+export interface FilePresentation {
+  style: ResolvedEntryStyle;
+  icon: ResolvedIcon;
 }

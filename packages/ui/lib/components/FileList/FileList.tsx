@@ -64,12 +64,12 @@ export const FileList = memo(function FileList({ side, tabId, state, showHidden,
   const { resolve } = useFileStyleResolver();
 
   const comparer = useCallback((a: DisplayEntry, b: DisplayEntry) => {
-    if (a.style.groupFirst !== b.style.groupFirst) return a.style.groupFirst ? -1 : 1;
-    if (a.style.sortPriority !== b.style.sortPriority) return b.style.sortPriority - a.style.sortPriority;
+    if (a.presentation.style.groupFirst !== b.presentation.style.groupFirst) return a.presentation.style.groupFirst ? -1 : 1;
+    if (a.presentation.style.sortPriority !== b.presentation.style.sortPriority) return b.presentation.style.sortPriority - a.presentation.style.sortPriority;
     return a.entry.name.localeCompare(b.entry.name);
   }, []);
 
-  const toDisplayEntry = useCallback((entry: FsNode): DisplayEntry => ({ entry, style: resolve(entry) }), [resolve]);
+  const toDisplayEntry = useCallback((entry: FsNode): DisplayEntry => ({ entry, presentation: resolve(entry) }), [resolve]);
 
   const sorted = useMemo(() => {
     const withStyle = entries.map((entry) => toDisplayEntry(entry));

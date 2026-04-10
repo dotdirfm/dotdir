@@ -1,52 +1,36 @@
-import { createFileStyleNode, useFileStyleResolver } from "@/features/fss/fileStyleResolver";
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import styles from "./FileIcon.module.css";
-import { useGetCachedIcon, useResolveIcon } from "./iconResolver";
+import { useIconAssetUrl } from "./iconCache";
+import { useLoadIconsForPaths, type ResolvedIcon } from "./iconResolver";
 
 interface FileIconProps {
-  path: string;
-  isDirectory: boolean;
-  langId?: string;
-  hidden?: boolean;
-  executable?: boolean;
+  icon: ResolvedIcon;
   size?: number;
   className?: string;
 }
 
-export function FileIcon({ path, isDirectory, langId, hidden, executable, size = 16, className }: FileIconProps) {
-  const { resolve, registerResolvedIcon, assetVersion } = useFileStyleResolver();
-  const resolveIcon = useResolveIcon();
-  const getCachedIcon = useGetCachedIcon();
-  const node = useMemo(
-    () =>
-      createFileStyleNode({
-        path,
-        isDirectory,
-        langId,
-        hidden,
-        executable,
-      }),
-    [executable, hidden, isDirectory, langId, path],
-  );
-  const style = resolve(node);
-  const icon = resolveIcon(node.name, isDirectory, false, false, langId, style.icon);
-  const iconRegistrationKey = useMemo(() => {
-    if (icon.kind === "image") {
-      return `image:${icon.path ?? "_default"}`;
-    }
-    if (icon.font) {
-      return `font:${icon.font.fontFamily}:${icon.font.character}:${icon.font.color ?? ""}:${icon.font.fontSize ?? ""}`;
-    }
-    return "font:_missing";
-  }, [icon]);
+export function FileIcon({ icon, size = 16, className }: FileIconProps) {
+  const loadIconsForPaths = useLoadIconsForPaths();
+  const imageUrl = useIconAssetUrl(icon.kind === "image" ? icon.path : null);
 
-  useEffect(() => registerResolvedIcon(icon), [iconRegistrationKey, registerResolvedIcon]);
-
-  const imageUrl = useMemo(() => {
-    if (icon.kind !== "image") return null;
-    if (!icon.path) return icon.url ?? icon.fallbackUrl;
-    return getCachedIcon(icon.path) ?? icon.url ?? icon.fallbackUrl;
-  }, [assetVersion, getCachedIcon, icon]);
+  useEffect(() => {
+    const resolvedThemeIcon =
+      icon.kind === "image" && icon.path
+        ? [{ kind: "image" as const, path: icon.path }]
+        : icon.kind === "font" && icon.font
+          ? [
+              {
+                kind: "font" as const,
+                character: icon.font.character,
+                fontFamily: icon.font.fontFamily,
+                color: icon.font.color,
+                fontSize: icon.font.fontSize,
+              },
+            ]
+          : [];
+    if (resolvedThemeIcon.length === 0) return;
+    void loadIconsForPaths(resolvedThemeIcon);
+  }, [icon, loadIconsForPaths]);
 
   const rootClassName = className ? `${styles.root} ${className}` : styles.root;
 
@@ -67,7 +51,7 @@ export function FileIcon({ path, isDirectory, langId, hidden, executable, size =
           {icon.font.character}
         </span>
       ) : (
-        <img className={styles.image} src={imageUrl ?? icon.fallbackUrl} width={size} height={size} alt="" />
+        <img className={styles.image} src={imageUrl ?? icon.url ?? icon.fallbackUrl} width={size} height={size} alt="" />
       )}
     </span>
   );

@@ -14,9 +14,8 @@ interface FileListEntryRowProps {
 }
 
 export const FileListEntryRow = memo(function FileListEntryRow({ item, rowHeight, active, selected, onPointerDown }: FileListEntryRowProps) {
-  const { entry, style } = item;
-  const executable = entry.type === "file" && !!(entry.meta as { executable?: boolean }).executable;
-  const hidden = !!entry.meta.hidden;
+  const { entry, presentation } = item;
+  const { style, icon } = presentation;
 
   return (
     <div
@@ -28,7 +27,7 @@ export const FileListEntryRow = memo(function FileListEntryRow({ item, rowHeight
       }}
     >
       <span className={styles["entry-icon"]}>
-        <FileIcon path={entry.path as string} isDirectory={entry.type === "folder"} langId={entry.lang} hidden={hidden} executable={executable} size={16} />
+        <FileIcon icon={icon} size={16} />
       </span>
       <span
         className={styles["entry-name"]}

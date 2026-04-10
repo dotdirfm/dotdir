@@ -1,9 +1,9 @@
 import { iconThemeVersionAtom, systemThemeAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { FileSystemObserver, useFileSystemWatchRegistry, type FileSystemChangeRecord } from "@/features/file-system/fs";
-import type { ResolvedEntryStyle } from "@/features/fss/types";
+import type { FilePresentation } from "@/features/fss/types";
 import { createPanelResolver, invalidateFssCache, resolveEntryStyle, syncLayers, useExtensionFssLayers } from "@/features/fss/fss";
-import { useLoadIconsForPaths, type ResolvedIcon } from "@/features/file-icons/iconResolver";
+import { useResolveIcon } from "@/features/file-icons/iconResolver";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
 import type { FsNode } from "fss-lang";
 import { createFsNode } from "fss-lang/helpers";
@@ -20,10 +20,8 @@ import {
 } from "react";
 
 type FileStyleResolverValue = {
-  resolve: (node: FsNode) => ResolvedEntryStyle;
+  resolve: (node: FsNode) => FilePresentation;
   version: number;
-  assetVersion: number;
-  registerResolvedIcon: (icon: ResolvedIcon) => () => void;
 };
 
 type FileStyleResolverProviderProps = {
@@ -33,32 +31,6 @@ type FileStyleResolverProviderProps = {
 };
 
 const FileStyleResolverContext = createContext<FileStyleResolverValue | null>(null);
-
-function resolvedIconToThemeIcon(icon: ResolvedIcon) {
-  if (icon.kind === "image" && icon.path) {
-    return { kind: "image" as const, path: icon.path };
-  }
-  if (icon.kind === "font" && icon.font) {
-    return {
-      kind: "font" as const,
-      character: icon.font.character,
-      fontFamily: icon.font.fontFamily,
-      color: icon.font.color,
-      fontSize: icon.font.fontSize,
-    };
-  }
-  return null;
-}
-
-function getResolvedIconKey(icon: ResolvedIcon): string | null {
-  if (icon.kind === "image" && icon.path) {
-    return `image:${icon.path}`;
-  }
-  if (icon.kind === "font" && icon.font) {
-    return `font:${icon.font.fontFamily}:${icon.font.character}:${icon.font.color ?? ""}:${icon.font.fontSize ?? ""}`;
-  }
-  return null;
-}
 
 function getWatchRoots(dirPath: string): string[] {
   const paths: string[] = [];
@@ -119,16 +91,13 @@ export function FileStyleResolverProvider({ path, pathKind = "directory", childr
   const extensionLayers = useExtensionFssLayers();
   const theme = useAtomValue(systemThemeAtom);
   const iconThemeVersion = useAtomValue(iconThemeVersionAtom);
-  const loadIconsForPaths = useLoadIconsForPaths();
+  const resolveIcon = useResolveIcon();
   const resolverRef = useRef(createPanelResolver(theme));
   const currentDirPathRef = useRef("");
-  const styleCacheRef = useRef(new Map<string, ResolvedEntryStyle>());
-  const requestedIconsRef = useRef(new Map<string, { count: number; icon: NonNullable<ReturnType<typeof resolvedIconToThemeIcon>> }>());
+  const presentationCacheRef = useRef(new Map<string, FilePresentation>());
   const observerRef = useRef<FileSystemObserver | null>(null);
   const syncGenerationRef = useRef(0);
   const [version, setVersion] = useState(0);
-  const [requestedIconsVersion, setRequestedIconsVersion] = useState(0);
-  const [assetVersion, setAssetVersion] = useState(0);
 
   const syncCurrentLayers = useCallback(async () => {
     const dirPath = currentDirPathRef.current;
@@ -137,7 +106,7 @@ export function FileStyleResolverProvider({ path, pathKind = "directory", childr
     resolverRef.current.setTheme(theme);
     await syncLayers(bridge, resolverRef.current, dirPath, extensionLayers);
     if (generation !== syncGenerationRef.current) return;
-    styleCacheRef.current.clear();
+    presentationCacheRef.current.clear();
     setVersion((value) => value + 1);
   }, [bridge, extensionLayers, theme]);
 
@@ -151,20 +120,6 @@ export function FileStyleResolverProvider({ path, pathKind = "directory", childr
   useEffect(() => {
     void syncCurrentLayers();
   }, [syncCurrentLayers, iconThemeVersion]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const icons = [...requestedIconsRef.current.values()].map((entry) => entry.icon);
-    if (icons.length === 0) return;
-    loadIconsForPaths(icons).then(() => {
-      if (!cancelled) {
-        setAssetVersion((value) => value + 1);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [loadIconsForPaths, requestedIconsVersion]);
 
   useEffect(() => {
     const handleRecords = (records: FileSystemChangeRecord[]) => {
@@ -212,7 +167,7 @@ export function FileStyleResolverProvider({ path, pathKind = "directory", childr
   }, [syncCurrentLayers, watchRegistry]);
 
   const resolve = useCallback(
-    (node: FsNode): ResolvedEntryStyle => {
+    (node: FsNode): FilePresentation => {
       const key = [
         node.path ?? "",
         node.type,
@@ -220,50 +175,25 @@ export function FileStyleResolverProvider({ path, pathKind = "directory", childr
         String((node.meta as { executable?: boolean } | undefined)?.executable ?? false),
         String((node.meta as { hidden?: boolean } | undefined)?.hidden ?? false),
       ].join("\0");
-      const cached = styleCacheRef.current.get(key);
+      const cached = presentationCacheRef.current.get(key);
       if (cached) return cached;
-      const resolved = resolveEntryStyle(resolverRef.current, node);
-      styleCacheRef.current.set(key, resolved);
-      return resolved;
+      const style = resolveEntryStyle(resolverRef.current, node);
+      const presentation = {
+        style,
+        icon: resolveIcon(node.name, node.type === "folder", false, node.parent == null, node.lang, style.icon),
+      };
+      presentationCacheRef.current.set(key, presentation);
+      return presentation;
     },
-    [version],
+    [resolveIcon, version],
   );
-
-  const registerResolvedIcon = useCallback((icon: ResolvedIcon) => {
-    const key = getResolvedIconKey(icon);
-    const themeIcon = resolvedIconToThemeIcon(icon);
-    if (!key || !themeIcon) {
-      return () => {};
-    }
-
-    const current = requestedIconsRef.current.get(key);
-    if (current) {
-      current.count += 1;
-    } else {
-      requestedIconsRef.current.set(key, { count: 1, icon: themeIcon });
-      setRequestedIconsVersion((value) => value + 1);
-    }
-
-    return () => {
-      const existing = requestedIconsRef.current.get(key);
-      if (!existing) return;
-      if (existing.count <= 1) {
-        requestedIconsRef.current.delete(key);
-        setRequestedIconsVersion((value) => value + 1);
-        return;
-      }
-      existing.count -= 1;
-    };
-  }, []);
 
   const value = useMemo<FileStyleResolverValue>(
     () => ({
       resolve,
       version,
-      assetVersion,
-      registerResolvedIcon,
     }),
-    [assetVersion, registerResolvedIcon, resolve, version],
+    [resolve, version],
   );
 
   return <FileStyleResolverContext.Provider value={value}>{children}</FileStyleResolverContext.Provider>;

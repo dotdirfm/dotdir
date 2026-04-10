@@ -21,7 +21,10 @@ export function getRequestedIndex(entries: DisplayEntry[], requestedName: string
   if (exact >= 0) return exact;
   const requested = {
     entry: { name: requestedName },
-    style: { groupFirst: false, sortPriority: 0 },
+    presentation: {
+      style: { groupFirst: false, sortPriority: 0 },
+      icon: { kind: "image", path: "_default", url: null, fallbackUrl: "" },
+    },
   } as DisplayEntry;
   let idx = binarySearch(entries, requested, comparer);
   if (idx < 0) idx = ~idx;
