@@ -24,7 +24,7 @@
   "scripts": {
     "dev": "vite",
     "watch": "vite build --watch",
-    "build": "pnpm --filter @dotdirfm/extension-api build && tsc && vite build",
+    "build": "pnpm --filter fss-lang build && pnpm --filter @dotdirfm/extension-api build && tsc && vite build",
     "lint": "eslint lib vite.config.ts",
     "lint:fix": "eslint lib vite.config.ts --fix",
     "fmt": "eslint lib vite.config.ts --fix",
@@ -59,7 +59,7 @@
     "@dotdirfm/extension-api": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
-    "fss-lang": "^0.0.5",
+    "fss-lang": "workspace:*",
     "jotai": "^2.19.0",
     "jsonc-parser": "^3.3.1",
     "marked": "^17.0.5",

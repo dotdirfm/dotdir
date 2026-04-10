@@ -1,0 +1,55 @@
+{
+  "name": "fss-lang",
+  "type": "module",
+  "version": "0.0.5",
+  "description": "File Style Sheets — a CSS-like language for describing how files should be rendered in a tree or panel.",
+  "author": "Mikhail Isupov <lam0x86@mail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/dotdirfm/dotdir#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dotdirfm/dotdir.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dotdirfm/dotdir/issues"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./helpers": {
+      "types": "./dist/helpers.d.ts",
+      "import": "./dist/helpers.js",
+      "default": "./dist/helpers.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "devDependencies": {
+    "@types/css-tree": "^2.3.11",
+    "@types/node": "^25.0.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
+  },
+  "dependencies": {
+    "css-tree": "^3.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "packageManager": "pnpm@10.30.3"
+}
