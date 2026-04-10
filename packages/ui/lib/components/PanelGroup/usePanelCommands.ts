@@ -1,5 +1,15 @@
 import type { PanelSide } from "@/entities/panel/model/types";
 import { useCommandRegistry } from "@/features/commands/commands";
+import {
+  CLOSE_TAB,
+  EDIT_IN_OPPOSITE_PANEL,
+  NEW_TAB,
+  OPEN_CURRENT_DIR_IN_OPPOSITE_PANEL_CURRENT_TAB,
+  OPEN_CURRENT_DIR_IN_OPPOSITE_PANEL_NEW_TAB,
+  OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_CURRENT_TAB,
+  OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_NEW_TAB,
+  PREVIEW_IN_OPPOSITE_PANEL,
+} from "@/features/commands/commandIds";
 import { OPPOSITE_PANEL } from "@/entities/panel/model/panelSide";
 import { createFilelistTab, createPreviewTab } from "@/entities/tab/model/tabsAtoms";
 import type { PanelTab } from "@/entities/tab/model/types";
@@ -32,13 +42,13 @@ export function usePanelCommands(args: UsePanelCommandsArgs): void {
   useEffect(() => {
     if (!args.active) return;
 
-    const disposables = [commandRegistry.registerCommand("newTab", () => argsRef.current.handleNewTab()), commandRegistry.registerCommand("closeTab", () => void argsRef.current.handleCloseActiveTab())];
+    const disposables = [commandRegistry.registerCommand(NEW_TAB, () => argsRef.current.handleNewTab()), commandRegistry.registerCommand(CLOSE_TAB, () => void argsRef.current.handleCloseActiveTab())];
 
     const register = (id: string, fn: () => void | Promise<void>) => {
       disposables.push(commandRegistry.registerCommand(id, fn));
     };
 
-    register("openCurrentDirInOppositePanelCurrentTab", () => {
+    register(OPEN_CURRENT_DIR_IN_OPPOSITE_PANEL_CURRENT_TAB, () => {
       const opposite = OPPOSITE_PANEL[argsRef.current.side];
       const fileListTab = argsRef.current.activeTabRef.current?.type === "filelist" ? argsRef.current.activeTabRef.current : null;
       if (!fileListTab) return;
@@ -51,7 +61,7 @@ export function usePanelCommands(args: UsePanelCommandsArgs): void {
       argsRef.current.setActivePanel(opposite);
     });
 
-    register("openCurrentDirInOppositePanelNewTab", () => {
+    register(OPEN_CURRENT_DIR_IN_OPPOSITE_PANEL_NEW_TAB, () => {
       const opposite = OPPOSITE_PANEL[argsRef.current.side];
       const fileListTab = argsRef.current.activeTabRef.current?.type === "filelist" ? argsRef.current.activeTabRef.current : null;
       if (!fileListTab) return;
@@ -63,7 +73,7 @@ export function usePanelCommands(args: UsePanelCommandsArgs): void {
       argsRef.current.setActivePanel(opposite);
     });
 
-    register("openSelectedDirInOppositePanelCurrentTab", () => {
+    register(OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_CURRENT_TAB, () => {
       const entry = getSelectedEntry(argsRef.current.activeTabRef.current);
       if (!entry || entry.type !== "folder") return;
       const opposite = OPPOSITE_PANEL[argsRef.current.side];
@@ -75,7 +85,7 @@ export function usePanelCommands(args: UsePanelCommandsArgs): void {
       argsRef.current.setActivePanel(opposite);
     });
 
-    register("openSelectedDirInOppositePanelNewTab", () => {
+    register(OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_NEW_TAB, () => {
       const entry = getSelectedEntry(argsRef.current.activeTabRef.current);
       if (!entry || entry.type !== "folder") return;
       const opposite = OPPOSITE_PANEL[argsRef.current.side];
@@ -87,7 +97,7 @@ export function usePanelCommands(args: UsePanelCommandsArgs): void {
       argsRef.current.setActivePanel(opposite);
     });
 
-    register("previewInOppositePanel", () => {
+    register(PREVIEW_IN_OPPOSITE_PANEL, () => {
       const side = argsRef.current.side;
       const entry = getSelectedEntry(argsRef.current.activeTabRef.current);
       if (!entry || entry.type !== "file") return;
@@ -117,7 +127,7 @@ export function usePanelCommands(args: UsePanelCommandsArgs): void {
       argsRef.current.setActivePanel(opposite);
     });
 
-    register("editInOppositePanel", () => {
+    register(EDIT_IN_OPPOSITE_PANEL, () => {
       const side = argsRef.current.side;
       const entry = getSelectedEntry(argsRef.current.activeTabRef.current);
       if (!entry || entry.type !== "file") return;

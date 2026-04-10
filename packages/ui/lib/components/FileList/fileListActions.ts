@@ -1,6 +1,7 @@
 import type { ActionQueue } from "@/components/FileList/actionQueue";
 import { useCommandLine } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { EDIT_FILE, TERMINAL_EXECUTE, VIEW_FILE } from "@/features/commands/commandIds";
 import { useFileOperationHandlers } from "@/features/file-ops/fileOperationHandlers";
 import type { FsNode } from "fss-lang";
 import { useMemo, useRef } from "react";
@@ -50,7 +51,7 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
           const [item] = getSelectedOrActiveEntries(depsRef.current);
           if (!item || item.entry.type !== "file") return;
           if (!(item.entry.meta as { executable?: boolean }).executable) return;
-          void commandRegistry.executeCommand("terminal.execute", item.entry.path as string);
+          void commandRegistry.executeCommand(TERMINAL_EXECUTE, item.entry.path as string);
         }),
       open: () =>
         depsRef.current.actionQueue.enqueue(async () => {
@@ -61,7 +62,7 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
         depsRef.current.actionQueue.enqueue(() => {
           const [item] = getSelectedOrActiveEntries(depsRef.current);
           if (item && item.entry.type === "file") {
-            void commandRegistry.executeCommand("viewFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
+            void commandRegistry.executeCommand(VIEW_FILE, item.entry.path as string, item.entry.name, Number(item.entry.meta.size));
           }
         }),
       editFile: () =>
@@ -69,7 +70,7 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
           const [item] = getSelectedOrActiveEntries(depsRef.current);
           if (item && item.entry.type === "file") {
             const langId = typeof item.entry.lang === "string" && item.entry.lang ? item.entry.lang : "plaintext";
-            void commandRegistry.executeCommand("editFile", item.entry.path as string, item.entry.name, Number(item.entry.meta.size), langId);
+            void commandRegistry.executeCommand(EDIT_FILE, item.entry.path as string, item.entry.name, Number(item.entry.meta.size), langId);
           }
         }),
       moveToTrash: () =>

@@ -15,6 +15,11 @@ import {
 import type { PanelTab } from "@/entities/tab/model/types";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
+import {
+  DOTDIR_OPEN_LEFT_PANEL_MENU,
+  DOTDIR_OPEN_RIGHT_PANEL_MENU,
+  LIST_OPEN,
+} from "@/features/commands/commandIds";
 import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { type FileListPanelController } from "@/features/panels/useFileListPanel";
@@ -471,7 +476,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
   }, [setActivePanel, side]);
 
   useEffect(() => {
-    const commandId = side === "left" ? "dotdir.openLeftPanelMenu" : "dotdir.openRightPanelMenu";
+    const commandId = side === "left" ? DOTDIR_OPEN_LEFT_PANEL_MENU : DOTDIR_OPEN_RIGHT_PANEL_MENU;
     return commandRegistry.registerCommand(commandId, () => {
       openPanelMenu();
     });
@@ -564,7 +569,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
             onConfirm={() => {
               close();
               requestAnimationFrame(() => {
-                void commandRegistry.executeCommand("list.open");
+                void commandRegistry.executeCommand(LIST_OPEN);
               });
             }}
           />

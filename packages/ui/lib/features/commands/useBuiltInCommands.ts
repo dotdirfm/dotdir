@@ -14,6 +14,32 @@ import {
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandLine } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
+import {
+  CLOSE_EDITOR,
+  CLOSE_TAB,
+  CLOSE_VIEWER,
+  COMMANDLINE_CLEAR,
+  DOTDIR_CANCEL_NAVIGATION,
+  DOTDIR_CLOSE_WINDOW,
+  DOTDIR_EXIT,
+  DOTDIR_FOCUS_LEFT_PANEL,
+  DOTDIR_FOCUS_RIGHT_PANEL,
+  DOTDIR_NEW_WINDOW,
+  DOTDIR_PANEL_ESCAPE,
+  EDIT_FILE,
+  LIST_MAKE_DIR,
+  OPEN_CREATE_FILE,
+  PASTE_LEFT_PANEL_PATH,
+  PASTE_RIGHT_PANEL_PATH,
+  RUN_COMMANDS,
+  SHOW_COMMAND_PALETTE,
+  SHOW_EXTENSIONS,
+  SWITCH_PANEL,
+  TERMINAL_EXECUTE,
+  TOGGLE_HIDDEN_FILES,
+  TOGGLE_PANELS,
+  VIEW_FILE,
+} from "@/features/commands/commandIds";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
 import { runCommandSequence, type RunCommandsArgs } from "@/features/commands/runCommands";
 import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
@@ -170,14 +196,14 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // ── View ──────────────────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand("toggleHiddenFiles", () => {
+      commandRegistry.registerCommand(TOGGLE_HIDDEN_FILES, () => {
         const next = !settingsRef.current.showHidden;
         setShowHidden(next);
       }),
     );
 
     disposables.push(
-      commandRegistry.registerCommand("runCommands", async (args) => {
+      commandRegistry.registerCommand(RUN_COMMANDS, async (args) => {
         const payload = (args ?? null) as RunCommandsArgs | null;
         if (!payload || !Array.isArray(payload.commands)) return;
         await runCommandSequence(commandRegistry, payload.commands);
@@ -185,7 +211,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     );
 
     disposables.push(
-      commandRegistry.registerCommand("togglePanels", () =>
+      commandRegistry.registerCommand(TOGGLE_PANELS, () =>
         setPanelsVisible((v) => {
           if (activeSessionRef.current?.session.getCapabilities().commandRunning) {
             return v;
@@ -202,20 +228,20 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     );
 
     disposables.push(
-      commandRegistry.registerCommand("showExtensions", () =>
+      commandRegistry.registerCommand(SHOW_EXTENSIONS, () =>
         showDialogRef.current({
           type: "extensions",
         }),
       ),
     );
-    disposables.push(commandRegistry.registerCommand("showCommandPalette", () => setCommandPaletteOpen((o) => !o)));
-    disposables.push(commandRegistry.registerCommand("closeViewer", () => depsRef.current.onRequestCloseViewer()));
-    disposables.push(commandRegistry.registerCommand("closeEditor", () => depsRef.current.onRequestCloseEditor()));
+    disposables.push(commandRegistry.registerCommand(SHOW_COMMAND_PALETTE, () => setCommandPaletteOpen((o) => !o)));
+    disposables.push(commandRegistry.registerCommand(CLOSE_VIEWER, () => depsRef.current.onRequestCloseViewer()));
+    disposables.push(commandRegistry.registerCommand(CLOSE_EDITOR, () => depsRef.current.onRequestCloseEditor()));
 
     // ── Navigation ────────────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand("switchPanel", () => {
+      commandRegistry.registerCommand(SWITCH_PANEL, () => {
         const nextSide = activePanelSideRef.current === "left" ? "right" : "left";
         setActivePanel(nextSide);
         requestAnimationFrame(() => {
@@ -225,7 +251,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       }),
     );
     disposables.push(
-      commandRegistry.registerCommand("dotdir.focusLeftPanel", () => {
+      commandRegistry.registerCommand(DOTDIR_FOCUS_LEFT_PANEL, () => {
         setActivePanel("left");
         requestAnimationFrame(() => {
           focusContextRef.current.request("panel");
@@ -234,7 +260,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       }),
     );
     disposables.push(
-      commandRegistry.registerCommand("dotdir.focusRightPanel", () => {
+      commandRegistry.registerCommand(DOTDIR_FOCUS_RIGHT_PANEL, () => {
         setActivePanel("right");
         requestAnimationFrame(() => {
           focusContextRef.current.request("panel");
@@ -244,13 +270,13 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     );
 
     disposables.push(
-      commandRegistry.registerCommand("dotdir.cancelNavigation", () => {
+      commandRegistry.registerCommand(DOTDIR_CANCEL_NAVIGATION, () => {
         cancelNavigationRef.current?.();
       }),
     );
 
     disposables.push(
-      commandRegistry.registerCommand("dotdir.panelEscape", async () => {
+      commandRegistry.registerCommand(DOTDIR_PANEL_ESCAPE, async () => {
         const panel = getPanelRef.current(activePanelSideRef.current);
         if (panel?.navigating) {
           cancelNavigationRef.current?.();
@@ -258,12 +284,12 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         }
 
         if (commandRegistry.getContext("commandLineHasText")) {
-          await commandRegistry.executeCommand("commandLine.clear");
+          await commandRegistry.executeCommand(COMMANDLINE_CLEAR);
           return;
         }
 
         if (activeTabRef.current?.type === "preview") {
-          await commandRegistry.executeCommand("closeTab");
+          await commandRegistry.executeCommand(CLOSE_TAB);
           return;
         }
 
@@ -272,7 +298,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         }
 
         if (viewerOpenRef.current) {
-          await commandRegistry.executeCommand("closeViewer");
+          await commandRegistry.executeCommand(CLOSE_VIEWER);
         }
       }),
     );
@@ -280,7 +306,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // ── File ──────────────────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand("openCreateFile", () => {
+      commandRegistry.registerCommand(OPEN_CREATE_FILE, () => {
         if (activeTabRef.current?.type !== "filelist") return;
         const currentPath = activeTabRef.current.path;
         const { onOpenCreateFileConfirm } = depsRef.current;
@@ -294,7 +320,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     );
 
     disposables.push(
-      commandRegistry.registerCommand("list.makeDir", () => {
+      commandRegistry.registerCommand(LIST_MAKE_DIR, () => {
         if (activeTabRef.current?.type !== "filelist") return;
         const currentPath = activeTabRef.current.path;
         showDialogRef.current({
@@ -322,7 +348,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // ── Application ───────────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand("dotdir.newWindow", async () => {
+      commandRegistry.registerCommand(DOTDIR_NEW_WINDOW, async () => {
         if (!bridgeRef.current.window) return;
         const current = await bridgeRef.current.window.getCurrentState();
         const windowId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `window-${Date.now()}`;
@@ -345,7 +371,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     );
 
     disposables.push(
-      commandRegistry.registerCommand("dotdir.closeWindow", async () => {
+      commandRegistry.registerCommand(DOTDIR_CLOSE_WINDOW, async () => {
         await Promise.all([flushCurrentWindowLayout(), flushCurrentWindowState()]);
 
         if (bridgeRef.current.window) {
@@ -365,7 +391,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     );
 
     disposables.push(
-      commandRegistry.registerCommand("dotdir.exit", async () => {
+      commandRegistry.registerCommand(DOTDIR_EXIT, async () => {
         await Promise.all([flushCurrentWindowLayout(), flushCurrentWindowState()]);
 
         if (bridgeRef.current.window?.exitApp) {
@@ -386,7 +412,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // ── Terminal ──────────────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand("terminal.execute", async (path: unknown) => {
+      commandRegistry.registerCommand(TERMINAL_EXECUTE, async (path: unknown) => {
         const name = basename(path as string);
         const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? `./${name}` : `./${JSON.stringify(name)}`;
         await runCommandRef.current(arg, activeCwdRef.current);
@@ -396,13 +422,13 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // ── Viewer / Editor ───────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand("viewFile", (path: unknown, name: unknown, size: unknown) => {
+      commandRegistry.registerCommand(VIEW_FILE, (path: unknown, name: unknown, size: unknown) => {
         depsRef.current.onViewFile(path as string, name as string, size as number);
       }),
     );
 
     disposables.push(
-      commandRegistry.registerCommand("editFile", (path: unknown, name: unknown, size: unknown, langId: unknown) => {
+      commandRegistry.registerCommand(EDIT_FILE, (path: unknown, name: unknown, size: unknown, langId: unknown) => {
         const limit = settingsRef.current.editorFileSizeLimit ?? DEFAULT_EDITOR_FILE_SIZE_LIMIT;
         if (limit > 0 && (size as number) > limit) return;
         depsRef.current.onEditFile(path as string, name as string, size as number, langId as string);
@@ -410,7 +436,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     );
 
     disposables.push(
-      commandRegistry.registerCommand("pasteLeftPanelPath", () => {
+      commandRegistry.registerCommand(PASTE_LEFT_PANEL_PATH, () => {
         const path = leftActiveTabRef.current?.type === "filelist" ? leftActiveTabRef.current.path : "";
         if (!path) return;
         const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
@@ -418,7 +444,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       }),
     );
     disposables.push(
-      commandRegistry.registerCommand("pasteRightPanelPath", () => {
+      commandRegistry.registerCommand(PASTE_RIGHT_PANEL_PATH, () => {
         const path = rightActiveTabRef.current?.type === "filelist" ? rightActiveTabRef.current.path : "";
         if (!path) return;
         const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);

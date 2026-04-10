@@ -1,6 +1,28 @@
 import { panelsVisibleAtom } from "@/atoms";
 import { useCommandLine, useCommandLineRegistration } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
+import {
+  COMMANDLINE_CLEAR,
+  COMMANDLINE_COPY,
+  COMMANDLINE_CUT,
+  COMMANDLINE_DELETE_LEFT,
+  COMMANDLINE_DELETE_RIGHT,
+  COMMANDLINE_END,
+  COMMANDLINE_EXECUTE,
+  COMMANDLINE_HOME,
+  COMMANDLINE_LEFT,
+  COMMANDLINE_MOVE_WORD_LEFT,
+  COMMANDLINE_MOVE_WORD_RIGHT,
+  COMMANDLINE_PASTE,
+  COMMANDLINE_RIGHT,
+  COMMANDLINE_SELECT_ALL,
+  COMMANDLINE_SELECT_END,
+  COMMANDLINE_SELECT_HOME,
+  COMMANDLINE_SELECT_LEFT,
+  COMMANDLINE_SELECT_RIGHT,
+  COMMANDLINE_SELECT_WORD_LEFT,
+  COMMANDLINE_SELECT_WORD_RIGHT,
+} from "@/features/commands/commandIds";
 import { registerCommandLineKeybindings } from "@/features/commands/registerKeybindings";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import terminalStyles from "@/styles/terminal.module.css";
@@ -74,7 +96,7 @@ export function CommandLine() {
     const d: Array<() => void> = [];
 
     d.push(
-      commandRegistry.registerCommand("commandLine.execute", () => {
+      commandRegistry.registerCommand(COMMANDLINE_EXECUTE, () => {
         const cmd = valueRef.current.trim();
         if (!cmd) return;
         onExecuteRef.current?.(cmd);
@@ -85,7 +107,7 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand("commandLine.clear", () => {
+      commandRegistry.registerCommand(COMMANDLINE_CLEAR, () => {
         if (cursorRef.current !== anchorRef.current) {
           setAnchor(cursorRef.current); // collapse selection first
         } else {
@@ -97,7 +119,7 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand("commandLine.deleteLeft", () => {
+      commandRegistry.registerCommand(COMMANDLINE_DELETE_LEFT, () => {
         const pos = cursorRef.current;
         const anch = anchorRef.current;
         if (pos !== anch) {
@@ -111,7 +133,7 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand("commandLine.deleteRight", () => {
+      commandRegistry.registerCommand(COMMANDLINE_DELETE_RIGHT, () => {
         if (!deleteSelection()) {
           const pos = cursorRef.current;
           if (pos < valueRef.current.length) {
@@ -122,7 +144,7 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand("commandLine.moveWordLeft", () => {
+      commandRegistry.registerCommand(COMMANDLINE_MOVE_WORD_LEFT, () => {
         const v = valueRef.current;
         let p = cursorRef.current;
         while (p > 0 && v[p - 1] === " ") p--;
@@ -132,7 +154,7 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand("commandLine.moveWordRight", () => {
+      commandRegistry.registerCommand(COMMANDLINE_MOVE_WORD_RIGHT, () => {
         const v = valueRef.current;
         let p = cursorRef.current;
         while (p < v.length && v[p] !== " ") p++;
@@ -141,13 +163,13 @@ export function CommandLine() {
       }),
     );
 
-    d.push(commandRegistry.registerCommand("commandLine.home", () => moveCursor(0, false)));
-    d.push(commandRegistry.registerCommand("commandLine.end", () => moveCursor(valueRef.current.length, false)));
-    d.push(commandRegistry.registerCommand("commandLine.left", () => moveCursor(Math.max(0, cursorRef.current - 1), false)));
-    d.push(commandRegistry.registerCommand("commandLine.right", () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), false)));
+    d.push(commandRegistry.registerCommand(COMMANDLINE_HOME, () => moveCursor(0, false)));
+    d.push(commandRegistry.registerCommand(COMMANDLINE_END, () => moveCursor(valueRef.current.length, false)));
+    d.push(commandRegistry.registerCommand(COMMANDLINE_LEFT, () => moveCursor(Math.max(0, cursorRef.current - 1), false)));
+    d.push(commandRegistry.registerCommand(COMMANDLINE_RIGHT, () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), false)));
 
     d.push(
-      commandRegistry.registerCommand("commandLine.selectAll", () => {
+      commandRegistry.registerCommand(COMMANDLINE_SELECT_ALL, () => {
         if (valueRef.current.length === 0) return;
         setAnchor(0);
         setCursor(valueRef.current.length);
@@ -155,12 +177,12 @@ export function CommandLine() {
     );
 
     // Selection commands — registered without keybindings; user can bind manually
-    d.push(commandRegistry.registerCommand("commandLine.selectLeft", () => moveCursor(Math.max(0, cursorRef.current - 1), true)));
-    d.push(commandRegistry.registerCommand("commandLine.selectRight", () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), true)));
-    d.push(commandRegistry.registerCommand("commandLine.selectHome", () => moveCursor(0, true)));
-    d.push(commandRegistry.registerCommand("commandLine.selectEnd", () => moveCursor(valueRef.current.length, true)));
+    d.push(commandRegistry.registerCommand(COMMANDLINE_SELECT_LEFT, () => moveCursor(Math.max(0, cursorRef.current - 1), true)));
+    d.push(commandRegistry.registerCommand(COMMANDLINE_SELECT_RIGHT, () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), true)));
+    d.push(commandRegistry.registerCommand(COMMANDLINE_SELECT_HOME, () => moveCursor(0, true)));
+    d.push(commandRegistry.registerCommand(COMMANDLINE_SELECT_END, () => moveCursor(valueRef.current.length, true)));
     d.push(
-      commandRegistry.registerCommand("commandLine.selectWordLeft", () => {
+      commandRegistry.registerCommand(COMMANDLINE_SELECT_WORD_LEFT, () => {
         const v = valueRef.current;
         let p = cursorRef.current;
         while (p > 0 && v[p - 1] === " ") p--;
@@ -169,7 +191,7 @@ export function CommandLine() {
       }),
     );
     d.push(
-      commandRegistry.registerCommand("commandLine.selectWordRight", () => {
+      commandRegistry.registerCommand(COMMANDLINE_SELECT_WORD_RIGHT, () => {
         const v = valueRef.current;
         let p = cursorRef.current;
         while (p < v.length && v[p] !== " ") p++;
@@ -179,7 +201,7 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand("commandLine.copy", () => {
+      commandRegistry.registerCommand(COMMANDLINE_COPY, () => {
         const pos = cursorRef.current;
         const anch = anchorRef.current;
         if (pos === anch) return;
@@ -190,7 +212,7 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand("commandLine.cut", () => {
+      commandRegistry.registerCommand(COMMANDLINE_CUT, () => {
         const pos = cursorRef.current;
         const anch = anchorRef.current;
         if (pos === anch) return;
@@ -202,7 +224,7 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand("commandLine.paste", () => {
+      commandRegistry.registerCommand(COMMANDLINE_PASTE, () => {
         navigator.clipboard
           .readText()
           .then((text) => {

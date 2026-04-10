@@ -1,33 +1,19 @@
 .help-dialog {
+  composes: modal-dialog from "../dialogs/dialogs.module.css";
   width: 560px;
   max-width: 90vw;
-  margin: auto;
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border-active);
-  border-radius: 6px;
-  padding: 0;
-}
-
-.help-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.5);
 }
 
 .help-dialog-header {
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
-  color: var(--fg-secondary);
+  composes: modal-dialog-header from "../dialogs/dialogs.module.css";
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .help-dialog-body {
+  composes: modal-dialog-body from "../dialogs/dialogs.module.css";
   padding: 16px 18px;
   max-height: 60vh;
-  overflow-y: auto;
   line-height: 1.6;
   outline: none;
 }
@@ -80,29 +66,5 @@
 }
 
 .help-dialog-buttons {
-  display: flex;
-  justify-content: flex-end;
-  padding: 8px 12px;
-  border-top: 1px solid var(--border);
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.help-dialog-buttons button {
-  padding: 4px 16px;
-  border: 1px solid var(--border-active);
-  border-radius: 3px;
-  background: var(--bg-secondary);
-  color: var(--fg);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.help-dialog-buttons button:hover {
-  background: var(--entry-hover);
-}
-
-.help-dialog-buttons button:focus {
-  outline: 2px solid var(--border-active);
-  outline-offset: 1px;
+  composes: modal-dialog-buttons from "../dialogs/dialogs.module.css";
 }

@@ -2,6 +2,7 @@ import { ActionQueue } from "@/components/FileList/actionQueue";
 import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { TERMINAL_EXECUTE, VIEW_FILE } from "@/features/commands/commandIds";
 import { useFileStyleResolver } from "@/features/fss/fileStyleResolver";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -205,7 +206,7 @@ export const FileList = memo(function FileList({ side, tabId, state, showHidden,
       } else if (entry.type === "folder") {
         await onNavigateRef.current(join(currentPathRef.current, entry.name));
       } else if (entry.type === "file") {
-        void commandRegistry.executeCommand("viewFile", entry.path as string, entry.name, Number(entry.meta.size));
+        void commandRegistry.executeCommand(VIEW_FILE, entry.path as string, entry.name, Number(entry.meta.size));
       }
     },
     [commandRegistry],
@@ -323,7 +324,7 @@ export const FileList = memo(function FileList({ side, tabId, state, showHidden,
       if (now - lastClickTimeRef.current < 300) {
         lastClickTimeRef.current = 0;
         if (executable) {
-          actionQueue.enqueue(() => commandRegistry.executeCommand("terminal.execute", entry.path as string));
+          actionQueue.enqueue(() => commandRegistry.executeCommand(TERMINAL_EXECUTE, entry.path as string));
         } else {
           actionQueue.enqueue(() => navigateToEntry(entry));
         }

@@ -1,6 +1,7 @@
 import { systemThemeAtom, themesReadyAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { DOTDIR_RESTART_EXTENSION_HOST } from "@/features/commands/commandIds";
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { type InstallRequest } from "@/features/extensions/runtime/shared";
@@ -154,6 +155,6 @@ export function useExtensionRuntime(): void {
   }, [bridge, installExtensionAndWait, reloadExtensionRuntimeInPlace]);
 
   useEffect(() => {
-    return commandRegistry.registerCommand("dotdir.restartExtensionHost", restartExtensionRuntime);
+    return commandRegistry.registerCommand(DOTDIR_RESTART_EXTENSION_HOST, restartExtensionRuntime);
   }, [commandRegistry, restartExtensionRuntime]);
 }

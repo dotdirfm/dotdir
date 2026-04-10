@@ -1,4 +1,5 @@
 import { useCommandRegistry } from "@/features/commands/commands";
+import { DOTDIR_EXIT, SHOW_COMMAND_PALETTE, SHOW_EXTENSIONS, TOGGLE_HIDDEN_FILES, TOGGLE_PANELS } from "@/features/commands/commandIds";
 import { useFocusContext } from "@/focusContext";
 import styles from "@/styles/terminal.module.css";
 import { FitAddon } from "@xterm/addon-fit";
@@ -15,11 +16,11 @@ interface TerminalViewProps {
 }
 
 const TERMINAL_ROUTED_COMMANDS = [
-  "togglePanels",
-  "showCommandPalette",
-  "toggleHiddenFiles",
-  "dotdir.exit",
-  "showExtensions",
+  TOGGLE_PANELS,
+  SHOW_COMMAND_PALETTE,
+  TOGGLE_HIDDEN_FILES,
+  DOTDIR_EXIT,
+  SHOW_EXTENSIONS,
 ] as const;
 
 function resolveTerminalTheme() {

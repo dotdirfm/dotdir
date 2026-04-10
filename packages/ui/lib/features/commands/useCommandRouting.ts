@@ -20,9 +20,10 @@ export function useCommandRouting(rootRef: RefObject<HTMLElement | null>): void 
     };
 
     const handleWindowKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (!focusContext.is("panel")) return;
+      const isPlainTab = event.key === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey;
+      const isFunctionKey = /^F\d{1,2}$/.test(event.key);
+      if (!isPlainTab && !isFunctionKey) return;
       commandRegistry.handleKeyboardEvent(event);
     };
 
