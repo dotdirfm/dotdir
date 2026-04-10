@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   publish-fss:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
@@ -67,7 +67,7 @@ jobs:
           NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
 
   publish-extension-api:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: publish-fss
     steps:
       - uses: actions/checkout@v6
@@ -119,7 +119,7 @@ jobs:
           NPM_CONFIG_CACHE: ${{ github.workspace }}/.npm-cache
 
   publish-ui:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: publish-extension-api
     steps:
       - uses: actions/checkout@v6
