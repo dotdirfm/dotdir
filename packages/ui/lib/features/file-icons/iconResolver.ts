@@ -1,15 +1,6 @@
-/**
- * Unified Icon Resolver
- *
- * Provides a single interface for resolving file/folder icons through
- * a theme adapter, regardless of whether the active theme comes from
- * FSS metadata or a VS Code icon theme JSON.
- */
-
-import { iconThemeVersionAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { atom, useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import {
   FssIconThemeAdapter,
   NoneIconThemeAdapter,
@@ -23,58 +14,80 @@ import {
 import { DEFAULT_ICONS } from "./defaultIcons";
 import { useIconAssetStore } from "./iconCache";
 
-const activeIconThemeAdapterAtom = atom<IconThemeAdapter>(new NoneIconThemeAdapter());
+type ActiveIconThemeState = {
+  adapter: IconThemeAdapter;
+  kind: "dark" | "light";
+  type: IconThemeType;
+};
+
+const activeIconThemeStateAtom = atom<ActiveIconThemeState>({
+  adapter: new NoneIconThemeAdapter(),
+  kind: "dark",
+  type: "none",
+});
 
 export function useSetIconTheme() {
   const bridge = useBridge();
-  const fssTheme = useMemo(() => new FssIconThemeAdapter(), []);
-  const vscodeTheme = useMemo(() => new VSCodeIconThemeAdapter(bridge), [bridge]);
-  const noneTheme = useMemo(() => new NoneIconThemeAdapter(), []);
-  const setActiveTheme = useSetAtom(activeIconThemeAdapterAtom);
-  const bumpThemeVersion = useSetAtom(iconThemeVersionAtom);
+  const setActiveThemeState = useSetAtom(activeIconThemeStateAtom);
 
   return {
     setIconTheme: async (type: IconThemeType, path?: string): Promise<void> => {
-      noneTheme.clear();
-      fssTheme.clear();
-      vscodeTheme.clear();
-
       if (type === "vscode" && path) {
+        const adapter = new VSCodeIconThemeAdapter(bridge);
         try {
-          await vscodeTheme.load(path);
-          setActiveTheme(vscodeTheme);
-          bumpThemeVersion((v) => v + 1);
+          await adapter.load(path);
+          setActiveThemeState((current) => {
+            current.adapter.clear();
+            adapter.setThemeKind?.(current.kind);
+            return {
+              adapter,
+              kind: current.kind,
+              type: "vscode",
+            };
+          });
         } catch {
-          setActiveTheme(noneTheme);
-          bumpThemeVersion((v) => v + 1);
+          setActiveThemeState((current) => {
+            current.adapter.clear();
+            return {
+              adapter: new NoneIconThemeAdapter(),
+              kind: current.kind,
+              type: "none",
+            };
+          });
         }
         return;
       }
 
-      const nextTheme = type === "fss" ? fssTheme : noneTheme;
-      setActiveTheme(nextTheme);
-      bumpThemeVersion((v) => v + 1);
+      setActiveThemeState((current) => {
+        current.adapter.clear();
+        const adapter: IconThemeAdapter = type === "fss" ? new FssIconThemeAdapter() : new NoneIconThemeAdapter();
+        adapter.setThemeKind?.(current.kind);
+        return {
+          adapter,
+          kind: current.kind,
+          type,
+        };
+      });
     },
   };
 }
 
 export function useSetIconThemeKind() {
-  const activeTheme = useAtomValue(activeIconThemeAdapterAtom);
-  const bumpThemeVersion = useSetAtom(iconThemeVersionAtom);
+  const setActiveThemeState = useSetAtom(activeIconThemeStateAtom);
   return {
     setIconThemeKind: (kind: "dark" | "light"): void => {
-      activeTheme.setThemeKind?.(kind);
-      bumpThemeVersion((v) => v + 1);
+      setActiveThemeState((current) => {
+        current.adapter.setThemeKind?.(kind);
+        return {
+          ...current,
+        };
+      });
     },
   };
 }
 
 export function useIconThemeType(): IconThemeType {
-  return useAtomValue(activeIconThemeAdapterAtom).kind;
-}
-
-export function useIconThemeVersion(): number {
-  return useAtomValue(iconThemeVersionAtom);
+  return useAtomValue(activeIconThemeStateAtom).type;
 }
 
 export interface ResolvedIcon {
@@ -90,7 +103,7 @@ export interface ResolvedIcon {
  * Returns either an image icon or a font icon plus fallback metadata.
  */
 export function useResolveIcon() {
-  const activeTheme = useAtomValue(activeIconThemeAdapterAtom);
+  const { adapter: activeTheme } = useAtomValue(activeIconThemeStateAtom);
   const iconAssets = useIconAssetStore();
 
   return useCallback(
@@ -143,7 +156,7 @@ export function useResolveIcon() {
  * Load any image assets and ensure any font families are ready.
  */
 export function useLoadIconsForPaths() {
-  const activeTheme = useAtomValue(activeIconThemeAdapterAtom);
+  const { adapter: activeTheme } = useAtomValue(activeIconThemeStateAtom);
   const iconAssets = useIconAssetStore();
   return useCallback(
     async (icons: ResolvedThemeIcon[]): Promise<void> => {

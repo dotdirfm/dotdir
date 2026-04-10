@@ -4,7 +4,6 @@ import { atom } from "jotai";
 export const themesReadyAtom = atom(false);
 
 export const systemThemeAtom = atom<SystemThemeKind>("dark");
-export const iconThemeVersionAtom = atom(0);
 
 export const panelsVisibleAtom = atom(true);
 export const terminalFocusRequestKeyAtom = atom(0);

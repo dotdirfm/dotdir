@@ -1,4 +1,4 @@
-import { iconThemeVersionAtom, systemThemeAtom } from "@/atoms";
+import { systemThemeAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { FileSystemObserver, useFileSystemWatchRegistry, type FileSystemChangeRecord } from "@/features/file-system/fs";
 import type { FilePresentation } from "@/features/fss/types";
@@ -90,7 +90,6 @@ export function FileStyleResolverProvider({ path, pathKind = "directory", childr
   const watchRegistry = useFileSystemWatchRegistry();
   const extensionLayers = useExtensionFssLayers();
   const theme = useAtomValue(systemThemeAtom);
-  const iconThemeVersion = useAtomValue(iconThemeVersionAtom);
   const resolveIcon = useResolveIcon();
   const resolverRef = useRef(createPanelResolver(theme));
   const currentDirPathRef = useRef("");
@@ -119,7 +118,7 @@ export function FileStyleResolverProvider({ path, pathKind = "directory", childr
 
   useEffect(() => {
     void syncCurrentLayers();
-  }, [syncCurrentLayers, iconThemeVersion]);
+  }, [resolveIcon, syncCurrentLayers]);
 
   useEffect(() => {
     const handleRecords = (records: FileSystemChangeRecord[]) => {
