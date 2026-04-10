@@ -10,8 +10,6 @@ import { iconThemeVersionAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { atom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useMemo } from "react";
-import { DEFAULT_ICONS } from "./defaultIcons";
-import { useIconAssetStore } from "./iconCache";
 import {
   FssIconThemeAdapter,
   NoneIconThemeAdapter,
@@ -22,6 +20,8 @@ import {
   type ResolvedFontIcon,
   type ResolvedThemeIcon,
 } from "./adapters";
+import { DEFAULT_ICONS } from "./defaultIcons";
+import { useIconAssetStore } from "./iconCache";
 
 const activeIconThemeAdapterAtom = atom<IconThemeAdapter>(new NoneIconThemeAdapter());
 

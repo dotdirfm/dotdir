@@ -51,22 +51,27 @@ export class VSCodeIconThemeAdapter implements IconThemeAdapter {
   private theme: LoadedVSCodeIconTheme | null = null;
   private themeKind: "dark" | "light" = "dark";
   private loadedFonts = new Map<string, Promise<void>>();
+  private loadedFontFaces = new Map<string, FontFace>();
 
   constructor(private bridge: Bridge) {}
 
   async load(path: string): Promise<void> {
+    this.clear();
     const text = await readFileText(this.bridge, path);
     const json: VSCodeIconThemeJson = parseJsonc(text, undefined, { allowTrailingComma: true });
     this.theme = {
       json,
       basePath: dirname(path),
     };
-    this.loadedFonts.clear();
   }
 
   clear(): void {
+    for (const face of this.loadedFontFaces.values()) {
+      document.fonts.delete(face);
+    }
     this.theme = null;
     this.loadedFonts.clear();
+    this.loadedFontFaces.clear();
   }
 
   setThemeKind(kind: "dark" | "light"): void {
@@ -206,6 +211,7 @@ export class VSCodeIconThemeAdapter implements IconThemeAdapter {
       });
       await face.load();
       document.fonts.add(face);
+      this.loadedFontFaces.set(fontId, face);
     })();
 
     this.loadedFonts.set(fontId, promise);

@@ -6,22 +6,19 @@
  * refreshes or navigates up automatically.
  */
 
-import { systemThemeAtom, themesReadyAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { FileListTabState } from "@/entities/tab/model/types";
 import type { Bridge, FsChangeType, FsEntry } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import { FileSystemObserver, useFileSystemWatchRegistry, type FileSystemChangeRecord, type HandleMeta } from "@/features/file-system/fs";
-import { createPanelResolver, invalidateFssCache, syncLayers, useExtensionFssLayers } from "@/features/fss/fss";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { buildContainerPath, isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, isFileExecutable, isRootPath, join } from "@/utils/path";
 import { useFsProviderRegistry } from "@/viewerEditorRegistry";
 import type { FsProviderEntry } from "@dotdirfm/extension-api";
-import type { FsNode, LayeredResolver } from "fss-lang";
+import type { FsNode } from "fss-lang";
 import { createFsNode } from "fss-lang/helpers";
-import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // ── Helper functions ──────────────────────────────────────────────────────────
@@ -114,7 +111,6 @@ export interface FileListPanelController {
   navigating: boolean;
   cancelNavigation: () => void;
   refresh: () => void;
-  fssResolver: LayeredResolver;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -124,10 +120,7 @@ export function useFileListPanel() {
   const bridge = useBridge();
   const fsProviderRegistry = useFsProviderRegistry();
   const watchRegistry = useFileSystemWatchRegistry();
-  const extensionLayers = useExtensionFssLayers();
   const languageRegistry = useLanguageRegistry();
-  const theme = useAtomValue(systemThemeAtom);
-  const themesReady = useAtomValue(themesReadyAtom);
   const [navigating, setNavigating] = useState(false);
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navAbortRef = useRef<AbortController | null>(null);
@@ -136,10 +129,6 @@ export function useFileListPanel() {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const resolver = useMemo(() => createPanelResolver(theme), [theme]);
-  const resolverRef = useRef<LayeredResolver>(resolver);
-  resolverRef.current = resolver;
-
   const observerRef = useRef<FileSystemObserver | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentPathRef = useRef<string>("");
@@ -147,31 +136,6 @@ export function useFileListPanel() {
 
   const showErrorRef = useRef(showError);
   showErrorRef.current = showError;
-
-  // When the OS theme changes or extension icon layers update, re-navigate to
-  // re-sync resolver layers for the current path. currentPathRef is used
-  // instead of state to avoid a stale closure; skips mount (path is "").
-  useEffect(() => {
-    if (!currentPathRef.current) return;
-    if (navAbortRef.current) {
-      rerunCurrentPathAfterNavigationRef.current = true;
-    } else {
-      refreshRef.current();
-    }
-  }, [resolver, extensionLayers]);
-
-  // Theme startup can complete after the panel has already kicked off its first
-  // directory load. Refresh once the extension/theme pipeline is ready so the
-  // initial view picks up the final icon theme and FSS layers even if an
-  // app-level refresh happened before this panel registered itself.
-  useEffect(() => {
-    if (!themesReady || !currentPathRef.current) return;
-    if (navAbortRef.current) {
-      rerunCurrentPathAfterNavigationRef.current = true;
-    } else {
-      refreshRef.current();
-    }
-  }, [themesReady]);
 
   const setupWatches = useCallback((dirPath: string) => {
     const observer = observerRef.current;
@@ -220,10 +184,6 @@ export function useFileListPanel() {
           if (isContainerPath(path)) {
             // ── Container path: delegate listing to the fsProvider extension ──
             const { containerFile: hostFile, innerPath } = parseContainerPath(path);
-            // Container tabs still need resolver layers so icon/theme extensions
-            // and host-directory .dir rules apply after tab cloning/remounts.
-            await syncLayers(bridge, resolverRef.current!, dirname(hostFile), extensionLayers);
-            if (abort.signal.aborted) return;
             const providerMatch = fsProviderRegistry.resolve(basename(hostFile));
             if (!providerMatch) {
               throw new Error(`No fsProvider registered for "${basename(hostFile)}"`);
@@ -263,8 +223,6 @@ export function useFileListPanel() {
             // No filesystem watches inside containers.
           } else {
             // ── Normal filesystem path ────────────────────────────────────────
-            await syncLayers(bridge, resolverRef.current!, path, extensionLayers);
-            if (abort.signal.aborted) return;
             const parent = buildParentChain(path);
             const rawEntries = await bridge.fs.entries(path);
             if (abort.signal.aborted) return;
@@ -302,7 +260,7 @@ export function useFileListPanel() {
         }
       }
     },
-    [bridge, extensionLayers, fsProviderRegistry, languageRegistry, setupWatches],
+    [bridge, fsProviderRegistry, languageRegistry, setupWatches],
   );
 
   const navigateTo = useCallback(
@@ -330,7 +288,6 @@ export function useFileListPanel() {
       if (!curPath) return;
 
       let needsRefresh = false;
-      let needsFssRefresh = false;
       let navigateUp = false;
 
       for (const record of records) {
@@ -344,17 +301,8 @@ export function useFileListPanel() {
           } else {
             needsRefresh = true;
           }
-        } else if (rootPath.endsWith("/.dir")) {
-          if (changedName === "fs.css") {
-            const parentDir = dirname(rootPath);
-            invalidateFssCache(parentDir);
-            needsFssRefresh = true;
-          }
         } else if (curPath.startsWith(rootPath + "/") || curPath === rootPath) {
-          if (changedName === ".dir") {
-            invalidateFssCache(rootPath);
-            needsFssRefresh = true;
-          } else if (changedName) {
+          if (changedName) {
             const relative = curPath.slice(rootPath.length + 1);
             const nextSegment = relative.split("/")[0];
             if (changedName === nextSegment && type === "disappeared") {
@@ -375,7 +323,7 @@ export function useFileListPanel() {
         return;
       }
 
-      if (needsRefresh || needsFssRefresh) {
+      if (needsRefresh) {
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
           debounceRef.current = null;
@@ -408,7 +356,6 @@ export function useFileListPanel() {
       navigating,
       cancelNavigation,
       refresh,
-      fssResolver: resolverRef.current!,
     }),
     [state, navigateTo, navigating, cancelNavigation, refresh],
   );

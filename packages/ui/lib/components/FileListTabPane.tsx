@@ -1,6 +1,7 @@
 import { themesReadyAtom } from "@/atoms";
 import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
+import { FileStyleResolverProvider } from "@/features/fss/fileStyleResolver";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import type { FileListPanelController } from "@/features/panels/useFileListPanel";
 import { useFileListPanel } from "@/features/panels/useFileListPanel";
@@ -115,20 +116,21 @@ export function FileListTabPane({
         pointerEvents: visible ? "auto" : "none",
       }}
     >
-      <FileList
-        key={tabId}
-        side={side}
-        tabId={tabId}
-        state={renderedState}
-        showHidden={showHidden}
-        onNavigate={(nextPath) => {
-          onActivatePanelFocus();
-          return panel.navigateTo(nextPath);
-        }}
-        active={focused}
-        fssResolver={panel.fssResolver}
-        onStateChange={pathsInSync ? onStateChange : undefined}
-      />
+      <FileStyleResolverProvider path={renderedState.path} pathKind="directory">
+        <FileList
+          key={tabId}
+          side={side}
+          tabId={tabId}
+          state={renderedState}
+          showHidden={showHidden}
+          onNavigate={(nextPath) => {
+            onActivatePanelFocus();
+            return panel.navigateTo(nextPath);
+          }}
+          active={focused}
+          onStateChange={pathsInSync ? onStateChange : undefined}
+        />
+      </FileStyleResolverProvider>
     </div>
   );
 }

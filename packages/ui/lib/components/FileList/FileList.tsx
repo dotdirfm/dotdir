@@ -2,20 +2,20 @@ import { ActionQueue } from "@/components/FileList/actionQueue";
 import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
 import { useCommandRegistry } from "@/features/commands/commands";
-import { useGetCachedIcon, useIconThemeVersion, useLoadIconsForPaths, useResolveIcon } from "@/features/file-icons/iconResolver";
-import { resolveEntryStyle } from "@/features/fss/fss";
+import { useFileStyleResolver } from "@/features/fss/fileStyleResolver";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cx } from "@/utils/cssModules";
 import { dirname, join } from "@/utils/path";
 import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
-import type { FsNode, LayeredResolver } from "fss-lang";
+import type { FsNode } from "fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
 import { FileInfoFooter } from "./FileInfoFooter";
 import styles from "./FileList.module.css";
 import { useFileListActionHandlers } from "./fileListActions";
+import { FileListEntryRow } from "./FileListEntryRow";
 import type { DisplayEntry } from "./types";
 import { useFileListCommands } from "./useFileListCommands";
 import { clamp, formatSize, getRequestedIndex } from "./utils";
@@ -29,20 +29,10 @@ interface FileListProps {
   showHidden: boolean;
   onNavigate: (path: string) => Promise<void>;
   active: boolean;
-  fssResolver: LayeredResolver;
   onStateChange?: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
 }
 
-export const FileList = memo(function FileList({
-  side,
-  tabId,
-  state,
-  showHidden,
-  onNavigate,
-  active,
-  fssResolver,
-  onStateChange,
-}: FileListProps) {
+export const FileList = memo(function FileList({ side, tabId, state, showHidden, onNavigate, active, onStateChange }: FileListProps) {
   const commandRegistry = useCommandRegistry();
   const viewerRegistry = useViewerRegistry();
   const editorRegistry = useEditorRegistry();
@@ -53,7 +43,6 @@ export const FileList = memo(function FileList({
   const rootRef = useRef<HTMLDivElement>(null);
   const [maxItemsPerColumn, setMaxItemsPerColumn] = useState(1);
   const [columnCount, setColumnCount] = useState(1);
-  const [iconsVersion, setIconsVersion] = useState(0);
   const [keyboardNavMode, setKeyboardNavMode] = useState(false);
   const keyboardNavModeRef = useRef(keyboardNavMode);
   keyboardNavModeRef.current = keyboardNavMode;
@@ -72,20 +61,7 @@ export const FileList = memo(function FileList({
     if (keyboardNavModeRef.current) setKeyboardNavMode(false);
   }, []);
 
-  const getCachedIcon = useGetCachedIcon();
-  const iconThemeVersion = useIconThemeVersion();
-
-  const getIconUrl = useCallback(
-    (iconPath: string | null): string | undefined => {
-      if (iconPath) {
-        return getCachedIcon(iconPath) ?? undefined;
-      }
-      return undefined;
-    },
-    [getCachedIcon],
-  );
-
-  const resolveIcon = useResolveIcon();
+  const { resolve } = useFileStyleResolver();
 
   const comparer = useCallback((a: DisplayEntry, b: DisplayEntry) => {
     if (a.style.groupFirst !== b.style.groupFirst) return a.style.groupFirst ? -1 : 1;
@@ -93,32 +69,15 @@ export const FileList = memo(function FileList({
     return a.entry.name.localeCompare(b.entry.name);
   }, []);
 
-  const toDisplayEntry = useCallback(
-    (entry: FsNode): DisplayEntry => {
-      const style = resolveEntryStyle(fssResolver, entry);
-      const isDir = entry.type === "folder";
-      const resolved = resolveIcon(entry.name, isDir, false, false, entry.lang, style.icon);
-      return {
-        entry,
-        style,
-        iconKind: resolved.kind,
-        iconPath: resolved.path,
-        iconFont: resolved.font,
-        iconFallbackUrl: resolved.fallbackUrl,
-      };
-    },
-    [fssResolver, resolveIcon],
-  );
+  const toDisplayEntry = useCallback((entry: FsNode): DisplayEntry => ({ entry, style: resolve(entry) }), [resolve]);
 
   const sorted = useMemo(() => {
-    void iconThemeVersion;
-    void iconsVersion;
-    const withStyle: DisplayEntry[] = entries.map((entry) => toDisplayEntry(entry));
+    const withStyle = entries.map((entry) => toDisplayEntry(entry));
     withStyle.sort(comparer);
     return withStyle;
-  }, [entries, comparer, iconThemeVersion, iconsVersion, toDisplayEntry]);
+  }, [entries, comparer, toDisplayEntry]);
 
-  const displayEntries: DisplayEntry[] = useMemo(() => {
+  const displayEntries = useMemo(() => {
     const result: DisplayEntry[] = [];
     if (state.entry) {
       const expandedParentNode = { ...state.entry, name: "..", stateFlags: 1 };
@@ -155,71 +114,20 @@ export const FileList = memo(function FileList({
   const topmostIndexRef = useRef(topmostIndex);
   topmostIndexRef.current = topmostIndex;
 
-  const neededIcons = useMemo(() => {
-    const imagePaths = new Set<string>();
-    const fontKeys = new Set<string>();
-    const fontIcons: NonNullable<DisplayEntry["iconFont"]>[] = [];
-
-    for (const { iconKind, iconPath, iconFont } of displayEntries) {
-      if (iconKind === "image" && iconPath) {
-        imagePaths.add(iconPath);
-      }
-      if (iconKind === "font" && iconFont) {
-        const key = `${iconFont.fontFamily}\0${iconFont.character}\0${iconFont.color ?? ""}\0${iconFont.fontSize ?? ""}`;
-        if (!fontKeys.has(key)) {
-          fontKeys.add(key);
-          fontIcons.push(iconFont);
-        }
-      }
-    }
-    return [
-      ...[...imagePaths].map((path) => ({ kind: "image" as const, path })),
-      ...fontIcons.map((font) => ({
-        kind: "font" as const,
-        character: font.character,
-        fontFamily: font.fontFamily,
-        color: font.color,
-        fontSize: font.fontSize,
-      })),
-    ];
-  }, [displayEntries]);
-  const neededIconsKey = useMemo(
-    () =>
-      neededIcons
-        .map((icon) => (icon.kind === "image" ? `image:${icon.path}` : `font:${icon.fontFamily}:${icon.character}:${icon.color ?? ""}:${icon.fontSize ?? ""}`))
-        .join("\0"),
-    [neededIcons],
-  );
-
-  const loadIconsForPaths = useLoadIconsForPaths();
-
-  useEffect(() => {
-    let cancelled = false;
-    loadIconsForPaths(neededIcons).then(() => {
-      if (!cancelled) setIconsVersion((n) => n + 1);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [loadIconsForPaths, neededIconsKey]);
-
   const onStateChangeRef = useRef(onStateChange);
   onStateChangeRef.current = onStateChange;
 
-  const emitCursorChange = useCallback(
-    (nextActiveIndex: number, nextTopmostIndex: number, nextSelectedNames: Iterable<string>) => {
-      if (!onStateChangeRef.current) return;
-      const entries = displayEntriesRef.current;
-      const maxIndex = Math.max(0, entries.length - 1);
-      const clampedActiveIndex = clamp(nextActiveIndex, 0, maxIndex);
-      const clampedTopmostIndex = clamp(nextTopmostIndex, 0, maxIndex);
-      const selectedName = entries[clampedActiveIndex]?.entry.name;
-      const topmostName = entries[clampedTopmostIndex]?.entry.name;
-      const selectedArray = [...new Set(nextSelectedNames)].filter((name) => entries.some((entry) => entry.entry.name === name));
-      onStateChangeRef.current(selectedName, topmostName, selectedArray);
-    },
-    [],
-  );
+  const emitCursorChange = useCallback((nextActiveIndex: number, nextTopmostIndex: number, nextSelectedNames: Iterable<string>) => {
+    if (!onStateChangeRef.current) return;
+    const entries = displayEntriesRef.current;
+    const maxIndex = Math.max(0, entries.length - 1);
+    const clampedActiveIndex = clamp(nextActiveIndex, 0, maxIndex);
+    const clampedTopmostIndex = clamp(nextTopmostIndex, 0, maxIndex);
+    const selectedName = entries[clampedActiveIndex]?.entry.name;
+    const topmostName = entries[clampedTopmostIndex]?.entry.name;
+    const selectedArray = [...new Set(nextSelectedNames)].filter((name) => entries.some((entry) => entry.entry.name === name));
+    onStateChangeRef.current(selectedName, topmostName, selectedArray);
+  }, []);
 
   useEffect(() => {
     if (!onStateChangeRef.current) return;
@@ -227,8 +135,7 @@ export const FileList = memo(function FileList({
     const nextTopmostName = displayEntries[topmostIndex]?.entry.name;
     const nextSelected = [...selectedNames];
     const sameSelected =
-      (state.selectedEntryNames ?? []).length === nextSelected.length &&
-      (state.selectedEntryNames ?? []).every((name, idx) => name === nextSelected[idx]);
+      (state.selectedEntryNames ?? []).length === nextSelected.length && (state.selectedEntryNames ?? []).every((name, idx) => name === nextSelected[idx]);
     if (state.activeEntryName === nextActiveName && state.topmostEntryName === nextTopmostName && sameSelected) {
       return;
     }
@@ -250,27 +157,30 @@ export const FileList = memo(function FileList({
   // Selection helpers
   type SelectionType = "include-active" | "exclude-active";
 
-  const applySelection = useCallback((oldIndex: number, newIndex: number, selectType: SelectionType, nextTopmostIndex?: number) => {
-    const entries = displayEntriesRef.current;
-    if (prevSelectRef.current === undefined) {
-      const currentName = entries[oldIndex]?.entry.name;
-      prevSelectRef.current = currentName ? !selectedNamesRef.current.has(currentName) : true;
-    }
-    const selecting = prevSelectRef.current;
-    const lo = Math.min(oldIndex, newIndex);
-    const hi = Math.max(oldIndex, newIndex);
+  const applySelection = useCallback(
+    (oldIndex: number, newIndex: number, selectType: SelectionType, nextTopmostIndex?: number) => {
+      const entries = displayEntriesRef.current;
+      if (prevSelectRef.current === undefined) {
+        const currentName = entries[oldIndex]?.entry.name;
+        prevSelectRef.current = currentName ? !selectedNamesRef.current.has(currentName) : true;
+      }
+      const selecting = prevSelectRef.current;
+      const lo = Math.min(oldIndex, newIndex);
+      const hi = Math.max(oldIndex, newIndex);
 
-    const next = new Set(selectedNamesRef.current);
-    for (let i = lo; i <= hi; i++) {
-      if (selectType === "exclude-active" && i === newIndex) continue;
-      const name = entries[i]?.entry.name;
-      if (!name) continue;
-      if (selecting) next.add(name);
-      else next.delete(name);
-    }
+      const next = new Set(selectedNamesRef.current);
+      for (let i = lo; i <= hi; i++) {
+        if (selectType === "exclude-active" && i === newIndex) continue;
+        const name = entries[i]?.entry.name;
+        if (!name) continue;
+        if (selecting) next.add(name);
+        else next.delete(name);
+      }
 
-    emitCursorChange(clamp(newIndex, 0, entries.length - 1), nextTopmostIndex ?? topmostIndexRef.current, next);
-  }, [emitCursorChange]);
+      emitCursorChange(clamp(newIndex, 0, entries.length - 1), nextTopmostIndex ?? topmostIndexRef.current, next);
+    },
+    [emitCursorChange],
+  );
 
   // Reset shift selection state on keyup
   useEffect(() => {
@@ -288,15 +198,18 @@ export const FileList = memo(function FileList({
     prevSelectRef.current = undefined;
   }, [state.path]);
 
-  const navigateToEntry = useCallback(async (entry: FsNode): Promise<void> => {
-    if (entry.name === "..") {
-      await onNavigateRef.current(dirname(currentPathRef.current));
-    } else if (entry.type === "folder") {
-      await onNavigateRef.current(join(currentPathRef.current, entry.name));
-    } else if (entry.type === "file") {
-      void commandRegistry.executeCommand("viewFile", entry.path as string, entry.name, Number(entry.meta.size));
-    }
-  }, [commandRegistry]);
+  const navigateToEntry = useCallback(
+    async (entry: FsNode): Promise<void> => {
+      if (entry.name === "..") {
+        await onNavigateRef.current(dirname(currentPathRef.current));
+      } else if (entry.type === "folder") {
+        await onNavigateRef.current(join(currentPathRef.current, entry.name));
+      } else if (entry.type === "file") {
+        void commandRegistry.executeCommand("viewFile", entry.path as string, entry.name, Number(entry.meta.size));
+      }
+    },
+    [commandRegistry],
+  );
 
   const displayedItems = Math.min(displayEntries.length, maxItemsPerColumn * columnCount);
   const maxItemsPerColumnRef = useRef(maxItemsPerColumn);
@@ -312,7 +225,7 @@ export const FileList = memo(function FileList({
     const fileName = item?.entry.name ?? "";
     commandRegistry.beginBatch();
     commandRegistry.setContext("listItemIsFile", isFile);
-    commandRegistry.setContext("listItemIsFolder", !isFile && item != null);
+    commandRegistry.setContext("listItemIsDir", !isFile && item != null);
     commandRegistry.setContext("listItemIsExecutable", isExecutable);
     commandRegistry.setContext("listItemHasViewer", isFile && viewerRegistry.resolve(fileName) !== null);
     commandRegistry.setContext("listItemHasEditor", isFile && editorRegistry.resolve(fileName) !== null);
@@ -373,7 +286,7 @@ export const FileList = memo(function FileList({
 
   useEffect(() => {
     return registerVisibleFileListFocus(side, tabId, () => {
-        rootRef.current?.focus({ preventScroll: true });
+      rootRef.current?.focus({ preventScroll: true });
     });
   }, [registerVisibleFileListFocus, side, tabId]);
 
@@ -385,82 +298,54 @@ export const FileList = memo(function FileList({
     setColumnCount(count);
   }, []);
 
-  const handlePosChange: ColumnsScrollerProps["onPosChange"] = useCallback((topmost: number, active: number) => {
-    const len = displayEntriesRef.current.length;
-    emitCursorChange(clamp(active, 0, len - 1), clamp(topmost, 0, len - 1), selectedNamesRef.current);
-  }, [emitCursorChange]);
+  const handlePosChange: ColumnsScrollerProps["onPosChange"] = useCallback(
+    (topmost: number, active: number) => {
+      const len = displayEntriesRef.current.length;
+      emitCursorChange(clamp(active, 0, len - 1), clamp(topmost, 0, len - 1), selectedNamesRef.current);
+    },
+    [emitCursorChange],
+  );
 
   const getItemKey = useCallback((index: number) => {
     return displayEntriesRef.current[index]?.entry.name ?? index;
   }, []);
 
   const lastClickTimeRef = useRef(0);
+  const handleItemPointerDown = useCallback(
+    (index: number) => {
+      const item = displayEntriesRef.current[index];
+      if (!item) return;
+      const { entry } = item;
+      const executable = entry.type === "file" && !!(entry.meta as { executable?: boolean }).executable;
+
+      clearKeyboardNav();
+      const now = Date.now();
+      if (now - lastClickTimeRef.current < 300) {
+        lastClickTimeRef.current = 0;
+        if (executable) {
+          actionQueue.enqueue(() => commandRegistry.executeCommand("terminal.execute", entry.path as string));
+        } else {
+          actionQueue.enqueue(() => navigateToEntry(entry));
+        }
+        return;
+      }
+
+      lastClickTimeRef.current = now;
+      actionQueue.enqueue(() => emitCursorChange(index, topmostIndexRef.current, selectedNamesRef.current));
+    },
+    [actionQueue, clearKeyboardNav, commandRegistry, emitCursorChange, navigateToEntry],
+  );
 
   const renderItem = useCallback(
     (index: number, isActive: boolean, isSelected: boolean) => {
-      void iconsVersion;
-      const item = displayEntriesRef.current[index];
+      const item = displayEntries[index];
       if (!item) return null;
-      const { entry, style, iconKind, iconPath, iconFont, iconFallbackUrl } = item;
-      const iconUrl = iconKind === "image" ? (getIconUrl(iconPath) ?? iconFallbackUrl) : null;
 
-      const isExecutable = entry.type === "file" && !!(entry.meta as { executable?: boolean }).executable;
       return (
-        <div
-          className={cx(styles, "entry", isActive && "selected", isSelected && "marked")}
-          style={{ height: ROW_HEIGHT, opacity: style.opacity }}
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            clearKeyboardNav();
-            const now = Date.now();
-            if (now - lastClickTimeRef.current < 300) {
-              lastClickTimeRef.current = 0;
-              if (isExecutable) {
-                actionQueue.enqueue(() => commandRegistry.executeCommand("terminal.execute", entry.path as string));
-              } else {
-                actionQueue.enqueue(() => navigateToEntry(entry));
-              }
-            } else {
-              lastClickTimeRef.current = now;
-              actionQueue.enqueue(() => emitCursorChange(index, topmostIndexRef.current, selectedNamesRef.current));
-            }
-          }}
-        >
-          <span className={styles["entry-icon"]}>
-            {iconKind === "font" && iconFont ? (
-              <span
-                className={styles["entry-icon-font"]}
-                style={{
-                  fontFamily: iconFont.fontFamily,
-                  fontSize: iconFont.fontSize,
-                  color: iconFont.color,
-                }}
-                aria-hidden="true"
-              >
-                {iconFont.character}
-              </span>
-            ) : (
-              <img src={iconUrl ?? iconFallbackUrl} width={16} height={16} alt="" />
-            )}
-          </span>
-          <span
-            className={styles["entry-name"]}
-            style={{
-              color: style.color,
-              fontWeight: style.fontWeight,
-              fontStyle: style.fontStyle,
-              fontStretch: style.fontStretch,
-              fontVariant: style.fontVariant,
-              textDecoration: style.textDecoration,
-            }}
-          >
-            {entry.name}
-          </span>
-          {"size" in entry.meta && entry.type === "file" && <span className={styles["entry-size"]}>{formatSize(entry.meta.size)}</span>}
-        </div>
+        <FileListEntryRow item={item} rowHeight={ROW_HEIGHT} active={isActive} selected={isSelected} onPointerDown={() => handleItemPointerDown(index)} />
       );
     },
-    [navigateToEntry, clearKeyboardNav, actionQueue, commandRegistry, emitCursorChange, getIconUrl, iconsVersion, isTouchscreen],
+    [displayEntries, handleItemPointerDown],
   );
 
   const activeEntry = displayEntries[activeIndex];
