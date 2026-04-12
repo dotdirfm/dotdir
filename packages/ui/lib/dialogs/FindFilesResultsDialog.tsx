@@ -11,9 +11,13 @@ import {
   CURSOR_UP,
 } from "@/features/commands/commandIds";
 import { useCommandRegistry } from "@/features/commands/commands";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+  defaultRangeExtractor,
+  useVirtualizer,
+} from "@tanstack/react-virtual";
+import type { Range } from "@tanstack/react-virtual";
 import { basename, dirname } from "@/utils/path";
-import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SmartLabel } from "./dialogHotkeys";
 import styles from "./dialogs.module.css";
 import { OverlayDialog } from "./OverlayDialog";
@@ -23,6 +27,7 @@ type SearchStatus = "running" | "finished" | "suspended" | "error";
 const SEARCH_RESULTS_FLUSH_MS = 32;
 const SEARCH_RESULTS_FLUSH_SIZE = 100;
 
+/** Virtual list row: directory header (sticky-capable) or file match. */
 type ResultRow =
   | { kind: "directory"; path: string }
   | { kind: "match"; matchIndex: number; match: FileSearchMatch };
@@ -203,13 +208,14 @@ export function FindFilesResultsDialog({
     }
     return matchesRef.current[0] ?? null;
   };
+
   const rows = useMemo(() => {
     const next: ResultRow[] = [];
     let currentDirectory: string | null = null;
     for (let i = 0; i < matchCount; i++) {
       const match = matchesRef.current[i];
       if (!match) continue;
-      const directoryPath = match.isDirectory ? dirname(match.path) : dirname(match.path);
+      const directoryPath = dirname(match.path);
       if (directoryPath !== currentDirectory) {
         currentDirectory = directoryPath;
         next.push({ kind: "directory", path: directoryPath });
@@ -218,19 +224,44 @@ export function FindFilesResultsDialog({
     }
     return next;
   }, [matchCount]);
-  const selectedRowIndex = useMemo(
-    () => rows.findIndex((row) => row.kind === "match" && row.matchIndex === selectedIndex),
-    [rows, selectedIndex],
+
+  const stickyIndexes = useMemo(
+    () => rows.reduce<number[]>((acc, row, i) => (row.kind === "directory" ? [...acc, i] : acc), []),
+    [rows],
+  );
+
+  const activeStickyIndexRef = useRef(0);
+
+  const rangeExtractor = useCallback(
+    (range: Range) => {
+      const lastPinned =
+        [...stickyIndexes].reverse().find((index) => range.startIndex >= index) ?? stickyIndexes[0] ?? 0;
+      activeStickyIndexRef.current = lastPinned;
+      const next = new Set([lastPinned, ...defaultRangeExtractor(range)]);
+      return [...next].sort((a, b) => a - b);
+    },
+    [stickyIndexes],
   );
 
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => listRef.current,
+    rangeExtractor,
+    getItemKey: (index) => {
+      const row = rows[index];
+      if (!row) return index;
+      return row.kind === "directory" ? `dir:${row.path}:${index}` : `m:${row.matchIndex}`;
+    },
     estimateSize: (index) => (rows[index]?.kind === "directory" ? 28 : 34),
     overscan: 10,
     useAnimationFrameWithResizeObserver: true,
     useScrollendEvent: false,
   });
+
+  const selectedRowIndex = useMemo(
+    () => rows.findIndex((row) => row.kind === "match" && row.matchIndex === selectedIndex),
+    [rows, selectedIndex],
+  );
 
   useEffect(() => {
     if (selectedRowIndex >= 0) {
@@ -342,26 +373,65 @@ export function FindFilesResultsDialog({
               {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                 const row = rows[virtualRow.index];
                 if (!row) return null;
+
+                const isSticky = stickyIndexes.includes(virtualRow.index);
+                const isActiveSticky = activeStickyIndexRef.current === virtualRow.index;
+
                 if (row.kind === "directory") {
                   return (
                     <div
-                      key={`dir:${row.path}`}
-                      className={styles["find-files-result-directory"]}
-                      style={{ transform: `translateY(${virtualRow.start}px)` }}
+                      key={virtualRow.key}
+                      className={
+                        isActiveSticky
+                          ? `${styles["find-files-result-directory"]} ${styles["find-files-result-directory--pinned"]}`
+                          : styles["find-files-result-directory"]
+                      }
+                      style={{
+                        ...(isSticky
+                          ? {
+                              background: "var(--bg)",
+                              borderBottom: "1px solid var(--border)",
+                              zIndex: 1,
+                            }
+                          : {}),
+                        ...(isActiveSticky
+                          ? {
+                              position: "sticky",
+                              top: 0,
+                              left: 0,
+                              width: "100%",
+                              height: `${virtualRow.size}px`,
+                            }
+                          : {
+                              position: "absolute",
+                              transform: `translateY(${virtualRow.start}px)`,
+                              left: 0,
+                              width: "100%",
+                              height: `${virtualRow.size}px`,
+                            }),
+                      }}
                     >
                       {row.path}
                     </div>
                   );
                 }
+
                 const active = row.matchIndex === selectedIndex;
                 return (
                   <div
-                    key={row.match.path}
+                    key={virtualRow.key}
                     id={`find-file-result-${row.matchIndex}`}
                     role="option"
                     aria-selected={active}
                     className={active ? styles["find-files-result-active"] : styles["find-files-result"]}
-                    style={{ transform: `translateY(${virtualRow.start}px)` }}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: `${virtualRow.size}px`,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
                     onMouseDown={() => setActiveIndex(row.matchIndex)}
                     onDoubleClick={() => {
                       setActiveIndex(row.matchIndex);

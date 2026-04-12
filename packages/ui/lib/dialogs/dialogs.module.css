@@ -375,14 +375,20 @@
   position: relative;
 }
 
+/* TanStack Virtual sticky pattern: directory rows use position:sticky when “active”. */
 .find-files-result-directory {
-  position: absolute;
-  left: 0;
-  right: 0;
+  box-sizing: border-box;
   padding: 6px 8px 2px;
   font-size: 12px;
   font-weight: 600;
   color: var(--fg-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.find-files-result-directory--pinned {
+  z-index: 2;
 }
 
 .find-files-result,
