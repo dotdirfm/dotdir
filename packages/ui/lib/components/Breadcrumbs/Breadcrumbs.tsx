@@ -1,7 +1,7 @@
 import { cx } from "@/utils/cssModules";
 import { getBreadcrumbSegments } from "@/utils/path";
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import styles from "./FileList.module.css";
+import styles from "./Breadcrumbs.module.css";
 
 interface BreadcrumbsProps {
   currentPath: string;

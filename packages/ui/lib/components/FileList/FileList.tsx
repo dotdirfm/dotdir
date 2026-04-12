@@ -1,8 +1,8 @@
 import { ActionQueue } from "@/components/FileList/actionQueue";
 import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
-import { useCommandRegistry } from "@/features/commands/commands";
 import { TERMINAL_EXECUTE, VIEW_FILE } from "@/features/commands/commandIds";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { useFileStyleResolver } from "@/features/fss/fileStyleResolver";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -11,7 +11,7 @@ import { dirname, join } from "@/utils/path";
 import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
 import type { FsNode } from "fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Breadcrumbs } from "./Breadcrumbs";
+import { Breadcrumbs } from "../Breadcrumbs/Breadcrumbs";
 import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
 import { FileInfoFooter } from "./FileInfoFooter";
 import styles from "./FileList.module.css";

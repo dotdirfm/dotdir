@@ -1,0 +1,68 @@
+.breadcrumbs {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.breadcrumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.breadcrumbs.is-cropped-left {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 18px, black 100%);
+  mask-image: linear-gradient(to right, transparent 0, black 18px, black 100%);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.breadcrumbs.is-cropped-right {
+  -webkit-mask-image: linear-gradient(to right, black 0, black calc(100% - 18px), transparent 100%);
+  mask-image: linear-gradient(to right, black 0, black calc(100% - 18px), transparent 100%);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.breadcrumbs.is-cropped-left.is-cropped-right {
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 18px, black calc(100% - 18px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, black 18px, black calc(100% - 18px), transparent 100%);
+}
+
+.breadcrumb-segment {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  cursor: pointer;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: 4px;
+  transition: background-color 0.1s ease;
+}
+
+.breadcrumb-segment:hover {
+  background: var(--entry-hover, rgba(255, 255, 255, 0.06));
+}
+
+.breadcrumb-segment-text {
+  white-space: nowrap;
+}
+
+.breadcrumb-separator {
+  flex-shrink: 0;
+  opacity: 0.6;
+  pointer-events: none;
+  user-select: none;
+}
