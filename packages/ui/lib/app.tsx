@@ -29,6 +29,7 @@ export type AppHandle = {
 };
 
 const THEME_STARTUP_TIMEOUT_MS = 5_000;
+const WINDOW_SHOW_TIMEOUT_MS = 5_000;
 
 export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function App({ widget }, ref) {
   const commandRegistry = useCommandRegistry();
@@ -54,6 +55,7 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const windowShownRef = useRef(false);
   const initialThemeRefreshDoneRef = useRef(false);
   const [themeStartupTimedOut, setThemeStartupTimedOut] = useState(false);
+  const [windowShowTimedOut, setWindowShowTimedOut] = useState(false);
 
   const { uiStateLoaded } = useWorkspaceRestoreProcess();
   const startupReady = uiStateLoaded && (themesReady || themeStartupTimedOut);
@@ -108,14 +110,28 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   }, [themesReady]);
 
   useEffect(() => {
+    if (startupReady) {
+      setWindowShowTimedOut(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      console.warn("[startup] Window show timed out after 5000ms; forcing window visibility.");
+      setWindowShowTimedOut(true);
+    }, WINDOW_SHOW_TIMEOUT_MS);
+
+    return () => clearTimeout(timer);
+  }, [startupReady]);
+
+  useEffect(() => {
     if (windowShownRef.current) return;
-    if (!startupReady) return;
+    if (!startupReady && !windowShowTimedOut) return;
     if (!bridge.window?.showCurrent) return;
     windowShownRef.current = true;
     void bridge.window.showCurrent().catch(() => {
       // Ignore show failures so startup can proceed.
     });
-  }, [bridge.window, startupReady]);
+  }, [bridge.window, startupReady, windowShowTimedOut]);
 
   useEffect(() => {
     if (!startupReady || !themesReady) return;

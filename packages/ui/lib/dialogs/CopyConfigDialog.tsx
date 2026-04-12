@@ -88,7 +88,7 @@ export function CopyConfigDialog({ itemCount, destPath, suggestionRoots, onConfi
               roots={suggestionRoots}
               mode="directories"
               inputRef={inputRef}
-              inputClassName={styles["open-create-file-field"] ? undefined : undefined}
+              inputClassName={styles["dialog-input"]}
               {...INPUT_NO_ASSIST}
             />
           </div>

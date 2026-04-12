@@ -17,9 +17,10 @@ export interface ModalDialogProps {
   variant?: "error" | "default";
   buttons?: ModalButton[];
   onClose: () => void;
+  stackIndex?: number;
 }
 
-export function ModalDialog({ title, message, variant = "default", buttons, onClose }: ModalDialogProps) {
+export function ModalDialog({ title, message, variant = "default", buttons, onClose, stackIndex = 0 }: ModalDialogProps) {
   const buttonsRef = useRef<HTMLDivElement>(null);
   const resolvedButtons = buttons ?? [{ label: "OK", default: true }];
   const defaultIdx = resolvedButtons.findIndex((b) => b.default);
@@ -28,7 +29,7 @@ export function ModalDialog({ title, message, variant = "default", buttons, onCl
   });
 
   return (
-    <OverlayDialog className={cx(styles, "modal-dialog", variant)} onClose={onClose} onKeyDown={onKeyDown}>
+    <OverlayDialog className={cx(styles, "modal-dialog", variant)} onClose={onClose} onKeyDown={onKeyDown} stackIndex={stackIndex}>
       {title && <div className={styles["modal-dialog-header"]}>{title}</div>}
       <div className={styles["modal-dialog-body"]}>{message}</div>
       <div className={styles["modal-dialog-buttons"]} ref={buttonsRef}>

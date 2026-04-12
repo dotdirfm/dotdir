@@ -119,6 +119,7 @@
 .make-folder-field input,
 .copy-config-field input,
 .copy-config-field select,
+.dialog-input,
 .dialog-select,
 .conflict-rename-field input,
 .rename-field input {
@@ -135,6 +136,8 @@
 .make-folder-field input:focus,
 .copy-config-field input:focus,
 .copy-config-field select:focus,
+.dialog-input:focus,
+.dialog-input:focus-visible,
 .dialog-select:focus,
 .dialog-select:focus-visible,
 .conflict-rename-field input:focus,
@@ -262,6 +265,180 @@
   border-radius: 3px;
   overflow: hidden;
   margin-bottom: 8px;
+}
+
+.find-files-dialog {
+  width: min(760px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border-active);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.find-files-start-row,
+.find-files-ignore-row,
+.find-files-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.find-files-ignore-row input,
+.find-files-search-grid input {
+  padding: 6px 8px;
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--input-border, var(--border));
+  border-radius: 3px;
+  color: var(--fg);
+}
+
+.find-files-search-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.find-files-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.find-files-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 12px;
+  color: var(--fg-secondary);
+}
+
+.find-files-results-dialog {
+  width: min(1480px, calc(100vw - 64px));
+  height: min(940px, calc(100vh - 64px));
+  max-width: calc(100vw - 64px);
+  max-height: calc(100vh - 64px);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border-active);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.find-files-results-title,
+.find-files-results-path,
+.find-files-results-status,
+.find-files-results-actions {
+  padding: 8px 12px;
+}
+
+.find-files-results-title {
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-secondary);
+  color: var(--fg-secondary);
+}
+
+.find-files-results-path {
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--fg);
+}
+
+.find-files-results-list {
+  min-height: 0;
+  padding: 8px;
+}
+
+.find-files-results-scroll {
+  height: 100%;
+  overflow: auto;
+  outline: none;
+}
+
+.find-files-results-scroll:focus-visible {
+  outline: 2px solid var(--border-active);
+  outline-offset: -1px;
+}
+
+.find-files-results-items {
+  position: relative;
+}
+
+.find-files-result-directory {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding: 6px 8px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-secondary);
+}
+
+.find-files-result,
+.find-files-result-active {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: block;
+  padding: 4px 8px 4px 20px;
+  border-radius: 2px;
+}
+
+.find-files-result-active {
+  background: var(--entry-hover);
+}
+
+.find-files-result-name {
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.find-files-results-status {
+  display: flex;
+  gap: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.find-files-results-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  border-top: 1px solid var(--input-border, var(--border));
+}
+
+.find-files-results-actions button {
+  padding: 4px 16px;
+  border: 1px solid var(--border-active);
+  border-radius: 3px;
+  background: var(--bg-secondary);
+  color: var(--fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.find-files-empty {
+  padding: 24px;
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+.find-files-error {
+  color: var(--error-fg);
 }
 
 .copy-progress-bar {

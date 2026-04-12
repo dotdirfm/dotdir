@@ -10,6 +10,8 @@ notify = { version = "7", features = ["macos_fsevent"] }
 parking_lot = "0.12"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
+globset = "0.4"
+regex = "1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

@@ -15,6 +15,7 @@ export interface OverlayDialogProps {
   initialFocusRef?: React.RefObject<HTMLElement | null>;
   focusLayer?: FocusLayer;
   allowCommandRouting?: boolean | ((event: KeyboardEvent) => boolean);
+  stackIndex?: number;
 }
 
 const FOCUSABLE =
@@ -36,6 +37,7 @@ export function OverlayDialog({
   initialFocusRef,
   focusLayer = "modal",
   allowCommandRouting = false,
+  stackIndex = 0,
 }: OverlayDialogProps) {
   const focusContext = useFocusContext();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -109,6 +111,7 @@ export function OverlayDialog({
   return (
     <div
       className={cx(styles, "overlay-backdrop", placement === "top" && "overlay-backdrop-top")}
+      style={{ zIndex: 200 + stackIndex * 10 }}
       onMouseDown={(e) => {
         if (dismissible && e.target === e.currentTarget) onClose();
       }}

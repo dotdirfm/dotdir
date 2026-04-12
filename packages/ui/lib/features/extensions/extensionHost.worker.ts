@@ -482,7 +482,14 @@ async function loadExtensions(dataDir: string): Promise<WorkerLoadedExtension[]>
     if (!ref.publisher || !ref.name || !ref.version) continue;
     const extDir = ref.path ? normalizePath(ref.path) : join(extensionsDir, extensionDirName(ref));
     const ext = await loadExtensionFromDir(extDir);
-    if (ext) loaded.push(ext);
+    if (ext) {
+      // Preserve source, autoUpdate, and path from extensions.json — loadExtensionFromDir
+      // builds a bare ref from the manifest and drops these fields.
+      ext.ref.source = ref.source;
+      ext.ref.autoUpdate = ref.autoUpdate;
+      if (ref.path) ext.ref.path = normalizePath(ref.path);
+      loaded.push(ext);
+    }
   }
 
   console.log(

@@ -63,6 +63,7 @@ export function MoveConfigDialog({ itemCount, destPath, suggestionRoots, onConfi
               roots={suggestionRoots}
               mode="directories"
               inputRef={inputRef}
+              inputClassName={styles["dialog-input"]}
               {...INPUT_NO_ASSIST}
             />
           </div>

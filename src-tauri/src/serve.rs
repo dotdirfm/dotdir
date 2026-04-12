@@ -18,7 +18,7 @@ use crate::pty;
 use crate::extensions_install::ExtensionInstallRequest;
 use crate::runtime_ops::{
     RuntimeState, cancel_copy_job, cancel_delete_job, cancel_extension_install_job,
-    cancel_move_job, fsp_list_entries as backend_fsp_list_entries,
+    cancel_move_job, cancel_search_job, fsp_list_entries as backend_fsp_list_entries,
     fsp_load as backend_fsp_load, fsp_read_file_range as backend_fsp_read_file_range,
     fs_close as backend_fs_close, fs_entries as backend_fs_entries,
     fs_create_dir as backend_fs_create_dir, fs_exists as backend_fs_exists,
@@ -32,12 +32,13 @@ use crate::runtime_ops::{
     pty_close as backend_pty_close, pty_resize as backend_pty_resize,
     pty_spawn as backend_pty_spawn, pty_write as backend_pty_write,
     resolve_copy_conflict, resolve_move_conflict, start_copy_job, start_delete_job,
-    start_extension_install_job, start_move_job,
+    start_extension_install_job, start_move_job, start_search_job,
 };
 use dotdir_core::{
     copy::{ConflictResolution, CopyOptions},
     move_op::MoveOptions,
     error::FsError,
+    search::FileSearchRequest,
     watch::{EventCallback, FsWatcher},
 };
 use futures::{SinkExt, StreamExt};
@@ -233,6 +234,11 @@ async fn process_message(
     // delete.start needs tx for progress streaming
     if method == "delete.start" {
         return Some(handle_delete_start(session, &id, &params, tx));
+    }
+
+    // search.start needs tx for progress streaming
+    if method == "search.start" {
+        return Some(handle_search_start(session, &id, &params, tx));
     }
 
     let session = session.clone();
@@ -446,6 +452,38 @@ fn handle_delete_start(
     Message::Text(json!({ "jsonrpc": "2.0", "id": id, "result": delete_id }).to_string())
 }
 
+fn handle_search_start(
+    session: &Arc<Session>,
+    id: &Value,
+    params: &Value,
+    tx: &mpsc::UnboundedSender<Message>,
+) -> Message {
+    let request: FileSearchRequest = match serde_json::from_value(params["request"].clone()) {
+        Ok(v) => v,
+        Err(_) => return rpc_error(id, &FsError::InvalidInput),
+    };
+
+    let tx_search = tx.clone();
+    let session_ref = session.clone();
+    let search_id = start_search_job(
+        &session.runtime,
+        request,
+        move |event, search_id| {
+            let payload = json!({
+                "jsonrpc": "2.0",
+                "method": "search.progress",
+                "params": { "searchId": search_id, "event": event }
+            });
+            let _ = tx_search.send(Message::Text(payload.to_string()));
+        },
+        move |search_id| {
+            session_ref.runtime.search_jobs.lock().unwrap().remove(&search_id);
+        },
+    );
+
+    Message::Text(json!({ "jsonrpc": "2.0", "id": id, "result": search_id }).to_string())
+}
+
 fn rpc_error(id: &Value, e: &FsError) -> Message {
     Message::Text(
         json!({
@@ -578,6 +616,11 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
         "delete.cancel" => {
             let delete_id = params["deleteId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
             cancel_delete_job(&session.runtime, delete_id);
+            Ok(Value::Null)
+        }
+        "search.cancel" => {
+            let search_id = params["searchId"].as_u64().ok_or(FsError::InvalidInput)? as u32;
+            cancel_search_job(&session.runtime, search_id);
             Ok(Value::Null)
         }
         "fsp.load" => {

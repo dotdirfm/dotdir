@@ -3,12 +3,13 @@ use dotdir_core::delete::DeleteEvent;
 use dotdir_core::move_op::MoveOptions;
 use dotdir_core::error::FsError;
 use dotdir_core::ops::{EntryInfo, StatResult};
+use dotdir_core::search::{FileSearchEvent, FileSearchRequest};
 use dotdir_core::watch::{EventCallback, FsWatcher};
 use extensions_install::{ExtensionInstallEvent, ExtensionInstallRequest};
 use log::debug;
 use runtime_ops::{
     RuntimeState, cancel_copy_job, cancel_delete_job, cancel_extension_install_job,
-    cancel_move_job, fsp_list_entries as backend_fsp_list_entries,
+    cancel_move_job, cancel_search_job, fsp_list_entries as backend_fsp_list_entries,
     fsp_load as backend_fsp_load, fsp_read_file_range as backend_fsp_read_file_range,
     fs_close as backend_fs_close, fs_create_dir as backend_fs_create_dir,
     fs_entries as backend_fs_entries, fs_exists as backend_fs_exists,
@@ -22,7 +23,7 @@ use runtime_ops::{
     pty_resize as backend_pty_resize, pty_spawn as backend_pty_spawn,
     pty_write as backend_pty_write, rename_item as backend_rename_item,
     resolve_copy_conflict, resolve_move_conflict, start_copy_job, start_delete_job,
-    start_extension_install_job, start_move_job, PtySpawnInfo,
+    start_extension_install_job, start_move_job, start_search_job, PtySpawnInfo,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -30,6 +31,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, Position, Size, State, WebviewUrl, WebviewWindowBuilder};
 use tauri::http::header as http_header;
 use tauri::http::StatusCode as HttpStatusCode;
@@ -273,6 +275,21 @@ fn create_app_window<R: tauri::Runtime>(
     }
 
     Ok(())
+}
+
+fn schedule_window_show_fallback<R: tauri::Runtime>(app: tauri::AppHandle<R>, window_id: String) {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(5));
+        if let Some(window) = app.get_webview_window(&window_id) {
+            if let Ok(false) = window.is_visible() {
+                write_debug_log(&format!(
+                    "startup fallback: forcing window '{window_id}' visible after 5s"
+                ));
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }
+    });
 }
 
 // ── Managed state ────────────────────────────────────────────────────
@@ -698,6 +715,13 @@ struct ExtensionInstallProgressEvent {
     event: ExtensionInstallEvent,
 }
 
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct SearchProgressEvent {
+    search_id: u32,
+    event: FileSearchEvent,
+}
+
 #[tauri::command]
 fn delete_start(
     paths: Vec<String>,
@@ -726,6 +750,36 @@ fn delete_start(
 #[tauri::command]
 fn delete_cancel(delete_id: u32, state: State<'_, AppState>) {
     cancel_delete_job(&state.runtime, delete_id);
+}
+
+#[tauri::command]
+fn search_start(
+    request: FileSearchRequest,
+    state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> CmdResult<u32> {
+    let emit_handle = app_handle.clone();
+    let cleanup_handle = app_handle.clone();
+    Ok(start_search_job(
+        &state.runtime,
+        request,
+        move |event, search_id| {
+            let _ = emit_handle.emit(
+                "search:progress",
+                SearchProgressEvent { search_id, event },
+            );
+        },
+        move |search_id| {
+            if let Some(app) = tauri::Manager::try_state::<AppState>(&cleanup_handle) {
+                app.runtime.search_jobs.lock().unwrap().remove(&search_id);
+            }
+        },
+    ))
+}
+
+#[tauri::command]
+fn search_cancel(search_id: u32, state: State<'_, AppState>) {
+    cancel_search_job(&state.runtime, search_id);
 }
 
 #[tauri::command]
@@ -1166,6 +1220,7 @@ pub fn run() {
                         is_maximized: saved.is_maximized,
                     },
                 )?;
+                schedule_window_show_fallback(app.handle().clone(), window_id.clone());
             }
 
             write_debug_log("tauri setup completed");
@@ -1205,6 +1260,8 @@ pub fn run() {
             move_resolve_conflict,
             delete_start,
             delete_cancel,
+            search_start,
+            search_cancel,
             extensions_install_start,
             extensions_install_cancel,
             rename_item,

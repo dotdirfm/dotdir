@@ -1,4 +1,4 @@
-import type { ConflictResolution, CopyOptions, MoveOptions } from "@/features/bridge";
+import type { ConflictResolution, CopyOptions, FileSearchMatch, FileSearchRequest, MoveOptions } from "@/features/bridge";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { type EditorProps, type ViewerProps } from "@/features/extensions/extensionApi";
 import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
@@ -14,6 +14,8 @@ import { ModalDialog } from "./ModalDialog";
 import { MoveConfigDialog } from "./MoveConfigDialog";
 import { OpenCreateFileDialog } from "./OpenCreateFileDialog";
 import { RenameDialog } from "./RenameDialog";
+import { FindFilesDialog } from "./FindFilesDialog";
+import { FindFilesResultsDialog } from "./FindFilesResultsDialog";
 
 export interface MessageDialogButton {
   label: string;
@@ -124,6 +126,23 @@ export type DialogSpec =
     }
   | {
       type: "extensions";
+    }
+  | {
+      type: "findFiles";
+      initialRequest: FileSearchRequest;
+      suggestionRoots: Array<{ id: string; label: string; path: string }>;
+      onConfirm: (request: FileSearchRequest) => void;
+      onCancel: () => void;
+    }
+  | {
+      type: "findFilesResults";
+      request: FileSearchRequest;
+      onAgain: (request: FileSearchRequest) => void;
+      onClose: () => void;
+      onChdir: (path: string) => void;
+      onViewFile: (path: string) => void;
+      onEditFile: (path: string) => void;
+      onPanelize?: (matches: FileSearchMatch[]) => void;
     }
   | {
       type: "viewer";
@@ -315,10 +334,10 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   return <DialogContext.Provider value={value}>{children}</DialogContext.Provider>;
 }
 
-function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React.ReactElement | null {
+function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue, stackIndex = 0): React.ReactElement | null {
   switch (dialog.type) {
     case "message":
-      return <ModalDialog title={dialog.title} message={dialog.message} variant={dialog.variant} buttons={dialog.buttons} onClose={ctx!.closeDialog} />;
+      return <ModalDialog title={dialog.title} message={dialog.message} variant={dialog.variant} buttons={dialog.buttons} onClose={ctx!.closeDialog} stackIndex={stackIndex} />;
     case "openCreateFile":
       return (
         <OpenCreateFileDialog
@@ -501,6 +520,37 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
       );
     case "extensions":
       return <ExtensionsPanel onClose={ctx.closeDialog} />;
+    case "findFiles":
+      return (
+        <FindFilesDialog
+          initialRequest={dialog.initialRequest}
+          suggestionRoots={dialog.suggestionRoots}
+          stackIndex={stackIndex}
+          onConfirm={(request) => {
+            dialog.onConfirm(request);
+          }}
+          onCancel={() => {
+            dialog.onCancel();
+            ctx!.closeDialog();
+          }}
+        />
+      );
+    case "findFilesResults":
+      return (
+        <FindFilesResultsDialog
+          request={dialog.request}
+          stackIndex={stackIndex}
+          onAgain={dialog.onAgain}
+          onClose={() => {
+            dialog.onClose();
+            ctx!.closeDialog();
+          }}
+          onChdir={dialog.onChdir}
+          onViewFile={dialog.onViewFile}
+          onEditFile={dialog.onEditFile}
+          onPanelize={dialog.onPanelize}
+        />
+      );
     case "viewer":
       return (
         <ViewerContainer
@@ -509,6 +559,7 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
           filePath={dialog.props.filePath}
           fileName={dialog.props.fileName}
           fileSize={dialog.props.fileSize}
+          stackIndex={stackIndex}
           onClose={dialog.onClose}
           onExecuteCommand={dialog.onExecuteCommand}
         />
@@ -521,6 +572,7 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
           filePath={dialog.props.filePath}
           fileName={dialog.props.fileName}
           langId={dialog.props.langId}
+          stackIndex={stackIndex}
           onClose={dialog.onClose}
           onDirtyChange={dialog.onDirtyChange}
         />
@@ -530,7 +582,7 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue): React
   }
 }
 
-function renderExtensionDialogSurface(dialog: ExtensionDialogSpec, visible: boolean) {
+function renderExtensionDialogSurface(dialog: ExtensionDialogSpec, visible: boolean, stackIndex = 0) {
   if (dialog.type === "viewer") {
     return (
       <ViewerContainer
@@ -540,6 +592,7 @@ function renderExtensionDialogSurface(dialog: ExtensionDialogSpec, visible: bool
         filePath={dialog.props.filePath}
         fileName={dialog.props.fileName}
         fileSize={dialog.props.fileSize}
+        stackIndex={stackIndex}
         visible={visible}
         onClose={dialog.onClose}
         onExecuteCommand={dialog.onExecuteCommand}
@@ -555,6 +608,7 @@ function renderExtensionDialogSurface(dialog: ExtensionDialogSpec, visible: bool
       filePath={dialog.props.filePath}
       fileName={dialog.props.fileName}
       langId={dialog.props.langId}
+      stackIndex={stackIndex}
       visible={visible}
       onClose={dialog.onClose}
       onDirtyChange={dialog.onDirtyChange}
@@ -562,10 +616,30 @@ function renderExtensionDialogSurface(dialog: ExtensionDialogSpec, visible: bool
   );
 }
 
-function ExtensionDialogSurfaceHost({ extensionSurfaces }: { extensionSurfaces: Record<string, ExtensionSurfaceSlot> }) {
+function ExtensionDialogSurfaceHost({
+  extensionSurfaces,
+  dialogs,
+}: {
+  extensionSurfaces: Record<string, ExtensionSurfaceSlot>;
+  dialogs: DialogSpec[];
+}) {
+  const orderBySurfaceKey = new Map<string, number>();
+  dialogs.forEach((dialog, index) => {
+    if ((dialog.type === "viewer" || dialog.type === "editor") && dialog.surfaceKey) {
+      orderBySurfaceKey.set(dialog.surfaceKey, index);
+    }
+  });
+  const orderedSurfaces = Object.entries(extensionSurfaces).sort((left, right) => {
+    const leftOrder = orderBySurfaceKey.get(left[0]) ?? -1;
+    const rightOrder = orderBySurfaceKey.get(right[0]) ?? -1;
+    return leftOrder - rightOrder;
+  });
+
   return (
     <>
-      {Object.entries(extensionSurfaces).map(([, slot]) => renderExtensionDialogSurface(slot.dialog, slot.visible))}
+      {orderedSurfaces.map(([surfaceKey, slot]) =>
+        renderExtensionDialogSurface(slot.dialog, slot.visible, orderBySurfaceKey.get(surfaceKey) ?? 0),
+      )}
     </>
   );
 }
@@ -710,14 +784,14 @@ export function DialogHolder() {
   const extensionSurfaces = ctx?.extensionSurfaces ?? {};
 
   if (dialogs.length === 0) {
-    return Object.keys(extensionSurfaces).length > 0 ? <ExtensionDialogSurfaceHost extensionSurfaces={extensionSurfaces} /> : null;
+    return Object.keys(extensionSurfaces).length > 0 ? <ExtensionDialogSurfaceHost extensionSurfaces={extensionSurfaces} dialogs={dialogs} /> : null;
   }
 
   const stackedDialogs = dialogs.map((item, index) => {
     if (item.type === "viewer" || item.type === "editor") {
       return null;
     }
-    const content = renderDialogContent(item, ctx!);
+    const content = renderDialogContent(item, ctx!, index);
     if (!content) return null;
     const helpText = index === dialogs.length - 1 ? HELP_TEXTS[item.type] : undefined;
     return helpText ? <HotkeyProvider key={`dialog-${index}`} helpText={helpText}>{content}</HotkeyProvider> : <React.Fragment key={`dialog-${index}`}>{content}</React.Fragment>;
@@ -725,7 +799,7 @@ export function DialogHolder() {
 
   return (
     <>
-      <ExtensionDialogSurfaceHost extensionSurfaces={extensionSurfaces} />
+      <ExtensionDialogSurfaceHost extensionSurfaces={extensionSurfaces} dialogs={dialogs} />
       {stackedDialogs}
     </>
   );

@@ -16,6 +16,9 @@ export default defineConfig({
       external: [
         "react",
         "react/jsx-runtime",
+        "react-dom",
+        "react-dom/client",
+        "react-dom/server",
         "jotai",
         "@xterm/addon-fit",
         "@xterm/xterm",

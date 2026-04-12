@@ -10,6 +10,7 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { colorThemeKey, extensionIconThemeKey, setExtensionAutoUpdate, uninstallExtension } from "@/features/extensions/extensions";
 import { getMarketplaceProvider, type MarketplaceDetails, type MarketplaceProviderId, type MarketplaceSearchItem } from "@/features/extensions/marketplaces";
+import { compareExtensionVersions, fetchDotDirExtensionDetails } from "@/features/extensions/marketplaces/dotdir";
 import {
   extensionColorThemes,
   extensionCommands,
@@ -342,6 +343,8 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const [remoteMetaByKey, setRemoteMetaByKey] = useState<Record<string, RemoteMetadata>>({});
   const [docsLoadingKey, setDocsLoadingKey] = useState<string | null>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [availableUpdateByKey, setAvailableUpdateByKey] = useState<Record<string, string | null>>({});
+  const checkedUpdateKeysRef = useRef(new Set<string>());
   const installIdToKeyRef = useRef(new Map<number, string>());
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -397,6 +400,11 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
 
       if (event.kind === "done") {
         installIdToKeyRef.current.delete(payload.installId);
+        setAvailableUpdateByKey((current) => {
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
         void (async () => {
           try {
             await extensionHost.restart();
@@ -595,6 +603,9 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const selectedRemoteMeta = selectedItem ? remoteMetaByKey[selectedItem.key] : undefined;
   const selectedReviewCount = selectedRemoteMeta?.reviewCount ?? (selectedItem?.kind === "marketplace" ? (selectedItem.remote.reviewCount ?? 0) : 0);
   const selectedHomepageLabel = formatHostLabel(selectedRemoteMeta?.homepage ?? null);
+  const selectedAvailableUpdate = selectedInstalled
+    ? (availableUpdateByKey[`${extensionRef(selectedInstalled).publisher}.${extensionRef(selectedInstalled).name}@${extensionRef(selectedInstalled).version}`] ?? null)
+    : null;
 
   const openExternalLink = useCallback(
     async (url: string) => {
@@ -710,6 +721,32 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
     };
   }, [remoteMetaByKey, selectedItem]);
 
+  useEffect(() => {
+    if (!selectedInstalled) return;
+    const ref = extensionRef(selectedInstalled);
+    if (ref.source !== "dotdir-marketplace") return;
+    const key = `${ref.publisher}.${ref.name}@${ref.version}`;
+    if (checkedUpdateKeysRef.current.has(key)) return;
+    checkedUpdateKeysRef.current.add(key);
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const details = await fetchDotDirExtensionDetails(ref.publisher, ref.name);
+        if (cancelled) return;
+        const latestVersion = details.version || null;
+        const hasUpdate = latestVersion ? compareExtensionVersions(latestVersion, ref.version) > 0 : false;
+        setAvailableUpdateByKey((current) => ({ ...current, [key]: hasUpdate ? latestVersion : null }));
+      } catch {
+        if (cancelled) return;
+        checkedUpdateKeysRef.current.delete(key); // allow retry on next selection
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedInstalled]);
+
   const handleInstall = useCallback(
     async (item: SidebarItem) => {
       setError("");
@@ -759,6 +796,20 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
       });
     },
     [activeColorTheme, activeIconTheme, bridge, dataDir, extensionHost, setActiveColorTheme, setActiveIconTheme],
+  );
+
+  const handleUpdateExtension = useCallback(
+    async (ext: LoadedExtension, version: string) => {
+      const ref = extensionRef(ext);
+      const key = `${ref.publisher}.${ref.name}@${ref.version}`;
+      await runBridgeInstall(key, {
+        source: "dotdir-marketplace",
+        publisher: ref.publisher,
+        name: ref.name,
+        version,
+      });
+    },
+    [runBridgeInstall],
   );
 
   const handleSetIconTheme = useCallback(
@@ -1077,6 +1128,18 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                   <div className={styles["ext-hero-actions"]}>
                     {selectedInstalled ? (
                       <>
+                        {selectedAvailableUpdate && (
+                          <button
+                            className={cx(styles, "ext-action", "primary")}
+                            disabled={!!selectedBusy}
+                            onClick={() => void handleUpdateExtension(selectedInstalled, selectedAvailableUpdate)}
+                            type="button"
+                          >
+                            <SmartLabel>
+                              {selectedBusy?.kind === "install" ? "Updating…" : `Update to ${selectedAvailableUpdate}`}
+                            </SmartLabel>
+                          </button>
+                        )}
                         <button
                           className={cx(styles, "ext-action")}
                           disabled={selectedBusy?.kind === "uninstall"}

@@ -1,5 +1,6 @@
 import { commandPaletteOpenAtom, panelsVisibleAtom, terminalFocusRequestKeyAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
+import type { FileSearchRequest } from "@/features/bridge";
 import {
     activePanelSideAtom,
     activeTabAtom,
@@ -32,6 +33,7 @@ import {
     PASTE_RIGHT_PANEL_PATH,
     RUN_COMMANDS,
     SHOW_COMMAND_PALETTE,
+    SHOW_FIND_FILES,
     SHOW_EXTENSIONS,
     SWITCH_PANEL,
     SHELL_EXECUTE,
@@ -43,6 +45,7 @@ import { useCommandRegistry } from "@/features/commands/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
 import { runCommandSequence, type RunCommandsArgs } from "@/features/commands/runCommands";
 import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
+import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
 import { useShowHidden, useUserSettings } from "@/features/settings/useUserSettings";
@@ -73,9 +76,14 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const focusContext = useFocusContext();
   const focusContextRef = useRef(focusContext);
   focusContextRef.current = focusContext;
-  const { showDialog } = useDialog();
+  const { showDialog, replaceDialog } = useDialog();
+  const languageRegistry = useLanguageRegistry();
   const showDialogRef = useRef(showDialog);
   showDialogRef.current = showDialog;
+  const replaceDialogRef = useRef(replaceDialog);
+  replaceDialogRef.current = replaceDialog;
+  const languageRegistryRef = useRef(languageRegistry);
+  languageRegistryRef.current = languageRegistry;
 
   const { paste: pasteToCommandLine } = useCommandLine();
   const pasteToCommandLineRef = useRef(pasteToCommandLine);
@@ -233,6 +241,74 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
           type: "extensions",
         }),
       ),
+    );
+    disposables.push(
+      commandRegistry.registerCommand(SHOW_FIND_FILES, async () => {
+        const currentPath =
+          activeTabRef.current?.type === "filelist" ? activeTabRef.current.path : await bridgeRef.current.utils.getHomePath();
+        const [homePath, mountedRoots] = await Promise.all([
+          bridgeRef.current.utils.getHomePath(),
+          bridgeRef.current.utils.getMountedRoots(),
+        ]);
+        const initialRequest: FileSearchRequest = {
+          startPath: currentPath,
+          ignoreDirsEnabled: true,
+          ignoreDirs: [".git", "node_modules", "dist"],
+          filePattern: "*",
+          contentPattern: "",
+          recursive: true,
+          followSymlinks: false,
+          shellPatterns: true,
+          caseSensitiveFileName: false,
+          wholeWords: false,
+          regex: false,
+          caseSensitiveContent: false,
+          allCharsets: false,
+          firstHit: false,
+          skipHidden: false,
+        };
+        const suggestionRoots = [
+          { id: "current", label: "Current Panel", path: currentPath },
+          { id: "home", label: "Home", path: homePath },
+          ...mountedRoots
+            .filter((root) => root !== homePath && root !== currentPath)
+            .map((root) => ({ id: `root:${root}`, label: root, path: root })),
+        ];
+        const openResults = (request: FileSearchRequest) => {
+          replaceDialogRef.current({
+            type: "findFilesResults",
+            request,
+            onAgain: (nextRequest) => {
+              replaceDialogRef.current({
+                type: "findFiles",
+                initialRequest: nextRequest,
+                suggestionRoots,
+                onConfirm: openResults,
+                onCancel: () => {},
+              });
+            },
+            onClose: () => {},
+            onChdir: (path) => {
+              void navigateToRef.current(path);
+            },
+            onViewFile: async (path) => {
+              const stat = await bridgeRef.current.fs.stat(path);
+              depsRef.current.onViewFile(path, basename(path), stat.size);
+            },
+            onEditFile: async (path) => {
+              const stat = await bridgeRef.current.fs.stat(path);
+              depsRef.current.onEditFile(path, basename(path), stat.size, languageRegistryRef.current.getLanguageForFilename(basename(path)));
+            },
+          });
+        };
+        showDialogRef.current({
+          type: "findFiles",
+          initialRequest,
+          suggestionRoots,
+          onConfirm: openResults,
+          onCancel: () => {},
+        });
+      }),
     );
     disposables.push(commandRegistry.registerCommand(SHOW_COMMAND_PALETTE, () => setCommandPaletteOpen((o) => !o)));
     disposables.push(commandRegistry.registerCommand(CLOSE_VIEWER, () => depsRef.current.onRequestCloseViewer()));

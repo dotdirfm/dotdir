@@ -8,6 +8,7 @@ use dotdir_core::{
     error::FsError,
     move_op::{self, MoveOptions},
     ops::{self, EntryInfo, StatResult},
+    search::{self, FileSearchEvent, FileSearchRequest},
     watch::FsWatcher,
 };
 use serde::Serialize;
@@ -41,6 +42,10 @@ pub(crate) struct ExtensionInstallJobHandle {
     pub(crate) cancel_token: CancelToken,
 }
 
+pub(crate) struct SearchJobHandle {
+    pub(crate) cancel_token: CancelToken,
+}
+
 pub(crate) struct RuntimeState {
     pub(crate) fdt: dotdir_core::ops::FdTable,
     pub(crate) watcher: FsWatcher,
@@ -54,6 +59,8 @@ pub(crate) struct RuntimeState {
     pub(crate) next_delete_id: AtomicU32,
     pub(crate) extension_install_jobs: Mutex<HashMap<u32, ExtensionInstallJobHandle>>,
     pub(crate) next_extension_install_id: AtomicU32,
+    pub(crate) search_jobs: Mutex<HashMap<u32, SearchJobHandle>>,
+    pub(crate) next_search_id: AtomicU32,
     pub(crate) fsp_manager: fsprovider::FsProviderManager,
 }
 
@@ -72,6 +79,8 @@ impl RuntimeState {
             next_delete_id: AtomicU32::new(0),
             extension_install_jobs: Mutex::new(HashMap::new()),
             next_extension_install_id: AtomicU32::new(0),
+            search_jobs: Mutex::new(HashMap::new()),
+            next_search_id: AtomicU32::new(0),
             fsp_manager: fsprovider::FsProviderManager::new(),
         }
     }
@@ -598,6 +607,48 @@ pub(crate) fn start_extension_install_job(
 
 pub(crate) fn cancel_extension_install_job(runtime: &RuntimeState, install_id: u32) {
     if let Some(job) = runtime.extension_install_jobs.lock().unwrap().get(&install_id) {
+        job.cancel_token.cancel();
+    }
+}
+
+pub(crate) fn start_search_job(
+    runtime: &RuntimeState,
+    request: FileSearchRequest,
+    emit_event: impl Fn(FileSearchEvent, u32) + Send + Sync + 'static,
+    cleanup: impl Fn(u32) + Send + 'static,
+) -> u32 {
+    let search_id = runtime.next_search_id.fetch_add(1, Ordering::Relaxed);
+    let cancel_token = CancelToken::new();
+
+    runtime.search_jobs.lock().unwrap().insert(
+        search_id,
+        SearchJobHandle {
+            cancel_token: cancel_token.clone(),
+        },
+    );
+
+    let emit_event = Arc::new(emit_event);
+    std::thread::spawn(move || {
+        let emit_progress = {
+            let emit_event = emit_event.clone();
+            move |event: FileSearchEvent| emit_event(event, search_id)
+        };
+
+        if let Err(err) = search::search_files(&request, &cancel_token, &emit_progress) {
+            emit_progress(FileSearchEvent::Error {
+                message: err.to_string(),
+                found: 0,
+            });
+        }
+
+        cleanup(search_id);
+    });
+
+    search_id
+}
+
+pub(crate) fn cancel_search_job(runtime: &RuntimeState, search_id: u32) {
+    if let Some(job) = runtime.search_jobs.lock().unwrap().get(&search_id) {
         job.cancel_token.cancel();
     }
 }

@@ -799,6 +799,7 @@ interface ViewerContainerWrapperProps {
   filePath: string;
   fileName: string;
   fileSize: number;
+  stackIndex?: number;
   inline?: boolean;
   inlineFocusMode?: "panel-first" | "viewer-first";
   visible?: boolean;
@@ -812,6 +813,7 @@ interface ExtensionShellLayoutProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   inline?: boolean;
   visible: boolean;
+  stackIndex?: number;
   inlineClassName: string;
   overlayClassName: string;
   frameClassName: string;
@@ -887,6 +889,7 @@ function ExtensionShellLayout({
   containerRef,
   inline,
   visible,
+  stackIndex = 0,
   inlineClassName,
   overlayClassName,
   frameClassName,
@@ -905,7 +908,7 @@ function ExtensionShellLayout({
   }
 
   return (
-    <div ref={containerRef} className={overlayClassName} style={{ display: visible ? "flex" : "none" }}>
+    <div ref={containerRef} className={overlayClassName} style={{ display: visible ? "flex" : "none", zIndex: 200 + stackIndex * 10 }}>
       <div className={frameClassName} style={{ display: "flex", flexDirection: "column", padding: 0 }}>
         {children}
       </div>
@@ -919,6 +922,7 @@ export function ViewerContainer({
   filePath,
   fileName,
   fileSize,
+  stackIndex = 0,
   inline,
   inlineFocusMode = "panel-first",
   visible,
@@ -1029,6 +1033,7 @@ export function ViewerContainer({
       inlineClassName={styles["file-viewer-inline"]}
       overlayClassName={styles["file-viewer-overlay"]}
       frameClassName={styles["file-viewer"]}
+      stackIndex={stackIndex}
     >
       {!inline && toolbar}
       <div style={{ flex: 1, minHeight: 0 }}>{container}</div>
@@ -1042,6 +1047,7 @@ interface EditorContainerWrapperProps {
   filePath: string;
   fileName: string;
   langId: string;
+  stackIndex?: number;
   inline?: boolean;
   visible?: boolean;
   onClose: () => void;
@@ -1057,6 +1063,7 @@ export function EditorContainer({
   filePath,
   fileName,
   langId,
+  stackIndex = 0,
   inline,
   visible,
   onClose,
@@ -1192,6 +1199,7 @@ export function EditorContainer({
       inlineClassName={styles["file-viewer-inline"]}
       overlayClassName={styles["file-editor-overlay"]}
       frameClassName={styles["file-editor"]}
+      stackIndex={stackIndex}
     >
       {content}
     </ExtensionShellLayout>

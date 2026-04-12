@@ -12,6 +12,8 @@ import type {
   DeleteProgressEvent,
   ExtensionInstallProgressEvent,
   ExtensionInstallRequest,
+  FileSearchProgressEvent,
+  FileSearchRequest,
   FsChangeEvent,
   FsChangeType,
   FsEntry,
@@ -41,6 +43,9 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
   const moveProgressListeners = new Set<(event: MoveProgressEvent) => void>();
   const deleteProgressListeners = new Set<
     (event: DeleteProgressEvent) => void
+  >();
+  const searchProgressListeners = new Set<
+    (event: FileSearchProgressEvent) => void
   >();
   const extensionInstallProgressListeners = new Set<
     (event: ExtensionInstallProgressEvent) => void
@@ -96,6 +101,12 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
           event: msg.params.event,
         };
         for (const cb of deleteProgressListeners) cb(event);
+      } else if (msg.method === "search.progress") {
+        const event: FileSearchProgressEvent = {
+          searchId: msg.params.searchId,
+          event: msg.params.event,
+        };
+        for (const cb of searchProgressListeners) cb(event);
       } else if (msg.method === "extensions.install.progress") {
         const event: ExtensionInstallProgressEvent = {
           installId: msg.params.installId,
@@ -365,6 +376,18 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
           deleteProgressListeners.add(callback);
           return () => {
             deleteProgressListeners.delete(callback);
+          };
+        },
+      },
+      search: {
+        start: (request: FileSearchRequest) =>
+          rpc("search.start", { request }) as Promise<number>,
+        cancel: (searchId: number) =>
+          rpc("search.cancel", { searchId }) as Promise<void>,
+        onProgress(callback: (event: FileSearchProgressEvent) => void): () => void {
+          searchProgressListeners.add(callback);
+          return () => {
+            searchProgressListeners.delete(callback);
           };
         },
       },

@@ -3,6 +3,7 @@ import { createContext, createElement, useContext, useEffect, useRef, type React
 export type FocusLayer =
   | "panel"
   | "autocomplete"
+  | "searchResults"
   | "menu"
   | "commandPalette"
   | "modal"
@@ -126,7 +127,7 @@ export class FocusContextManager {
       return adapter.allowCommandRouting(event);
     }
     if (adapter?.allowCommandRouting === false) return false;
-    return layer === "panel" || layer === "menu" || layer === "viewer" || layer === "editor";
+    return layer === "panel" || layer === "menu" || layer === "searchResults" || layer === "viewer" || layer === "editor";
   }
 
   shouldRouteCommandEvent(event: KeyboardEvent, root: HTMLElement): boolean {
@@ -141,6 +142,9 @@ export class FocusContextManager {
     const activeAdapter = this.adapters.get(activeLayer);
     if (typeof activeAdapter?.allowCommandRouting === "function") {
       return activeAdapter.allowCommandRouting(event);
+    }
+    if (activeAdapter?.allowCommandRouting === true) {
+      return true;
     }
 
     if (this.isEditableTarget(event.target) || this.isEditableTarget(document.activeElement)) return false;

@@ -38,7 +38,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   const [editorDirty, setEditorDirty] = useState(false);
   const editorCloseConfirmOpenRef = useRef(false);
   const { showHidden } = useShowHidden();
-  const { dialog, showDialog, replaceDialog, closeDialog } = useDialog();
+  const { dialog, dialogs, showDialog, replaceDialog, closeDialog } = useDialog();
 
   const activePanelSide = useAtomValue(activePanelSideAtom);
   const activePanelSideRef = useRef(activePanelSide);
@@ -231,6 +231,22 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
       return;
     }
 
+    if (topDialogType === "findFilesResults") {
+      showDialog({
+        type: "viewer",
+        extensionDirPath: viewerResolved.extensionDirPath,
+        entry: viewerResolved.contribution.entry,
+        props: {
+          filePath: viewerFile.path,
+          fileName: viewerFile.name,
+          fileSize: viewerFile.size,
+        },
+        onClose: requestCloseViewer,
+        onExecuteCommand: handleExecuteCommand,
+      });
+      return;
+    }
+
     if (topDialogType && topDialogType !== "viewer") {
       return;
     }
@@ -247,7 +263,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
       onClose: requestCloseViewer,
       onExecuteCommand: handleExecuteCommand,
     });
-  }, [closeDialog, dialog?.type, handleExecuteCommand, replaceDialog, requestCloseViewer, showDialog, viewerFile, viewerResolved]);
+  }, [closeDialog, dialog?.type, dialogs, handleExecuteCommand, replaceDialog, requestCloseViewer, showDialog, viewerFile, viewerResolved]);
 
   useEffect(() => {
     const topDialogType = dialog?.type;
@@ -270,6 +286,22 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
       return;
     }
 
+    if (topDialogType === "findFilesResults") {
+      showDialog({
+        type: "editor",
+        extensionDirPath: editorResolved.extensionDirPath,
+        entry: editorResolved.contribution.entry,
+        props: {
+          filePath: editorFile.path,
+          fileName: editorFile.name,
+          langId: editorFile.langId,
+        },
+        onClose: requestCloseEditor,
+        onDirtyChange: setEditorDirty,
+      });
+      return;
+    }
+
     if (topDialogType && topDialogType !== "editor") {
       return;
     }
@@ -286,7 +318,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
       onClose: requestCloseEditor,
       onDirtyChange: setEditorDirty,
     });
-  }, [closeDialog, dialog?.type, editorFile, editorResolved, replaceDialog, requestCloseEditor, showDialog]);
+  }, [closeDialog, dialog?.type, dialogs, editorFile, editorResolved, replaceDialog, requestCloseEditor, showDialog]);
 
   return {
     handleViewFile,

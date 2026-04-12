@@ -249,6 +249,7 @@ export class CommandRegistry {
       ...this.contextValues,
       focusPanel: currentFocus === "panel",
       focusAutocomplete: currentFocus === "autocomplete",
+      focusSearchResults: currentFocus === "searchResults",
       focusMenu: currentFocus === "menu",
       focusViewer: currentFocus === "viewer",
       focusEditor: currentFocus === "editor",

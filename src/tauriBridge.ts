@@ -11,6 +11,8 @@ import type {
   DeleteProgressEvent,
   ExtensionInstallProgressEvent,
   ExtensionInstallRequest,
+  FileSearchProgressEvent,
+  FileSearchRequest,
   FsChangeEvent,
   FsEntry,
   MoveOptions,
@@ -251,6 +253,25 @@ export const tauriBridge: Bridge = {
       onProgress(callback: (event: DeleteProgressEvent) => void): () => void {
         let unlisten: (() => void) | null = null;
         listen<DeleteProgressEvent>("delete:progress", (event) => {
+          callback(event.payload);
+        }).then((fn) => {
+          unlisten = fn;
+        });
+        return () => {
+          unlisten?.();
+        };
+      },
+    },
+    search: {
+      async start(request: FileSearchRequest): Promise<number> {
+        return invoke<number>("search_start", { request });
+      },
+      async cancel(searchId: number): Promise<void> {
+        return invoke<void>("search_cancel", { searchId });
+      },
+      onProgress(callback: (event: FileSearchProgressEvent) => void): () => void {
+        let unlisten: (() => void) | null = null;
+        listen<FileSearchProgressEvent>("search:progress", (event) => {
           callback(event.payload);
         }).then((fn) => {
           unlisten = fn;

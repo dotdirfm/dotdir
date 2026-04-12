@@ -113,6 +113,38 @@ export type DeleteProgressEvent = {
   event: { kind: "progress"; filesDone: number; currentFile: string } | { kind: "done"; filesDone: number } | { kind: "error"; message: string };
 };
 
+export interface FileSearchRequest {
+  startPath: string;
+  ignoreDirsEnabled: boolean;
+  ignoreDirs: string[];
+  filePattern: string;
+  contentPattern: string;
+  recursive: boolean;
+  followSymlinks: boolean;
+  shellPatterns: boolean;
+  caseSensitiveFileName: boolean;
+  wholeWords: boolean;
+  regex: boolean;
+  caseSensitiveContent: boolean;
+  allCharsets: boolean;
+  firstHit: boolean;
+  skipHidden: boolean;
+}
+
+export interface FileSearchMatch {
+  path: string;
+  isDirectory: boolean;
+}
+
+export type FileSearchProgressEvent = {
+  searchId: number;
+  event:
+    | { kind: "match"; match: FileSearchMatch }
+    | { kind: "done"; found: number }
+    | { kind: "cancelled"; found: number }
+    | { kind: "error"; message: string; found: number };
+};
+
 export type ExtensionInstallRequest =
   | { source: "dotdir-marketplace"; publisher: string; name: string; version: string }
   | { source: "open-vsx-marketplace"; publisher: string; name: string; downloadUrl: string };
@@ -205,6 +237,11 @@ export interface Bridge {
       start(paths: string[]): Promise<number>;
       cancel(deleteId: number): Promise<void>;
       onProgress(callback: (event: DeleteProgressEvent) => void): Unsubscribe;
+    };
+    search: {
+      start(request: FileSearchRequest): Promise<number>;
+      cancel(searchId: number): Promise<void>;
+      onProgress(callback: (event: FileSearchProgressEvent) => void): Unsubscribe;
     };
     rename: {
       rename(source: string, newName: string): Promise<void>;
