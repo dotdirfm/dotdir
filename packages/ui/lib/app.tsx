@@ -15,7 +15,6 @@ import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { Terminal, TerminalToolbar } from "@/features/terminal/Terminal";
 import { useSystemTheme } from "@/features/themes/useSystemTheme";
 import { useFocusContext } from "@/focusContext";
-import { useInteractionCommands } from "@/hooks/useInteractionCommands";
 import { useViewerEditorState } from "@/hooks/useViewerEditorState";
 import { useWorkspacePersistenceProcess, useWorkspaceRestoreProcess } from "@/processes/workspace-session/model/useWorkspaceSessionProcess";
 import baseStyles from "@/styles/base.module.css";
@@ -136,7 +135,6 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     viewerOpen,
   });
 
-  useInteractionCommands();
   useCommandRouting(rootRef);
 
   useEffect(() => {

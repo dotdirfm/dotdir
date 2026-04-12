@@ -1,26 +1,26 @@
 import { panelsVisibleAtom } from "@/atoms";
 import { useCommandLine, useCommandLineRegistration } from "@/features/command-line/useCommandLine";
 import {
-    COMMANDLINE_CLEAR,
+    CLEAR,
     COMMANDLINE_COPY,
-    COMMANDLINE_CURSOR_END,
-    COMMANDLINE_CURSOR_HOME,
-    COMMANDLINE_CURSOR_LEFT,
-    COMMANDLINE_CURSOR_RIGHT,
-    COMMANDLINE_CURSOR_WORD_LEFT,
-    COMMANDLINE_CURSOR_WORD_RIGHT,
     COMMANDLINE_CUT,
-    COMMANDLINE_DELETE_LEFT,
-    COMMANDLINE_DELETE_RIGHT,
     COMMANDLINE_EXECUTE,
     COMMANDLINE_PASTE,
-    COMMANDLINE_SELECT_ALL,
-    COMMANDLINE_SELECT_END,
-    COMMANDLINE_SELECT_HOME,
-    COMMANDLINE_SELECT_LEFT,
-    COMMANDLINE_SELECT_RIGHT,
-    COMMANDLINE_SELECT_WORD_LEFT,
-    COMMANDLINE_SELECT_WORD_RIGHT,
+    CURSOR_END,
+    CURSOR_HOME,
+    CURSOR_LEFT,
+    CURSOR_RIGHT,
+    CURSOR_WORD_LEFT,
+    CURSOR_WORD_RIGHT,
+    DELETE_LEFT,
+    DELETE_RIGHT,
+    SELECT_ALL,
+    SELECT_END,
+    SELECT_HOME,
+    SELECT_LEFT,
+    SELECT_RIGHT,
+    SELECT_WORD_LEFT,
+    SELECT_WORD_RIGHT,
 } from "@/features/commands/commandIds";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { registerCommandLineKeybindings } from "@/features/commands/registerKeybindings";
@@ -73,6 +73,8 @@ export function CommandLine() {
     commandRegistry.setContext("commandLineHasText", visible && value.length > 0);
   }, [commandRegistry, value, visible]);
 
+  const commandLineEditingActive = visible && value.length > 0;
+
   // Helpers used inside command handlers (always read via refs)
   const deleteSelection = useCallback((): boolean => {
     const pos = cursorRef.current;
@@ -91,9 +93,10 @@ export function CommandLine() {
     if (!extendSel) setAnchor(newPos);
   }, []);
 
-  // Register all editing/navigation commands once; always read state via refs
+  // Register commands whose ownership follows command-line editing state.
   useEffect(() => {
     const d: Array<() => void> = [];
+    if (!commandLineEditingActive) return;
 
     d.push(
       commandRegistry.registerCommand(COMMANDLINE_EXECUTE, () => {
@@ -107,9 +110,9 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand(COMMANDLINE_CLEAR, () => {
+      commandRegistry.registerCommand(CLEAR, () => {
         if (cursorRef.current !== anchorRef.current) {
-          setAnchor(cursorRef.current); // collapse selection first
+          setAnchor(cursorRef.current);
         } else {
           setValue("");
           setCursor(0);
@@ -119,7 +122,7 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand(COMMANDLINE_DELETE_LEFT, () => {
+      commandRegistry.registerCommand(DELETE_LEFT, () => {
         const pos = cursorRef.current;
         const anch = anchorRef.current;
         if (pos !== anch) {
@@ -133,7 +136,7 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand(COMMANDLINE_DELETE_RIGHT, () => {
+      commandRegistry.registerCommand(DELETE_RIGHT, () => {
         if (!deleteSelection()) {
           const pos = cursorRef.current;
           if (pos < valueRef.current.length) {
@@ -144,7 +147,7 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand(COMMANDLINE_CURSOR_WORD_LEFT, () => {
+      commandRegistry.registerCommand(CURSOR_WORD_LEFT, () => {
         const v = valueRef.current;
         let p = cursorRef.current;
         while (p > 0 && v[p - 1] === " ") p--;
@@ -154,7 +157,7 @@ export function CommandLine() {
     );
 
     d.push(
-      commandRegistry.registerCommand(COMMANDLINE_CURSOR_WORD_RIGHT, () => {
+      commandRegistry.registerCommand(CURSOR_WORD_RIGHT, () => {
         const v = valueRef.current;
         let p = cursorRef.current;
         while (p < v.length && v[p] !== " ") p++;
@@ -163,26 +166,25 @@ export function CommandLine() {
       }),
     );
 
-    d.push(commandRegistry.registerCommand(COMMANDLINE_CURSOR_HOME, () => moveCursor(0, false)));
-    d.push(commandRegistry.registerCommand(COMMANDLINE_CURSOR_END, () => moveCursor(valueRef.current.length, false)));
-    d.push(commandRegistry.registerCommand(COMMANDLINE_CURSOR_LEFT, () => moveCursor(Math.max(0, cursorRef.current - 1), false)));
-    d.push(commandRegistry.registerCommand(COMMANDLINE_CURSOR_RIGHT, () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), false)));
+    d.push(commandRegistry.registerCommand(CURSOR_HOME, () => moveCursor(0, false)));
+    d.push(commandRegistry.registerCommand(CURSOR_END, () => moveCursor(valueRef.current.length, false)));
+    d.push(commandRegistry.registerCommand(CURSOR_LEFT, () => moveCursor(Math.max(0, cursorRef.current - 1), false)));
+    d.push(commandRegistry.registerCommand(CURSOR_RIGHT, () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), false)));
 
     d.push(
-      commandRegistry.registerCommand(COMMANDLINE_SELECT_ALL, () => {
+      commandRegistry.registerCommand(SELECT_ALL, () => {
         if (valueRef.current.length === 0) return;
         setAnchor(0);
         setCursor(valueRef.current.length);
       }),
     );
 
-    // Selection commands — registered without keybindings; user can bind manually
-    d.push(commandRegistry.registerCommand(COMMANDLINE_SELECT_LEFT, () => moveCursor(Math.max(0, cursorRef.current - 1), true)));
-    d.push(commandRegistry.registerCommand(COMMANDLINE_SELECT_RIGHT, () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), true)));
-    d.push(commandRegistry.registerCommand(COMMANDLINE_SELECT_HOME, () => moveCursor(0, true)));
-    d.push(commandRegistry.registerCommand(COMMANDLINE_SELECT_END, () => moveCursor(valueRef.current.length, true)));
+    d.push(commandRegistry.registerCommand(SELECT_LEFT, () => moveCursor(Math.max(0, cursorRef.current - 1), true)));
+    d.push(commandRegistry.registerCommand(SELECT_RIGHT, () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), true)));
+    d.push(commandRegistry.registerCommand(SELECT_HOME, () => moveCursor(0, true)));
+    d.push(commandRegistry.registerCommand(SELECT_END, () => moveCursor(valueRef.current.length, true)));
     d.push(
-      commandRegistry.registerCommand(COMMANDLINE_SELECT_WORD_LEFT, () => {
+      commandRegistry.registerCommand(SELECT_WORD_LEFT, () => {
         const v = valueRef.current;
         let p = cursorRef.current;
         while (p > 0 && v[p - 1] === " ") p--;
@@ -191,7 +193,7 @@ export function CommandLine() {
       }),
     );
     d.push(
-      commandRegistry.registerCommand(COMMANDLINE_SELECT_WORD_RIGHT, () => {
+      commandRegistry.registerCommand(SELECT_WORD_RIGHT, () => {
         const v = valueRef.current;
         let p = cursorRef.current;
         while (p < v.length && v[p] !== " ") p++;
@@ -245,7 +247,28 @@ export function CommandLine() {
     return () => {
       for (const fn of d) fn();
     };
-  }, [commandRegistry, deleteSelection, moveCursor]);
+  }, [commandLineEditingActive, commandRegistry, deleteSelection, moveCursor]);
+
+  useEffect(() => {
+    if (commandLineEditingActive) return;
+    if (!visible) return;
+    return commandRegistry.registerCommand(COMMANDLINE_PASTE, () => {
+      navigator.clipboard
+        .readText()
+        .then((text) => {
+          if (!text) return;
+          const pos = cursorRef.current;
+          const anch = anchorRef.current;
+          const s = Math.min(pos, anch);
+          const e = Math.max(pos, anch);
+          const newPos = s + text.length;
+          setValue((v) => v.slice(0, s) + text + v.slice(e));
+          setCursor(newPos);
+          setAnchor(newPos);
+        })
+        .catch(() => {});
+    });
+  }, [commandLineEditingActive, commandRegistry, visible]);
 
   // Register keybindings only while visible
   useEffect(() => {

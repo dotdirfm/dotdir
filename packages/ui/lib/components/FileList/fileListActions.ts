@@ -1,7 +1,7 @@
 import type { ActionQueue } from "@/components/FileList/actionQueue";
 import { useCommandLine } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
-import { EDIT_FILE, TERMINAL_EXECUTE, VIEW_FILE } from "@/features/commands/commandIds";
+import { EDIT_FILE, SHELL_EXECUTE, VIEW_FILE } from "@/features/commands/commandIds";
 import { useFileOperationHandlers } from "@/features/file-ops/fileOperationHandlers";
 import type { FsNode } from "fss-lang";
 import { useMemo, useRef } from "react";
@@ -51,7 +51,7 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
           const [item] = getSelectedOrActiveEntries(depsRef.current);
           if (!item || item.entry.type !== "file") return;
           if (!(item.entry.meta as { executable?: boolean }).executable) return;
-          void commandRegistry.executeCommand(TERMINAL_EXECUTE, item.entry.path as string);
+          void commandRegistry.executeCommand(SHELL_EXECUTE, item.entry.path as string);
         }),
       open: () =>
         depsRef.current.actionQueue.enqueue(async () => {

@@ -2,6 +2,7 @@ import { createContext, createElement, useContext, useEffect, useRef, type React
 
 export type FocusLayer =
   | "panel"
+  | "autocomplete"
   | "menu"
   | "commandPalette"
   | "modal"

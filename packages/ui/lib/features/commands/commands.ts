@@ -163,18 +163,20 @@ export class CommandRegistry {
   }
 
   async executeCommand(id: string, ...args: unknown[]): Promise<void> {
-    const handlers = this.handlers.get(id);
-    if (!handlers || handlers.length === 0) {
+    const registrations = this.handlers.get(id);
+    if (!registrations || registrations.length === 0) {
       console.warn(`Command not found: ${id}`);
       return;
     }
+
+    const selected = registrations[registrations.length - 1];
+    if (!selected) return;
+
     console.log("[dotdir:command]", id, ...args);
-    for (const handler of [...handlers]) {
-      try {
-        await handler(...args);
-      } catch (err) {
-        console.error(`Command ${id} failed:`, err);
-      }
+    try {
+      await selected(...args);
+    } catch (err) {
+      console.error(`Command ${id} failed:`, err);
     }
   }
 
@@ -246,6 +248,7 @@ export class CommandRegistry {
       ...userContext,
       ...this.contextValues,
       focusPanel: currentFocus === "panel",
+      focusAutocomplete: currentFocus === "autocomplete",
       focusMenu: currentFocus === "menu",
       focusViewer: currentFocus === "viewer",
       focusEditor: currentFocus === "editor",

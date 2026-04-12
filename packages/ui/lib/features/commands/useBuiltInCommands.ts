@@ -1,45 +1,45 @@
 import { commandPaletteOpenAtom, panelsVisibleAtom, terminalFocusRequestKeyAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import {
-  activePanelSideAtom,
-  activeTabAtom,
-  createFilelistTab,
-  leftActiveTabAtom,
-  leftActiveTabIdAtom,
-  leftTabsAtom,
-  rightActiveTabAtom,
-  rightActiveTabIdAtom,
-  rightTabsAtom,
+    activePanelSideAtom,
+    activeTabAtom,
+    createFilelistTab,
+    leftActiveTabAtom,
+    leftActiveTabIdAtom,
+    leftTabsAtom,
+    rightActiveTabAtom,
+    rightActiveTabIdAtom,
+    rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandLine } from "@/features/command-line/useCommandLine";
-import { useCommandRegistry } from "@/features/commands/commands";
 import {
-  CLOSE_EDITOR,
-  CLOSE_TAB,
-  CLOSE_VIEWER,
-  COMMANDLINE_CLEAR,
-  DOTDIR_CANCEL_NAVIGATION,
-  DOTDIR_CLOSE_WINDOW,
-  DOTDIR_EXIT,
-  DOTDIR_FOCUS_LEFT_PANEL,
-  DOTDIR_FOCUS_RIGHT_PANEL,
-  DOTDIR_NEW_WINDOW,
-  DOTDIR_PANEL_ESCAPE,
-  EDIT_FILE,
-  LIST_MAKE_DIR,
-  OPEN_CREATE_FILE,
-  PASTE_LEFT_PANEL_PATH,
-  PASTE_RIGHT_PANEL_PATH,
-  RUN_COMMANDS,
-  SHOW_COMMAND_PALETTE,
-  SHOW_EXTENSIONS,
-  SWITCH_PANEL,
-  TERMINAL_EXECUTE,
-  TOGGLE_HIDDEN_FILES,
-  TOGGLE_PANELS,
-  VIEW_FILE,
+    CLEAR,
+    CLOSE_EDITOR,
+    CLOSE_TAB,
+    CLOSE_VIEWER,
+    DOTDIR_CANCEL_NAVIGATION,
+    DOTDIR_CLOSE_WINDOW,
+    DOTDIR_EXIT,
+    DOTDIR_FOCUS_LEFT_PANEL,
+    DOTDIR_FOCUS_RIGHT_PANEL,
+    DOTDIR_NEW_WINDOW,
+    DOTDIR_PANEL_ESCAPE,
+    EDIT_FILE,
+    LIST_MAKE_DIR,
+    OPEN_CREATE_FILE,
+    PASTE_LEFT_PANEL_PATH,
+    PASTE_RIGHT_PANEL_PATH,
+    RUN_COMMANDS,
+    SHOW_COMMAND_PALETTE,
+    SHOW_EXTENSIONS,
+    SWITCH_PANEL,
+    SHELL_EXECUTE,
+    TOGGLE_HIDDEN_FILES,
+    TOGGLE_PANELS,
+    VIEW_FILE,
 } from "@/features/commands/commandIds";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
 import { runCommandSequence, type RunCommandsArgs } from "@/features/commands/runCommands";
 import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
@@ -284,7 +284,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         }
 
         if (commandRegistry.getContext("commandLineHasText")) {
-          await commandRegistry.executeCommand(COMMANDLINE_CLEAR);
+          await commandRegistry.executeCommand(CLEAR);
           return;
         }
 
@@ -412,7 +412,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // ── Terminal ──────────────────────────────────────────────────────────────
 
     disposables.push(
-      commandRegistry.registerCommand(TERMINAL_EXECUTE, async (path: unknown) => {
+      commandRegistry.registerCommand(SHELL_EXECUTE, async (path: unknown) => {
         const name = basename(path as string);
         const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? `./${name}` : `./${JSON.stringify(name)}`;
         await runCommandRef.current(arg, activeCwdRef.current);

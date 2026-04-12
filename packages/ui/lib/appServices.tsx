@@ -1,7 +1,6 @@
 import { CommandRegistryProvider } from "@/features/commands/commands";
 import { FileSystemWatchRegistryProvider } from "@/features/file-system/fs";
 import { FocusProvider } from "@/focusContext";
-import { InteractionProvider } from "@/interactionContext";
 import { ViewerEditorRegistryProvider } from "@/viewerEditorRegistry";
 import type { ReactNode } from "react";
 
@@ -10,9 +9,7 @@ export function AppServicesProvider({ children }: { children: ReactNode }) {
     <FileSystemWatchRegistryProvider>
       <CommandRegistryProvider>
         <FocusProvider>
-          <InteractionProvider>
-            <ViewerEditorRegistryProvider>{children}</ViewerEditorRegistryProvider>
-          </InteractionProvider>
+          <ViewerEditorRegistryProvider>{children}</ViewerEditorRegistryProvider>
         </FocusProvider>
       </CommandRegistryProvider>
     </FileSystemWatchRegistryProvider>

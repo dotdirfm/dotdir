@@ -1,5 +1,17 @@
+import {
+  ACCEPT,
+  CANCEL,
+  CURSOR_DOWN,
+  CURSOR_END,
+  CURSOR_HOME,
+  CURSOR_LEFT,
+  CURSOR_PAGE_DOWN,
+  CURSOR_PAGE_UP,
+  CURSOR_RIGHT,
+  CURSOR_UP,
+} from "@/features/commands/commandIds";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { useFocusContext, useManagedFocusLayer } from "@/focusContext";
-import { useInteractionContext, type InteractionIntent } from "@/interactionContext";
 import { cx } from "@/utils/cssModules";
 import {
   forwardRef,
@@ -114,8 +126,8 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   viewTitle,
   renderAnchor,
 }, ref) {
+  const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
-  const interactionContext = useInteractionContext();
   const anchorContainerRef = useRef<HTMLSpanElement | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -349,7 +361,11 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
               anchorContainerRef.current?.contains(node) === true
           : false;
       },
-      allowCommandRouting: true,
+      allowCommandRouting(event) {
+        const editableTarget = focusContext.isEditableTarget(document.activeElement);
+        if (editableTarget) return event.key === "Escape";
+        return true;
+      },
     });
   }, [focusContext, selectedItemId]);
 
@@ -366,81 +382,72 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
     });
   }, []);
 
-  const handleIntent = useCallback((intent: InteractionIntent, event?: KeyboardEvent | null): boolean => {
-    if (!open) return false;
-    const editableTarget = focusContext.isEditableTarget(document.activeElement);
+  const handleMenuCommand = useCallback((commandId: string): void => {
+    if (!open) return;
 
-    if (editableTarget) {
-      if (intent === "cancel") {
-        close();
-        return true;
-      }
-      return false;
-    }
-
-    switch (intent) {
-      case "cursorUp": {
+    switch (commandId) {
+      case CURSOR_UP: {
         if (selectedIndex < 0) {
           updateSelectedIndex(getLastEnabledIndex(currentView.items));
-          return true;
+          return;
         }
         updateSelectedIndex(getNextEnabledIndex(currentView.items, selectedIndex, -1));
-        return true;
+        return;
       }
-      case "cursorDown": {
+      case CURSOR_DOWN: {
         if (selectedIndex < 0) {
           updateSelectedIndex(getFirstEnabledIndex(currentView.items));
-          return true;
+          return;
         }
         updateSelectedIndex(getNextEnabledIndex(currentView.items, selectedIndex, 1));
-        return true;
+        return;
       }
-      case "cursorHome":
-      case "cursorPageUp":
+      case CURSOR_HOME:
+      case CURSOR_PAGE_UP:
         updateSelectedIndex(getFirstEnabledIndex(currentView.items));
-        return true;
-      case "cursorEnd":
-      case "cursorPageDown":
+        return;
+      case CURSOR_END:
+      case CURSOR_PAGE_DOWN:
         updateSelectedIndex(getLastEnabledIndex(currentView.items));
-        return true;
-      case "cursorLeft":
-        if (stack.length <= 1) return false;
+        return;
+      case CURSOR_LEFT:
+        if (stack.length <= 1) return;
         popView();
-        return true;
-      case "cursorRight":
-        if (!selectedItem?.items?.length && !selectedItem?.renderView) return false;
+        return;
+      case CURSOR_RIGHT:
+        if (!selectedItem?.items?.length && !selectedItem?.renderView) return;
         pushView(selectedItem);
-        return true;
-      case "accept":
-        if (!selectedItem) return false;
-        void handleItemClick(selectedItem, Boolean(event?.shiftKey && selectedItem.onOpenInNewTab));
-        return true;
-      case "cancel":
+        return;
+      case ACCEPT:
+        if (!selectedItem) return;
+        void handleItemClick(selectedItem);
+        return;
+      case CANCEL:
         close();
-        return true;
+        return;
       default:
-        return false;
+        return;
     }
-  }, [close, currentView.items, focusContext, handleItemClick, open, popView, pushView, selectedIndex, selectedItem, stack.length, updateSelectedIndex]);
+  }, [close, currentView.items, handleItemClick, open, popView, pushView, selectedIndex, selectedItem, stack.length, updateSelectedIndex]);
 
   useEffect(() => {
-    return interactionContext.registerController({
-      contains(node) {
-        const popover = popoverRef.current;
-        return node instanceof Node
-          ? (popover?.contains(node) ?? false) ||
-              (anchorRef.current?.contains(node) ?? false) ||
-              (anchorContainerRef.current?.contains(node) ?? false)
-          : false;
-      },
-      isActive() {
-        return open && focusContext.is("menu");
-      },
-      handleIntent(intent, event) {
-        return handleIntent(intent, event);
-      },
-    });
-  }, [focusContext, handleIntent, interactionContext, open]);
+    if (!open) return;
+    const disposables = [
+      commandRegistry.registerCommand(CURSOR_UP, () => { handleMenuCommand(CURSOR_UP); }),
+      commandRegistry.registerCommand(CURSOR_DOWN, () => { handleMenuCommand(CURSOR_DOWN); }),
+      commandRegistry.registerCommand(CURSOR_HOME, () => { handleMenuCommand(CURSOR_HOME); }),
+      commandRegistry.registerCommand(CURSOR_PAGE_UP, () => { handleMenuCommand(CURSOR_PAGE_UP); }),
+      commandRegistry.registerCommand(CURSOR_END, () => { handleMenuCommand(CURSOR_END); }),
+      commandRegistry.registerCommand(CURSOR_PAGE_DOWN, () => { handleMenuCommand(CURSOR_PAGE_DOWN); }),
+      commandRegistry.registerCommand(CURSOR_LEFT, () => { handleMenuCommand(CURSOR_LEFT); }),
+      commandRegistry.registerCommand(CURSOR_RIGHT, () => { handleMenuCommand(CURSOR_RIGHT); }),
+      commandRegistry.registerCommand(ACCEPT, () => { handleMenuCommand(ACCEPT); }),
+      commandRegistry.registerCommand(CANCEL, () => { handleMenuCommand(CANCEL); }),
+    ];
+    return () => {
+      disposables.forEach((dispose) => dispose());
+    };
+  }, [commandRegistry, handleMenuCommand, open]);
 
   return (
     <>

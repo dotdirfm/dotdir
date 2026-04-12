@@ -1,5 +1,16 @@
-import { useInteractionContext } from "@/interactionContext";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  ACCEPT,
+  CANCEL,
+  CURSOR_DOWN,
+  CURSOR_END,
+  CURSOR_HOME,
+  CURSOR_PAGE_DOWN,
+  CURSOR_PAGE_UP,
+  CURSOR_UP,
+} from "@/features/commands/commandIds";
+import { useCommandRegistry } from "@/features/commands/commands";
+import { useFocusContext, useManagedFocusLayer } from "@/focusContext";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import styles from "./AutocompleteInput.module.css";
 
 export interface AutocompleteOption {
@@ -46,11 +57,11 @@ export function AutocompleteInput({
   enterKeyHint,
   keepOpenOnSelect = false,
 }: AutocompleteInputProps) {
-  const interactionContext = useInteractionContext();
+  const commandRegistry = useCommandRegistry();
+  const focusContext = useFocusContext();
   const localInputRef = useRef<HTMLInputElement>(null);
   const mergedInputRef = inputRef ?? localInputRef;
   const [open, setOpen] = useState(false);
-  const [focused, setFocused] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const pointerDownRef = useRef(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -69,6 +80,7 @@ export function AutocompleteInput({
     [groups],
   );
   const dropdownOpen = open && flattened.length > 0;
+  useManagedFocusLayer("autocomplete", dropdownOpen);
   const flattenedRef = useRef(flattened);
   const selectedIndexRef = useRef(selectedIndex);
   const dropdownOpenRef = useRef(dropdownOpen);
@@ -76,13 +88,37 @@ export function AutocompleteInput({
   selectedIndexRef.current = selectedIndex;
   dropdownOpenRef.current = dropdownOpen;
 
-  const moveInputCursor = useCallback((position: "start" | "end") => {
-    const input = mergedInputRef.current;
-    if (!input) return;
-    const nextPosition = position === "start" ? 0 : input.value.length;
-    input.focus();
-    input.setSelectionRange(nextPosition, nextPosition);
-  }, [mergedInputRef]);
+  useEffect(() => {
+    return focusContext.registerAdapter("autocomplete", {
+      focus() {
+        mergedInputRef.current?.focus();
+      },
+      contains(node) {
+        return node instanceof Node
+          ? mergedInputRef.current?.contains(node) === true || dropdownRef.current?.contains(node) === true
+          : false;
+      },
+      isEditableTarget(node) {
+        return mergedInputRef.current?.contains(node as Node) === true;
+      },
+      allowCommandRouting(event) {
+        if (!dropdownOpenRef.current) return false;
+        switch (event.key) {
+          case "ArrowUp":
+          case "ArrowDown":
+          case "PageUp":
+          case "PageDown":
+          case "Home":
+          case "End":
+          case "Enter":
+          case "Escape":
+            return true;
+          default:
+            return false;
+        }
+      },
+    });
+  }, [focusContext, mergedInputRef]);
 
   useEffect(() => {
     setSelectedIndex((current) => {
@@ -104,74 +140,73 @@ export function AutocompleteInput({
   commitSelectionRef.current = commitSelection;
 
   useEffect(() => {
-    return interactionContext.registerController({
-      contains(node) {
-        const input = mergedInputRef.current;
-        const dropdown = dropdownRef.current;
-        if (!(node instanceof Node)) return false;
-        return Boolean((input && input.contains(node)) || (dropdown && dropdown.contains(node)));
-      },
-      isActive() {
-        return focused;
-      },
-      handleIntent(intent) {
-        switch (intent) {
-          case "cancel":
-            if (!dropdownOpenRef.current) return false;
-            setOpen(false);
-            return true;
-          case "cursorDown":
-            if (!dropdownOpenRef.current) return false;
-            setSelectedIndex((current) =>
-              current === null ? 0 : Math.min(flattenedRef.current.length - 1, current + 1),
-            );
-            return true;
-          case "cursorUp":
-            if (!dropdownOpenRef.current) return false;
-            setSelectedIndex((current) =>
-              current === null ? Math.max(0, flattenedRef.current.length - 1) : Math.max(0, current - 1),
-            );
-            return true;
-          case "cursorPageDown":
-            if (!dropdownOpenRef.current) return false;
-            setSelectedIndex((current) =>
-              current === null ? 0 : Math.min(flattenedRef.current.length - 1, current + PAGE_STEP),
-            );
-            return true;
-          case "cursorPageUp":
-            if (!dropdownOpenRef.current) return false;
-            setSelectedIndex((current) => (current === null ? 0 : Math.max(0, current - PAGE_STEP)));
-            return true;
-          case "cursorHome":
-            if (!dropdownOpenRef.current) {
-              moveInputCursor("start");
-              return true;
-            }
-            if (flattenedRef.current.length === 0) return false;
-            setSelectedIndex(0);
-            return true;
-          case "cursorEnd":
-            if (!dropdownOpenRef.current) {
-              moveInputCursor("end");
-              return true;
-            }
-            if (flattenedRef.current.length === 0) return false;
-            setSelectedIndex(flattenedRef.current.length - 1);
-            return true;
-          case "accept": {
-            if (!dropdownOpenRef.current) return false;
-            if (selectedIndexRef.current === null) return false;
-            const selected = flattenedRef.current[selectedIndexRef.current];
-            if (!selected) return false;
-            commitSelectionRef.current(selected.option.value);
-            return true;
-          }
-          default:
-            return false;
-        }
-      },
-    });
-  }, [focused, interactionContext, mergedInputRef, moveInputCursor]);
+    if (!dropdownOpen) return;
+    const disposables = [
+      commandRegistry.registerCommand(
+        CANCEL,
+        () => {
+          setOpen(false);
+          setSelectedIndex(null);
+        },
+      ),
+      commandRegistry.registerCommand(
+        CURSOR_DOWN,
+        () => {
+          setSelectedIndex((current) =>
+            current === null ? 0 : Math.min(flattenedRef.current.length - 1, current + 1),
+          );
+        },
+      ),
+      commandRegistry.registerCommand(
+        CURSOR_UP,
+        () => {
+          setSelectedIndex((current) =>
+            current === null ? Math.max(0, flattenedRef.current.length - 1) : Math.max(0, current - 1),
+          );
+        },
+      ),
+      commandRegistry.registerCommand(
+        CURSOR_PAGE_DOWN,
+        () => {
+          setSelectedIndex((current) =>
+            current === null ? 0 : Math.min(flattenedRef.current.length - 1, current + PAGE_STEP),
+          );
+        },
+      ),
+      commandRegistry.registerCommand(
+        CURSOR_PAGE_UP,
+        () => {
+          setSelectedIndex((current) => (current === null ? 0 : Math.max(0, current - PAGE_STEP)));
+        },
+      ),
+      commandRegistry.registerCommand(
+        CURSOR_HOME,
+        () => {
+          if (flattenedRef.current.length === 0) return;
+          setSelectedIndex(0);
+        },
+      ),
+      commandRegistry.registerCommand(
+        CURSOR_END,
+        () => {
+          if (flattenedRef.current.length === 0) return;
+          setSelectedIndex(flattenedRef.current.length - 1);
+        },
+      ),
+      commandRegistry.registerCommand(
+        ACCEPT,
+        () => {
+          if (selectedIndexRef.current === null) return;
+          const selected = flattenedRef.current[selectedIndexRef.current];
+          if (!selected) return;
+          commitSelectionRef.current(selected.option.value);
+        },
+      ),
+    ];
+    return () => {
+      disposables.forEach((dispose) => dispose());
+    };
+  }, [commandRegistry, dropdownOpen]);
 
   useEffect(() => {
     const dropdown = dropdownRef.current;
@@ -238,11 +273,7 @@ export function AutocompleteInput({
           setOpen(true);
           setSelectedIndex(null);
         }}
-        onFocus={() => {
-          setFocused(true);
-        }}
         onBlur={() => {
-          setFocused(false);
           if (pointerDownRef.current) return;
           setOpen(false);
           setSelectedIndex(null);

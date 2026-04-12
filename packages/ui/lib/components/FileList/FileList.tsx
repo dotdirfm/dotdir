@@ -1,7 +1,7 @@
 import { ActionQueue } from "@/components/FileList/actionQueue";
 import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
-import { TERMINAL_EXECUTE, VIEW_FILE } from "@/features/commands/commandIds";
+import { SHELL_EXECUTE, VIEW_FILE } from "@/features/commands/commandIds";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useFileStyleResolver } from "@/features/fss/fileStyleResolver";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
@@ -270,7 +270,6 @@ export const FileList = memo(function FileList({ side, tabId, state, showHidden,
 
   useFileListCommands({
     active,
-    containerRef: rootRef,
     actionQueue,
     fileActions,
     markKeyboardNav,
@@ -324,7 +323,7 @@ export const FileList = memo(function FileList({ side, tabId, state, showHidden,
       if (now - lastClickTimeRef.current < 300) {
         lastClickTimeRef.current = 0;
         if (executable) {
-          actionQueue.enqueue(() => commandRegistry.executeCommand(TERMINAL_EXECUTE, entry.path as string));
+          actionQueue.enqueue(() => commandRegistry.executeCommand(SHELL_EXECUTE, entry.path as string));
         } else {
           actionQueue.enqueue(() => navigateToEntry(entry));
         }

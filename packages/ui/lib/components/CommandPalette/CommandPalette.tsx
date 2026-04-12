@@ -1,13 +1,22 @@
 import { commandPaletteOpenAtom } from "@/atoms";
 import { OverlayDialog } from "@/dialogs/OverlayDialog";
 import {
+  ACCEPT,
+  CANCEL,
+  CURSOR_DOWN,
+  CURSOR_END,
+  CURSOR_HOME,
+  CURSOR_PAGE_DOWN,
+  CURSOR_PAGE_UP,
+  CURSOR_UP,
+} from "@/features/commands/commandIds";
+import {
   formatKeybinding,
   useCommandRegistry,
   type Command,
   type Keybinding,
 } from "@/features/commands/commands";
 import { useFocusContext } from "@/focusContext";
-import { useInteractionContext } from "@/interactionContext";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -38,7 +47,6 @@ export function CommandPalette() {
   const [open, setOpen] = useAtom(commandPaletteOpenAtom);
   const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
-  const interactionContext = useInteractionContext();
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -242,86 +250,64 @@ export function CommandPalette() {
 
   useEffect(() => {
     if (!open) return;
-    return interactionContext.registerController({
-      contains(node) {
-        const container = containerRef.current;
-        return node instanceof Node && !!container?.contains(node);
-      },
-      isActive() {
-        return open;
-      },
-      handleIntent(intent, event) {
-        setKeyboardNavigationActive(true);
-        hoverSelectionEnabledRef.current = false;
-        lastPointerPositionRef.current = null;
-        lastHoverSelectionPointerRef.current = null;
-        switch (intent) {
-          case "cancel":
-            paletteStateRef.current.closePalette();
-            return true;
-          case "cursorDown":
-            setSelectedIndex((current) => {
-              if (orderedItemsRef.current.length === 0) return 0;
-              return Math.max(
-                0,
-                Math.min(orderedItemsRef.current.length - 1, current + 1),
-              );
-            });
-            return true;
-          case "cursorUp":
-            setSelectedIndex((current) => {
-              if (orderedItemsRef.current.length === 0) return 0;
-              return Math.max(
-                0,
-                Math.min(orderedItemsRef.current.length - 1, current - 1),
-              );
-            });
-            return true;
-          case "cursorPageDown":
-            setSelectedIndex((current) => {
-              if (orderedItemsRef.current.length === 0) return 0;
-              return Math.max(
-                0,
-                Math.min(
-                  orderedItemsRef.current.length - 1,
-                  current + PAGE_STEP,
-                ),
-              );
-            });
-            return true;
-          case "cursorPageUp":
-            setSelectedIndex((current) => {
-              if (orderedItemsRef.current.length === 0) return 0;
-              return Math.max(
-                0,
-                Math.min(
-                  orderedItemsRef.current.length - 1,
-                  current - PAGE_STEP,
-                ),
-              );
-            });
-            return true;
-          case "cursorHome":
-            if (orderedItemsRef.current.length === 0) return false;
-            setSelectedIndex(0);
-            return true;
-          case "cursorEnd":
-            if (orderedItemsRef.current.length === 0) return false;
-            setSelectedIndex(orderedItemsRef.current.length - 1);
-            return true;
-          case "accept": {
-            if (event.key !== "Enter") return false;
-            const selected = orderedItemsRef.current[selectedIndexRef.current];
-            if (!selected) return false;
-            executePaletteCommandRef.current(selected.command.id);
-            return true;
-          }
-          default:
-            return false;
-        }
-      },
-    });
-  }, [open, interactionContext]);
+    const activateKeyboardNavigation = () => {
+      setKeyboardNavigationActive(true);
+      hoverSelectionEnabledRef.current = false;
+      lastPointerPositionRef.current = null;
+      lastHoverSelectionPointerRef.current = null;
+    };
+    const disposables = [
+      commandRegistry.registerCommand(CANCEL, () => {
+        paletteStateRef.current.closePalette();
+      }),
+      commandRegistry.registerCommand(CURSOR_DOWN, () => {
+        activateKeyboardNavigation();
+        setSelectedIndex((current) => {
+          if (orderedItemsRef.current.length === 0) return 0;
+          return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current + 1));
+        });
+      }),
+      commandRegistry.registerCommand(CURSOR_UP, () => {
+        activateKeyboardNavigation();
+        setSelectedIndex((current) => {
+          if (orderedItemsRef.current.length === 0) return 0;
+          return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current - 1));
+        });
+      }),
+      commandRegistry.registerCommand(CURSOR_PAGE_DOWN, () => {
+        activateKeyboardNavigation();
+        setSelectedIndex((current) => {
+          if (orderedItemsRef.current.length === 0) return 0;
+          return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current + PAGE_STEP));
+        });
+      }),
+      commandRegistry.registerCommand(CURSOR_PAGE_UP, () => {
+        activateKeyboardNavigation();
+        setSelectedIndex((current) => {
+          if (orderedItemsRef.current.length === 0) return 0;
+          return Math.max(0, Math.min(orderedItemsRef.current.length - 1, current - PAGE_STEP));
+        });
+      }),
+      commandRegistry.registerCommand(CURSOR_HOME, () => {
+        activateKeyboardNavigation();
+        if (orderedItemsRef.current.length === 0) return;
+        setSelectedIndex(0);
+      }),
+      commandRegistry.registerCommand(CURSOR_END, () => {
+        activateKeyboardNavigation();
+        if (orderedItemsRef.current.length === 0) return;
+        setSelectedIndex(orderedItemsRef.current.length - 1);
+      }),
+      commandRegistry.registerCommand(ACCEPT, () => {
+        const selected = orderedItemsRef.current[selectedIndexRef.current];
+        if (!selected) return;
+        executePaletteCommandRef.current(selected.command.id);
+      }),
+    ];
+    return () => {
+      disposables.forEach((dispose) => dispose());
+    };
+  }, [commandRegistry, open]);
 
   if (!open) return null;
 
@@ -332,6 +318,7 @@ export function CommandPalette() {
       initialFocusRef={inputRef}
       placement="top"
       focusLayer="commandPalette"
+      allowCommandRouting={() => true}
     >
       <div ref={containerRef} className={paletteStyles["command-palette"]}>
         <input
