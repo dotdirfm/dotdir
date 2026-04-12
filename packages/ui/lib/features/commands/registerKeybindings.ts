@@ -169,6 +169,7 @@ const fileListKeybindings: Keybinding[] = [
   { command: ACCEPT, key: "enter", when: "focusMenu" },
   { command: ACCEPT, key: "enter", when: "focusCommandPalette" },
   { command: ACCEPT, key: "enter", when: "focusAutocomplete" },
+  { command: ACCEPT, key: "tab", when: "focusAutocomplete" },
   { command: CANCEL, key: "escape", when: "focusMenu" },
   { command: CANCEL, key: "escape", when: "focusCommandPalette" },
   { command: CANCEL, key: "escape", when: "focusAutocomplete" },

@@ -73,6 +73,10 @@
 .ext-source-select,
 .ext-filter-button {
   width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--fg);
@@ -94,10 +98,6 @@
   gap: 8px;
 }
 
-.ext-filter-wrap {
-  position: relative;
-}
-
 .ext-filter-button {
   min-width: 136px;
   cursor: pointer;
@@ -108,11 +108,7 @@
 }
 
 .ext-filter-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
   width: 220px;
-  z-index: 5;
   background: var(--bg);
   border: 1px solid var(--border-active);
   border-radius: 2px;
@@ -126,29 +122,6 @@
   list-style: none;
   margin: 0;
   padding: 0;
-}
-
-.ext-category-menu {
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--border);
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.ext-filter-item {
-  display: block;
-  padding: 8px 10px;
-  border-radius: 2px;
-  font-size: 12px;
-  color: var(--fg-secondary);
-  cursor: pointer;
-}
-
-.ext-filter-item:hover,
-.ext-filter-item.active {
-  background: var(--entry-hover);
-  color: var(--fg);
 }
 
 .ext-filter-empty,
@@ -473,6 +446,10 @@
 }
 
 .ext-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--fg);
@@ -480,6 +457,7 @@
   padding: 8px 10px;
   font-size: 12px;
   min-width: 0;
+  width: 100%;
 }
 
 .ext-content-body {

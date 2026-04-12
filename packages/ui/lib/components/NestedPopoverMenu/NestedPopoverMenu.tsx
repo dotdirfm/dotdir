@@ -11,6 +11,7 @@ import {
   CURSOR_UP,
 } from "@/features/commands/commandIds";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { DropdownSurface } from "@/components/DropdownSurface/DropdownSurface";
 import { useFocusContext, useManagedFocusLayer } from "@/focusContext";
 import { cx } from "@/utils/cssModules";
 import {
@@ -136,7 +137,6 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const generatedId = useId().replace(/:/g, "");
   const popoverId = `nested-menu-${generatedId}`;
-  const anchorName = `--nested-menu-anchor-${generatedId}`;
 
   const rootView = useMemo<MenuView>(
     () => ({
@@ -292,37 +292,6 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   }, [close, pushView]);
 
   useEffect(() => {
-    const popover = popoverRef.current;
-    if (!popover || !("showPopover" in popover)) return;
-    const element = popover as HTMLDivElement & {
-      showPopover: () => void;
-      hidePopover: () => void;
-      matches: (selector: string) => boolean;
-    };
-    const isOpen = element.matches(":popover-open");
-    if (open) {
-      if (!isOpen) element.showPopover();
-      return;
-    }
-    if (isOpen) element.hidePopover();
-  }, [open]);
-
-  useEffect(() => {
-    const popover = popoverRef.current;
-    if (!popover) return;
-    const onToggle = (event: Event) => {
-      const nextState = (event as ToggleEvent).newState;
-      if (nextState === "closed") {
-        setOpen(false);
-      }
-    };
-    popover.addEventListener("toggle", onToggle);
-    return () => {
-      popover.removeEventListener("toggle", onToggle);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!open) return;
 
     const handleWindowBlur = () => {
@@ -454,7 +423,6 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
       <span
         ref={anchorContainerRef}
         className={styles.anchor}
-        style={{ anchorName } as React.CSSProperties}
       >
         {renderAnchor({
           ref: anchorRef,
@@ -464,20 +432,23 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
           close,
         })}
       </span>
-      <div
-        ref={popoverRef}
-        popover="auto"
-        id={popoverId}
+      <DropdownSurface
+        open={open}
+        anchor={{ type: "element", ref: anchorRef }}
+        placement={placement}
+        popoverMode="auto"
+        surfaceRef={popoverRef}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setOpen(false);
+        }}
         className={cx(
           styles,
           "popover",
           sizeAnimating && "popoverSizeAnimated",
-          `placement-${placement}`,
           className,
           popoverClassName,
         )}
         style={{
-          positionAnchor: anchorName,
           width: contentSize?.width,
           height: contentSize?.height,
         } as React.CSSProperties}
@@ -498,7 +469,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
             />
           </div>
         </div>
-      </div>
+      </DropdownSurface>
     </>
   );
 });

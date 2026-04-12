@@ -22,7 +22,7 @@ const FOCUSABLE =
 
 function getFocusable(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-    (el) => !el.hasAttribute("disabled") && el.tabIndex !== -1,
+    (el) => !el.hasAttribute("disabled") && el.tabIndex !== -1 && !el.closest("[inert]"),
   );
 }
 
@@ -70,6 +70,10 @@ export function OverlayDialog({
   const handleKeyDownCapture: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
     onKeyDown?.(e);
     if (e.defaultPrevented) return;
+
+    if (focusContext.current !== focusLayer) {
+      return;
+    }
 
     if (e.key === "Escape" && dismissible) {
       e.preventDefault();

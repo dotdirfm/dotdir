@@ -1,8 +1,9 @@
+import { DropdownSelect, type DropdownSelectOption } from "@/components/DropdownSelect/DropdownSelect";
 import { useDialogButtonNav } from "@/dialogs/useDialogButtonNav";
 import type { ConflictPolicy, CopyOptions, SymlinkMode } from "@/features/bridge";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { PathAutocompleteInput } from "./PathAutocompleteInput";
 import { SmartLabel } from "./dialogHotkeys";
 import styles from "./dialogs.module.css";
@@ -28,6 +29,24 @@ export function CopyConfigDialog({ itemCount, destPath, suggestionRoots, onConfi
   const [useCow, setUseCow] = useState(false);
   const [disableWriteCache, setDisableWriteCache] = useState(false);
   const { onKeyDown } = useDialogButtonNav(buttonsRef, { defaultIndex: 1 });
+  const conflictOptions = useMemo<DropdownSelectOption[]>(
+    () => [
+      { value: "ask", label: "Ask" },
+      { value: "overwrite", label: "Overwrite" },
+      { value: "skip", label: "Skip" },
+      { value: "rename", label: "Auto-rename" },
+      { value: "onlyNewer", label: "Only newer" },
+    ],
+    [],
+  );
+  const symlinkOptions = useMemo<DropdownSelectOption[]>(
+    () => [
+      { value: "smart", label: "Smart" },
+      { value: "alwaysLink", label: "Copy link" },
+      { value: "alwaysTarget", label: "Copy target" },
+    ],
+    [],
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,24 +97,24 @@ export function CopyConfigDialog({ itemCount, destPath, suggestionRoots, onConfi
             <label htmlFor="copy-conflict">
               <SmartLabel>Conflict handling</SmartLabel>
             </label>
-            <select id="copy-conflict" value={conflictPolicy} onChange={(e) => setConflictPolicy(e.target.value as ConflictPolicy)}>
-              <option value="ask">Ask</option>
-              <option value="overwrite">Overwrite</option>
-              <option value="skip">Skip</option>
-              <option value="rename">Auto-rename</option>
-              <option value="onlyNewer">Only newer</option>
-            </select>
+            <DropdownSelect
+              value={conflictPolicy}
+              options={conflictOptions}
+              onChange={(value) => setConflictPolicy(value as ConflictPolicy)}
+              triggerClassName={styles["dialog-select"]}
+            />
           </div>
 
           <div className={styles["copy-config-field"]}>
             <label htmlFor="copy-symlink">
               <SmartLabel>Symlinks</SmartLabel>
             </label>
-            <select id="copy-symlink" value={symlinkMode} onChange={(e) => setSymlinkMode(e.target.value as SymlinkMode)}>
-              <option value="smart">Smart</option>
-              <option value="alwaysLink">Copy link</option>
-              <option value="alwaysTarget">Copy target</option>
-            </select>
+            <DropdownSelect
+              value={symlinkMode}
+              options={symlinkOptions}
+              onChange={(value) => setSymlinkMode(value as SymlinkMode)}
+              triggerClassName={styles["dialog-select"]}
+            />
           </div>
 
           <fieldset className={styles["copy-config-section"]}>

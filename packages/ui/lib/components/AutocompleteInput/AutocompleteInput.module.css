@@ -4,6 +4,7 @@
 
 .autocomplete-input {
   width: 100%;
+  background: var(--bg);
 }
 
 .autocomplete-dropdown {

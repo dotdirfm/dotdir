@@ -1,8 +1,9 @@
+import { DropdownSelect, type DropdownSelectOption } from "@/components/DropdownSelect/DropdownSelect";
 import { useDialogButtonNav } from "@/dialogs/useDialogButtonNav";
 import type { ConflictPolicy, MoveOptions } from "@/features/bridge";
 import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { PathAutocompleteInput } from "./PathAutocompleteInput";
 import { SmartLabel } from "./dialogHotkeys";
 import styles from "./dialogs.module.css";
@@ -22,6 +23,16 @@ export function MoveConfigDialog({ itemCount, destPath, suggestionRoots, onConfi
   const [destValue, setDestValue] = useState(destPath);
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("ask");
   const { onKeyDown } = useDialogButtonNav(buttonsRef, { defaultIndex: 1 });
+  const conflictOptions = useMemo<DropdownSelectOption[]>(
+    () => [
+      { value: "ask", label: "Ask" },
+      { value: "overwrite", label: "Overwrite" },
+      { value: "skip", label: "Skip" },
+      { value: "rename", label: "Auto-rename" },
+      { value: "onlyNewer", label: "Only newer" },
+    ],
+    [],
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,13 +71,12 @@ export function MoveConfigDialog({ itemCount, destPath, suggestionRoots, onConfi
             <label htmlFor="move-conflict">
               <SmartLabel>Conflict handling</SmartLabel>
             </label>
-            <select id="move-conflict" value={conflictPolicy} onChange={(e) => setConflictPolicy(e.target.value as ConflictPolicy)}>
-              <option value="ask">Ask</option>
-              <option value="overwrite">Overwrite</option>
-              <option value="skip">Skip</option>
-              <option value="rename">Auto-rename</option>
-              <option value="onlyNewer">Only newer</option>
-            </select>
+            <DropdownSelect
+              value={conflictPolicy}
+              options={conflictOptions}
+              onChange={(value) => setConflictPolicy(value as ConflictPolicy)}
+              triggerClassName={styles["dialog-select"]}
+            />
           </div>
         </div>
         <div className={styles["modal-dialog-buttons"]} ref={buttonsRef}>

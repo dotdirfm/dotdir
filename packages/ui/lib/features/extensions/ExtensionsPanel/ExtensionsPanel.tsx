@@ -1,3 +1,5 @@
+import { DropdownSelect, type DropdownSelectOption } from "@/components/DropdownSelect/DropdownSelect";
+import { List } from "@/components/List/List";
 import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import { OverlayDialog } from "@/dialogs/OverlayDialog";
 import { SmartLabel } from "@/dialogs/dialogHotkeys";
@@ -21,7 +23,6 @@ import {
   extensionRef,
   extensionShellIntegrations,
   extensionViewers,
-  type LoadedColorTheme,
   type LoadedExtension,
 } from "@/features/extensions/types";
 import { useLoadedExtensions, useSetLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
@@ -305,7 +306,6 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const installed = useLoadedExtensions();
   const setInstalled = useSetLoadedExtensions();
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const filterMenuRef = useRef<HTMLDivElement>(null);
   const extensionHost = useExtensionHostClient();
   const [marketplaceSource, setMarketplaceSource] = useState<MarketplaceSource>("open-vsx");
   const [query, setQuery] = useState("");
@@ -316,8 +316,6 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState("");
   const [filterKind, setFilterKind] = useState<FilterKind>("none");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
-  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
   const [contentTab, setContentTab] = useState<ContentTab>("details");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [docsByKey, setDocsByKey] = useState<Record<string, LoadedDocs>>({});
@@ -359,18 +357,6 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
       void doSearch(query.trim(), marketplaceSource);
     }
   }, [doSearch, filterKind, marketplaceSource, query]);
-
-  useEffect(() => {
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!filterMenuRef.current?.contains(target)) {
-        setFilterMenuOpen(false);
-        setCategoryMenuOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", handlePointerDown, true);
-    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
-  }, []);
 
   useEffect(() => {
     return bridge.extensions.install.onProgress((payload: ExtensionInstallProgressEvent) => {
@@ -454,6 +440,30 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
 
   const showingMarketplace = query.trim().length > 0 || filterKind !== "none";
 
+  const marketplaceSourceOptions = useMemo<DropdownSelectOption[]>(
+    () => [
+      { value: "open-vsx", label: "Open VSX" },
+      { value: "dotdir", label: ".dir" },
+    ],
+    [],
+  );
+
+  const filterOptions = useMemo<DropdownSelectOption[]>(
+    () => [
+      { value: "none", label: "Installed" },
+      { value: "featured", label: "Featured" },
+      { value: "recent", label: "Recently Published" },
+      { value: "recommended", label: "Recommended" },
+      { value: "category", label: "Category" },
+    ],
+    [],
+  );
+
+  const categoryOptions = useMemo<DropdownSelectOption[]>(
+    () => availableCategories.map((category) => ({ value: category, label: category })),
+    [availableCategories],
+  );
+
   const filteredMarketplaceItems = useMemo(() => {
     let items = marketplaceItems;
 
@@ -507,6 +517,14 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const selectedColorThemeValue = selectedInstalled
     ? (selectedColorThemes.find((theme) => colorThemeKey(selectedInstalled, theme.id) === activeColorTheme)?.id ?? "")
     : "";
+  const selectedIconThemeOptions = useMemo<DropdownSelectOption[]>(
+    () => [{ value: "", label: "Default" }, ...selectedIconThemes.map((theme) => ({ value: theme.id, label: theme.label }))],
+    [selectedIconThemes],
+  );
+  const selectedColorThemeOptions = useMemo<DropdownSelectOption[]>(
+    () => [{ value: "", label: "Default" }, ...selectedColorThemes.map((theme) => ({ value: theme.id, label: theme.label }))],
+    [selectedColorThemes],
+  );
   const selectedDocs = selectedItem ? docsByKey[selectedItem.key] : undefined;
   const selectedRemoteMeta = selectedItem ? remoteMetaByKey[selectedItem.key] : undefined;
   const selectedReviewCount = selectedRemoteMeta?.reviewCount ?? (selectedItem?.kind === "marketplace" ? (selectedItem.remote.reviewCount ?? 0) : 0);
@@ -845,118 +863,54 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
               />
             </div>
             <div className={styles["ext-toolbar-row"]}>
-              <select
-                className={styles["ext-source-select"]}
+              <DropdownSelect
+                triggerClassName={styles["ext-source-select"]}
                 value={marketplaceSource}
-                onChange={(event) => {
-                  setMarketplaceSource(event.target.value as MarketplaceSource);
+                options={marketplaceSourceOptions}
+                onChange={(nextValue) => {
+                  const nextSource = nextValue as MarketplaceSource;
+                  setMarketplaceSource(nextSource);
                   if (query.trim() || filterKind !== "none") {
-                    void doSearch(query.trim(), event.target.value as MarketplaceSource);
+                    void doSearch(query.trim(), nextSource);
                   }
                 }}
-              >
-                <option value="open-vsx">Open VSX</option>
-                <option value="dotdir">.dir</option>
-              </select>
+              />
 
-              <div className={styles["ext-filter-wrap"]} ref={filterMenuRef}>
-                <button className={cx(styles, "ext-filter-button", filterKind !== "none" && "active")} onClick={() => setFilterMenuOpen((open) => !open)}>
-                  <SmartLabel>{formatFilterLabel(filterKind, selectedCategory)}</SmartLabel>
-                </button>
-                {filterMenuOpen && (
-                  <div className={styles["ext-filter-menu"]}>
-                    <ul className={styles["ext-filter-list"]}>
-                      <li
-                        className={cx(styles, "ext-filter-item", filterKind === "none" && "active")}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => {
-                          setFilterKind("none");
-                          setSelectedCategory(null);
-                          setFilterMenuOpen(false);
-                          setCategoryMenuOpen(false);
-                        }}
-                      >
-                        Installed
-                      </li>
-                      <li
-                        className={cx(styles, "ext-filter-item", filterKind === "featured" && "active")}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => {
-                          setFilterKind("featured");
-                          setSelectedCategory(null);
-                          setFilterMenuOpen(false);
-                          setCategoryMenuOpen(false);
-                        }}
-                      >
-                        Featured
-                      </li>
-                      <li
-                        className={cx(styles, "ext-filter-item", filterKind === "recent" && "active")}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => {
-                          setFilterKind("recent");
-                          setSelectedCategory(null);
-                          setFilterMenuOpen(false);
-                          setCategoryMenuOpen(false);
-                        }}
-                      >
-                        Recently Published
-                      </li>
-                      <li
-                        className={cx(styles, "ext-filter-item", filterKind === "recommended" && "active")}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => {
-                          setFilterKind("recommended");
-                          setSelectedCategory(null);
-                          setFilterMenuOpen(false);
-                          setCategoryMenuOpen(false);
-                        }}
-                      >
-                        Recommended
-                      </li>
-                      <li
-                        className={cx(styles, "ext-filter-item", filterKind === "category" && "active")}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setCategoryMenuOpen((open) => !open)}
-                      >
-                        Category
-                      </li>
-                    </ul>
-                    {categoryMenuOpen && (
-                      <div className={styles["ext-category-menu"]}>
-                        {availableCategories.length === 0 ? (
-                          <div className={styles["ext-filter-empty"]}>No categories from current source</div>
-                        ) : (
-                          <ul className={styles["ext-filter-list"]}>
-                            {availableCategories.map((category) => (
-                              <li
-                                key={category}
-                                className={cx(styles, "ext-filter-item", selectedCategory === category && "active")}
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => {
-                                  setFilterKind("category");
-                                  setSelectedCategory(category);
-                                  setFilterMenuOpen(false);
-                                  setCategoryMenuOpen(false);
-                                }}
-                              >
-                                {category}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <DropdownSelect
+                triggerClassName={cx(styles, "ext-filter-button", filterKind !== "none" && "active")}
+                menuClassName={styles["ext-filter-menu"]}
+                value={filterKind}
+                options={filterOptions}
+                renderValue={() => <SmartLabel>{formatFilterLabel(filterKind, selectedCategory)}</SmartLabel>}
+                onChange={(nextValue) => {
+                  const nextFilter = nextValue as FilterKind;
+                  setFilterKind(nextFilter);
+                  if (nextFilter !== "category") {
+                    setSelectedCategory(null);
+                  } else if (!selectedCategory && availableCategories.length > 0) {
+                    setSelectedCategory(availableCategories[0] ?? null);
+                  }
+                }}
+              />
             </div>
+            {filterKind === "category" && (
+              <div className={styles["ext-toolbar-row"]}>
+                <DropdownSelect
+                  triggerClassName={styles["ext-source-select"]}
+                  menuClassName={styles["ext-filter-menu"]}
+                  value={selectedCategory ?? ""}
+                  options={
+                    categoryOptions.length > 0
+                      ? categoryOptions
+                      : [{ value: "", label: "No categories from current source" }]
+                  }
+                  renderValue={(selected) => selected?.label ?? "Category"}
+                  onChange={(nextValue) => {
+                    setSelectedCategory(nextValue || null);
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           {error && <div className={styles["ext-error"]}>{error}</div>}
@@ -966,23 +920,22 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
             {!loading && sidebarItems.length === 0 && (
               <div className={styles["ext-empty"]}>{showingMarketplace ? "No matching extensions" : "No installed extensions"}</div>
             )}
-            <ul className={styles["ext-sidebar-items"]}>
-              {sidebarItems.map((item) => {
-                const isSelected = item.key === selectedKey;
+            <List
+              items={sidebarItems}
+              getKey={(item) => item.key}
+              activeKey={selectedKey}
+              onActiveKeyChange={(key) => setSelectedKey(key)}
+              onActivate={(key) => {
+                setSelectedKey(key);
+                setContentTab("details");
+                setMobileDetailOpen(true);
+              }}
+              className={styles["ext-sidebar-items"]}
+              renderItem={(item, { active }) => {
                 const installedExtension = installedByKey.get(item.key);
                 const busy = busyByKey[item.key];
                 return (
-                  <li
-                    key={item.key}
-                    className={cx(styles, "ext-sidebar-item", isSelected && "selected")}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      setSelectedKey(item.key);
-                      setContentTab("details");
-                      setMobileDetailOpen(true);
-                    }}
-                  >
+                  <div className={cx(styles, "ext-sidebar-item", active && "selected")}>
                     <div className={styles["ext-item-icon"]}>{item.iconUrl ? <img src={item.iconUrl} alt="" /> : (item.title[0]?.toUpperCase() ?? "?")}</div>
                     <div className={styles["ext-item-copy"]}>
                       <div className={styles["ext-item-title"]}>{item.title}</div>
@@ -994,10 +947,10 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                         {busy?.kind === "uninstall" && <span>Removing</span>}
                       </div>
                     </div>
-                  </li>
+                  </div>
                 );
-              })}
-            </ul>
+              }}
+            />
           </div>
         </aside>
 
@@ -1103,47 +1056,35 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                     {selectedIconThemes.length > 0 && (
                       <label className={styles["ext-select-wrap"]}>
                         <span className={styles["ext-select-label"]}>Icon Theme</span>
-                        <select
-                          className={styles["ext-select"]}
+                        <DropdownSelect
+                          triggerClassName={styles["ext-select"]}
                           value={selectedIconThemeValue}
-                          onChange={(event) => {
-                            if (!event.target.value) {
+                          options={selectedIconThemeOptions}
+                          onChange={(nextValue) => {
+                            if (!nextValue) {
                               setActiveIconTheme(undefined);
                               return;
                             }
-                            handleSetIconTheme(selectedInstalled, event.target.value);
+                            handleSetIconTheme(selectedInstalled, nextValue);
                           }}
-                        >
-                          <option value="">Default</option>
-                          {selectedIconThemes.map((theme) => (
-                            <option key={theme.id} value={theme.id}>
-                              {theme.label}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </label>
                     )}
                     {selectedColorThemes.length > 0 && (
                       <label className={styles["ext-select-wrap"]}>
                         <span className={styles["ext-select-label"]}>Color Theme</span>
-                        <select
-                          className={styles["ext-select"]}
+                        <DropdownSelect
+                          triggerClassName={styles["ext-select"]}
                           value={selectedColorThemeValue}
-                          onChange={(event) => {
-                            if (!event.target.value) {
+                          options={selectedColorThemeOptions}
+                          onChange={(nextValue) => {
+                            if (!nextValue) {
                               setActiveColorTheme(undefined);
                               return;
                             }
-                            handleSetColorTheme(selectedInstalled, event.target.value);
+                            handleSetColorTheme(selectedInstalled, nextValue);
                           }}
-                        >
-                          <option value="">Default</option>
-                          {selectedColorThemes.map((theme: LoadedColorTheme) => (
-                            <option key={theme.id} value={theme.id}>
-                              {theme.label}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </label>
                     )}
                   </div>

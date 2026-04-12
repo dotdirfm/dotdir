@@ -1,10 +1,8 @@
 .anchor {
   display: inline-flex;
-  anchor-name: --nested-menu-anchor;
 }
 
 .popover {
-  position-anchor: --nested-menu-anchor;
   box-sizing: content-box;
   margin: 0;
   padding: 0;
@@ -32,66 +30,6 @@
     height 200ms ease,
     display 180ms allow-discrete,
     overlay 180ms allow-discrete;
-}
-
-.placement-bottom-start {
-  position-area: span-right bottom;
-  translate: 0 6px;
-}
-
-.placement-bottom-end {
-  position-area: span-left bottom;
-  translate: 0 6px;
-}
-
-.placement-bottom-center {
-  position-area: center bottom;
-  translate: 0 6px;
-}
-
-.placement-top-start {
-  position-area: span-right top;
-  translate: 0 -6px;
-}
-
-.placement-top-end {
-  position-area: span-left top;
-  translate: 0 -6px;
-}
-
-.placement-top-center {
-  position-area: center top;
-  translate: 0 -6px;
-}
-
-.placement-right-start {
-  position-area: right span-bottom;
-  translate: 6px 0;
-}
-
-.placement-right-end {
-  position-area: right span-top;
-  translate: 6px 0;
-}
-
-.placement-right-center {
-  position-area: right center;
-  translate: 6px 0;
-}
-
-.placement-left-start {
-  position-area: left span-bottom;
-  translate: -6px 0;
-}
-
-.placement-left-end {
-  position-area: left span-top;
-  translate: -6px 0;
-}
-
-.placement-left-center {
-  position-area: left center;
-  translate: -6px 0;
 }
 
 .popover:popover-open {

@@ -10,7 +10,8 @@ import {
 } from "@/features/commands/commandIds";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { useFocusContext, useManagedFocusLayer } from "@/focusContext";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { DropdownSurface } from "@/components/DropdownSurface/DropdownSurface";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import styles from "./AutocompleteInput.module.css";
 
 export interface AutocompleteOption {
@@ -65,7 +66,6 @@ export function AutocompleteInput({
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const pointerDownRef = useRef(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties | null>(null);
   const generatedId = useId();
   const anchorId = id ?? `autocomplete-${generatedId.replace(/:/g, "")}`;
 
@@ -104,6 +104,7 @@ export function AutocompleteInput({
       allowCommandRouting(event) {
         if (!dropdownOpenRef.current) return false;
         switch (event.key) {
+          case "Tab":
           case "ArrowUp":
           case "ArrowDown":
           case "PageUp":
@@ -209,53 +210,12 @@ export function AutocompleteInput({
   }, [commandRegistry, dropdownOpen]);
 
   useEffect(() => {
-    const dropdown = dropdownRef.current;
-    if (!dropdown) return;
-    if (!("showPopover" in dropdown)) return;
-    const popoverDropdown = dropdown as HTMLDivElement & {
-      showPopover: () => void;
-      hidePopover: () => void;
-      matches: (selector: string) => boolean;
-    };
-    const isOpen = popoverDropdown.matches(":popover-open");
-    if (dropdownOpen) {
-      if (!isOpen) popoverDropdown.showPopover();
-      return;
-    }
-    if (isOpen) popoverDropdown.hidePopover();
-  }, [anchorId, dropdownOpen]);
-
-  useEffect(() => {
     if (!dropdownOpen || selectedIndex === null) return;
     const dropdown = dropdownRef.current;
     if (!dropdown) return;
     const selectedEl = dropdown.querySelector<HTMLElement>('[data-selected="true"]');
     selectedEl?.scrollIntoView({ block: "nearest" });
   }, [dropdownOpen, selectedIndex]);
-
-  useLayoutEffect(() => {
-    if (!dropdownOpen) return;
-
-    const updatePosition = () => {
-      const input = mergedInputRef.current;
-      if (!input) return;
-      const rect = input.getBoundingClientRect();
-      setDropdownStyle({
-        position: "fixed",
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: rect.width,
-      });
-    };
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [dropdownOpen, mergedInputRef]);
 
   return (
     <div className={className ? `${styles["autocomplete"]} ${className}` : styles["autocomplete"]}>
@@ -273,6 +233,14 @@ export function AutocompleteInput({
           setOpen(true);
           setSelectedIndex(null);
         }}
+        onKeyDownCapture={(event) => {
+          if (event.key !== "Escape") return;
+          if (!dropdownOpenRef.current) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(false);
+          setSelectedIndex(null);
+        }}
         onBlur={() => {
           if (pointerDownRef.current) return;
           setOpen(false);
@@ -280,11 +248,14 @@ export function AutocompleteInput({
         }}
       />
       {flattened.length > 0 && (
-        <div
-          ref={dropdownRef}
-          popover="manual"
+        <DropdownSurface
+          open={dropdownOpen}
+          anchor={{ type: "element", ref: mergedInputRef }}
+          placement="bottom-start"
+          offset={4}
+          matchAnchorWidth
           className={styles["autocomplete-dropdown"]}
-          style={dropdownStyle ?? undefined}
+          surfaceRef={dropdownRef}
         >
           {groups.map((group) => {
             if (group.options.length === 0) return null;
@@ -325,7 +296,7 @@ export function AutocompleteInput({
               </div>
             );
           })}
-        </div>
+        </DropdownSurface>
       )}
     </div>
   );
