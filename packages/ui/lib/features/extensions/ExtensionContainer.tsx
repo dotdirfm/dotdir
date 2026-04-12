@@ -91,6 +91,8 @@ export function ExtensionContainer(containerProps: ContainerProps) {
   const panelFocusElRef = useRef<HTMLElement | null>(null);
   const inlineIframeFocusedRef = useRef(false);
   const autoFocusOnceRef = useRef(false);
+  const [mountVersion, setMountVersion] = useState(0);
+  const wasActiveRef = useRef(active !== false);
 
   useEffect(() => {
     if (!isInline) return;
@@ -98,6 +100,16 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     inlineIframeFocusedRef.current = inlineFocusMode === "viewer-first";
     autoFocusOnceRef.current = false;
   }, [focusContext, inlineFocusMode, isInline]);
+
+  useEffect(() => {
+    const isActive = active !== false;
+    const wasActive = wasActiveRef.current;
+    wasActiveRef.current = isActive;
+    if (isInline) return;
+    if (!wasActive && isActive) {
+      setMountVersion((value) => value + 1);
+    }
+  }, [active, isInline]);
 
   // For non-preview viewer/editor, focus iframe automatically when it appears.
   useEffect(() => {
@@ -770,6 +782,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
       )}
       {iframeSrc && (
         <iframe
+          key={`${kind}:${mountVersion}`}
           ref={iframeRef}
           src={iframeSrc}
           // Chromium/WebView2: loading `vfs://…` as iframe `src` is top navigation to a custom

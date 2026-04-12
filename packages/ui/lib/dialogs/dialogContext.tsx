@@ -9,13 +9,13 @@ import { CopyConfigDialog } from "./CopyConfigDialog";
 import { CopyProgressDialog } from "./CopyProgressDialog";
 import { DeleteProgressDialog } from "./DeleteProgressDialog";
 import { HotkeyProvider } from "./dialogHotkeys";
+import { FindFilesDialog } from "./FindFilesDialog";
+import { FindFilesResultsDialog } from "./FindFilesResultsDialog";
 import { MakeFolderDialog, type MakeFolderResult } from "./MakeFolderDialog";
 import { ModalDialog } from "./ModalDialog";
 import { MoveConfigDialog } from "./MoveConfigDialog";
 import { OpenCreateFileDialog } from "./OpenCreateFileDialog";
 import { RenameDialog } from "./RenameDialog";
-import { FindFilesDialog } from "./FindFilesDialog";
-import { FindFilesResultsDialog } from "./FindFilesResultsDialog";
 
 export interface MessageDialogButton {
   label: string;
@@ -188,25 +188,19 @@ type ExtensionSurfaceSlot = {
   visible: boolean;
 };
 
-function getExtensionDialogReuseKey(spec: ExtensionDialogSpec): string {
-  return `${spec.type}:${spec.extensionDirPath}:${spec.entry}`;
-}
-
 function assignExtensionDialogSurfaceKey(
   spec: DialogSpec,
   current: DialogSpec | null,
-  slots: Record<string, ExtensionSurfaceSlot>,
+  _slots: Record<string, ExtensionSurfaceSlot>,
   nextSurfaceIdRef: React.MutableRefObject<number>,
 ): DialogSpec {
   if (spec.type !== "viewer" && spec.type !== "editor") return spec;
   if (spec.surfaceKey) return spec;
-  const reuseKey = getExtensionDialogReuseKey(spec);
   const currentSurfaceKey =
     current?.type === spec.type && current.extensionDirPath === spec.extensionDirPath && current.entry === spec.entry ? current.surfaceKey : undefined;
-  const parkedSurfaceKey = Object.entries(slots).find(([, slot]) => !slot.visible && getExtensionDialogReuseKey(slot.dialog) === reuseKey)?.[0];
   return {
     ...spec,
-    surfaceKey: currentSurfaceKey ?? parkedSurfaceKey ?? `dialog-surface-${++nextSurfaceIdRef.current}`,
+    surfaceKey: currentSurfaceKey ?? `dialog-surface-${++nextSurfaceIdRef.current}`,
   };
 }
 
@@ -249,6 +243,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
 
   const replaceDialog = useCallback((spec: DialogSpec) => {
     setState((prev) => {
+      const current = prev.dialogs.length > 0 ? prev.dialogs[prev.dialogs.length - 1]! : null;
       const nextSpec = assignExtensionDialogSurfaceKey(spec, prev.dialogs.length > 0 ? prev.dialogs[prev.dialogs.length - 1]! : null, prev.extensionSurfaces, nextSurfaceIdRef);
       const nextSurfaces = { ...prev.extensionSurfaces };
       if (nextSpec.type === "viewer" || nextSpec.type === "editor") {
@@ -259,6 +254,13 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             visible: true,
           };
         }
+      }
+      const nextSurfaceKey = (nextSpec.type === "viewer" || nextSpec.type === "editor") ? nextSpec.surfaceKey : undefined;
+      if ((current?.type === "viewer" || current?.type === "editor") && current.surfaceKey && current.surfaceKey !== nextSurfaceKey) {
+        nextSurfaces[current.surfaceKey] = {
+          dialog: current,
+          visible: false,
+        };
       }
       if (prev.dialogs.length === 0) {
         return {

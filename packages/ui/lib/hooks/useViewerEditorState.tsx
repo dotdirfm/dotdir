@@ -11,6 +11,50 @@ import { useEditorRegistry, useFsProviderRegistry, useViewerRegistry } from "@/v
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+function sameViewerDialog(
+  dialog: ReturnType<typeof useDialog>["dialog"],
+  next:
+    | {
+        extensionDirPath: string;
+        entry: string;
+        filePath: string;
+        fileName: string;
+        fileSize: number;
+      }
+    | null,
+): boolean {
+  if (!dialog || dialog.type !== "viewer" || !next) return false;
+  return (
+    dialog.extensionDirPath === next.extensionDirPath &&
+    dialog.entry === next.entry &&
+    dialog.props.filePath === next.filePath &&
+    dialog.props.fileName === next.fileName &&
+    dialog.props.fileSize === next.fileSize
+  );
+}
+
+function sameEditorDialog(
+  dialog: ReturnType<typeof useDialog>["dialog"],
+  next:
+    | {
+        extensionDirPath: string;
+        entry: string;
+        filePath: string;
+        fileName: string;
+        langId: string;
+      }
+    | null,
+): boolean {
+  if (!dialog || dialog.type !== "editor" || !next) return false;
+  return (
+    dialog.extensionDirPath === next.extensionDirPath &&
+    dialog.entry === next.entry &&
+    dialog.props.filePath === next.filePath &&
+    dialog.props.fileName === next.fileName &&
+    dialog.props.langId === next.langId
+  );
+}
+
 type UseViewerEditorStateResult = {
   handleViewFile: (filePath: string, fileName: string, fileSize: number) => void;
   handleEditFile: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
@@ -38,7 +82,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   const [editorDirty, setEditorDirty] = useState(false);
   const editorCloseConfirmOpenRef = useRef(false);
   const { showHidden } = useShowHidden();
-  const { dialog, dialogs, showDialog, replaceDialog, closeDialog } = useDialog();
+  const { dialog, showDialog, replaceDialog, closeDialog } = useDialog();
 
   const activePanelSide = useAtomValue(activePanelSideAtom);
   const activePanelSideRef = useRef(activePanelSide);
@@ -50,6 +94,8 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
         void navigateTo(filePath + CONTAINER_SEP);
         return;
       }
+      setEditorDirty(false);
+      setEditorFile(null);
       setViewerFile({
         path: filePath,
         name: fileName,
@@ -57,15 +103,16 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
         panel: activePanelSideRef.current,
       });
     },
-    [activePanelSideRef, fsProviderRegistry, navigateTo, setViewerFile],
+    [activePanelSideRef, fsProviderRegistry, navigateTo, setEditorFile, setViewerFile],
   );
 
   const handleEditFile = useCallback(
     (filePath: string, fileName: string, fileSize: number, langId: string) => {
+      setViewerFile(null);
       setEditorDirty(false);
       setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
     },
-    [setEditorFile],
+    [setEditorFile, setViewerFile],
   );
 
   const handleOpenCreateFileConfirm = useCallback(
@@ -75,10 +122,11 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
         await bridge.fs.writeFile(filePath, "");
       }
       const size = exists ? (await bridge.fs.stat(filePath)).size : 0;
+      setViewerFile(null);
       setEditorDirty(false);
       setEditorFile({ path: filePath, name: fileName, size, langId });
     },
-    [bridge, setEditorFile],
+    [bridge, setEditorFile, setViewerFile],
   );
 
   const requestCloseViewer = useCallback(() => {
@@ -251,19 +299,31 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
       return;
     }
 
-    replaceDialog({
-      type: "viewer",
+    const desiredViewer = {
       extensionDirPath: viewerResolved.extensionDirPath,
       entry: viewerResolved.contribution.entry,
+      filePath: viewerFile.path,
+      fileName: viewerFile.name,
+      fileSize: viewerFile.size,
+    };
+
+    if (sameViewerDialog(dialog, desiredViewer)) {
+      return;
+    }
+
+    replaceDialog({
+      type: "viewer",
+      extensionDirPath: desiredViewer.extensionDirPath,
+      entry: desiredViewer.entry,
       props: {
-        filePath: viewerFile.path,
-        fileName: viewerFile.name,
-        fileSize: viewerFile.size,
+        filePath: desiredViewer.filePath,
+        fileName: desiredViewer.fileName,
+        fileSize: desiredViewer.fileSize,
       },
       onClose: requestCloseViewer,
       onExecuteCommand: handleExecuteCommand,
     });
-  }, [closeDialog, dialog?.type, dialogs, handleExecuteCommand, replaceDialog, requestCloseViewer, showDialog, viewerFile, viewerResolved]);
+  }, [closeDialog, dialog, handleExecuteCommand, replaceDialog, requestCloseViewer, showDialog, viewerFile, viewerResolved]);
 
   useEffect(() => {
     const topDialogType = dialog?.type;
@@ -306,19 +366,31 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
       return;
     }
 
-    replaceDialog({
-      type: "editor",
+    const desiredEditor = {
       extensionDirPath: editorResolved.extensionDirPath,
       entry: editorResolved.contribution.entry,
+      filePath: editorFile.path,
+      fileName: editorFile.name,
+      langId: editorFile.langId,
+    };
+
+    if (sameEditorDialog(dialog, desiredEditor)) {
+      return;
+    }
+
+    replaceDialog({
+      type: "editor",
+      extensionDirPath: desiredEditor.extensionDirPath,
+      entry: desiredEditor.entry,
       props: {
-        filePath: editorFile.path,
-        fileName: editorFile.name,
-        langId: editorFile.langId,
+        filePath: desiredEditor.filePath,
+        fileName: desiredEditor.fileName,
+        langId: desiredEditor.langId,
       },
       onClose: requestCloseEditor,
       onDirtyChange: setEditorDirty,
     });
-  }, [closeDialog, dialog?.type, dialogs, editorFile, editorResolved, replaceDialog, requestCloseEditor, showDialog]);
+  }, [closeDialog, dialog, editorFile, editorResolved, replaceDialog, requestCloseEditor, showDialog]);
 
   return {
     handleViewFile,

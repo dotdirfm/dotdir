@@ -1,45 +1,45 @@
 import { commandPaletteOpenAtom, panelsVisibleAtom, terminalFocusRequestKeyAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
-import type { FileSearchRequest } from "@/features/bridge";
 import {
-    activePanelSideAtom,
-    activeTabAtom,
-    createFilelistTab,
-    leftActiveTabAtom,
-    leftActiveTabIdAtom,
-    leftTabsAtom,
-    rightActiveTabAtom,
-    rightActiveTabIdAtom,
-    rightTabsAtom,
+  activePanelSideAtom,
+  activeTabAtom,
+  createFilelistTab,
+  leftActiveTabAtom,
+  leftActiveTabIdAtom,
+  leftTabsAtom,
+  rightActiveTabAtom,
+  rightActiveTabIdAtom,
+  rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
+import type { FileSearchRequest } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandLine } from "@/features/command-line/useCommandLine";
 import {
-    CLEAR,
-    CLOSE_EDITOR,
-    CLOSE_TAB,
-    CLOSE_VIEWER,
-    DOTDIR_CANCEL_NAVIGATION,
-    DOTDIR_CLOSE_WINDOW,
-    DOTDIR_EXIT,
-    DOTDIR_FOCUS_LEFT_PANEL,
-    DOTDIR_FOCUS_RIGHT_PANEL,
-    DOTDIR_NEW_WINDOW,
-    DOTDIR_PANEL_ESCAPE,
-    EDIT_FILE,
-    LIST_MAKE_DIR,
-    OPEN_CREATE_FILE,
-    PASTE_LEFT_PANEL_PATH,
-    PASTE_RIGHT_PANEL_PATH,
-    RUN_COMMANDS,
-    SHOW_COMMAND_PALETTE,
-    SHOW_FIND_FILES,
-    SHOW_EXTENSIONS,
-    SWITCH_PANEL,
-    SHELL_EXECUTE,
-    TOGGLE_HIDDEN_FILES,
-    TOGGLE_PANELS,
-    VIEW_FILE,
+  CLEAR,
+  CLOSE_EDITOR,
+  CLOSE_TAB,
+  CLOSE_VIEWER,
+  DOTDIR_CANCEL_NAVIGATION,
+  DOTDIR_CLOSE_WINDOW,
+  DOTDIR_EXIT,
+  DOTDIR_FOCUS_LEFT_PANEL,
+  DOTDIR_FOCUS_RIGHT_PANEL,
+  DOTDIR_NEW_WINDOW,
+  DOTDIR_PANEL_ESCAPE,
+  EDIT_FILE,
+  LIST_MAKE_DIR,
+  OPEN_CREATE_FILE,
+  PASTE_LEFT_PANEL_PATH,
+  PASTE_RIGHT_PANEL_PATH,
+  RUN_COMMANDS,
+  SHELL_EXECUTE,
+  SHOW_COMMAND_PALETTE,
+  SHOW_EXTENSIONS,
+  SHOW_FIND_FILES,
+  SWITCH_PANEL,
+  TOGGLE_HIDDEN_FILES,
+  TOGGLE_PANELS,
+  VIEW_FILE,
 } from "@/features/commands/commandIds";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
@@ -96,6 +96,18 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   activeCwdRef.current = activeCwd;
   const activeSessionRef = useRef(activeSession);
   activeSessionRef.current = activeSession;
+  const ensureWindowRef = useRef(ensureWindow);
+  ensureWindowRef.current = ensureWindow;
+  const removeWindowRef = useRef(removeWindow);
+  removeWindowRef.current = removeWindow;
+  const flushCurrentWindowLayoutRef = useRef(flushCurrentWindowLayout);
+  flushCurrentWindowLayoutRef.current = flushCurrentWindowLayout;
+  const flushCurrentWindowStateRef = useRef(flushCurrentWindowState);
+  flushCurrentWindowStateRef.current = flushCurrentWindowState;
+  const getCurrentWindowIdRef = useRef(getCurrentWindowId);
+  getCurrentWindowIdRef.current = getCurrentWindowId;
+  const getWindowIdsRef = useRef(getWindowIds);
+  getWindowIdsRef.current = getWindowIds;
 
   // Updated every render so command handlers always see the latest callbacks.
   const depsRef = useRef(deps);
@@ -140,6 +152,8 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   navigateToRef.current = navigateTo;
   const cancelNavigationRef = useRef(cancelNavigation);
   cancelNavigationRef.current = cancelNavigation;
+  const focusFileListRef = useRef(focusFileList);
+  focusFileListRef.current = focusFileList;
 
   // const panelRef = useRef(activePanelSideRef.current === "left" ? leftRef.current : rightRef.current);
   // panelRef.current = activePanelSideRef.current === "left" ? leftRef.current : rightRef.current;
@@ -322,7 +336,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         setActivePanel(nextSide);
         requestAnimationFrame(() => {
           focusContextRef.current.request("panel");
-          focusFileList(nextSide);
+          focusFileListRef.current(nextSide);
         });
       }),
     );
@@ -331,7 +345,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         setActivePanel("left");
         requestAnimationFrame(() => {
           focusContextRef.current.request("panel");
-          focusFileList("left");
+          focusFileListRef.current("left");
         });
       }),
     );
@@ -340,7 +354,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         setActivePanel("right");
         requestAnimationFrame(() => {
           focusContextRef.current.request("panel");
-          focusFileList("right");
+          focusFileListRef.current("right");
         });
       }),
     );
@@ -429,7 +443,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         const current = await bridgeRef.current.window.getCurrentState();
         const windowId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `window-${Date.now()}`;
 
-        await ensureWindow(windowId);
+        await ensureWindowRef.current(windowId);
         try {
           await bridgeRef.current.window.create({
             id: windowId,
@@ -440,7 +454,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
             isMaximized: false,
           });
         } catch (err) {
-          await removeWindow(windowId);
+          await removeWindowRef.current(windowId);
           throw err;
         }
       }),
@@ -448,15 +462,15 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
     disposables.push(
       commandRegistry.registerCommand(DOTDIR_CLOSE_WINDOW, async () => {
-        await Promise.all([flushCurrentWindowLayout(), flushCurrentWindowState()]);
+        await Promise.all([flushCurrentWindowLayoutRef.current(), flushCurrentWindowStateRef.current()]);
 
         if (bridgeRef.current.window) {
-          const currentWindowId = await getCurrentWindowId();
-          const windowIds = await getWindowIds();
+          const currentWindowId = await getCurrentWindowIdRef.current();
+          const windowIds = await getWindowIdsRef.current();
           if (windowIds.length > 1) {
-            await removeWindow(currentWindowId);
+            await removeWindowRef.current(currentWindowId);
           } else {
-            await ensureWindow(currentWindowId);
+            await ensureWindowRef.current(currentWindowId);
           }
           await bridgeRef.current.window.closeCurrent();
           return;
@@ -468,7 +482,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
     disposables.push(
       commandRegistry.registerCommand(DOTDIR_EXIT, async () => {
-        await Promise.all([flushCurrentWindowLayout(), flushCurrentWindowState()]);
+        await Promise.all([flushCurrentWindowLayoutRef.current(), flushCurrentWindowStateRef.current()]);
 
         if (bridgeRef.current.window?.exitApp) {
           await bridgeRef.current.window.exitApp();
@@ -536,22 +550,9 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     return () => {
       for (const d of disposables) d();
     };
-  }, [
-    commandRegistry,
-    setActivePanel,
-    setLeftTabs,
-    setRightTabs,
-    setLeftActiveTabId,
-    setRightActiveTabId,
-    setPanelsVisible,
-    setCommandPaletteOpen,
-    setTerminalFocusRequestKey,
-    ensureWindow,
-    removeWindow,
-    flushCurrentWindowLayout,
-    flushCurrentWindowState,
-    getCurrentWindowId,
-    getWindowIds,
-    setShowHidden,
-  ]);
+    // Intentionally register built-in commands once. Call-time behavior reads
+    // the latest state through refs above, so dependency churn here only causes
+    // unnecessary unregister/register storms.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commandRegistry]);
 }

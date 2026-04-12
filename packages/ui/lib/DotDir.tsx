@@ -35,9 +35,9 @@ export type {
   MoveProgressEvent,
   PtyLaunchInfo
 } from "@/features/bridge";
+export { extensionIframeBootstrapSource } from "./features/extensions/iframeBootstrap";
 export { basename, dirname, join, normalizePath } from "./utils/path";
 export { defaultResolveVfsUrl };
-export { extensionIframeBootstrapSource } from "./features/extensions/iframeBootstrap";
 export type { AppHandle, VfsUrlKind, VfsUrlResolver };
 
 export type DotDirProps = {

@@ -10,6 +10,21 @@ interface KeyBarItem {
   keybinding?: Keybinding;
 }
 
+function sameItems(left: KeyBarItem[], right: KeyBarItem[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i++) {
+    const a = left[i]!;
+    const b = right[i]!;
+    if (a.fKey !== b.fKey) return false;
+    if (a.command?.id !== b.command?.id) return false;
+    if ((a.command?.shortTitle ?? a.command?.title) !== (b.command?.shortTitle ?? b.command?.title)) return false;
+    if (a.keybinding?.command !== b.keybinding?.command) return false;
+    if (a.keybinding?.key !== b.keybinding?.key) return false;
+    if (a.keybinding?.when !== b.keybinding?.when) return false;
+  }
+  return true;
+}
+
 function createKeybarKeyboardEvent(fKey: number, ctrl: boolean, shift: boolean, alt: boolean): KeyboardEvent {
   return new KeyboardEvent("keydown", {
     key: `F${fKey}`,
@@ -65,7 +80,7 @@ export function KeyBar() {
       newItems.push({ fKey: i });
     }
 
-    setItems(newItems);
+    setItems((current) => (sameItems(current, newItems) ? current : newItems));
   }, [commandRegistry, focusContext, modifiers]);
 
   useEffect(() => {

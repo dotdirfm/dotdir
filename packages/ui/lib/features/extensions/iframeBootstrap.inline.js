@@ -417,10 +417,12 @@ window.addEventListener("message", async (e) => {
         }
 
         // viewer
-        if (nextFilePath !== lastFilePath) {
-          await mountWithProps(data.props);
-          lastFilePath = nextFilePath;
-        }
+        // Remount on every non-empty update. Reused viewer surfaces can be
+        // hidden and shown again for the same file, and some viewer
+        // implementations keep imperative state that does not recover reliably
+        // from a hide/show cycle with only prop updates.
+        await mountWithProps(data.props);
+        lastFilePath = nextFilePath;
       });
 
       await lifecycleChain;
