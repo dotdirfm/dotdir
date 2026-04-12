@@ -452,6 +452,62 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
           width: contentSize?.width,
           height: contentSize?.height,
         } as React.CSSProperties}
+        onKeyDownCapture={(event) => {
+          switch (event.key) {
+            case "ArrowUp":
+              event.preventDefault();
+              event.stopPropagation();
+              handleMenuCommand(CURSOR_UP);
+              return;
+            case "ArrowDown":
+              event.preventDefault();
+              event.stopPropagation();
+              handleMenuCommand(CURSOR_DOWN);
+              return;
+            case "ArrowLeft":
+              event.preventDefault();
+              event.stopPropagation();
+              handleMenuCommand(CURSOR_LEFT);
+              return;
+            case "ArrowRight":
+              event.preventDefault();
+              event.stopPropagation();
+              handleMenuCommand(CURSOR_RIGHT);
+              return;
+            case "Home":
+              event.preventDefault();
+              event.stopPropagation();
+              handleMenuCommand(CURSOR_HOME);
+              return;
+            case "End":
+              event.preventDefault();
+              event.stopPropagation();
+              handleMenuCommand(CURSOR_END);
+              return;
+            case "PageUp":
+              event.preventDefault();
+              event.stopPropagation();
+              handleMenuCommand(CURSOR_PAGE_UP);
+              return;
+            case "PageDown":
+              event.preventDefault();
+              event.stopPropagation();
+              handleMenuCommand(CURSOR_PAGE_DOWN);
+              return;
+            case "Enter":
+              event.preventDefault();
+              event.stopPropagation();
+              handleMenuCommand(ACCEPT);
+              return;
+            case "Escape":
+              event.preventDefault();
+              event.stopPropagation();
+              handleMenuCommand(CANCEL);
+              return;
+            default:
+              return;
+          }
+        }}
       >
         <div className={styles.viewport}>
           <div key={currentView.id} ref={observeCurrentContent} className={styles["screen-current"]}>
@@ -459,6 +515,7 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
               view={currentView}
               canGoBack={stack.length > 1}
               onBack={popView}
+              onCommand={handleMenuCommand}
               onItemClick={handleItemClick}
               selectedItemId={selectedItemId}
               setItemRef={(itemId, element) => {
@@ -478,6 +535,7 @@ function MenuViewBody({
   view,
   canGoBack,
   onBack,
+  onCommand,
   onItemClick,
   selectedItemId,
   setItemRef,
@@ -487,6 +545,7 @@ function MenuViewBody({
   view: MenuView;
   canGoBack: boolean;
   onBack: () => void;
+  onCommand: (commandId: string) => void;
   onItemClick: (item: NestedPopoverMenuItem) => void | Promise<void>;
   selectedItemId: string | null;
   setItemRef: (itemId: string, element: HTMLAnchorElement | null) => void;
@@ -547,6 +606,32 @@ function MenuViewBody({
                 onClick={(event) => {
                   event.preventDefault();
                   void onItemClick(item);
+                }}
+                onKeyDown={(event) => {
+                  switch (event.key) {
+                    case "ArrowLeft":
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onCommand(CURSOR_LEFT);
+                      return;
+                    case "ArrowRight":
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onCommand(CURSOR_RIGHT);
+                      return;
+                    case "Enter":
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onCommand(ACCEPT);
+                      return;
+                    case "Escape":
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onCommand(CANCEL);
+                      return;
+                    default:
+                      return;
+                  }
                 }}
                 onAuxClick={(event) => {
                   if (event.button !== 1 || item.disabled || !item.onOpenInNewTab) return;

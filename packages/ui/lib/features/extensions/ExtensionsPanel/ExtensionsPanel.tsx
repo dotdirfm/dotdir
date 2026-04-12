@@ -1,5 +1,6 @@
 import { DropdownSelect, type DropdownSelectOption } from "@/components/DropdownSelect/DropdownSelect";
 import { List } from "@/components/List/List";
+import { NestedPopoverMenu, type NestedPopoverMenuItem } from "@/components/NestedPopoverMenu/NestedPopoverMenu";
 import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import { OverlayDialog } from "@/dialogs/OverlayDialog";
 import { SmartLabel } from "@/dialogs/dialogHotkeys";
@@ -33,9 +34,9 @@ import { cx } from "@/utils/cssModules";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { join } from "@/utils/path";
 import { marked } from "marked";
-import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type MouseEvent as ReactMouseEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaGithub } from "react-icons/fa6";
-import { VscArrowLeft, VscCloudDownload, VscStarEmpty, VscStarFull, VscVerifiedFilled } from "react-icons/vsc";
+import { VscArrowLeft, VscChevronDown, VscCloudDownload, VscStarEmpty, VscStarFull, VscVerifiedFilled } from "react-icons/vsc";
 import styles from "./ExtensionsPanel.module.css";
 
 type MarketplaceSource = MarketplaceProviderId;
@@ -43,6 +44,25 @@ type InstallPhase = "download" | "extract" | "write" | "finalize";
 type BusyState = { kind: "install"; phase: InstallPhase } | { kind: "uninstall" };
 type FilterKind = "none" | "featured" | "recent" | "recommended" | "category";
 type ContentTab = "details" | "features" | "changelog";
+
+const DEFAULT_VSCODE_CATEGORIES = [
+  "Programming Languages",
+  "Snippets",
+  "Linters",
+  "Themes",
+  "Formatters",
+  "Keymaps",
+  "Debuggers",
+  "SCM Providers",
+  "Other",
+  "Extension Packs",
+  "Language Packs",
+  "Data Science",
+  "Machine Learning",
+  "Visualization",
+  "Notebooks",
+  "Testing",
+];
 
 type SidebarItem =
   | {
@@ -430,6 +450,9 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
 
   const availableCategories = useMemo(() => {
     const all = new Set<string>();
+    for (const category of DEFAULT_VSCODE_CATEGORIES) {
+      all.add(category);
+    }
     for (const item of marketplaceItems) {
       for (const category of item.categories) {
         all.add(category);
@@ -448,19 +471,62 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
     [],
   );
 
-  const filterOptions = useMemo<DropdownSelectOption[]>(
+  const filterMenuItems = useMemo<NestedPopoverMenuItem[]>(
     () => [
-      { value: "none", label: "Installed" },
-      { value: "featured", label: "Featured" },
-      { value: "recent", label: "Recently Published" },
-      { value: "recommended", label: "Recommended" },
-      { value: "category", label: "Category" },
+      {
+        id: "installed",
+        label: "Installed",
+        onSelect: () => {
+          setFilterKind("none");
+          setSelectedCategory(null);
+        },
+      },
+      {
+        id: "featured",
+        label: "Featured",
+        onSelect: () => {
+          setFilterKind("featured");
+          setSelectedCategory(null);
+        },
+      },
+      {
+        id: "recent",
+        label: "Recently Published",
+        onSelect: () => {
+          setFilterKind("recent");
+          setSelectedCategory(null);
+        },
+      },
+      {
+        id: "recommended",
+        label: "Recommended",
+        onSelect: () => {
+          setFilterKind("recommended");
+          setSelectedCategory(null);
+        },
+      },
+      {
+        id: "category",
+        label: "Category",
+        items:
+          availableCategories.length > 0
+            ? availableCategories.map((category) => ({
+                id: `category:${category}`,
+                label: category,
+                onSelect: () => {
+                  setFilterKind("category");
+                  setSelectedCategory(category);
+                },
+              }))
+            : [
+                {
+                  id: "category:none",
+                  label: "No categories from current source",
+                  disabled: true,
+                },
+              ],
+      },
     ],
-    [],
-  );
-
-  const categoryOptions = useMemo<DropdownSelectOption[]>(
-    () => availableCategories.map((category) => ({ value: category, label: category })),
     [availableCategories],
   );
 
@@ -875,42 +941,35 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                   }
                 }}
               />
-
-              <DropdownSelect
-                triggerClassName={cx(styles, "ext-filter-button", filterKind !== "none" && "active")}
-                menuClassName={styles["ext-filter-menu"]}
-                value={filterKind}
-                options={filterOptions}
-                renderValue={() => <SmartLabel>{formatFilterLabel(filterKind, selectedCategory)}</SmartLabel>}
-                onChange={(nextValue) => {
-                  const nextFilter = nextValue as FilterKind;
-                  setFilterKind(nextFilter);
-                  if (nextFilter !== "category") {
-                    setSelectedCategory(null);
-                  } else if (!selectedCategory && availableCategories.length > 0) {
-                    setSelectedCategory(availableCategories[0] ?? null);
-                  }
-                }}
+              <NestedPopoverMenu
+                items={filterMenuItems}
+                placement="bottom-end"
+                popoverClassName={styles["ext-filter-menu"]}
+                renderAnchor={({ ref, id, open, toggle }) => (
+                  <button
+                    ref={ref as RefObject<HTMLButtonElement | null>}
+                    id={id}
+                    type="button"
+                    className={cx(styles, "ext-filter-button", filterKind !== "none" && "active")}
+                    style={{
+                      appearance: "none",
+                      WebkitAppearance: "none",
+                      background: "var(--bg)",
+                      backgroundImage: "none",
+                      boxShadow: "none",
+                      color: "var(--fg)",
+                      borderColor: "var(--border)",
+                    }}
+                    aria-haspopup="menu"
+                    aria-expanded={open}
+                    onClick={toggle}
+                  >
+                    <SmartLabel>{formatFilterLabel(filterKind, selectedCategory)}</SmartLabel>
+                    <VscChevronDown aria-hidden="true" />
+                  </button>
+                )}
               />
             </div>
-            {filterKind === "category" && (
-              <div className={styles["ext-toolbar-row"]}>
-                <DropdownSelect
-                  triggerClassName={styles["ext-source-select"]}
-                  menuClassName={styles["ext-filter-menu"]}
-                  value={selectedCategory ?? ""}
-                  options={
-                    categoryOptions.length > 0
-                      ? categoryOptions
-                      : [{ value: "", label: "No categories from current source" }]
-                  }
-                  renderValue={(selected) => selected?.label ?? "Category"}
-                  onChange={(nextValue) => {
-                    setSelectedCategory(nextValue || null);
-                  }}
-                />
-              </div>
-            )}
           </div>
 
           {error && <div className={styles["ext-error"]}>{error}</div>}
