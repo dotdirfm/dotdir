@@ -1,10 +1,12 @@
 use crate::copy::CancelToken;
 use crate::error::FsError;
+use grep_regex::{RegexMatcher, RegexMatcherBuilder};
+use grep_searcher::{Searcher, Sink, SinkMatch};
 use globset::{GlobBuilder, GlobMatcher};
-use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,8 +92,8 @@ fn build_name_matcher(request: &FileSearchRequest) -> Result<NameMatcher, FsErro
     })
 }
 
-fn build_content_regex(request: &FileSearchRequest) -> Result<Option<Regex>, FsError> {
-    let pattern = request.content_pattern.trim();
+fn build_content_regex(request: &FileSearchRequest) -> Result<Option<RegexMatcher>, FsError> {
+    let pattern = request.content_pattern.as_str();
     if pattern.is_empty() {
         return Ok(None);
     }
@@ -107,11 +109,15 @@ fn build_content_regex(request: &FileSearchRequest) -> Result<Option<Regex>, FsE
         source
     };
 
-    let regex = RegexBuilder::new(&source)
-        .case_insensitive(!request.case_sensitive_content)
-        .build()
+    let mut builder = RegexMatcherBuilder::new();
+    builder.case_insensitive(!request.case_sensitive_content);
+    // Force line-oriented matching so grep-searcher can stream without
+    // falling back to whole-file multiline mode.
+    builder.line_terminator(Some(b'\n'));
+    let matcher = builder
+        .build(&source)
         .map_err(|_| FsError::InvalidInput)?;
-    Ok(Some(regex))
+    Ok(Some(matcher))
 }
 
 fn is_hidden(path: &Path) -> bool {
@@ -132,26 +138,49 @@ fn should_ignore_dir(path: &Path, ignored_dirs: &HashSet<String>) -> bool {
         .unwrap_or(false)
 }
 
-fn read_file_matches(path: &Path, regex: &Regex, all_charsets: bool) -> bool {
-    let bytes = match fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(_) => return false,
-    };
-    if all_charsets {
-        let text = String::from_utf8_lossy(&bytes);
-        regex.is_match(&text)
-    } else {
-        std::str::from_utf8(&bytes)
-            .map(|text| regex.is_match(text))
-            .unwrap_or(false)
+#[derive(Default)]
+struct FirstMatchSink {
+    found: bool,
+}
+
+impl Sink for FirstMatchSink {
+    type Error = io::Error;
+
+    fn matched(
+        &mut self,
+        _searcher: &Searcher,
+        _mat: &SinkMatch<'_>,
+    ) -> Result<bool, Self::Error> {
+        self.found = true;
+        // Stop at the first content match for this file.
+        Ok(false)
     }
+}
+
+fn read_file_matches(path: &Path, matcher: &RegexMatcher, all_charsets: bool) -> bool {
+    // Keep old behavior: with "all charsets" disabled, skip files that aren't
+    // valid UTF-8. This check still reads the file, but matching itself below
+    // is streaming and doesn't allocate the whole haystack for regex search.
+    if !all_charsets {
+        let bytes = match fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(_) => return false,
+        };
+        if std::str::from_utf8(&bytes).is_err() {
+            return false;
+        }
+    }
+
+    let mut searcher = Searcher::new();
+    let mut sink = FirstMatchSink::default();
+    searcher.search_path(matcher, path, &mut sink).is_ok() && sink.found
 }
 
 fn entry_matches(
     path: &Path,
     is_directory: bool,
     name_matcher: &NameMatcher,
-    content_regex: Option<&Regex>,
+    content_regex: Option<&RegexMatcher>,
     all_charsets: bool,
 ) -> bool {
     let file_name = path.file_name().and_then(|name| name.to_str()).unwrap_or("");

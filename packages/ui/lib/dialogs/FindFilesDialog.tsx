@@ -63,7 +63,8 @@ export function FindFilesDialog({
       ignoreDirsEnabled,
       ignoreDirs: ignoreDirsEnabled ? parseIgnoreDirs(ignoreDirsText) : [],
       filePattern: filePattern.trim() || "*",
-      contentPattern: contentPattern.trim(),
+      // Preserve leading/trailing whitespace for content search (important for regex patterns like " *The").
+      contentPattern,
       recursive,
       followSymlinks,
       shellPatterns,
