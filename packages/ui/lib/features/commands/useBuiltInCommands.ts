@@ -21,6 +21,7 @@ import {
   CLOSE_VIEWER,
   DOTDIR_CANCEL_NAVIGATION,
   DOTDIR_EDITOR_FIND,
+  DOTDIR_EDITOR_SAVE,
   DOTDIR_CLOSE_WINDOW,
   DOTDIR_EXIT,
   DOTDIR_FOCUS_LEFT_PANEL,
@@ -47,6 +48,7 @@ import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/fe
 import { runCommandSequence, type RunCommandsArgs } from "@/features/commands/runCommands";
 import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
+import { DOTDIR_MONACO_EXECUTE_ACTION } from "@/features/extensions/builtins/monacoCommandBridge";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
@@ -330,8 +332,13 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     disposables.push(commandRegistry.registerCommand(CLOSE_VIEWER, () => depsRef.current.onRequestCloseViewer()));
     disposables.push(commandRegistry.registerCommand(CLOSE_EDITOR, () => depsRef.current.onRequestCloseEditor()));
     disposables.push(
+      commandRegistry.registerCommand(DOTDIR_EDITOR_SAVE, async () => {
+        await executeMountedExtensionCommand("dotdir.save", []);
+      }),
+    );
+    disposables.push(
       commandRegistry.registerCommand(DOTDIR_EDITOR_FIND, async () => {
-        await executeMountedExtensionCommand("dotdir.find", []);
+        await executeMountedExtensionCommand(DOTDIR_MONACO_EXECUTE_ACTION, ["actions.find"]);
       }),
     );
 

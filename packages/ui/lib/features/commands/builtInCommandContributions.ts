@@ -23,6 +23,7 @@ import {
     DELETE_RIGHT,
     DOTDIR_CANCEL_NAVIGATION,
     DOTDIR_EDITOR_FIND,
+    DOTDIR_EDITOR_SAVE,
     DOTDIR_CLOSE_WINDOW,
     DOTDIR_EXIT,
     DOTDIR_FOCUS_LEFT_PANEL,
@@ -87,11 +88,12 @@ export const builtInCommandContributions: CommandContribution[] = [
   { command: TOGGLE_PANELS, title: "Toggle Panels", category: "View" },
   { command: RUN_COMMANDS, title: "Run Commands", category: "View", palette: false },
   { command: SHOW_EXTENSIONS, title: "Show Extensions", shortTitle: "Plugins", category: "View" },
-  { command: SHOW_FIND_FILES, title: "Find Files", shortTitle: "Find", category: "View" },
+  { command: SHOW_FIND_FILES, title: "Find Files", shortTitle: "Find", category: "View", when: "!dialogOpen" },
   { command: SHOW_COMMAND_PALETTE, title: "Show All Commands", category: "View" },
   { command: CLOSE_VIEWER, title: "Close Viewer", category: "View" },
   { command: CLOSE_EDITOR, title: "Close Editor", category: "View" },
-  { command: DOTDIR_EDITOR_FIND, title: "Find in Editor", category: "View", when: "focusEditor" },
+  { command: DOTDIR_EDITOR_FIND, title: "Find in Editor", category: "View", when: "focusEditor", palette: false },
+  { command: DOTDIR_EDITOR_SAVE, title: "Save File", category: "File", when: "focusEditor", palette: false },
 
   // ── Navigation ────────────────────────────────────────────────────────────
   { command: SWITCH_PANEL, title: "Switch Panel", category: "Navigation" },

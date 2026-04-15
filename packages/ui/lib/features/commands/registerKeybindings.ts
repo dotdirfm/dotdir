@@ -1,11 +1,12 @@
 import type { Keybinding, KeybindingLayer } from "@/features/commands/commands";
+import { MONACO_QUICK_COMMAND_ACTION } from "@/features/extensions/builtins/monacoCommandBridge";
 import {
   ACCEPT,
   CANCEL,
   CLOSE_EDITOR,
   CLOSE_TAB,
   CLOSE_VIEWER,
-  DOTDIR_EDITOR_FIND,
+  DOTDIR_EDITOR_SAVE,
   COMMANDLINE_COPY,
   COMMANDLINE_CUT,
   COMMANDLINE_EXECUTE,
@@ -83,7 +84,7 @@ const appBuiltInKeybindings: Keybinding[] = [
   { command: TOGGLE_HIDDEN_FILES, key: "ctrl+.", mac: "cmd+." },
   { command: TOGGLE_PANELS, key: "ctrl+o", mac: "cmd+o", when: "!terminalCommandRunning" },
   { command: SHOW_EXTENSIONS, key: "f11" },
-  { command: SHOW_FIND_FILES, key: "alt+f7" },
+  { command: SHOW_FIND_FILES, key: "alt+f7", when: "!dialogOpen" },
   { command: DOTDIR_OPEN_LEFT_PANEL_MENU, key: "alt+f1", when: "!dialogOpen" },
   { command: DOTDIR_OPEN_RIGHT_PANEL_MENU, key: "alt+f2", when: "!dialogOpen" },
   { command: DOTDIR_NEW_WINDOW, key: "ctrl+n", mac: "cmd+n", when: "supportsWindowManagement && !dialogOpen" },
@@ -106,13 +107,13 @@ const appBuiltInKeybindings: Keybinding[] = [
   { command: LIST_MAKE_DIR, key: "f7", when: "focusPanel" },
 
   // Command palette
-  { command: SHOW_COMMAND_PALETTE, key: "cmd+shift+p" },
-  { command: SHOW_COMMAND_PALETTE, key: "cmd+p" },
+  { command: SHOW_COMMAND_PALETTE, key: "f1" },
+  { command: MONACO_QUICK_COMMAND_ACTION, key: "ctrl+f1", mac: "cmd+f1", when: "focusEditor" },
 
   // Close viewer/editor commands
   { command: CLOSE_VIEWER, key: "escape", when: "focusViewer" },
   { command: CLOSE_EDITOR, key: "escape", when: "focusEditor" },
-  { command: DOTDIR_EDITOR_FIND, key: "ctrl+f", mac: "cmd+f", when: "focusEditor" },
+  { command: DOTDIR_EDITOR_SAVE, key: "ctrl+s", mac: "cmd+s", when: "focusEditor" },
 
   // Exit command
   { command: DOTDIR_CLOSE_WINDOW, key: "f10", when: "supportsWindowManagement" },

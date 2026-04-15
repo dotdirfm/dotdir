@@ -1201,7 +1201,7 @@ export function ViewerContainer({
     inline,
     isVisible,
     allowCommandRouting(event) {
-      return event.ctrlKey || event.metaKey || /^F\d{1,2}$/.test(event.key) || event.key === "Escape";
+      return event.ctrlKey || event.metaKey || event.altKey || /^F\d{1,2}$/.test(event.key) || event.key === "Escape";
     },
   });
   const handleClose = useCallback(() => {
@@ -1355,7 +1355,16 @@ export function EditorContainer({
       return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
     },
     allowCommandRouting(event) {
-      return event.ctrlKey || event.metaKey || /^F\d{1,2}$/.test(event.key) || event.key === "Escape";
+      const isMonacoEditorWidgetTarget = (node: EventTarget | null) => {
+        const el = node as HTMLElement | null;
+        return Boolean(el?.closest?.(".editor-widget"));
+      };
+      if (event.key === "Escape") {
+        if (isMonacoEditorWidgetTarget(event.target) || isMonacoEditorWidgetTarget(document.activeElement)) {
+          return false;
+        }
+      }
+      return event.ctrlKey || event.metaKey || event.altKey || /^F\d{1,2}$/.test(event.key) || event.key === "Escape";
     },
   });
   const handleClose = useCallback(() => {

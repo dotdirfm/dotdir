@@ -4,6 +4,14 @@ import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker.js?worker";
 import monacoCssUrl from "monaco-editor/min/vs/editor/editor.main.css?url";
 import onigWasmUrl from "vscode-oniguruma/release/onig.wasm?url";
 import { useEffect, useRef } from "react";
+import { useCommandRegistry } from "@/features/commands/commands";
+import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
+import {
+  DOTDIR_MONACO_EXECUTE_ACTION,
+  MONACO_QUICK_COMMAND_ACTION,
+  registerMonacoCommandContributions,
+  type MonacoCommandContribution,
+} from "@/features/extensions/builtins/monacoCommandBridge";
 import type { ColorThemeData, DotDirGlobalApi, EditorExtensionApi, EditorProps } from "@/features/extensions/extensionApi";
 
 interface MonacoEditorSurfaceProps {
@@ -12,6 +20,19 @@ interface MonacoEditorSurfaceProps {
   active?: boolean;
   onInteract?: () => void;
 }
+
+interface MonacoEditorSurfaceRuntime {
+  onCommandContributionsChange?: (commands: MonacoCommandContribution[]) => void;
+}
+
+type MonacoResolvedKeybindingLike = {
+  getUserSettingsLabel?: () => string | null;
+  hasMultipleChords?: () => boolean;
+};
+
+type MonacoStandaloneKeybindingServiceLike = {
+  lookupKeybinding: (commandId: string) => MonacoResolvedKeybindingLike | undefined;
+};
 
 class TMState implements Monaco.languages.IState {
   constructor(private readonly ruleStackValue: StateStack) {}
@@ -64,6 +85,33 @@ function stripLangSuffix(scope: string): string {
   const suffix = match[2]!.toLowerCase();
   if (!COMMON_SCOPE_SUFFIXES.has(suffix)) return scope;
   return match[1]!;
+}
+
+function getMonacoKeybindingService(
+  editor: Monaco.editor.IStandaloneCodeEditor,
+): MonacoStandaloneKeybindingServiceLike | null {
+  const candidate = (editor as Monaco.editor.IStandaloneCodeEditor & {
+    _standaloneKeybindingService?: unknown;
+  })._standaloneKeybindingService;
+
+  if (!candidate || typeof (candidate as { lookupKeybinding?: unknown }).lookupKeybinding !== "function") {
+    return null;
+  }
+
+  return candidate as MonacoStandaloneKeybindingServiceLike;
+}
+
+function toDotdirMonacoKeybinding(
+  resolvedKeybinding: MonacoResolvedKeybindingLike | undefined,
+): Pick<NonNullable<MonacoCommandContribution["keybinding"]>, "key" | "mac"> | undefined {
+  if (!resolvedKeybinding) return undefined;
+  if (resolvedKeybinding.hasMultipleChords?.()) return undefined;
+
+  const label = resolvedKeybinding.getUserSettingsLabel?.()?.trim().toLowerCase();
+  if (!label || /\s/.test(label)) return undefined;
+  if (label.includes("win+") || label.includes("meta+")) return undefined;
+
+  return { key: label };
 }
 
 function normalizeColor(value: unknown): string | null {
@@ -147,7 +195,7 @@ function buildMonacoTheme(themeData: ColorThemeData): { base: "vs" | "vs-dark"; 
   return { base, rules, colors };
 }
 
-function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensionApi {
+function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: MonacoEditorSurfaceRuntime): EditorExtensionApi {
   let editorInstance: Monaco.editor.IStandaloneCodeEditor | null = null;
   let rootEl: HTMLDivElement | null = null;
   let mounted = false;
@@ -168,6 +216,42 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
   let unmountFn: (() => void) | null = null;
   const grammarJsonCache = new Map<string, object | null>();
   const activatedTokenProviders = new Set<string>();
+
+  function publishEditorCommands(editor: Monaco.editor.IStandaloneCodeEditor | null): void {
+    if (!runtime?.onCommandContributionsChange) return;
+    if (!editor) {
+      runtime.onCommandContributionsChange([]);
+      return;
+    }
+
+    const commands: MonacoCommandContribution[] = [];
+    const keybindingService = getMonacoKeybindingService(editor);
+    const seenDisplaySignatures = new Set<string>();
+    for (const action of editor.getSupportedActions()) {
+      if (action.id.startsWith("dotdir.")) continue;
+      const title = action.label?.trim() || action.alias?.trim();
+      if (!title) continue;
+      const keybinding =
+        action.id === MONACO_QUICK_COMMAND_ACTION
+          ? undefined
+          : toDotdirMonacoKeybinding(keybindingService?.lookupKeybinding(action.id));
+      const displaySignature = [
+        title.toLowerCase(),
+        keybinding?.key ?? "",
+        keybinding?.mac ?? "",
+      ].join("\u0000");
+      if (seenDisplaySignatures.has(displaySignature)) continue;
+      seenDisplaySignatures.add(displaySignature);
+      commands.push({
+        command: action.id,
+        title,
+        palette: action.id !== MONACO_QUICK_COMMAND_ACTION,
+        keybinding,
+      });
+    }
+
+    runtime.onCommandContributionsChange(commands);
+  }
 
   async function ensureOnigurumaWasmLoaded(): Promise<void> {
     if (onigWasmLoadPromise) return onigWasmLoadPromise;
@@ -287,6 +371,17 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
     }
 
     editor.trigger("keyboard", "actions.find", {});
+  }
+
+  async function runEditorAction(editor: Monaco.editor.IStandaloneCodeEditor, actionId: string, payload?: unknown): Promise<void> {
+    if (actionId === "actions.find") {
+      await openFindWidget(editor);
+      return;
+    }
+
+    const action = editor.getAction(actionId);
+    if (!action?.isSupported()) return;
+    await action.run(payload);
   }
 
   async function ensureTextMateLanguage(props: EditorProps, targetLangId: string): Promise<void> {
@@ -508,6 +603,9 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
       selectionHighlight: true,
       occurrencesHighlight: "singleFile",
       tabCompletion: "on",
+      find: {
+        addExtraSpaceOnTop: false,
+      },
       fixedOverflowWidgets: true,
       overflowWidgetsDomNode: editorHost,
     });
@@ -554,14 +652,28 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
     disposeSaveCommand = null;
     disposeFindCommand?.();
     disposeFindCommand = null;
-    if (hostApi.commands) {
-      disposeSaveCommand = hostApi.commands.registerCommand("dotdir.save", async () => {
+    disposeSaveCommand = registerMountedExtensionCommandHandler(
+      "dotdir.save",
+      async () => {
         await save();
-      }).dispose;
-      disposeFindCommand = hostApi.commands.registerCommand("dotdir.find", async () => {
+      },
+      { isActive: () => editor.hasWidgetFocus() },
+    );
+    disposeFindCommand = registerMountedExtensionCommandHandler(
+      "dotdir.find",
+      async () => {
         await openFindWidget(editor);
-      }).dispose;
-    }
+      },
+      { isActive: () => editor.hasWidgetFocus() },
+    );
+    const disposeExecuteActionCommand = registerMountedExtensionCommandHandler(
+      DOTDIR_MONACO_EXECUTE_ACTION,
+      async (actionId, payload) => {
+        if (typeof actionId !== "string" || actionId.length === 0) return;
+        await runEditorAction(editor, actionId, payload);
+      },
+      { isActive: () => editor.hasWidgetFocus() },
+    );
 
     editor.onDidChangeModelContent(() => {
       if (dirty) return;
@@ -588,7 +700,6 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
     editor.addAction({
       id: "dotdir.save",
       label: "Save File",
-      keybindings: [monaco.KeyCode.F2],
       run: () => {
         void save();
       },
@@ -596,12 +707,12 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
     editor.addAction({
       id: "dotdir.close",
       label: "Close Editor",
-      keybindings: [monaco.KeyCode.Escape],
       run: () => {
         hostApi.onClose();
       },
     });
 
+    publishEditorCommands(editor);
     scheduleInitialViewportStabilization(editor);
     scheduleEditorFocus(editor);
 
@@ -623,6 +734,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
         disposeFindCommand();
         disposeFindCommand = null;
       }
+      disposeExecuteActionCommand();
       if (focusListener) focusListener();
       if (themeUnsubscribe) {
         themeUnsubscribe();
@@ -634,6 +746,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
       }
       editor.dispose();
       editorInstance = null;
+      publishEditorCommands(null);
       if (rootEl?.parentNode) rootEl.parentNode.removeChild(rootEl);
       rootEl = null;
     };
@@ -646,6 +759,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
     if (model) {
       monaco.editor.setModelLanguage(model, langId);
     }
+    publishEditorCommands(editorInstance);
   }
 
   function focusEditor(): void {
@@ -694,9 +808,33 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
 export function MonacoEditorSurface({ hostApi, props, active, onInteract }: MonacoEditorSurfaceProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const apiRef = useRef<EditorExtensionApi | null>(null);
+  const commandRegistry = useCommandRegistry();
+  const monacoCommandDisposerRef = useRef<(() => void) | null>(null);
+  const monacoCommandSignatureRef = useRef<string>("");
 
   if (!apiRef.current) {
-    apiRef.current = createMonacoEditorExtensionApi(hostApi);
+    apiRef.current = createMonacoEditorExtensionApi(hostApi, {
+      onCommandContributionsChange(commands) {
+        const nextSignature = commands
+          .slice()
+          .sort((left, right) => left.command.localeCompare(right.command))
+          .map((command) =>
+            [
+              command.command,
+              command.title,
+              command.shortTitle ?? "",
+              command.palette === false ? "0" : "1",
+              command.keybinding?.key ?? "",
+              command.keybinding?.mac ?? "",
+            ].join("\u0000"),
+          )
+          .join("\u0001");
+        if (nextSignature === monacoCommandSignatureRef.current) return;
+        monacoCommandSignatureRef.current = nextSignature;
+        monacoCommandDisposerRef.current?.();
+        monacoCommandDisposerRef.current = registerMonacoCommandContributions(commandRegistry, commands);
+      },
+    });
   }
 
   useEffect(() => {
@@ -715,6 +853,9 @@ export function MonacoEditorSurface({ hostApi, props, active, onInteract }: Mona
   useEffect(() => {
     const api = apiRef.current;
     return () => {
+      monacoCommandDisposerRef.current?.();
+      monacoCommandDisposerRef.current = null;
+      monacoCommandSignatureRef.current = "";
       void api?.unmount();
     };
   }, []);
