@@ -5,6 +5,7 @@ import {
   CLOSE_EDITOR,
   CLOSE_TAB,
   CLOSE_VIEWER,
+  DOTDIR_EDITOR_FIND,
   COMMANDLINE_COPY,
   COMMANDLINE_CUT,
   COMMANDLINE_EXECUTE,
@@ -111,6 +112,7 @@ const appBuiltInKeybindings: Keybinding[] = [
   // Close viewer/editor commands
   { command: CLOSE_VIEWER, key: "escape", when: "focusViewer" },
   { command: CLOSE_EDITOR, key: "escape", when: "focusEditor" },
+  { command: DOTDIR_EDITOR_FIND, key: "ctrl+f", mac: "cmd+f", when: "focusEditor" },
 
   // Exit command
   { command: DOTDIR_CLOSE_WINDOW, key: "f10", when: "supportsWindowManagement" },

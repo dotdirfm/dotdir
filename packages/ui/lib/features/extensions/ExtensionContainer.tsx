@@ -1103,11 +1103,13 @@ function useExtensionSurfaceFocus({
   inline,
   isVisible,
   isEditableTarget,
+  allowCommandRouting,
 }: {
   focusLayer: "viewer" | "editor";
   inline?: boolean;
   isVisible: boolean;
   isEditableTarget?: (node: EventTarget | null) => boolean;
+  allowCommandRouting?: boolean | ((event: KeyboardEvent) => boolean);
 }) {
   const focusContext = useFocusContext();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1130,8 +1132,9 @@ function useExtensionSurfaceFocus({
         return node instanceof Node ? root.contains(node) : false;
       },
       isEditableTarget,
+      allowCommandRouting,
     });
-  }, [focusContext, focusLayer, isEditableTarget, isVisible]);
+  }, [allowCommandRouting, focusContext, focusLayer, isEditableTarget, isVisible]);
 
   useEffect(() => {
     if (!inline) return;
@@ -1197,6 +1200,9 @@ export function ViewerContainer({
     focusLayer: "viewer",
     inline,
     isVisible,
+    allowCommandRouting(event) {
+      return event.ctrlKey || event.metaKey || /^F\d{1,2}$/.test(event.key) || event.key === "Escape";
+    },
   });
   const handleClose = useCallback(() => {
     onClose();
@@ -1347,6 +1353,9 @@ export function EditorContainer({
       if (!el) return false;
       const tag = el.tagName?.toLowerCase();
       return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
+    },
+    allowCommandRouting(event) {
+      return event.ctrlKey || event.metaKey || /^F\d{1,2}$/.test(event.key) || event.key === "Escape";
     },
   });
   const handleClose = useCallback(() => {

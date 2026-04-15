@@ -20,6 +20,7 @@ import {
   CLOSE_TAB,
   CLOSE_VIEWER,
   DOTDIR_CANCEL_NAVIGATION,
+  DOTDIR_EDITOR_FIND,
   DOTDIR_CLOSE_WINDOW,
   DOTDIR_EXIT,
   DOTDIR_FOCUS_LEFT_PANEL,
@@ -45,6 +46,7 @@ import { useCommandRegistry } from "@/features/commands/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
 import { runCommandSequence, type RunCommandsArgs } from "@/features/commands/runCommands";
 import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
+import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
@@ -327,6 +329,11 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     disposables.push(commandRegistry.registerCommand(SHOW_COMMAND_PALETTE, () => setCommandPaletteOpen((o) => !o)));
     disposables.push(commandRegistry.registerCommand(CLOSE_VIEWER, () => depsRef.current.onRequestCloseViewer()));
     disposables.push(commandRegistry.registerCommand(CLOSE_EDITOR, () => depsRef.current.onRequestCloseEditor()));
+    disposables.push(
+      commandRegistry.registerCommand(DOTDIR_EDITOR_FIND, async () => {
+        await executeMountedExtensionCommand("dotdir.find", []);
+      }),
+    );
 
     // ── Navigation ────────────────────────────────────────────────────────────
 

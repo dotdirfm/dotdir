@@ -155,8 +155,9 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
   let monacoCssReady = false;
   let focusListener: (() => void) | null = null;
   let disposeSaveCommand: (() => void) | null = null;
+  let disposeFindCommand: (() => void) | null = null;
   let monacoModule: typeof Monaco | null = null;
-  let monacoModulePromise: Promise<typeof import("monaco-editor/esm/vs/editor/editor.api.js")> | null = null;
+  let monacoModulePromise: Promise<typeof import("monaco-editor/esm/vs/editor/editor.main.js")> | null = null;
   let textMateModulePromise: Promise<typeof import("vscode-textmate")> | null = null;
   let onigurumaModulePromise: Promise<typeof import("vscode-oniguruma")> | null = null;
   let onigWasmLoadPromise: Promise<void> | null = null;
@@ -187,7 +188,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
 
   async function ensureMonacoModule(): Promise<typeof Monaco> {
     if (monacoModule) return monacoModule;
-    const loaded = await (monacoModulePromise ??= import("monaco-editor/esm/vs/editor/editor.api.js"));
+    const loaded = await (monacoModulePromise ??= import("monaco-editor/esm/vs/editor/editor.main.js"));
     monacoModule = loaded;
     return loaded;
   }
@@ -205,28 +206,6 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
       // ignore
     }
     editor.focus();
-    const domNode = editor.getDomNode();
-    if (!domNode) return;
-    try {
-      if (domNode.tabIndex < 0) {
-        domNode.tabIndex = 0;
-      }
-      domNode.focus();
-    } catch {
-      // ignore
-    }
-    const target = domNode.querySelector("textarea.inputarea, textarea, [contenteditable='true']");
-    if (target instanceof HTMLElement) {
-      try {
-        target.focus();
-        if (target instanceof HTMLTextAreaElement) {
-          const end = target.value.length;
-          target.setSelectionRange(end, end);
-        }
-      } catch {
-        // ignore
-      }
-    }
   }
 
   function stabilizeInitialViewport(editor: Monaco.editor.IStandaloneCodeEditor | null): void {
@@ -260,6 +239,54 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
     setTimeout(run, 0);
     setTimeout(run, 50);
     setTimeout(run, 150);
+  }
+
+  async function openFindWidget(editor: Monaco.editor.IStandaloneCodeEditor): Promise<void> {
+    focusEditorDomTarget(editor);
+    editor.layout();
+
+    const findController = editor.getContribution("editor.contrib.findController") as
+      | {
+          start?: (
+            opts: {
+              forceRevealReplace: boolean;
+              seedSearchStringFromSelection: "none" | "single" | "multiple";
+              seedSearchStringFromNonEmptySelection: boolean;
+              seedSearchStringFromGlobalClipboard: boolean;
+              shouldFocus: 0 | 1 | 2;
+              shouldAnimate: boolean;
+              updateSearchScope: boolean;
+              loop: boolean;
+            },
+            newState?: Record<string, unknown>,
+          ) => Promise<void> | void;
+        }
+      | null;
+
+    if (findController?.start) {
+      await findController.start(
+        {
+          forceRevealReplace: false,
+          seedSearchStringFromSelection: "single",
+          seedSearchStringFromNonEmptySelection: false,
+          seedSearchStringFromGlobalClipboard: false,
+          shouldFocus: 1,
+          shouldAnimate: false,
+          updateSearchScope: false,
+          loop: true,
+        },
+        {},
+      );
+      return;
+    }
+
+    const action = editor.getAction("actions.find");
+    if (action) {
+      await action.run();
+      return;
+    }
+
+    editor.trigger("keyboard", "actions.find", {});
   }
 
   async function ensureTextMateLanguage(props: EditorProps, targetLangId: string): Promise<void> {
@@ -452,7 +479,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
     root.className = isDark ? "dotdir-dark" : "dotdir-light";
 
     const editorHost = document.createElement("div");
-    editorHost.style.cssText = "flex:1;min-height:0;width:100%;overflow:hidden;";
+    editorHost.style.cssText = "position:relative;flex:1;min-height:0;width:100%;overflow:hidden;";
     editorHost.dataset.dotdirFocusTarget = "true";
     root.appendChild(editorHost);
     rootEl = editorHost;
@@ -470,6 +497,19 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
       wordWrap: "off",
       tabSize: 4,
       insertSpaces: true,
+      quickSuggestions: {
+        other: true,
+        comments: true,
+        strings: true,
+      },
+      quickSuggestionsDelay: 120,
+      wordBasedSuggestions: "currentDocument",
+      suggestOnTriggerCharacters: true,
+      selectionHighlight: true,
+      occurrencesHighlight: "singleFile",
+      tabCompletion: "on",
+      fixedOverflowWidgets: true,
+      overflowWidgetsDomNode: editorHost,
     });
     editorInstance = editor;
 
@@ -512,9 +552,14 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
 
     disposeSaveCommand?.();
     disposeSaveCommand = null;
+    disposeFindCommand?.();
+    disposeFindCommand = null;
     if (hostApi.commands) {
       disposeSaveCommand = hostApi.commands.registerCommand("dotdir.save", async () => {
         await save();
+      }).dispose;
+      disposeFindCommand = hostApi.commands.registerCommand("dotdir.find", async () => {
+        await openFindWidget(editor);
       }).dispose;
     }
 
@@ -524,6 +569,22 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
       hostApi.setDirty?.(true);
     });
 
+    editor.addAction({
+      id: "dotdir.find",
+      label: "Find",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF],
+      run: () => {
+        return openFindWidget(editor);
+      },
+    });
+    editor.addAction({
+      id: "dotdir.triggerSuggest",
+      label: "Trigger Suggest",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Space],
+      run: () => {
+        editor.trigger("keyboard", "editor.action.triggerSuggest", {});
+      },
+    });
     editor.addAction({
       id: "dotdir.save",
       label: "Save File",
@@ -557,6 +618,10 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi): EditorExtensi
       if (disposeSaveCommand) {
         disposeSaveCommand();
         disposeSaveCommand = null;
+      }
+      if (disposeFindCommand) {
+        disposeFindCommand();
+        disposeFindCommand = null;
       }
       if (focusListener) focusListener();
       if (themeUnsubscribe) {

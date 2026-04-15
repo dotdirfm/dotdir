@@ -22,6 +22,7 @@ import {
     DELETE_LEFT,
     DELETE_RIGHT,
     DOTDIR_CANCEL_NAVIGATION,
+    DOTDIR_EDITOR_FIND,
     DOTDIR_CLOSE_WINDOW,
     DOTDIR_EXIT,
     DOTDIR_FOCUS_LEFT_PANEL,
@@ -90,6 +91,7 @@ export const builtInCommandContributions: CommandContribution[] = [
   { command: SHOW_COMMAND_PALETTE, title: "Show All Commands", category: "View" },
   { command: CLOSE_VIEWER, title: "Close Viewer", category: "View" },
   { command: CLOSE_EDITOR, title: "Close Editor", category: "View" },
+  { command: DOTDIR_EDITOR_FIND, title: "Find in Editor", category: "View", when: "focusEditor" },
 
   // ── Navigation ────────────────────────────────────────────────────────────
   { command: SWITCH_PANEL, title: "Switch Panel", category: "Navigation" },

@@ -6,6 +6,7 @@ export const SHOW_FIND_FILES = "showFindFiles";
 export const SHOW_COMMAND_PALETTE = "showCommandPalette";
 export const CLOSE_VIEWER = "closeViewer";
 export const CLOSE_EDITOR = "closeEditor";
+export const DOTDIR_EDITOR_FIND = "dotdir.editorFind";
 
 export const SWITCH_PANEL = "switchPanel";
 export const DOTDIR_FOCUS_LEFT_PANEL = "dotdir.focusLeftPanel";
