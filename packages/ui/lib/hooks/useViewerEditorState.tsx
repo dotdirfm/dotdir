@@ -282,6 +282,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
     if (topDialogType === "findFilesResults") {
       showDialog({
         type: "viewer",
+        contributionId: viewerResolved.contribution.id,
         extensionDirPath: viewerResolved.extensionDirPath,
         entry: viewerResolved.contribution.entry,
         props: {
@@ -300,6 +301,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
     }
 
     const desiredViewer = {
+      contributionId: viewerResolved.contribution.id,
       extensionDirPath: viewerResolved.extensionDirPath,
       entry: viewerResolved.contribution.entry,
       filePath: viewerFile.path,
@@ -313,6 +315,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
 
     replaceDialog({
       type: "viewer",
+      contributionId: desiredViewer.contributionId,
       extensionDirPath: desiredViewer.extensionDirPath,
       entry: desiredViewer.entry,
       props: {
@@ -349,6 +352,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
     if (topDialogType === "findFilesResults") {
       showDialog({
         type: "editor",
+        contributionId: editorResolved.contribution.id,
         extensionDirPath: editorResolved.extensionDirPath,
         entry: editorResolved.contribution.entry,
         props: {
@@ -367,6 +371,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
     }
 
     const desiredEditor = {
+      contributionId: editorResolved.contribution.id,
       extensionDirPath: editorResolved.extensionDirPath,
       entry: editorResolved.contribution.entry,
       filePath: editorFile.path,
@@ -380,6 +385,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
 
     replaceDialog({
       type: "editor",
+      contributionId: desiredEditor.contributionId,
       extensionDirPath: desiredEditor.extensionDirPath,
       entry: desiredEditor.entry,
       props: {

@@ -147,6 +147,7 @@ export type DialogSpec =
   | {
       type: "viewer";
       surfaceKey?: string;
+      contributionId?: string;
       extensionDirPath: string;
       entry: string;
       props: ViewerProps;
@@ -156,6 +157,7 @@ export type DialogSpec =
   | {
       type: "editor";
       surfaceKey?: string;
+      contributionId?: string;
       extensionDirPath: string;
       entry: string;
       props: EditorProps;
@@ -556,6 +558,7 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue, stackI
     case "viewer":
       return (
         <ViewerContainer
+          contributionId={dialog.contributionId}
           extensionDirPath={dialog.extensionDirPath}
           entry={dialog.entry}
           filePath={dialog.props.filePath}
@@ -569,6 +572,7 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue, stackI
     case "editor":
       return (
         <EditorContainer
+          contributionId={dialog.contributionId}
           extensionDirPath={dialog.extensionDirPath}
           entry={dialog.entry}
           filePath={dialog.props.filePath}
@@ -589,6 +593,7 @@ function renderExtensionDialogSurface(dialog: ExtensionDialogSpec, visible: bool
     return (
       <ViewerContainer
         key={dialog.surfaceKey}
+        contributionId={dialog.contributionId}
         extensionDirPath={dialog.extensionDirPath}
         entry={dialog.entry}
         filePath={dialog.props.filePath}
@@ -605,6 +610,7 @@ function renderExtensionDialogSurface(dialog: ExtensionDialogSpec, visible: bool
   return (
     <EditorContainer
       key={dialog.surfaceKey}
+      contributionId={dialog.contributionId}
       extensionDirPath={dialog.extensionDirPath}
       entry={dialog.entry}
       filePath={dialog.props.filePath}
