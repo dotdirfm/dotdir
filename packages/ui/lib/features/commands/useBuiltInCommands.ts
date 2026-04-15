@@ -19,6 +19,16 @@ import {
   CLOSE_EDITOR,
   CLOSE_TAB,
   CLOSE_VIEWER,
+  CURSOR_DOWN,
+  CURSOR_END,
+  CURSOR_HOME,
+  CURSOR_LEFT,
+  CURSOR_PAGE_DOWN,
+  CURSOR_PAGE_UP,
+  CURSOR_RIGHT,
+  CURSOR_UP,
+  CURSOR_WORD_LEFT,
+  CURSOR_WORD_RIGHT,
   DOTDIR_CANCEL_NAVIGATION,
   DOTDIR_EDITOR_FIND,
   DOTDIR_EDITOR_SAVE,
@@ -34,6 +44,17 @@ import {
   PASTE_LEFT_PANEL_PATH,
   PASTE_RIGHT_PANEL_PATH,
   RUN_COMMANDS,
+  SELECT_ALL,
+  SELECT_DOWN,
+  SELECT_END,
+  SELECT_HOME,
+  SELECT_LEFT,
+  SELECT_PAGE_DOWN,
+  SELECT_PAGE_UP,
+  SELECT_RIGHT,
+  SELECT_UP,
+  SELECT_WORD_LEFT,
+  SELECT_WORD_RIGHT,
   SHELL_EXECUTE,
   SHOW_COMMAND_PALETTE,
   SHOW_EXTENSIONS,
@@ -174,6 +195,18 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
   useEffect(() => {
     const disposables: Array<() => void> = [];
+    const isEditorFocusActive = () => focusContextRef.current.is("editor");
+    const registerEditorMovementCommand = (commandId: string, monacoCommandId: string) => {
+      disposables.push(
+        commandRegistry.registerCommand(
+          commandId,
+          async () => {
+            await executeMountedExtensionCommand(DOTDIR_MONACO_EXECUTE_ACTION, [monacoCommandId]);
+          },
+          { isActive: isEditorFocusActive },
+        ),
+      );
+    };
 
     const closePreviewOnSide = async (side: "left" | "right"): Promise<boolean> => {
       const activePreview = side === "left" ? leftActiveTabRef.current : rightActiveTabRef.current;
@@ -341,6 +374,27 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         await executeMountedExtensionCommand(DOTDIR_MONACO_EXECUTE_ACTION, ["actions.find"]);
       }),
     );
+    registerEditorMovementCommand(CURSOR_UP, "cursorUp");
+    registerEditorMovementCommand(CURSOR_DOWN, "cursorDown");
+    registerEditorMovementCommand(CURSOR_LEFT, "cursorLeft");
+    registerEditorMovementCommand(CURSOR_RIGHT, "cursorRight");
+    registerEditorMovementCommand(CURSOR_HOME, "cursorHome");
+    registerEditorMovementCommand(CURSOR_END, "cursorEnd");
+    registerEditorMovementCommand(CURSOR_PAGE_UP, "cursorPageUp");
+    registerEditorMovementCommand(CURSOR_PAGE_DOWN, "cursorPageDown");
+    registerEditorMovementCommand(CURSOR_WORD_LEFT, "cursorWordLeft");
+    registerEditorMovementCommand(CURSOR_WORD_RIGHT, "cursorWordRight");
+    registerEditorMovementCommand(SELECT_UP, "cursorUpSelect");
+    registerEditorMovementCommand(SELECT_DOWN, "cursorDownSelect");
+    registerEditorMovementCommand(SELECT_LEFT, "cursorLeftSelect");
+    registerEditorMovementCommand(SELECT_RIGHT, "cursorRightSelect");
+    registerEditorMovementCommand(SELECT_HOME, "cursorHomeSelect");
+    registerEditorMovementCommand(SELECT_END, "cursorEndSelect");
+    registerEditorMovementCommand(SELECT_PAGE_UP, "cursorPageUpSelect");
+    registerEditorMovementCommand(SELECT_PAGE_DOWN, "cursorPageDownSelect");
+    registerEditorMovementCommand(SELECT_WORD_LEFT, "cursorWordLeftSelect");
+    registerEditorMovementCommand(SELECT_WORD_RIGHT, "cursorWordRightSelect");
+    registerEditorMovementCommand(SELECT_ALL, "editor.action.selectAll");
 
     // ── Navigation ────────────────────────────────────────────────────────────
 

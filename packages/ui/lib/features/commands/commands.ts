@@ -54,12 +54,16 @@ export interface KeybindingContribution {
 export type KeybindingLayer = "default" | "extension" | "user";
 
 type CommandHandler = (...args: unknown[]) => void | Promise<void>;
+type RegisteredCommandHandler = {
+  handler: CommandHandler;
+  isActive?: () => boolean;
+};
 type ContextGetter = () => Record<string, unknown>;
 type ResolvedKeybinding = Keybinding & { normalizedKey: string };
 
 export class CommandRegistry {
   private contributions = new Map<string, CommandContribution>();
-  private handlers = new Map<string, CommandHandler[]>();
+  private handlers = new Map<string, RegisteredCommandHandler[]>();
   private keybindingLayers: Record<KeybindingLayer, Keybinding[]> = {
     default: [],
     extension: [],
@@ -112,18 +116,19 @@ export class CommandRegistry {
     };
   }
 
-  registerCommand(id: string, handler: CommandHandler): () => void {
+  registerCommand(id: string, handler: CommandHandler, options?: { isActive?: () => boolean }): () => void {
     const handlers = this.handlers.get(id);
+    const entry: RegisteredCommandHandler = { handler, isActive: options?.isActive };
     if (handlers) {
-      handlers.push(handler);
+      handlers.push(entry);
     } else {
-      this.handlers.set(id, [handler]);
+      this.handlers.set(id, [entry]);
     }
     this.notifyListeners();
     return () => {
       const registered = this.handlers.get(id);
       if (!registered) return;
-      const idx = registered.indexOf(handler);
+      const idx = registered.indexOf(entry);
       if (idx < 0) return;
       registered.splice(idx, 1);
       if (registered.length === 0) {
@@ -169,12 +174,20 @@ export class CommandRegistry {
       return;
     }
 
-    const selected = registrations[registrations.length - 1];
+    const selected =
+      [...registrations].reverse().find((entry) => {
+        if (!entry.isActive) return false;
+        try {
+          return entry.isActive();
+        } catch {
+          return false;
+        }
+      }) ?? registrations[registrations.length - 1];
     if (!selected) return;
 
     console.log("[dotdir:command]", id, ...args);
     try {
-      await selected(...args);
+      await selected.handler(...args);
     } catch (err) {
       console.error(`Command ${id} failed:`, err);
     }

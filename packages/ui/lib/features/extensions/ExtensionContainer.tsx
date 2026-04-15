@@ -1359,10 +1359,25 @@ export function EditorContainer({
         const el = node as HTMLElement | null;
         return Boolean(el?.closest?.(".editor-widget"));
       };
+      const isEditorNavigationKey =
+        event.key === "ArrowUp" ||
+        event.key === "ArrowDown" ||
+        event.key === "ArrowLeft" ||
+        event.key === "ArrowRight" ||
+        event.key === "Home" ||
+        event.key === "End" ||
+        event.key === "PageUp" ||
+        event.key === "PageDown";
       if (event.key === "Escape") {
         if (isMonacoEditorWidgetTarget(event.target) || isMonacoEditorWidgetTarget(document.activeElement)) {
           return false;
         }
+      }
+      if (isEditorNavigationKey) {
+        if (isMonacoEditorWidgetTarget(event.target) || isMonacoEditorWidgetTarget(document.activeElement)) {
+          return false;
+        }
+        return true;
       }
       return event.ctrlKey || event.metaKey || event.altKey || /^F\d{1,2}$/.test(event.key) || event.key === "Escape";
     },

@@ -380,8 +380,12 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
     }
 
     const action = editor.getAction(actionId);
-    if (!action?.isSupported()) return;
-    await action.run(payload);
+    if (action?.isSupported()) {
+      await action.run(payload);
+      return;
+    }
+
+    editor.trigger("keyboard", actionId, payload && typeof payload === "object" ? payload : {});
   }
 
   async function ensureTextMateLanguage(props: EditorProps, targetLangId: string): Promise<void> {
