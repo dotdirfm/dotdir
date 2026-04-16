@@ -115,6 +115,7 @@ const appBuiltInKeybindings: Keybinding[] = [
   // Close viewer/editor commands
   { command: CLOSE_VIEWER, key: "escape", when: "focusViewer" },
   { command: CLOSE_EDITOR, key: "escape", when: "focusEditor" },
+  { command: DOTDIR_EDITOR_SAVE, key: "f2", when: "focusEditor" },
   { command: DOTDIR_EDITOR_SAVE, key: "ctrl+s", mac: "cmd+s", when: "focusEditor" },
   { command: CURSOR_UP, key: "up", when: "focusEditor" },
   { command: CURSOR_DOWN, key: "down", when: "focusEditor" },

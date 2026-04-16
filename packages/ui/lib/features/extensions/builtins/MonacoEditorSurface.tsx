@@ -217,6 +217,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
   let unmountFn: (() => void) | null = null;
   const grammarJsonCache = new Map<string, object | null>();
   const activatedTokenProviders = new Set<string>();
+  const reservedDotdirEditorKeys = new Set(["f1", "ctrl+f1", "cmd+f1", "f2", "ctrl+s", "cmd+s"]);
 
   function publishEditorCommands(editor: Monaco.editor.IStandaloneCodeEditor | null): void {
     if (!runtime?.onCommandContributionsChange) return;
@@ -236,10 +237,14 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
         action.id === MONACO_QUICK_COMMAND_ACTION
           ? undefined
           : toDotdirMonacoKeybinding(keybindingService?.lookupKeybinding(action.id));
+      const sanitizedKeybinding =
+        keybinding && !reservedDotdirEditorKeys.has(keybinding.key) && !(keybinding.mac && reservedDotdirEditorKeys.has(keybinding.mac))
+          ? keybinding
+          : undefined;
       const displaySignature = [
         title.toLowerCase(),
-        keybinding?.key ?? "",
-        keybinding?.mac ?? "",
+        sanitizedKeybinding?.key ?? "",
+        sanitizedKeybinding?.mac ?? "",
       ].join("\u0000");
       if (seenDisplaySignatures.has(displaySignature)) continue;
       seenDisplaySignatures.add(displaySignature);
@@ -247,7 +252,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
         command: action.id,
         title,
         palette: action.id !== MONACO_QUICK_COMMAND_ACTION,
-        keybinding,
+        keybinding: sanitizedKeybinding,
       });
     }
 

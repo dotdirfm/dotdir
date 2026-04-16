@@ -17,6 +17,24 @@ import {
 } from "@/features/extensions/types";
 import { createContext, createElement, useContext, useRef, useSyncExternalStore, type ReactNode } from "react";
 
+const BUILTIN_EXTENSION_DIR_PATH = "__dotdir_builtin__";
+
+const BUILTIN_FILE_VIEWER: ExtensionViewerContribution = {
+  id: "file-viewer",
+  label: "File Viewer",
+  patterns: ["*"],
+  entry: "builtins/file-viewer",
+  priority: -10_000,
+};
+
+const BUILTIN_MONACO_EDITOR: ExtensionEditorContribution = {
+  id: "monaco",
+  label: "Monaco Editor",
+  patterns: ["*"],
+  entry: "builtins/monaco",
+  priority: -10_000,
+};
+
 export interface ResolvedViewer {
   contribution: ExtensionViewerContribution;
   extensionDirPath: string;
@@ -152,6 +170,10 @@ export class ViewerEditorRegistryManager {
   private version = 0;
   private listeners = new Set<RegistryListener>();
 
+  constructor() {
+    this.registerBuiltIns();
+  }
+
   subscribe(listener: RegistryListener): () => void {
     this.listeners.add(listener);
     return () => {
@@ -163,10 +185,16 @@ export class ViewerEditorRegistryManager {
     return this.version;
   }
 
+  private registerBuiltIns(): void {
+    this.viewerRegistry.register(BUILTIN_FILE_VIEWER, BUILTIN_EXTENSION_DIR_PATH);
+    this.editorRegistry.register(BUILTIN_MONACO_EDITOR, BUILTIN_EXTENSION_DIR_PATH);
+  }
+
   replaceExtensions(extensions: LoadedExtension[]): void {
     this.viewerRegistry.clear();
     this.editorRegistry.clear();
     this.fsProviderRegistry.clear();
+    this.registerBuiltIns();
 
     for (const ext of extensions) {
       for (const viewer of extensionViewers(ext)) {
