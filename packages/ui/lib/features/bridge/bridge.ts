@@ -261,6 +261,7 @@ export interface Bridge {
     getMountedRoots(): Promise<string[]>;
     getAppDirs(): Promise<AppDirs>;
     getEnv(): Promise<Record<string, string>>;
+    debugLog?(message: string): Promise<void>;
     openExternal?(url: string): Promise<void>;
   };
   systemTheme: {

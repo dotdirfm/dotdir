@@ -6,6 +6,7 @@ import onigWasmUrl from "vscode-oniguruma/release/onig.wasm?url";
 import { useEffect, useRef } from "react";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
+import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import {
   DOTDIR_MONACO_EXECUTE_ACTION,
   MONACO_QUICK_COMMAND_ACTION,
@@ -205,9 +206,9 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
   let disposeSaveCommand: (() => void) | null = null;
   let disposeFindCommand: (() => void) | null = null;
   let monacoModule: typeof Monaco | null = null;
-  let monacoModulePromise: Promise<typeof import("monaco-editor/esm/vs/editor/editor.main.js")> | null = null;
-  let textMateModulePromise: Promise<typeof import("vscode-textmate")> | null = null;
-  let onigurumaModulePromise: Promise<typeof import("vscode-oniguruma")> | null = null;
+  let monacoModulePromise: Promise<any> | null = null;
+  let textMateModulePromise: Promise<any> | null = null;
+  let onigurumaModulePromise: Promise<any> | null = null;
   let onigWasmLoadPromise: Promise<void> | null = null;
   let themeUnsubscribe: (() => void) | null = null;
   let cssVarThemeObserver: MutationObserver | null = null;
@@ -457,7 +458,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
       tokenize: (line: string, state: Monaco.languages.IState) => {
         const tmState = state as TMState;
         const result = grammar.tokenizeLine(line, tmState.ruleStack);
-        const tokens: Monaco.languages.IToken[] = result.tokens.map((token) => ({
+        const tokens: Monaco.languages.IToken[] = result.tokens.map((token: { startIndex: number; scopes: string[] }) => ({
           startIndex: token.startIndex,
           scopes: stripLangSuffix(token.scopes[token.scopes.length - 1] ?? "source"),
         }));
@@ -813,8 +814,10 @@ export function MonacoEditorSurface({ hostApi, props, active, onInteract }: Mona
   const rootRef = useRef<HTMLDivElement | null>(null);
   const apiRef = useRef<EditorExtensionApi | null>(null);
   const commandRegistry = useCommandRegistry();
+  const extensionHost = useExtensionHostClient();
   const monacoCommandDisposerRef = useRef<(() => void) | null>(null);
   const monacoCommandSignatureRef = useRef<string>("");
+  const activatedLanguageEventsRef = useRef(new Set<string>());
 
   if (!apiRef.current) {
     apiRef.current = createMonacoEditorExtensionApi(hostApi, {
@@ -847,6 +850,18 @@ export function MonacoEditorSurface({ hostApi, props, active, onInteract }: Mona
     if (!root || !api) return;
     void api.mount(root, props);
   }, [props]);
+
+  useEffect(() => {
+    const langId = String(props.langId ?? "").trim();
+    if (!langId) return;
+    const event = `onLanguage:${langId}`;
+    if (activatedLanguageEventsRef.current.has(event)) return;
+    activatedLanguageEventsRef.current.add(event);
+    void extensionHost.activateByEvent(event).catch((error) => {
+      console.warn(`[ExtHost] Failed to activate language event ${event}`, error);
+      activatedLanguageEventsRef.current.delete(event);
+    });
+  }, [extensionHost, props.langId]);
 
   useEffect(() => {
     const api = apiRef.current;

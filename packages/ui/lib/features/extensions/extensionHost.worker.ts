@@ -140,6 +140,7 @@ interface ExtensionManifest {
    * If present, the host will load it and call exported `activate()` / `deactivate()`.
    */
   browser?: string;
+  type?: string;
   contributes?: ExtensionContributions;
 }
 
@@ -237,6 +238,15 @@ type BrowserExtensionModule = {
   };
 };
 
+function emitActivationLog(
+  level: "info" | "warn" | "error",
+  extension: string,
+  message: string,
+  event?: string,
+): void {
+  self.postMessage({ type: "activationLog", level, extension, event, message });
+}
+
 function readTextFile(path: string): Promise<string | null> {
   return new Promise((resolve, reject) => {
     const id = nextRequestId++;
@@ -249,6 +259,31 @@ function activationKey(ext: WorkerLoadedExtension): string {
   return `${ext.ref.publisher}.${ext.ref.name}.${ext.ref.version}`;
 }
 
+function encodePathPreservingSlashes(path: string): string {
+  return path
+    .split("/")
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+}
+
+function windowsDrivePathToSlashSegments(path: string): string {
+  const s = path.replace(/\\/g, "/");
+  return s.replace(/(^|\/)([A-Za-z]):(?=\/|$)/g, "$1$2/");
+}
+
+function extensionScriptVfsUrl(absPath: string): string {
+  const normalized = absPath.replace(/\\/g, "/");
+  const withLeading = normalized.startsWith("/") ? normalized : `/${normalized}`;
+  const vfsPath = `/_ext${withLeading}`;
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const isWindows = /Windows/i.test(ua);
+  if (isWindows) {
+    const forUrl = windowsDrivePathToSlashSegments(vfsPath);
+    return `http://vfs.localhost${encodePathPreservingSlashes(forUrl)}`;
+  }
+  return `vfs://vfs${encodePathPreservingSlashes(vfsPath)}`;
+}
+
 function extensionWantsEvent(ext: WorkerLoadedExtension, event: string): boolean {
   const events = ext.manifest.activationEvents ?? [];
   if (events.length === 0) {
@@ -257,18 +292,95 @@ function extensionWantsEvent(ext: WorkerLoadedExtension, event: string): boolean
   return events.includes("*") || events.includes(event);
 }
 
-async function importBrowserModule(absScriptPath: string): Promise<BrowserExtensionModule> {
+async function importBrowserModuleEsm(absScriptPath: string): Promise<BrowserExtensionModule> {
+  const moduleUrl = extensionScriptVfsUrl(absScriptPath);
+  const mod = await import(/* @vite-ignore */ moduleUrl);
+  return mod as BrowserExtensionModule;
+}
+
+async function importBrowserModuleCjs(absScriptPath: string): Promise<BrowserExtensionModule> {
   const script = await readTextFile(absScriptPath);
   if (script == null) {
     throw new Error(`Browser script not found: ${absScriptPath}`);
   }
-  const blobUrl = URL.createObjectURL(new Blob([script], { type: "text/javascript" }));
+  const cjsWrapper = `
+const __dotdir_vscode = globalThis.__dotdir_vscode_api;
+const module = { exports: {} };
+const exports = module.exports;
+const require = (id) => {
+  if (id === "vscode") return __dotdir_vscode;
+  throw new Error("Unsupported browser require: " + id);
+};
+(function(module, exports, require, globalThis, self){
+${script}
+})(module, exports, require, globalThis, self);
+const __exp = module.exports && module.exports.__esModule && module.exports.default ? module.exports.default : module.exports;
+export default __exp;
+export const activate = __exp?.activate;
+export const deactivate = __exp?.deactivate;
+`;
+  const cjsBlobUrl = URL.createObjectURL(new Blob([cjsWrapper], { type: "text/javascript" }));
   try {
-    const mod = await import(/* @vite-ignore */ blobUrl);
+    const mod = await import(/* @vite-ignore */ cjsBlobUrl);
     return mod as BrowserExtensionModule;
   } finally {
-    URL.revokeObjectURL(blobUrl);
+    URL.revokeObjectURL(cjsBlobUrl);
   }
+}
+
+async function resolveBrowserScriptPath(absScriptPath: string): Promise<string> {
+  const candidates = [
+    absScriptPath,
+    `${absScriptPath}.js`,
+    `${absScriptPath}.mjs`,
+    join(absScriptPath, "index.js"),
+    join(absScriptPath, "index.mjs"),
+  ];
+  for (const candidate of candidates) {
+    const content = await readTextFile(candidate);
+    if (content != null) return candidate;
+  }
+  return absScriptPath;
+}
+
+function createVscodeApi(dotdirCommands: BrowserExtensionContext["dotdir"]["commands"], extensionKey: string): unknown {
+  const commands = {
+    registerCommand: (commandId: string, handler: (...args: unknown[]) => unknown) => {
+      emitActivationLog("info", extensionKey, `vscode.commands.registerCommand ${commandId}`);
+      return dotdirCommands.registerCommand(commandId, (...args: unknown[]) => {
+        void handler(...args);
+      });
+    },
+    executeCommand: async (commandId: string, ...args: unknown[]) => {
+      emitActivationLog("info", extensionKey, `vscode.commands.executeCommand ${commandId}`);
+      await runCommand(commandId, args);
+      return undefined;
+    },
+  };
+  const window = {
+    showInformationMessage: async (message: string) => {
+      emitActivationLog("info", extensionKey, `vscode.window.showInformationMessage ${message}`);
+      return undefined;
+    },
+    showWarningMessage: async (message: string) => {
+      emitActivationLog("warn", extensionKey, `vscode.window.showWarningMessage ${message}`);
+      return undefined;
+    },
+    showErrorMessage: async (message: string) => {
+      emitActivationLog("error", extensionKey, `vscode.window.showErrorMessage ${message}`);
+      return undefined;
+    },
+  };
+  const Disposable = class {
+    static from(...disposables: Array<{ dispose: () => void }>): { dispose: () => void } {
+      return {
+        dispose: () => {
+          for (const disposable of disposables) disposable.dispose();
+        },
+      };
+    }
+  };
+  return { commands, window, Disposable };
 }
 
 async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
@@ -278,7 +390,16 @@ async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
 
   const relScript = normalizePath(ext.manifest.browser).replace(/^\/+/, "");
   const absScriptPath = join(ext.dirPath, relScript);
-  const mod = await importBrowserModule(absScriptPath);
+  const resolvedScriptPath = await resolveBrowserScriptPath(absScriptPath);
+  const isEsm = String(ext.manifest.type ?? "").trim().toLowerCase() === "module";
+  emitActivationLog(
+    "info",
+    key,
+    `loading browser script ${resolvedScriptPath} via ${isEsm ? extensionScriptVfsUrl(resolvedScriptPath) : "cjs-wrapper"}`,
+  );
+  const mod = isEsm
+    ? await importBrowserModuleEsm(resolvedScriptPath)
+    : await importBrowserModuleCjs(resolvedScriptPath);
   const activate = mod.activate ?? mod.default?.activate;
   const deactivate = mod.deactivate ?? mod.default?.deactivate;
   if (typeof activate !== "function") {
@@ -310,8 +431,14 @@ async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
     dotdir,
   };
 
+  const vscodeApi = createVscodeApi(dotdir.commands, key);
+  (self as unknown as { __dotdir_vscode_api?: unknown }).__dotdir_vscode_api = vscodeApi;
+  (self as unknown as { vscode?: unknown }).vscode = vscodeApi;
+  emitActivationLog("info", key, "vscode shim installed");
+
   (self as unknown as { dotdir?: unknown }).dotdir = dotdir;
   await activate(ctx);
+  emitActivationLog("info", key, "activated");
   activeExtensions.set(key, { subscriptions: localDisposables, deactivate });
 }
 
@@ -323,6 +450,8 @@ async function activateByEvent(event: string): Promise<void> {
       await activateExtension(ext);
     } catch (err) {
       console.error("[ExtHost] activate failed:", activationKey(ext), err);
+      const message = err instanceof Error ? err.message : String(err);
+      emitActivationLog("error", activationKey(ext), message, event);
     }
   }
 }

@@ -52,7 +52,7 @@ use std::{
 
 use tokio::sync::mpsc;
 
-use crate::FsEntry;
+use crate::{FsEntry, write_debug_log};
 
 #[derive(RustEmbed)]
 #[folder = "../dist"]
@@ -659,6 +659,11 @@ fn dispatch(session: &Session, method: &str, params: &Value) -> Result<Value, Fs
         "utils.getMountedRoots" => Ok(serde_json::to_value(backend_get_mounted_roots()).unwrap()),
         "utils.getAppDirs" => Ok(serde_json::to_value(backend_get_app_dirs()).unwrap()),
         "utils.getEnv" => Ok(serde_json::to_value(backend_get_env()).unwrap()),
+        "utils.debugLog" => {
+            let message = params["message"].as_str().ok_or(FsError::InvalidInput)?;
+            write_debug_log(message);
+            Ok(Value::Null)
+        }
         _ => Err(FsError::InvalidInput),
     }
 }

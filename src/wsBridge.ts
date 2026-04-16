@@ -446,6 +446,14 @@ export async function createWsBridge(wsUrl: string): Promise<Bridge> {
           cacheDir: string;
         }>,
       getEnv: () => rpc("utils.getEnv", {}) as Promise<Record<string, string>>,
+      debugLog: async (message: string) => {
+        // Headless websocket backend may not expose this method.
+        try {
+          await rpc("utils.debugLog", { message });
+        } catch {
+          // no-op fallback
+        }
+      },
       openExternal: async (url: string) => {
         window.open(url, "_blank", "noopener,noreferrer");
       },

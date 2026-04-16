@@ -20,6 +20,8 @@ import {
   CLOSE_TAB,
   CLOSE_VIEWER,
   CURSOR_DOWN,
+  CURSOR_DOCUMENT_END,
+  CURSOR_DOCUMENT_START,
   CURSOR_END,
   CURSOR_HOME,
   CURSOR_LEFT,
@@ -380,6 +382,8 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     registerEditorMovementCommand(CURSOR_RIGHT, "cursorRight");
     registerEditorMovementCommand(CURSOR_HOME, "cursorHome");
     registerEditorMovementCommand(CURSOR_END, "cursorEnd");
+    registerEditorMovementCommand(CURSOR_DOCUMENT_START, "cursorTop");
+    registerEditorMovementCommand(CURSOR_DOCUMENT_END, "cursorBottom");
     registerEditorMovementCommand(CURSOR_PAGE_UP, "cursorPageUp");
     registerEditorMovementCommand(CURSOR_PAGE_DOWN, "cursorPageDown");
     registerEditorMovementCommand(CURSOR_WORD_LEFT, "cursorWordLeft");

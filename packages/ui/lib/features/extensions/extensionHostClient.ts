@@ -128,6 +128,21 @@ export class ExtensionHostClient {
         }
       } else if (msg.type === "error") {
         console.error("[ExtensionHost] Worker error:", msg.message);
+        void this.bridge.utils.debugLog?.(`[ExtensionHost] worker error: ${String(msg.message ?? "unknown")}`);
+      } else if (msg.type === "activationLog") {
+        const level = String(msg.level ?? "info");
+        const extension = String(msg.extension ?? "unknown-extension");
+        const event = msg.event ? String(msg.event) : "";
+        const message = String(msg.message ?? "");
+        const text = `[ExtensionHost:${level}] ${extension}${event ? ` event=${event}` : ""} ${message}`.trim();
+        if (level === "error") {
+          console.error(text);
+        } else if (level === "warn") {
+          console.warn(text);
+        } else {
+          console.log(text);
+        }
+        void this.bridge.utils.debugLog?.(text);
       } else if (msg.type === "requestResult") {
         const requestId = Number(msg.requestId);
         const pending = this.pendingRequests.get(requestId);
