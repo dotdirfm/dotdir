@@ -44,6 +44,7 @@ type ParkedPreviewSurface = {
   reuseKey: string;
   surfaceKey: string;
   mode: "viewer" | "editor";
+  contributionId?: string;
   extensionDirPath: string;
   entry: string;
   path: string;
@@ -161,6 +162,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
             reuseKey,
             surfaceKey,
             mode,
+            contributionId: resolved.contribution.id,
             extensionDirPath: resolved.extensionDirPath,
             entry: resolved.contribution.entry,
             path: closingTab.path,
@@ -638,6 +640,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
             }}
           >
             <EditorContainer
+              contributionId={resolvedEditor.contribution.id}
               extensionDirPath={resolvedEditor.extensionDirPath}
               entry={resolvedEditor.contribution.entry}
               filePath={tab.path}
@@ -685,6 +688,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
             }}
           >
             <ViewerContainer
+              contributionId={resolved.contribution.id}
               extensionDirPath={resolved.extensionDirPath}
               entry={resolved.contribution.entry}
               filePath={tab.path}
@@ -789,6 +793,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
                 style={{ visibility: "hidden", position: "absolute", inset: 0, opacity: 0, pointerEvents: "none" }}
               >
                 <EditorContainer
+                  contributionId={slot.contributionId}
                   extensionDirPath={slot.extensionDirPath}
                   entry={slot.entry}
                   filePath={slot.path}
@@ -806,6 +811,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
                 style={{ visibility: "hidden", position: "absolute", inset: 0, opacity: 0, pointerEvents: "none" }}
               >
                 <ViewerContainer
+                  contributionId={slot.contributionId}
                   extensionDirPath={slot.extensionDirPath}
                   entry={slot.entry}
                   filePath={slot.path}

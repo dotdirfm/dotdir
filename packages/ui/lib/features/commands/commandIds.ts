@@ -6,6 +6,8 @@ export const SHOW_FIND_FILES = "showFindFiles";
 export const SHOW_COMMAND_PALETTE = "showCommandPalette";
 export const CLOSE_VIEWER = "closeViewer";
 export const CLOSE_EDITOR = "closeEditor";
+export const DOTDIR_EDITOR_FIND = "dotdir.editorFind";
+export const DOTDIR_EDITOR_SAVE = "dotdir.editorSave";
 
 export const SWITCH_PANEL = "switchPanel";
 export const DOTDIR_FOCUS_LEFT_PANEL = "dotdir.focusLeftPanel";
@@ -20,6 +22,8 @@ export const CURSOR_LEFT = "cursorLeft";
 export const CURSOR_RIGHT = "cursorRight";
 export const CURSOR_HOME = "cursorHome";
 export const CURSOR_END = "cursorEnd";
+export const CURSOR_DOCUMENT_START = "cursorDocumentStart";
+export const CURSOR_DOCUMENT_END = "cursorDocumentEnd";
 export const CURSOR_PAGE_UP = "cursorPageUp";
 export const CURSOR_PAGE_DOWN = "cursorPageDown";
 export const CURSOR_WORD_LEFT = "cursorWordLeft";

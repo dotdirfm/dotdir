@@ -8,7 +8,7 @@ import type { Bridge } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
-import type { ColorThemeData, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
+import type { ColorThemeData, DotDirCommandsApi, DotDirGlobalApi, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
 import { readFileText as readFileTextFromFs } from "@/features/file-system/fs";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
@@ -20,11 +20,22 @@ import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
 import { getStyleHostElement } from "@/utils/styleHost";
 import { useFsProviderRegistry } from "@/viewerEditorRegistry";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+const LazyFileViewerSurface = lazy(async () => {
+  const mod = await import("@/features/extensions/builtins/FileViewerSurface");
+  return { default: mod.FileViewerSurface };
+});
+
+const LazyMonacoEditorSurface = lazy(async () => {
+  const mod = await import("@/features/extensions/builtins/MonacoEditorSurface");
+  return { default: mod.MonacoEditorSurface };
+});
 
 // ── Container props ─────────────────────────────────────────────────────
 
 interface ExtensionContainerProps {
+  contributionId?: string;
   extensionDirPath: string;
   entry: string;
   active?: boolean;
@@ -70,7 +81,226 @@ async function readFromContainer(
   return provider.readFileRange(hostFile, innerPath, offset, length);
 }
 
+function resolveBuiltInSurface(kind: ContainerProps["kind"], contributionId?: string) {
+  if (kind === "viewer" && contributionId === "file-viewer") {
+    return LazyFileViewerSurface;
+  }
+  if (kind === "editor" && contributionId === "monaco") {
+    return LazyMonacoEditorSurface;
+  }
+  return null;
+}
+
+function BuiltInExtensionContainer(containerProps: ContainerProps) {
+  const BuiltInSurface = resolveBuiltInSurface(containerProps.kind, containerProps.contributionId);
+  const { kind, props, className, style, active } = containerProps;
+  const bridge = useBridge();
+  const fsProviderRegistry = useFsProviderRegistry();
+  const currentFileRef = useRef<{ fd: number; size: number; path: string } | null>(null);
+  const currentFilePathRef = useRef<string | null>(null);
+  const onCloseRef = useRef(containerProps.onClose);
+  onCloseRef.current = containerProps.onClose;
+  const onInteractRef = useRef(containerProps.onInteract);
+  onInteractRef.current = containerProps.onInteract;
+  const onExecuteCommandRef = useRef(containerProps.kind === "viewer" ? containerProps.onExecuteCommand : undefined);
+  if (containerProps.kind === "viewer") {
+    onExecuteCommandRef.current = containerProps.onExecuteCommand;
+  }
+  const onDirtyChangeRef = useRef(containerProps.kind === "editor" ? containerProps.onDirtyChange : undefined);
+  if (containerProps.kind === "editor") {
+    onDirtyChangeRef.current = containerProps.onDirtyChange;
+  }
+
+  useEffect(() => {
+    currentFilePathRef.current = kind === "viewer" ? (props as ViewerProps).filePath : (props as EditorProps).filePath;
+  }, [kind, props]);
+
+  useEffect(() => {
+    if (active !== false) return;
+    const current = currentFileRef.current;
+    if (!current) return;
+    void bridge.fs.close(current.fd).catch(() => {});
+    currentFileRef.current = null;
+  }, [active, bridge.fs]);
+
+  useEffect(() => {
+    return () => {
+      const current = currentFileRef.current;
+      if (!current) return;
+      void bridge.fs.close(current.fd).catch(() => {});
+      currentFileRef.current = null;
+    };
+  }, [bridge.fs]);
+
+  const buildHostApi = useCallback(
+    (): HostApi => ({
+      async readFile(path: string): Promise<ArrayBuffer> {
+        const normalized = normalizePath(path);
+        if (isContainerPath(normalized)) return readFromContainer(bridge, fsProviderRegistry, normalized, 0, 64 * 1024 * 1024);
+        return bridge.fs.readFile(normalized);
+      },
+      async readFileRange(path: string, offset: number, length: number): Promise<ArrayBuffer> {
+        const normalized = normalizePath(path);
+        if (isContainerPath(normalized)) return readFromContainer(bridge, fsProviderRegistry, normalized, offset, length);
+        const current = currentFileRef.current;
+        let target = current;
+        if (!target || target.path !== normalized) {
+          if (current) {
+            try {
+              await bridge.fs.close(current.fd);
+            } catch {
+              // ignore close errors
+            }
+          }
+          const fd = await bridge.fs.open(normalized);
+          const stat = await bridge.fs.stat(normalized);
+          target = { fd, size: stat.size, path: normalized };
+          currentFileRef.current = target;
+        }
+        const safeOffset = Math.max(0, Math.floor(offset));
+        const maxLen = Math.max(0, Math.floor(length));
+        const remaining = Math.max(0, target.size - safeOffset);
+        const safeLen = Math.min(maxLen, remaining);
+        if (safeLen === 0) return new ArrayBuffer(0);
+        return bridge.fs.read(target.fd, safeOffset, safeLen);
+      },
+      async readFileText(path: string): Promise<string> {
+        const normalized = normalizePath(path);
+        if (isContainerPath(normalized)) {
+          const buf = await this.readFile(path);
+          return new TextDecoder().decode(buf);
+        }
+        return readFileTextFromFs(bridge, normalized);
+      },
+      async statFile(path: string): Promise<{ size: number; mtimeMs: number }> {
+        const normalized = normalizePath(path);
+        if (isContainerPath(normalized)) {
+          const data = await readFromContainer(bridge, fsProviderRegistry, normalized, 0, 64 * 1024 * 1024);
+          return { size: data.byteLength, mtimeMs: 0 };
+        }
+        const stat = await bridge.fs.stat(normalized);
+        const current = currentFileRef.current;
+        if (current && current.path === normalized && current.size !== stat.size) {
+          current.size = stat.size;
+        }
+        return stat;
+      },
+      onFileChange(callback: () => void): () => void {
+        const filePath = currentFilePathRef.current;
+        if (!filePath) return () => {};
+        const normalized = normalizePath(filePath);
+        const dir = dirname(normalized);
+        const name = basename(normalized);
+        const watchId = `viewer-${Math.random().toString(36).slice(2)}`;
+        let disposed = false;
+
+        const stopFsChange = bridge.fs.onFsChange((event) => {
+          if (disposed) return;
+          if (event.watchId !== watchId || !event.name) return;
+          if (event.name === name && (event.type === "modified" || event.type === "appeared")) {
+            const current = currentFileRef.current;
+            if (current && current.path === normalized) {
+              void bridge.fs.close(current.fd).catch(() => {});
+              currentFileRef.current = null;
+            }
+            callback();
+          }
+        });
+
+        void (async () => {
+          const ok = await bridge.fs.watch(watchId, dir);
+          if (!ok) {
+            disposed = true;
+            stopFsChange();
+          }
+        })();
+
+        return () => {
+          if (disposed) return;
+          disposed = true;
+          bridge.fs.unwatch(watchId);
+          stopFsChange();
+        };
+      },
+      async writeFile(path: string, content: string): Promise<void> {
+        await bridge.fs.writeFile(path, content);
+      },
+      setDirty(dirty: boolean): void {
+        onDirtyChangeRef.current?.(dirty);
+      },
+      async getTheme(): Promise<"light" | "dark"> {
+        return bridge.systemTheme.get();
+      },
+      getColorTheme(): ColorThemeData | null {
+        return getActiveColorThemeData();
+      },
+      onThemeChange(callback: (theme: ColorThemeData) => void): () => void {
+        const unsub = onColorThemeChange(callback);
+        return () => unsub();
+      },
+      onClose(): void {
+        onCloseRef.current();
+      },
+      async executeCommand<T = unknown>(command: string, args?: unknown): Promise<T> {
+        const handler = onExecuteCommandRef.current;
+        if (!handler) throw new Error("No command handler registered");
+        return handler(command, args) as Promise<T>;
+      },
+      async getExtensionResourceUrl(): Promise<string> {
+        throw new Error("Extension resource URL not available in built-in surface mode");
+      },
+    }),
+    [bridge, fsProviderRegistry],
+  );
+
+  const hostApi = useMemo<DotDirGlobalApi>(() => {
+    const base = buildHostApi();
+    const commands: DotDirCommandsApi = {
+      registerCommand(commandId, handler) {
+        const dispose = registerMountedExtensionCommandHandler(commandId, (...args) => handler(...args));
+        return { dispose };
+      },
+    };
+    return { ...base, commands };
+  }, [buildHostApi]);
+
+  if (!BuiltInSurface) {
+    return (
+      <div className={className} style={style}>
+        Unsupported built-in surface
+      </div>
+    );
+  }
+
+  return (
+    <div className={className} style={{ ...style, width: "100%", height: "100%" }}>
+      <Suspense
+        fallback={
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--fg-muted, #888)",
+            }}
+          >
+            Loading {kind}…
+          </div>
+        }
+      >
+        <BuiltInSurface hostApi={hostApi} props={props as never} active={active} onInteract={() => onInteractRef.current?.()} />
+      </Suspense>
+    </div>
+  );
+}
+
 export function ExtensionContainer(containerProps: ContainerProps) {
+  if (resolveBuiltInSurface(containerProps.kind, containerProps.contributionId)) {
+    return <BuiltInExtensionContainer {...containerProps} />;
+  }
+
   const { extensionDirPath, entry, kind, props, onClose, className, style, active } = containerProps;
 
   const bridge = useBridge();
@@ -807,6 +1037,7 @@ export function ExtensionContainer(containerProps: ContainerProps) {
 // ── Convenience wrappers ───────────────────────────────────────────────
 
 interface ViewerContainerWrapperProps {
+  contributionId?: string;
   extensionDirPath: string;
   entry: string;
   filePath: string;
@@ -833,8 +1064,23 @@ interface ExtensionShellLayoutProps {
   children: React.ReactNode;
 }
 
-function focusIframeWithin(root: HTMLElement | null): void {
+function focusSurfaceWithin(root: HTMLElement | null): void {
   if (!root) return;
+  const directTarget = root.querySelector<HTMLElement>("[data-dotdir-focus-target='true'], textarea.inputarea, textarea, [contenteditable='true']");
+  if (directTarget) {
+    const focusNow = () => {
+      try {
+        directTarget.focus();
+      } catch {
+        // ignore
+      }
+    };
+    focusNow();
+    requestAnimationFrame(focusNow);
+    setTimeout(focusNow, 0);
+    setTimeout(focusNow, 50);
+    return;
+  }
   const iframe = root.querySelector("iframe");
   if (!(iframe instanceof HTMLIFrameElement)) return;
   const focusNow = () => {
@@ -857,11 +1103,13 @@ function useExtensionSurfaceFocus({
   inline,
   isVisible,
   isEditableTarget,
+  allowCommandRouting,
 }: {
   focusLayer: "viewer" | "editor";
   inline?: boolean;
   isVisible: boolean;
   isEditableTarget?: (node: EventTarget | null) => boolean;
+  allowCommandRouting?: boolean | ((event: KeyboardEvent) => boolean);
 }) {
   const focusContext = useFocusContext();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -878,14 +1126,15 @@ function useExtensionSurfaceFocus({
     if (!root) return;
     return focusContext.registerAdapter(focusLayer, {
       focus() {
-        focusIframeWithin(root);
+        focusSurfaceWithin(root);
       },
       contains(node) {
         return node instanceof Node ? root.contains(node) : false;
       },
       isEditableTarget,
+      allowCommandRouting,
     });
-  }, [focusContext, focusLayer, isEditableTarget, isVisible]);
+  }, [allowCommandRouting, focusContext, focusLayer, isEditableTarget, isVisible]);
 
   useEffect(() => {
     if (!inline) return;
@@ -930,6 +1179,7 @@ function ExtensionShellLayout({
 }
 
 export function ViewerContainer({
+  contributionId,
   extensionDirPath,
   entry,
   filePath,
@@ -950,6 +1200,9 @@ export function ViewerContainer({
     focusLayer: "viewer",
     inline,
     isVisible,
+    allowCommandRouting(event) {
+      return event.ctrlKey || event.metaKey || event.altKey || /^F\d{1,2}$/.test(event.key) || event.key === "Escape";
+    },
   });
   const handleClose = useCallback(() => {
     onClose();
@@ -1026,6 +1279,7 @@ export function ViewerContainer({
   const container = (
     <ExtensionContainer
       kind="viewer"
+      contributionId={contributionId}
       extensionDirPath={extensionDirPath}
       entry={entry}
       props={viewerProps}
@@ -1055,6 +1309,7 @@ export function ViewerContainer({
 }
 
 interface EditorContainerWrapperProps {
+  contributionId?: string;
   extensionDirPath: string;
   entry: string;
   filePath: string;
@@ -1071,6 +1326,7 @@ interface EditorContainerWrapperProps {
 }
 
 export function EditorContainer({
+  contributionId,
   extensionDirPath,
   entry,
   filePath,
@@ -1097,6 +1353,33 @@ export function EditorContainer({
       if (!el) return false;
       const tag = el.tagName?.toLowerCase();
       return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
+    },
+    allowCommandRouting(event) {
+      const isMonacoEditorWidgetTarget = (node: EventTarget | null) => {
+        const el = node as HTMLElement | null;
+        return Boolean(el?.closest?.(".editor-widget"));
+      };
+      const isEditorNavigationKey =
+        event.key === "ArrowUp" ||
+        event.key === "ArrowDown" ||
+        event.key === "ArrowLeft" ||
+        event.key === "ArrowRight" ||
+        event.key === "Home" ||
+        event.key === "End" ||
+        event.key === "PageUp" ||
+        event.key === "PageDown";
+      if (event.key === "Escape") {
+        if (isMonacoEditorWidgetTarget(event.target) || isMonacoEditorWidgetTarget(document.activeElement)) {
+          return false;
+        }
+      }
+      if (isEditorNavigationKey) {
+        if (isMonacoEditorWidgetTarget(event.target) || isMonacoEditorWidgetTarget(document.activeElement)) {
+          return false;
+        }
+        return true;
+      }
+      return event.ctrlKey || event.metaKey || event.altKey || /^F\d{1,2}$/.test(event.key) || event.key === "Escape";
     },
   });
   const handleClose = useCallback(() => {
@@ -1191,6 +1474,7 @@ export function EditorContainer({
       <div style={{ flex: 1, minHeight: 0 }}>
         <ExtensionContainer
           kind="editor"
+          contributionId={contributionId}
           extensionDirPath={extensionDirPath}
           entry={entry}
           props={editorProps}

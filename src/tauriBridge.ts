@@ -371,6 +371,9 @@ export const tauriBridge: Bridge = {
     async getEnv(): Promise<Record<string, string>> {
       return invoke<Record<string, string>>("get_env");
     },
+    async debugLog(message: string): Promise<void> {
+      return invoke<void>("debug_log", { message });
+    },
     async openExternal(url: string): Promise<void> {
       await openUrl(url);
     },
