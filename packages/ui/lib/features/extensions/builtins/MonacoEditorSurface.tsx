@@ -6,7 +6,8 @@ import onigWasmUrl from "vscode-oniguruma/release/onig.wasm?url";
 import { useEffect, useRef } from "react";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
-import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
+import { useExtensionHostClient, type ExtensionHostClient } from "@/features/extensions/extensionHostClient";
+import { attachMonacoBridges, type AttachedBridges } from "@/features/extensions/monacoBridge";
 import {
   DOTDIR_MONACO_EXECUTE_ACTION,
   MONACO_QUICK_COMMAND_ACTION,
@@ -79,6 +80,93 @@ const COMMON_SCOPE_SUFFIXES = new Set([
   "bash",
   "zsh",
 ]);
+
+let sharedMonacoModulePromise: Promise<typeof Monaco> | null = null;
+async function loadSharedMonaco(): Promise<typeof Monaco> {
+  return (sharedMonacoModulePromise ??= import("monaco-editor/esm/vs/editor/editor.main.js") as Promise<typeof Monaco>);
+}
+
+/**
+ * Shared body-level container for Monaco overflow widgets (suggestion popup,
+ * hover, parameter hints, find widget, ...). Editors mount with
+ * `overflow:hidden`, and when widgets live inside that clipped container they
+ * get chopped off. VS Code solves this the same way: lift the widgets out to a
+ * top-level fixed-position layer with a high z-index.
+ */
+let sharedOverflowWidgetsHost: HTMLDivElement | null = null;
+function getOverflowWidgetsHost(): HTMLDivElement {
+  if (sharedOverflowWidgetsHost && sharedOverflowWidgetsHost.isConnected) return sharedOverflowWidgetsHost;
+  const existing = document.querySelector<HTMLDivElement>("div[data-dotdir-monaco-overflow]");
+  if (existing) {
+    sharedOverflowWidgetsHost = existing;
+    return existing;
+  }
+  const host = document.createElement("div");
+  host.dataset.dotdirMonacoOverflow = "true";
+  host.className = "monaco-editor";
+  host.style.cssText = "position:fixed;top:0;left:0;width:0;height:0;z-index:10000;";
+  document.body.appendChild(host);
+  sharedOverflowWidgetsHost = host;
+  return host;
+}
+
+/**
+ * Colors for Monaco's floating widgets. Without these the hover/suggest
+ * popups render transparent on top of the editor viewport.
+ */
+function overlayWidgetColors(isDark: boolean): Record<string, string> {
+  if (isDark) {
+    return {
+      "editorHoverWidget.background": "#252526",
+      "editorHoverWidget.border": "#454545",
+      "editorHoverWidget.foreground": "#d4d4d4",
+      "editorHoverWidget.statusBarBackground": "#2c2c2d",
+      "editorWidget.background": "#252526",
+      "editorWidget.foreground": "#d4d4d4",
+      "editorWidget.border": "#454545",
+      "editorSuggestWidget.background": "#252526",
+      "editorSuggestWidget.border": "#454545",
+      "editorSuggestWidget.foreground": "#d4d4d4",
+      "editorSuggestWidget.selectedBackground": "#094771",
+      "editorSuggestWidget.highlightForeground": "#0097fb",
+      "list.hoverBackground": "#2a2d2e",
+      "list.activeSelectionBackground": "#094771",
+      "list.activeSelectionForeground": "#ffffff",
+    };
+  }
+  return {
+    "editorHoverWidget.background": "#f3f3f3",
+    "editorHoverWidget.border": "#c8c8c8",
+    "editorHoverWidget.foreground": "#1e1e1e",
+    "editorHoverWidget.statusBarBackground": "#ebebeb",
+    "editorWidget.background": "#f3f3f3",
+    "editorWidget.foreground": "#1e1e1e",
+    "editorWidget.border": "#c8c8c8",
+    "editorSuggestWidget.background": "#f3f3f3",
+    "editorSuggestWidget.border": "#c8c8c8",
+    "editorSuggestWidget.foreground": "#1e1e1e",
+    "editorSuggestWidget.selectedBackground": "#cde6f8",
+    "editorSuggestWidget.highlightForeground": "#0066bf",
+    "list.hoverBackground": "#e8e8e8",
+    "list.activeSelectionBackground": "#cde6f8",
+    "list.activeSelectionForeground": "#1e1e1e",
+  };
+}
+
+let attachedBridgeClient: ExtensionHostClient | null = null;
+let attachedBridges: AttachedBridges | null = null;
+
+export async function ensureMonacoBridgesAttached(client: ExtensionHostClient): Promise<void> {
+  if (attachedBridgeClient === client) return;
+  if (attachedBridges) {
+    attachedBridges.detach();
+    attachedBridges = null;
+    attachedBridgeClient = null;
+  }
+  const monaco = await loadSharedMonaco();
+  attachedBridges = attachMonacoBridges(monaco, client);
+  attachedBridgeClient = client;
+}
 
 function stripLangSuffix(scope: string): string {
   const match = scope.match(/^(.*)\.([a-zA-Z0-9_-]+)$/);
@@ -503,7 +591,11 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
         { token: "entity.name.function", foreground: "DCDCAA" },
         { token: "variable", foreground: "9CDCFE" },
       ],
-      colors: { "editor.background": "#1e1e1e", "editor.foreground": "#d4d4d4" },
+      colors: {
+        "editor.background": "#1e1e1e",
+        "editor.foreground": "#d4d4d4",
+        ...overlayWidgetColors(true),
+      },
     });
     monaco.editor.defineTheme("dotdir-light", {
       base: "vs",
@@ -516,7 +608,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
         { token: "entity.name.function", foreground: "795E26" },
         { token: "variable", foreground: "001080" },
       ],
-      colors: {},
+      colors: overlayWidgetColors(false),
     });
     monacoReady = true;
   }
@@ -543,6 +635,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
       colors: {
         "editor.background": bg,
         "editor.foreground": fg,
+        ...overlayWidgetColors(isDark),
       },
     });
     monaco.editor.setTheme("dotdir-css");
@@ -589,9 +682,21 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
     root.appendChild(editorHost);
     rootEl = editorHost;
 
+    // Create the Monaco model with an explicit URI so language servers /
+    // extension-host providers have a stable document identity to sync
+    // against. Reuse an existing model at the same URI if one is still in
+    // Monaco's model registry.
+    const modelUri = monaco.Uri.file(props.filePath);
+    let model = monaco.editor.getModel(modelUri);
+    if (model) {
+      if (model.getValue() !== content) model.setValue(content);
+      if (props.langId) monaco.editor.setModelLanguage(model, props.langId);
+    } else {
+      model = monaco.editor.createModel(content, props.langId || "plaintext", modelUri);
+    }
+
     const editor = monaco.editor.create(editorHost, {
-      value: content,
-      language: props.langId || "plaintext",
+      model,
       theme: monacoTheme,
       automaticLayout: true,
       minimap: { enabled: false },
@@ -617,7 +722,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
         addExtraSpaceOnTop: false,
       },
       fixedOverflowWidgets: true,
-      overflowWidgetsDomNode: editorHost,
+      overflowWidgetsDomNode: getOverflowWidgetsHost(),
     });
     editorInstance = editor;
 
@@ -848,6 +953,12 @@ export function MonacoEditorSurface({ hostApi, props, active, onInteract }: Mona
       },
     });
   }
+
+  useEffect(() => {
+    void ensureMonacoBridgesAttached(extensionHost).catch((err) => {
+      console.warn("[MonacoEditorSurface] failed to attach extension-host bridges", err);
+    });
+  }, [extensionHost]);
 
   useEffect(() => {
     const root = rootRef.current;

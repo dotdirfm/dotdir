@@ -3,6 +3,7 @@ import { useCommandLine } from "@/features/command-line/useCommandLine";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { EDIT_FILE, SHELL_EXECUTE, VIEW_FILE } from "@/features/commands/commandIds";
 import { useFileOperationHandlers } from "@/features/file-ops/fileOperationHandlers";
+import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import type { FsNode } from "fss-lang";
 import { useMemo, useRef } from "react";
 
@@ -37,12 +38,15 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
   const commandRegistry = useCommandRegistry();
   const ops = useFileOperationHandlers();
   const { paste: pasteToCommandLine } = useCommandLine();
+  const languageRegistry = useLanguageRegistry();
   const depsRef = useRef(deps);
   depsRef.current = deps;
   const opsRef = useRef(ops);
   opsRef.current = ops;
   const pasteToCommandLineRef = useRef(pasteToCommandLine);
   pasteToCommandLineRef.current = pasteToCommandLine;
+  const languageRegistryRef = useRef(languageRegistry);
+  languageRegistryRef.current = languageRegistry;
 
   return useMemo(
     () => ({
@@ -69,7 +73,12 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
         depsRef.current.actionQueue.enqueue(() => {
           const [item] = getSelectedOrActiveEntries(depsRef.current);
           if (item && item.entry.type === "file") {
-            const langId = typeof item.entry.lang === "string" && item.entry.lang ? item.entry.lang : "plaintext";
+            // Always resolve the language from the current registry — the value cached on
+            // FsNode.lang can be stale if the folder was listed before an extension that
+            // contributes the language finished loading.
+            const resolved = languageRegistryRef.current.getLanguageForFilename(item.entry.name);
+            const cached = typeof item.entry.lang === "string" && item.entry.lang ? item.entry.lang : "plaintext";
+            const langId = resolved && resolved !== "plaintext" ? resolved : cached;
             void commandRegistry.executeCommand(EDIT_FILE, item.entry.path as string, item.entry.name, Number(item.entry.meta.size), langId);
           }
         }),

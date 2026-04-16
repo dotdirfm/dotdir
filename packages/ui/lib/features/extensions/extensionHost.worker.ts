@@ -2,268 +2,448 @@
  * Extension Host Worker
  *
  * Runs in a Web Worker to isolate extension loading from the main thread.
- * Can be safely terminated and restarted to pick up extension changes.
+ * Hosts the VS Code API shim (`vscodeShim/*`) and bridges LSP/provider
+ * calls over postMessage to the main thread where Monaco lives.
  *
- * Communication protocol with main thread:
- *   Main → Worker:
- *     { type: 'start', dataDir: string }            — begin loading extensions
- *     { type: 'readFileResult', id, data, error? }   — response to a file read request
- *   Worker → Main:
- *     { type: 'readFile', id, path }                 — request file contents
- *     { type: 'loaded', extensions }                 — all extensions loaded
- *     { type: 'error', message }                     — fatal loading error
+ * See `ehProtocol.ts` for the full set of messages exchanged.
  */
 
 import { dirname, join, normalizePath } from "../../utils/path";
+import type {
+  HostToMainMessage,
+  MainToHostMessage,
+  DiagnosticPayload,
+  PositionPayload,
+  RangePayload,
+  TextEditPayload,
+  CompletionItemPayload,
+  CompletionListPayload,
+  HoverPayload,
+  DocumentSymbolPayload,
+  SymbolInformationPayload,
+  FoldingRangePayload,
+  SelectionRangePayload,
+  LocationPayload,
+  DocumentHighlightPayload,
+  ColorInformationPayload,
+  ColorPresentationPayload,
+  DocumentLinkPayload,
+  SignatureHelpPayload,
+  CodeActionPayload,
+  CodeLensPayload,
+} from "./ehProtocol";
+import {
+  createVscodeNamespace,
+  installWorkerRpc,
+  installCommandAdapter,
+  setActiveExtensionKey,
+  setDataDir,
+  setWorkspaceFolders,
+  setActiveEditor,
+  loadConfigDefaults,
+  loadLanguageDefaults,
+  updateUserConfigValue,
+  textDocuments,
+  registerExtension,
+  markExtensionActive,
+  getProvider,
+  logActivation,
+  workspace as vscodeWorkspace,
+  type WorkerRpc,
+  type WorkerRpcHandler,
+} from "./vscodeShim";
+import { Disposable } from "./vscodeShim/events";
+import {
+  CompletionItem,
+  CompletionItemLabel,
+  CompletionList,
+  Diagnostic,
+  DocumentLink,
+  DocumentSymbol,
+  FoldingRange,
+  Hover,
+  Location,
+  MarkdownString,
+  Position,
+  Range,
+  SelectionRange,
+  SymbolInformation,
+  TextEdit,
+  Uri,
+  type MarkedString,
+} from "./vscodeShim/types";
+import { ExtensionMode, registerExtension as _reg } from "./vscodeShim/extensions";
 
-// ── Types (duplicated subset to avoid importing DOM-dependent modules) ──
+void _reg;
 
-interface ExtensionIconTheme {
-  id: string;
-  label: string;
-  path: string;
-}
+// ── Types duplicated from loader (avoid DOM imports) ────────────────
 
-interface ExtensionLanguage {
-  id: string;
-  aliases?: string[];
-  extensions?: string[];
-  filenames?: string[];
-  configuration?: string;
-}
-
-interface ExtensionGrammar {
-  language: string;
-  scopeName: string;
-  path: string;
-  embeddedLanguages?: Record<string, string>;
-}
-
-interface LoadedGrammar {
-  contribution: ExtensionGrammar;
-  content: object;
-}
-
-interface LoadedGrammarRef {
-  contribution: ExtensionGrammar;
-  /** Absolute path to the grammar JSON file on disk. */
-  path: string;
-}
-
-interface ExtensionViewerContribution {
-  id: string;
-  label: string;
-  patterns: string[];
-  mimeTypes?: string[];
-  entry: string;
-  priority?: number;
-}
-
-interface ExtensionEditorContribution {
-  id: string;
-  label: string;
-  patterns: string[];
-  mimeTypes?: string[];
-  langId?: string;
-  entry: string;
-  priority?: number;
-}
-
-interface ExtensionColorTheme {
-  id?: string;
-  label: string;
-  uiTheme: string;
-  path: string;
-}
-
-interface ExtensionCommand {
-  command: string;
-  title: string;
-  category?: string;
-  icon?: string;
-}
-
-interface ExtensionKeybinding {
-  command: string;
-  key: string;
-  mac?: string;
-  when?: string;
-  args?: unknown;
-}
-
-interface ExtensionFsProviderContribution {
-  id: string;
-  label: string;
-  patterns: string[];
-  entry: string;
-  priority?: number;
-  runtime?: "frontend" | "backend";
-}
-
+interface ExtensionIconTheme { id: string; label: string; path: string }
+interface ExtensionLanguage { id: string; aliases?: string[]; extensions?: string[]; filenames?: string[]; configuration?: string }
+interface ExtensionGrammar { language: string; scopeName: string; path: string; embeddedLanguages?: Record<string, string> }
+interface LoadedGrammarRef { contribution: ExtensionGrammar; path: string }
+interface ExtensionViewerContribution { id: string; label: string; patterns: string[]; mimeTypes?: string[]; entry: string; priority?: number }
+interface ExtensionEditorContribution { id: string; label: string; patterns: string[]; mimeTypes?: string[]; langId?: string; entry: string; priority?: number }
+interface ExtensionColorTheme { id?: string; label: string; uiTheme: string; path: string }
+interface ExtensionCommand { command: string; title: string; category?: string; icon?: string }
+interface ExtensionKeybinding { command: string; key: string; mac?: string; when?: string; args?: unknown }
+interface ExtensionFsProviderContribution { id: string; label: string; patterns: string[]; entry: string; priority?: number; runtime?: "frontend" | "backend" }
 interface ExtensionShellIntegration {
-  shell: string;
-  label: string;
-  scriptPath: string;
-  executableCandidates: string[];
+  shell: string; label: string; scriptPath: string; executableCandidates: string[];
   platforms?: ("darwin" | "linux" | "unix" | "windows")[];
-  hiddenCdTemplate?: string;
-  cwdEscape?: "posix" | "powershell" | "cmd";
-  lineEnding?: "\n" | "\r\n";
-  spawnArgs?: string[];
-  scriptArg?: boolean;
+  hiddenCdTemplate?: string; cwdEscape?: "posix" | "powershell" | "cmd";
+  lineEnding?: "\n" | "\r\n"; spawnArgs?: string[]; scriptArg?: boolean;
 }
-
 interface ExtensionContributions {
-  iconTheme?: ExtensionIconTheme;
-  iconThemes?: ExtensionIconTheme[];
-  themes?: ExtensionColorTheme[];
-  languages?: ExtensionLanguage[];
-  grammars?: ExtensionGrammar[];
-  viewers?: ExtensionViewerContribution[];
-  editors?: ExtensionEditorContribution[];
-  commands?: ExtensionCommand[];
-  keybindings?: ExtensionKeybinding[];
-  fsProviders?: ExtensionFsProviderContribution[];
-  shellIntegrations?: ExtensionShellIntegration[];
+  iconTheme?: ExtensionIconTheme; iconThemes?: ExtensionIconTheme[]; themes?: ExtensionColorTheme[];
+  languages?: ExtensionLanguage[]; grammars?: ExtensionGrammar[];
+  viewers?: ExtensionViewerContribution[]; editors?: ExtensionEditorContribution[];
+  commands?: ExtensionCommand[]; keybindings?: ExtensionKeybinding[];
+  fsProviders?: ExtensionFsProviderContribution[]; shellIntegrations?: ExtensionShellIntegration[];
+  configuration?: { properties?: Record<string, { default?: unknown }> } | Array<{ properties?: Record<string, { default?: unknown }> }>;
+  configurationDefaults?: Record<string, Record<string, unknown>>;
 }
 
 interface ExtensionManifest {
-  name: string;
-  version: string;
-  publisher: string;
-  displayName?: string;
-  description?: string;
-  icon?: string;
-  activationEvents?: string[];
-  /**
-   * Optional browser activation script entry.
-   * If present, the host will load it and call exported `activate()` / `deactivate()`.
-   */
-  browser?: string;
-  type?: string;
+  name: string; version: string; publisher: string;
+  displayName?: string; description?: string; icon?: string;
+  activationEvents?: string[]; browser?: string; main?: string; type?: string;
   contributes?: ExtensionContributions;
 }
 
 interface ExtensionRef {
-  publisher: string;
-  name: string;
-  version: string;
+  publisher: string; name: string; version: string;
   source?: "dotdir-marketplace" | "open-vsx-marketplace";
-  autoUpdate?: boolean;
-  /** Optional absolute path for development; when set, load from this dir instead of extensionsDir. */
-  path?: string;
+  autoUpdate?: boolean; path?: string;
 }
 
-interface WorkerLoadedColorTheme {
-  id: string;
-  label: string;
-  uiTheme: string;
-  jsonPath: string;
-}
+interface WorkerLoadedColorTheme { id: string; label: string; uiTheme: string; jsonPath: string }
 
 export interface WorkerLoadedExtension {
   ref: ExtensionRef;
   manifest: ExtensionManifest;
   dirPath: string;
   iconUrl?: string;
-  iconThemes?: Array<{
-    id: string;
-    label: string;
-    kind: "fss" | "vscode";
-    path: string;
-    basePath?: string;
-    sourceId?: string;
-    fss?: string;
-  }>;
+  iconThemes?: Array<{ id: string; label: string; kind: "fss" | "vscode"; path: string; basePath?: string; sourceId?: string; fss?: string }>;
   colorThemes?: WorkerLoadedColorTheme[];
   languages?: ExtensionLanguage[];
-  /** Grammar contributions (lazy JSON loading for editor). */
   grammarRefs?: LoadedGrammarRef[];
-  /** Previously loaded grammars (kept for compatibility). */
-  grammars?: LoadedGrammar[];
   viewers?: ExtensionViewerContribution[];
   editors?: ExtensionEditorContribution[];
-  /** Command contributions from this extension */
   commands?: ExtensionCommand[];
-  /** Keybinding contributions from this extension */
   keybindings?: ExtensionKeybinding[];
-  /** FsProvider contributions from this extension */
   fsProviders?: ExtensionFsProviderContribution[];
-  /** Shell integration contributions (scripts fully loaded). */
   shellIntegrations?: Array<{
-    shell: string;
-    label: string;
-    script: string;
-    executableCandidates: string[];
+    shell: string; label: string; script: string; executableCandidates: string[];
     platforms?: ("darwin" | "linux" | "unix" | "windows")[];
-    hiddenCdTemplate?: string;
-    cwdEscape?: "posix" | "powershell" | "cmd";
-    lineEnding?: "\n" | "\r\n";
-    spawnArgs?: string[];
-    scriptArg?: boolean;
+    hiddenCdTemplate?: string; cwdEscape?: "posix" | "powershell" | "cmd";
+    lineEnding?: "\n" | "\r\n"; spawnArgs?: string[]; scriptArg?: boolean;
   }>;
 }
 
-// ── File reading via RPC to main thread ─────────────────────────────
+// ── Mutable worker-scoped state ─────────────────────────────────────
 
-let nextRequestId = 0;
-const pendingReads = new Map<number, { resolve: (data: string | null) => void; reject: (err: Error) => void }>();
 const loadedExtensions = new Map<string, WorkerLoadedExtension>();
 const activeExtensions = new Map<
   string,
-  {
-    subscriptions: Array<{ dispose: () => void }>;
-    deactivate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
-  }
+  { subscriptions: Array<{ dispose: () => void }>; deactivate?: (ctx: unknown) => unknown | Promise<unknown> }
 >();
-const commandHandlers = new Map<string, (...args: unknown[]) => void | Promise<void>>();
 
-type BrowserDisposable = { dispose: () => void };
+const commandHandlers = new Map<string, (...args: unknown[]) => unknown | Promise<unknown>>();
 
-interface BrowserExtensionContext {
-  subscriptions: BrowserDisposable[];
-  dotdir: {
-    commands: {
-      registerCommand: (commandId: string, handler: (...args: unknown[]) => void | Promise<void>) => BrowserDisposable;
-    };
-  };
+// ── Low-level RPC plumbing ──────────────────────────────────────────
+
+let nextRequestId = 1;
+let nextReadId = 1;
+const pendingRequests = new Map<number, { resolve: (value: unknown) => void; reject: (err: Error) => void }>();
+const pendingReads = new Map<number, { resolve: (data: string | null) => void; reject: (err: Error) => void }>();
+const pendingBinaryReads = new Map<number, { resolve: (data: ArrayBuffer | null) => void; reject: (err: Error) => void }>();
+const subscribers = new Map<MainToHostMessage["type"], Set<WorkerRpcHandler>>();
+
+function sendToMain(msg: HostToMainMessage): void {
+  (self as unknown as { postMessage: (data: unknown) => void }).postMessage(msg);
 }
 
-type BrowserExtensionModule = {
-  activate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
-  deactivate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
-  default?: {
-    activate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
-    deactivate?: (ctx: BrowserExtensionContext) => unknown | Promise<unknown>;
-  };
+function requestFromMain<T = unknown>(msg: HostToMainMessage & { requestId: number }): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    pendingRequests.set(msg.requestId, {
+      resolve: resolve as (value: unknown) => void,
+      reject,
+    });
+    sendToMain(msg);
+  });
+}
+
+const rpc: WorkerRpc = {
+  send: sendToMain,
+  request: requestFromMain,
+  nextRequestId: () => nextRequestId++,
+  dispatch: (msg: MainToHostMessage): boolean => {
+    const set = subscribers.get(msg.type);
+    if (!set || set.size === 0) return false;
+    for (const handler of set) {
+      try {
+        handler(msg);
+      } catch (err) {
+        console.error("[ExtHost] subscriber threw", err);
+      }
+    }
+    return true;
+  },
+  subscribe: (type, handler) => {
+    let set = subscribers.get(type);
+    if (!set) {
+      set = new Set();
+      subscribers.set(type, set);
+    }
+    set.add(handler);
+    return () => {
+      set!.delete(handler);
+    };
+  },
 };
 
-function emitActivationLog(
-  level: "info" | "warn" | "error",
-  extension: string,
-  message: string,
-  event?: string,
-): void {
-  self.postMessage({ type: "activationLog", level, extension, event, message });
-}
+installWorkerRpc(rpc);
 
 function readTextFile(path: string): Promise<string | null> {
   return new Promise((resolve, reject) => {
-    const id = nextRequestId++;
+    const id = nextReadId++;
     pendingReads.set(id, { resolve, reject });
-    self.postMessage({ type: "readFile", id, path });
+    sendToMain({ type: "readFile", id, path });
   });
 }
+
+// readBinaryFile helper kept available for future callers; the main-thread
+// reads originate from the workspace.fs shim via subscribe()'d messages.
+void (function readBinaryFile(path: string): Promise<ArrayBuffer | null> {
+  return new Promise((resolve, reject) => {
+    const id = nextReadId++;
+    pendingBinaryReads.set(id, { resolve, reject });
+    sendToMain({ type: "readBinaryFile", id, path });
+  });
+});
+
+// ── Command adapter for vscode.commands ─────────────────────────────
+
+installCommandAdapter({
+  registerCommand(id: string, handler: (...args: unknown[]) => unknown | Promise<unknown>) {
+    commandHandlers.set(id, handler);
+    return new Disposable(() => {
+      if (commandHandlers.get(id) === handler) commandHandlers.delete(id);
+    });
+  },
+  async executeWorkerCommand(id: string, args: unknown[]) {
+    const handler = commandHandlers.get(id);
+    if (!handler) throw new Error(`Command not found: ${id}`);
+    return await handler(...args);
+  },
+  hasWorkerCommand(id: string): boolean {
+    return commandHandlers.has(id);
+  },
+  listCommands(): string[] {
+    return Array.from(commandHandlers.keys());
+  },
+});
+
+// ── Nested worker + importScripts polyfills ─────────────────────────
+
+async function fetchAsBlobUrl(rawUrl: string): Promise<string> {
+  // Try to resolve by reading the script text via our existing readFile RPC.
+  // Falls back to fetch() for standard http(s) URLs.
+  const path = urlToLocalPath(rawUrl);
+  if (path) {
+    const text = await readTextFile(path);
+    if (text == null) throw new Error(`Script not found: ${rawUrl}`);
+    // Rewrite inline nested `new URL(x, import.meta.url)` / `new Worker(x, ...)`
+    // relative paths so webpack-chunked LSP servers still resolve siblings
+    // from the same extension directory.
+    const rewritten = rewriteBundledUrlsToAbsolute(text, path);
+    return URL.createObjectURL(new Blob([rewritten], { type: "text/javascript" }));
+  }
+  const response = await fetch(rawUrl);
+  const text = await response.text();
+  return URL.createObjectURL(new Blob([text], { type: "text/javascript" }));
+}
+
+function urlToLocalPath(rawUrl: string): string | null {
+  if (rawUrl.startsWith("vfs://vfs/_ext/")) {
+    const encoded = rawUrl.slice("vfs://vfs/_ext".length);
+    return decodeURIComponent(encoded);
+  }
+  if (rawUrl.startsWith("http://vfs.localhost/_ext/")) {
+    const encoded = rawUrl.slice("http://vfs.localhost/_ext".length);
+    return decodeURIComponent(encoded.replace(/^\/([A-Za-z])\//, "/$1:/"));
+  }
+  if (rawUrl.startsWith("file://")) {
+    try {
+      const u = new URL(rawUrl);
+      return decodeURIComponent(u.pathname);
+    } catch {
+      return null;
+    }
+  }
+  if (rawUrl.startsWith("blob:") || rawUrl.startsWith("data:")) return null;
+  return null;
+}
+
+// Keep a back-compat alias (older code used this name).
+const vfsUrlToPath = urlToLocalPath;
+void vfsUrlToPath;
+
+function rewriteBundledUrlsToAbsolute(_source: string, _scriptLocalPath: string): string {
+  // Nothing to rewrite right now; the blob wrapper loader for nested workers
+  // handles relative URLs via its own Worker polyfill already. Placeholder
+  // kept so we can add targeted rewrites (e.g. webpack chunk imports) later.
+  return _source;
+}
+
+const _OriginalWorker = (globalThis as unknown as { Worker: typeof Worker }).Worker;
+
+class ProxiedWorker {
+  private _impl: Worker | null = null;
+  private _queue: Array<{ data: unknown; transfer?: Transferable[] }> = [];
+  private _listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  private _onmessage: ((ev: MessageEvent) => unknown) | null = null;
+  private _onerror: ((ev: ErrorEvent) => unknown) | null = null;
+  private _onmessageerror: ((ev: MessageEvent) => unknown) | null = null;
+
+  constructor(scriptUrl: string | URL, options?: WorkerOptions) {
+    const resolved = typeof scriptUrl === "string" ? scriptUrl : scriptUrl.toString();
+    void this._bootstrap(resolved, options);
+  }
+
+  private async _bootstrap(scriptUrl: string, options?: WorkerOptions): Promise<void> {
+    try {
+      const blobUrl = await fetchAsBlobUrl(scriptUrl);
+      const worker = new _OriginalWorker(blobUrl, options);
+      this._impl = worker;
+
+      worker.onmessage = (ev) => {
+        this._onmessage?.(ev);
+        this._fireListeners("message", ev);
+      };
+      worker.onerror = (ev) => {
+        this._onerror?.(ev);
+        this._fireListeners("error", ev);
+      };
+      worker.onmessageerror = (ev) => {
+        this._onmessageerror?.(ev);
+        this._fireListeners("messageerror", ev);
+      };
+
+      for (const queued of this._queue) {
+        worker.postMessage(queued.data, queued.transfer ?? []);
+      }
+      this._queue = [];
+    } catch (err) {
+      console.error("[ExtHost] nested worker bootstrap failed", err);
+      const ev = new ErrorEvent("error", { error: err, message: err instanceof Error ? err.message : String(err) });
+      this._onerror?.(ev);
+      this._fireListeners("error", ev);
+    }
+  }
+
+  postMessage(data: unknown, transfer?: Transferable[] | StructuredSerializeOptions): void {
+    const t = Array.isArray(transfer) ? transfer : undefined;
+    if (this._impl) {
+      this._impl.postMessage(data, t ?? []);
+    } else {
+      this._queue.push({ data, transfer: t });
+    }
+  }
+
+  terminate(): void {
+    this._impl?.terminate();
+    this._queue = [];
+  }
+
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+    let set = this._listeners.get(type);
+    if (!set) {
+      set = new Set();
+      this._listeners.set(type, set);
+    }
+    set.add(listener);
+  }
+
+  removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+    this._listeners.get(type)?.delete(listener);
+  }
+
+  dispatchEvent(_event: Event): boolean {
+    return true;
+  }
+
+  set onmessage(cb: ((ev: MessageEvent) => unknown) | null) {
+    this._onmessage = cb;
+  }
+  get onmessage(): ((ev: MessageEvent) => unknown) | null {
+    return this._onmessage;
+  }
+  set onerror(cb: ((ev: ErrorEvent) => unknown) | null) {
+    this._onerror = cb;
+  }
+  get onerror(): ((ev: ErrorEvent) => unknown) | null {
+    return this._onerror;
+  }
+  set onmessageerror(cb: ((ev: MessageEvent) => unknown) | null) {
+    this._onmessageerror = cb;
+  }
+  get onmessageerror(): ((ev: MessageEvent) => unknown) | null {
+    return this._onmessageerror;
+  }
+
+  private _fireListeners(type: string, ev: Event): void {
+    const set = this._listeners.get(type);
+    if (!set) return;
+    for (const l of set) {
+      if (typeof l === "function") l.call(this, ev);
+      else l.handleEvent(ev);
+    }
+  }
+}
+
+(globalThis as unknown as { Worker: unknown }).Worker = ProxiedWorker;
+
+// Override importScripts so webpack chunks loaded from vfs paths work.
+const _originalImportScripts =
+  (globalThis as unknown as { importScripts?: (...urls: string[]) => void }).importScripts;
+if (_originalImportScripts) {
+  (globalThis as unknown as { importScripts: (...urls: string[]) => void }).importScripts = ((
+    ...urls: string[]
+  ) => {
+    // Best effort: synchronously loading VFS scripts is impossible from a
+    // Web Worker — importScripts is synchronous. We fall back to the
+    // original for non-vfs urls; for vfs urls we'd need a nested worker
+    // pre-bundled dependency. vscode-yaml doesn't trip this path after
+    // LSP handshake because all chunks are bundled into languageserver-web.js.
+    for (const url of urls) {
+      if (urlToLocalPath(url)) {
+        console.warn(`[ExtHost] importScripts(${url}) not fully supported in worker; skipping`);
+        continue;
+      }
+      _originalImportScripts(url);
+    }
+  }) as typeof _originalImportScripts;
+}
+
+// ── Vscode resolver installed in module loader ──────────────────────
+
+const vscodeNs = createVscodeNamespace();
+(self as unknown as { __dotdir_vscode_api?: unknown }).__dotdir_vscode_api = vscodeNs;
+
+// ── Helpers ─────────────────────────────────────────────────────────
 
 function activationKey(ext: WorkerLoadedExtension): string {
   return `${ext.ref.publisher}.${ext.ref.name}.${ext.ref.version}`;
 }
 
+function extensionId(ext: WorkerLoadedExtension): string {
+  return `${ext.ref.publisher}.${ext.ref.name}`;
+}
+
 function encodePathPreservingSlashes(path: string): string {
-  return path
-    .split("/")
-    .map((seg) => encodeURIComponent(seg))
-    .join("/");
+  return path.split("/").map((seg) => encodeURIComponent(seg)).join("/");
 }
 
 function windowsDrivePathToSlashSegments(path: string): string {
@@ -286,11 +466,17 @@ function extensionScriptVfsUrl(absPath: string): string {
 
 function extensionWantsEvent(ext: WorkerLoadedExtension, event: string): boolean {
   const events = ext.manifest.activationEvents ?? [];
-  if (events.length === 0) {
-    return event === "*";
-  }
+  if (events.length === 0) return event === "*";
   return events.includes("*") || events.includes(event);
 }
+
+// ── Browser module loading ─────────────────────────────────────────
+
+type BrowserExtensionModule = {
+  activate?: (ctx: unknown) => unknown | Promise<unknown>;
+  deactivate?: (ctx: unknown) => unknown | Promise<unknown>;
+  default?: { activate?: (ctx: unknown) => unknown | Promise<unknown>; deactivate?: (ctx: unknown) => unknown | Promise<unknown> };
+};
 
 async function importBrowserModuleEsm(absScriptPath: string): Promise<BrowserExtensionModule> {
   const moduleUrl = extensionScriptVfsUrl(absScriptPath);
@@ -298,11 +484,9 @@ async function importBrowserModuleEsm(absScriptPath: string): Promise<BrowserExt
   return mod as BrowserExtensionModule;
 }
 
-async function importBrowserModuleCjs(absScriptPath: string): Promise<BrowserExtensionModule> {
+async function importBrowserModuleCjs(absScriptPath: string, extDir: string): Promise<BrowserExtensionModule> {
   const script = await readTextFile(absScriptPath);
-  if (script == null) {
-    throw new Error(`Browser script not found: ${absScriptPath}`);
-  }
+  if (script == null) throw new Error(`Browser script not found: ${absScriptPath}`);
   const cjsWrapper = `
 const __dotdir_vscode = globalThis.__dotdir_vscode_api;
 const module = { exports: {} };
@@ -311,9 +495,11 @@ const require = (id) => {
   if (id === "vscode") return __dotdir_vscode;
   throw new Error("Unsupported browser require: " + id);
 };
-(function(module, exports, require, globalThis, self){
+const __filename = ${JSON.stringify(absScriptPath)};
+const __dirname = ${JSON.stringify(extDir)};
+(function(module, exports, require, globalThis, self, __filename, __dirname){
 ${script}
-})(module, exports, require, globalThis, self);
+})(module, exports, require, globalThis, self, __filename, __dirname);
 const __exp = module.exports && module.exports.__esModule && module.exports.default ? module.exports.default : module.exports;
 export default __exp;
 export const activate = __exp?.activate;
@@ -321,21 +507,14 @@ export const deactivate = __exp?.deactivate;
 `;
   const cjsBlobUrl = URL.createObjectURL(new Blob([cjsWrapper], { type: "text/javascript" }));
   try {
-    const mod = await import(/* @vite-ignore */ cjsBlobUrl);
-    return mod as BrowserExtensionModule;
+    return (await import(/* @vite-ignore */ cjsBlobUrl)) as BrowserExtensionModule;
   } finally {
     URL.revokeObjectURL(cjsBlobUrl);
   }
 }
 
 async function resolveBrowserScriptPath(absScriptPath: string): Promise<string> {
-  const candidates = [
-    absScriptPath,
-    `${absScriptPath}.js`,
-    `${absScriptPath}.mjs`,
-    join(absScriptPath, "index.js"),
-    join(absScriptPath, "index.mjs"),
-  ];
+  const candidates = [absScriptPath, `${absScriptPath}.js`, `${absScriptPath}.mjs`, join(absScriptPath, "index.js"), join(absScriptPath, "index.mjs")];
   for (const candidate of candidates) {
     const content = await readTextFile(candidate);
     if (content != null) return candidate;
@@ -343,44 +522,109 @@ async function resolveBrowserScriptPath(absScriptPath: string): Promise<string> 
   return absScriptPath;
 }
 
-function createVscodeApi(dotdirCommands: BrowserExtensionContext["dotdir"]["commands"], extensionKey: string): unknown {
-  const commands = {
-    registerCommand: (commandId: string, handler: (...args: unknown[]) => unknown) => {
-      emitActivationLog("info", extensionKey, `vscode.commands.registerCommand ${commandId}`);
-      return dotdirCommands.registerCommand(commandId, (...args: unknown[]) => {
-        void handler(...args);
-      });
+// ── Activation ─────────────────────────────────────────────────────
+
+function loadManifestConfig(manifest: ExtensionManifest): void {
+  const cfg = manifest.contributes?.configuration;
+  if (Array.isArray(cfg)) {
+    for (const c of cfg) if (c?.properties) loadConfigDefaults(c.properties);
+  } else if (cfg?.properties) {
+    loadConfigDefaults(cfg.properties);
+  }
+  loadLanguageDefaults(manifest.contributes?.configurationDefaults);
+}
+
+interface ExtensionContextShape {
+  subscriptions: Array<{ dispose: () => void }>;
+  extensionUri: Uri;
+  extensionPath: string;
+  globalStoragePath: string;
+  globalStorageUri: Uri;
+  storagePath?: string;
+  storageUri?: Uri;
+  logPath: string;
+  logUri: Uri;
+  environmentVariableCollection: unknown;
+  extensionMode: ExtensionMode;
+  asAbsolutePath: (relative: string) => string;
+  secrets: unknown;
+  globalState: unknown;
+  workspaceState: unknown;
+  extension: { id: string; extensionUri: Uri; extensionPath: string; isActive: boolean; packageJSON: Record<string, unknown>; extensionKind: number; exports: unknown };
+  dotdir: { commands: { registerCommand: (id: string, handler: (...args: unknown[]) => unknown) => { dispose: () => void } } };
+}
+
+const mementoStore = new Map<string, Map<string, unknown>>();
+
+function createMemento(scopeKey: string): {
+  get: <T>(key: string, defaultValue?: T) => T | undefined;
+  update: (key: string, value: unknown) => Promise<void>;
+  keys: () => readonly string[];
+  setKeysForSync?: (keys: readonly string[]) => void;
+} {
+  let m = mementoStore.get(scopeKey);
+  if (!m) {
+    m = new Map<string, unknown>();
+    mementoStore.set(scopeKey, m);
+  }
+  return {
+    get<T>(key: string, defaultValue?: T): T | undefined {
+      return (m!.has(key) ? (m!.get(key) as T) : defaultValue) as T | undefined;
     },
-    executeCommand: async (commandId: string, ...args: unknown[]) => {
-      emitActivationLog("info", extensionKey, `vscode.commands.executeCommand ${commandId}`);
-      await runCommand(commandId, args);
-      return undefined;
+    async update(key: string, value: unknown): Promise<void> {
+      if (value === undefined) m!.delete(key);
+      else m!.set(key, value);
     },
+    keys() {
+      return Array.from(m!.keys());
+    },
+    setKeysForSync() {},
   };
-  const window = {
-    showInformationMessage: async (message: string) => {
-      emitActivationLog("info", extensionKey, `vscode.window.showInformationMessage ${message}`);
-      return undefined;
+}
+
+function createExtensionContext(ext: WorkerLoadedExtension, subs: Array<{ dispose: () => void }>): ExtensionContextShape {
+  const id = extensionId(ext);
+  const extensionUri = Uri.file(ext.dirPath);
+  const globalStorageDir = join(ext.dirPath, "..", ".global-storage", id);
+  const logDir = join(ext.dirPath, "..", ".logs", id);
+  return {
+    subscriptions: subs,
+    extensionUri,
+    extensionPath: ext.dirPath,
+    globalStoragePath: globalStorageDir,
+    globalStorageUri: Uri.file(globalStorageDir),
+    storagePath: undefined,
+    storageUri: undefined,
+    logPath: logDir,
+    logUri: Uri.file(logDir),
+    environmentVariableCollection: { persistent: false, replace: () => {}, append: () => {}, prepend: () => {}, get: () => undefined, forEach: () => {}, delete: () => {}, clear: () => {} },
+    extensionMode: ExtensionMode.Production,
+    asAbsolutePath: (relative: string) => join(ext.dirPath, relative),
+    secrets: { get: async () => undefined, store: async () => {}, delete: async () => {}, onDidChange: () => ({ dispose: () => {} }) },
+    globalState: createMemento(`${id}:global`),
+    workspaceState: createMemento(`${id}:workspace`),
+    extension: {
+      id,
+      extensionUri,
+      extensionPath: ext.dirPath,
+      isActive: false,
+      packageJSON: ext.manifest as unknown as Record<string, unknown>,
+      extensionKind: 1,
+      exports: undefined,
     },
-    showWarningMessage: async (message: string) => {
-      emitActivationLog("warn", extensionKey, `vscode.window.showWarningMessage ${message}`);
-      return undefined;
-    },
-    showErrorMessage: async (message: string) => {
-      emitActivationLog("error", extensionKey, `vscode.window.showErrorMessage ${message}`);
-      return undefined;
-    },
-  };
-  const Disposable = class {
-    static from(...disposables: Array<{ dispose: () => void }>): { dispose: () => void } {
-      return {
-        dispose: () => {
-          for (const disposable of disposables) disposable.dispose();
+    dotdir: {
+      commands: {
+        registerCommand: (commandId: string, handler: (...args: unknown[]) => unknown) => {
+          commandHandlers.set(commandId, handler);
+          const d = new Disposable(() => {
+            if (commandHandlers.get(commandId) === handler) commandHandlers.delete(commandId);
+          });
+          subs.push(d);
+          return d;
         },
-      };
-    }
+      },
+    },
   };
-  return { commands, window, Disposable };
 }
 
 async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
@@ -388,58 +632,45 @@ async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
   if (activeExtensions.has(key)) return;
   if (!ext.manifest.browser) return;
 
+  setActiveExtensionKey(key);
+
   const relScript = normalizePath(ext.manifest.browser).replace(/^\/+/, "");
   const absScriptPath = join(ext.dirPath, relScript);
   const resolvedScriptPath = await resolveBrowserScriptPath(absScriptPath);
   const isEsm = String(ext.manifest.type ?? "").trim().toLowerCase() === "module";
-  emitActivationLog(
-    "info",
-    key,
-    `loading browser script ${resolvedScriptPath} via ${isEsm ? extensionScriptVfsUrl(resolvedScriptPath) : "cjs-wrapper"}`,
-  );
+  logActivation("info", `loading browser script ${resolvedScriptPath} via ${isEsm ? "esm" : "cjs-wrapper"}`);
+
   const mod = isEsm
     ? await importBrowserModuleEsm(resolvedScriptPath)
-    : await importBrowserModuleCjs(resolvedScriptPath);
+    : await importBrowserModuleCjs(resolvedScriptPath, ext.dirPath);
   const activate = mod.activate ?? mod.default?.activate;
   const deactivate = mod.deactivate ?? mod.default?.deactivate;
   if (typeof activate !== "function") {
-    console.warn(`[ExtHost] ${key} browser entry has no activate() export`);
+    logActivation("warn", "browser entry has no activate() export");
     return;
   }
 
-  const localDisposables: BrowserDisposable[] = [];
-  const dotdir = {
-    commands: {
-      registerCommand: (commandId: string, handler: (...args: unknown[]) => void | Promise<void>): BrowserDisposable => {
-        commandHandlers.set(commandId, handler);
-        const disposable = {
-          dispose: () => {
-            const current = commandHandlers.get(commandId);
-            if (current === handler) {
-              commandHandlers.delete(commandId);
-            }
-          },
-        };
-        localDisposables.push(disposable);
-        return disposable;
-      },
-    },
-  };
+  const subs: Array<{ dispose: () => void }> = [];
+  const ctx = createExtensionContext(ext, subs);
 
-  const ctx: BrowserExtensionContext = {
-    subscriptions: localDisposables,
-    dotdir,
-  };
+  // Register in vscode.extensions.all before activation so the extension
+  // can resolve itself during activate().
+  registerExtension({
+    id: extensionId(ext),
+    extensionUri: ctx.extensionUri,
+    extensionPath: ctx.extensionPath,
+    isActive: false,
+    packageJSON: ext.manifest as unknown as Record<string, unknown>,
+    extensionKind: 1,
+    exports: undefined,
+    activate: async () => undefined,
+  });
 
-  const vscodeApi = createVscodeApi(dotdir.commands, key);
-  (self as unknown as { __dotdir_vscode_api?: unknown }).__dotdir_vscode_api = vscodeApi;
-  (self as unknown as { vscode?: unknown }).vscode = vscodeApi;
-  emitActivationLog("info", key, "vscode shim installed");
-
-  (self as unknown as { dotdir?: unknown }).dotdir = dotdir;
-  await activate(ctx);
-  emitActivationLog("info", key, "activated");
-  activeExtensions.set(key, { subscriptions: localDisposables, deactivate });
+  const exports = await activate(ctx);
+  markExtensionActive(extensionId(ext), exports);
+  logActivation("info", "activated");
+  activeExtensions.set(key, { subscriptions: subs, deactivate });
+  setActiveExtensionKey(null);
 }
 
 async function activateByEvent(event: string): Promise<void> {
@@ -449,21 +680,23 @@ async function activateByEvent(event: string): Promise<void> {
     try {
       await activateExtension(ext);
     } catch (err) {
-      console.error("[ExtHost] activate failed:", activationKey(ext), err);
       const message = err instanceof Error ? err.message : String(err);
-      emitActivationLog("error", activationKey(ext), message, event);
+      console.error("[ExtHost] activate failed:", activationKey(ext), err);
+      setActiveExtensionKey(activationKey(ext));
+      logActivation("error", message, event);
+      setActiveExtensionKey(null);
     }
   }
 }
 
-async function runCommand(command: string, args: unknown[]): Promise<void> {
+async function runCommand(command: string, args: unknown[]): Promise<unknown> {
   await activateByEvent(`onCommand:${command}`);
   const handler = commandHandlers.get(command);
-  if (!handler) return;
-  await handler(...args);
+  if (!handler) return undefined;
+  return await handler(...args);
 }
 
-// ── Extension loading logic ─────────────────────────────────────────
+// ── Extension loading (from disk) ──────────────────────────────────
 
 function extensionDirName(ref: ExtensionRef): string {
   return `${ref.publisher}-${ref.name}-${ref.version}`;
@@ -486,22 +719,9 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
       const theme = manifest.contributes.iconTheme;
       const themePath = join(extDir, theme.path);
       if (themePath.endsWith(".json")) {
-        iconThemes.push({
-          id: theme.id || "default",
-          label: theme.label || manifest.displayName || manifest.name,
-          kind: "vscode",
-          path: themePath,
-          sourceId: theme.id,
-        });
+        iconThemes.push({ id: theme.id || "default", label: theme.label || manifest.displayName || manifest.name, kind: "vscode", path: themePath, sourceId: theme.id });
       } else {
-        iconThemes.push({
-          id: theme.id || "default",
-          label: theme.label || manifest.displayName || manifest.name,
-          kind: "fss",
-          path: themePath,
-          basePath: dirname(themePath),
-          sourceId: theme.id,
-        });
+        iconThemes.push({ id: theme.id || "default", label: theme.label || manifest.displayName || manifest.name, kind: "fss", path: themePath, basePath: dirname(themePath), sourceId: theme.id });
       }
     }
 
@@ -510,7 +730,7 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
         ...manifest.contributes.iconThemes.map((theme, index) => ({
           id: theme.id || `${theme.label}#${index}`,
           label: theme.label,
-          kind: theme.path.endsWith(".json") ? "vscode" as const : "fss" as const,
+          kind: theme.path.endsWith(".json") ? ("vscode" as const) : ("fss" as const),
           path: join(extDir, theme.path),
           basePath: theme.path.endsWith(".json") ? undefined : dirname(join(extDir, theme.path)),
           sourceId: theme.id,
@@ -524,13 +744,8 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
     if (manifest.contributes?.grammars?.length) {
       grammarRefs = [];
       for (const grammarContrib of manifest.contributes.grammars) {
-        try {
-          const grammarPath = join(extDir, grammarContrib.path);
-          // Lazy: don't parse JSON yet; Monaco will load per-language on demand.
-          grammarRefs.push({ contribution: grammarContrib, path: grammarPath });
-        } catch {
-          // Skip grammars that fail to load
-        }
+        const grammarPath = join(extDir, grammarContrib.path);
+        grammarRefs.push({ contribution: grammarContrib, path: grammarPath });
       }
     }
 
@@ -572,7 +787,7 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
       }
     }
 
-    return {
+    const loaded: WorkerLoadedExtension = {
       ref,
       manifest,
       dirPath: extDir,
@@ -588,6 +803,8 @@ async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtensi
       fsProviders,
       shellIntegrations,
     };
+    loadManifestConfig(manifest);
+    return loaded;
   } catch {
     return null;
   }
@@ -612,8 +829,6 @@ async function loadExtensions(dataDir: string): Promise<WorkerLoadedExtension[]>
     const extDir = ref.path ? normalizePath(ref.path) : join(extensionsDir, extensionDirName(ref));
     const ext = await loadExtensionFromDir(extDir);
     if (ext) {
-      // Preserve source, autoUpdate, and path from extensions.json — loadExtensionFromDir
-      // builds a bare ref from the manifest and drops these fields.
       ext.ref.source = ref.source;
       ext.ref.autoUpdate = ref.autoUpdate;
       if (ref.path) ext.ref.path = normalizePath(ref.path);
@@ -621,68 +836,512 @@ async function loadExtensions(dataDir: string): Promise<WorkerLoadedExtension[]>
     }
   }
 
-  console.log(
-    "[ExtHost] loaded",
-    loaded.length,
-    "extensions; FSS:",
-    loaded.flatMap((e) => (e.iconThemes ?? []).filter((theme) => theme.kind === "fss").map((theme) => `${e.ref.publisher}.${e.ref.name}:${theme.id}`)),
-    "vscode:",
-    loaded.flatMap((e) => (e.iconThemes ?? []).filter((theme) => theme.kind === "vscode").map((theme) => `${e.ref.publisher}.${e.ref.name}:${theme.id}`)),
-  );
+  console.log("[ExtHost] loaded", loaded.length, "extensions");
   loadedExtensions.clear();
-  for (const ext of loaded) {
-    loadedExtensions.set(activationKey(ext), ext);
-  }
+  for (const ext of loaded) loadedExtensions.set(activationKey(ext), ext);
   return loaded;
+}
+
+// ── Provider invocation dispatch ───────────────────────────────────
+
+const providerCancellations = new Map<number, { isCancellationRequested: boolean; onCancellationRequested: ReturnType<typeof noopCancelEvent> }>();
+
+function noopCancelEvent() {
+  return (_l: () => void) => ({ dispose() {} });
+}
+
+function makeCancellationToken(requestId: number): {
+  isCancellationRequested: boolean;
+  onCancellationRequested: (listener: () => void) => { dispose: () => void };
+} {
+  let cancelled = false;
+  const listeners = new Set<() => void>();
+  const token = {
+    get isCancellationRequested() {
+      return cancelled;
+    },
+    onCancellationRequested: (listener: () => void) => {
+      listeners.add(listener);
+      return {
+        dispose: () => listeners.delete(listener),
+      };
+    },
+  };
+  providerCancellations.set(requestId, {
+    get isCancellationRequested() {
+      return cancelled;
+    },
+    onCancellationRequested: () => ({ dispose: () => {} }),
+  } as unknown as (typeof providerCancellations extends Map<number, infer V> ? V : never));
+  const cancel = () => {
+    if (cancelled) return;
+    cancelled = true;
+    for (const l of listeners) {
+      try {
+        l();
+      } catch {
+        // ignore
+      }
+    }
+    listeners.clear();
+    providerCancellations.delete(requestId);
+  };
+  (token as unknown as { _cancel: () => void })._cancel = cancel;
+  return token;
+}
+
+// ── Type adapters: shim → flat payload ─────────────────────────────
+
+function posPayload(p: { line: number; character: number }): PositionPayload {
+  return { line: p.line, character: p.character };
+}
+
+function rangePayload(r: { start: { line: number; character: number }; end: { line: number; character: number } }): RangePayload {
+  return { start: posPayload(r.start), end: posPayload(r.end) };
+}
+
+function stringifyDoc(d: unknown): string | { kind: "plaintext" | "markdown"; value: string } | undefined {
+  if (d == null) return undefined;
+  if (typeof d === "string") return d;
+  if (d instanceof MarkdownString) return { kind: "markdown", value: d.value };
+  const any = d as { kind?: string; value?: string };
+  if (typeof any.value === "string") return { kind: any.kind === "markdown" ? "markdown" : "plaintext", value: any.value };
+  return String(d);
+}
+
+function textEditPayload(e: TextEdit | { range: Range; newText: string }): TextEditPayload {
+  return { range: rangePayload(e.range), newText: e.newText };
+}
+
+function completionItemPayload(item: unknown): CompletionItemPayload {
+  const ci = item as CompletionItem & { textEdit?: TextEdit; insertTextRules?: number };
+  const label: string | { label: string; detail?: string; description?: string } =
+    typeof ci.label === "string" ? ci.label : (ci.label as CompletionItemLabel);
+  let range: CompletionItemPayload["range"];
+  if (ci.range instanceof Range) range = rangePayload(ci.range);
+  else if (ci.range && typeof ci.range === "object" && "inserting" in ci.range) {
+    range = { inserting: rangePayload(ci.range.inserting), replacing: rangePayload(ci.range.replacing) };
+  } else if (ci.textEdit) {
+    range = rangePayload(ci.textEdit.range);
+  }
+  let insertText: string | undefined;
+  let insertTextFormat: number | undefined;
+  if (typeof ci.insertText === "string") insertText = ci.insertText;
+  else if (ci.insertText && typeof ci.insertText === "object" && "value" in ci.insertText) {
+    insertText = (ci.insertText as { value: string }).value;
+    insertTextFormat = 2;
+  } else if (ci.textEdit) {
+    insertText = ci.textEdit.newText;
+  }
+  return {
+    label,
+    kind: ci.kind,
+    tags: ci.tags,
+    detail: ci.detail,
+    documentation: stringifyDoc(ci.documentation),
+    sortText: ci.sortText,
+    filterText: ci.filterText,
+    insertText,
+    insertTextFormat,
+    range,
+    commitCharacters: ci.commitCharacters,
+    preselect: ci.preselect,
+    additionalTextEdits: ci.additionalTextEdits?.map(textEditPayload),
+    command: ci.command,
+  };
+}
+
+function completionListPayload(result: unknown): CompletionListPayload | null {
+  if (result == null) return null;
+  let items: unknown[] = [];
+  let isIncomplete = false;
+  if (Array.isArray(result)) items = result;
+  else if (result instanceof CompletionList) {
+    items = result.items;
+    isIncomplete = Boolean(result.isIncomplete);
+  } else if (result && typeof result === "object" && "items" in result) {
+    const r = result as { items: unknown[]; isIncomplete?: boolean };
+    items = r.items;
+    isIncomplete = Boolean(r.isIncomplete);
+  }
+  return { items: items.map(completionItemPayload), isIncomplete };
+}
+
+function hoverPayload(result: unknown): HoverPayload | null {
+  if (!result) return null;
+  const h = result as Hover;
+  const contents = (h.contents ?? []).map((c: MarkedString) => {
+    if (typeof c === "string") return c;
+    if (c instanceof MarkdownString) return { kind: "markdown" as const, value: c.value };
+    if ("language" in c) return { language: c.language, value: c.value };
+    return { kind: "plaintext" as const, value: String((c as { value?: string }).value ?? c) };
+  });
+  return { contents, range: h.range ? rangePayload(h.range) : undefined };
+}
+
+function diagnosticPayload(d: unknown): DiagnosticPayload {
+  const diag = d as Diagnostic;
+  return {
+    range: rangePayload(diag.range),
+    message: diag.message,
+    severity: diag.severity,
+    source: diag.source,
+    code:
+      diag.code && typeof diag.code === "object" && "target" in diag.code
+        ? { value: diag.code.value, target: diag.code.target.toString() }
+        : (diag.code as string | number | undefined),
+    tags: diag.tags,
+  };
+}
+
+function symbolPayload(s: unknown): DocumentSymbolPayload | SymbolInformationPayload {
+  if (s instanceof DocumentSymbol) {
+    return {
+      name: s.name,
+      detail: s.detail,
+      kind: s.kind,
+      tags: s.tags,
+      range: rangePayload(s.range),
+      selectionRange: rangePayload(s.selectionRange),
+      children: (s.children ?? []).map(symbolPayload) as DocumentSymbolPayload[],
+    };
+  }
+  const si = s as SymbolInformation;
+  return {
+    name: si.name,
+    kind: si.kind,
+    tags: si.tags,
+    containerName: si.containerName,
+    location: { uri: si.location.uri.toString(), range: rangePayload(si.location.range) },
+  };
+}
+
+function locationPayload(l: unknown): LocationPayload {
+  const loc = l as Location;
+  return { uri: loc.uri.toString(), range: rangePayload(loc.range) };
+}
+
+function foldingPayload(f: unknown): FoldingRangePayload {
+  const fr = f as FoldingRange;
+  const kindStr = fr.kind === 1 ? "comment" : fr.kind === 2 ? "imports" : fr.kind === 3 ? "region" : undefined;
+  return { start: fr.start, end: fr.end, kind: kindStr };
+}
+
+function selectionRangePayload(sr: unknown): SelectionRangePayload {
+  const r = sr as SelectionRange;
+  return { range: rangePayload(r.range), parent: r.parent ? selectionRangePayload(r.parent) : undefined };
+}
+
+function docHighlightPayload(h: unknown): DocumentHighlightPayload {
+  const dh = h as { range: Range; kind?: number };
+  return { range: rangePayload(dh.range), kind: dh.kind };
+}
+
+function colorInfoPayload(c: unknown): ColorInformationPayload {
+  const ci = c as { range: Range; color: { red: number; green: number; blue: number; alpha: number } };
+  return { range: rangePayload(ci.range), color: { ...ci.color } };
+}
+
+function colorPresentationPayload(p: unknown): ColorPresentationPayload {
+  const cp = p as { label: string; textEdit?: TextEdit; additionalTextEdits?: TextEdit[] };
+  return { label: cp.label, textEdit: cp.textEdit ? textEditPayload(cp.textEdit) : undefined, additionalTextEdits: cp.additionalTextEdits?.map(textEditPayload) };
+}
+
+function documentLinkPayload(l: unknown): DocumentLinkPayload {
+  const dl = l as DocumentLink;
+  return { range: rangePayload(dl.range), target: dl.target?.toString(), tooltip: dl.tooltip };
+}
+
+function signatureHelpPayload(s: unknown): SignatureHelpPayload | null {
+  if (!s) return null;
+  const sh = s as { signatures: Array<{ label: string; documentation?: unknown; parameters?: Array<{ label: string | [number, number]; documentation?: unknown }>; activeParameter?: number }>; activeSignature?: number; activeParameter?: number };
+  return {
+    signatures: sh.signatures.map((sig) => ({
+      label: sig.label,
+      documentation: stringifyDoc(sig.documentation),
+      parameters: sig.parameters?.map((p) => ({ label: p.label, documentation: stringifyDoc(p.documentation) })),
+      activeParameter: sig.activeParameter,
+    })),
+    activeSignature: sh.activeSignature,
+    activeParameter: sh.activeParameter,
+  };
+}
+
+function codeActionPayload(a: unknown): CodeActionPayload {
+  const act = a as { title: string; kind?: { value: string }; diagnostics?: Diagnostic[]; edit?: { entries: () => Array<[Uri, TextEdit[]]> }; command?: { command: string; title: string; arguments?: unknown[] }; isPreferred?: boolean; disabled?: { reason: string } };
+  let edit: CodeActionPayload["edit"];
+  if (act.edit && typeof act.edit.entries === "function") {
+    const changes: Record<string, TextEditPayload[]> = {};
+    for (const [uri, edits] of act.edit.entries()) changes[uri.toString()] = edits.map(textEditPayload);
+    edit = { changes };
+  }
+  return {
+    title: act.title,
+    kind: act.kind?.value,
+    diagnostics: act.diagnostics?.map(diagnosticPayload),
+    edit,
+    command: act.command,
+    isPreferred: act.isPreferred,
+    disabled: act.disabled,
+  };
+}
+
+function codeLensPayload(l: unknown): CodeLensPayload {
+  const cl = l as { range: Range; command?: { command: string; title: string; arguments?: unknown[] } };
+  return { range: rangePayload(cl.range), command: cl.command };
+}
+
+// ── Invoke provider ───────────────────────────────────────────────
+
+interface ProviderInvokeArgs {
+  uri: string;
+  position?: PositionPayload;
+  range?: RangePayload;
+  context?: Record<string, unknown>;
+  newName?: string;
+  ch?: string;
+  options?: Record<string, unknown>;
+}
+
+async function invokeProvider(providerId: number, method: string, args: ProviderInvokeArgs, requestId: number): Promise<unknown> {
+  const record = getProvider(providerId);
+  if (!record) throw new Error(`No provider registered for id ${providerId}`);
+  const provider = record.provider as Record<string, (...a: unknown[]) => unknown>;
+  const fn = provider[method];
+  if (typeof fn !== "function") throw new Error(`Provider ${record.kind} has no method ${method}`);
+  const doc = textDocuments.get(args.uri);
+  if (!doc) throw new Error(`No document for ${args.uri}`);
+  const token = makeCancellationToken(requestId);
+  const ctxArg = args.context ?? {};
+
+  let result: unknown;
+  switch (record.kind) {
+    case "completion": {
+      const pos = new Position(args.position!.line, args.position!.character);
+      result = await fn.call(provider, doc, pos, token, ctxArg);
+      return completionListPayload(result);
+    }
+    case "hover": {
+      const pos = new Position(args.position!.line, args.position!.character);
+      result = await fn.call(provider, doc, pos, token);
+      return hoverPayload(result);
+    }
+    case "definition":
+    case "typeDefinition":
+    case "implementation":
+    case "declaration": {
+      const pos = new Position(args.position!.line, args.position!.character);
+      result = await fn.call(provider, doc, pos, token);
+      if (!result) return null;
+      const arr = Array.isArray(result) ? result : [result];
+      return arr.map((l) => (l && (l as { uri?: Uri }).uri ? locationPayload(l) : locationPayload(l)));
+    }
+    case "reference": {
+      const pos = new Position(args.position!.line, args.position!.character);
+      result = await fn.call(provider, doc, pos, ctxArg, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(locationPayload);
+    }
+    case "documentHighlight": {
+      const pos = new Position(args.position!.line, args.position!.character);
+      result = await fn.call(provider, doc, pos, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(docHighlightPayload);
+    }
+    case "documentSymbol": {
+      result = await fn.call(provider, doc, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(symbolPayload);
+    }
+    case "workspaceSymbol": {
+      result = await fn.call(provider, args.context?.["query"] ?? "", token);
+      if (!Array.isArray(result)) return [];
+      return result.map(symbolPayload);
+    }
+    case "codeAction": {
+      const r = new Range(args.range!.start.line, args.range!.start.character, args.range!.end.line, args.range!.end.character);
+      result = await fn.call(provider, doc, r, ctxArg, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(codeActionPayload);
+    }
+    case "codeLens": {
+      result = await fn.call(provider, doc, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(codeLensPayload);
+    }
+    case "documentFormatting": {
+      result = await fn.call(provider, doc, args.options ?? {}, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(textEditPayload);
+    }
+    case "documentRangeFormatting": {
+      const r = new Range(args.range!.start.line, args.range!.start.character, args.range!.end.line, args.range!.end.character);
+      result = await fn.call(provider, doc, r, args.options ?? {}, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(textEditPayload);
+    }
+    case "onTypeFormatting": {
+      const pos = new Position(args.position!.line, args.position!.character);
+      result = await fn.call(provider, doc, pos, args.ch ?? "", args.options ?? {}, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(textEditPayload);
+    }
+    case "rename": {
+      const pos = new Position(args.position!.line, args.position!.character);
+      result = await fn.call(provider, doc, pos, args.newName ?? "", token);
+      if (!result) return null;
+      const changes: Record<string, TextEditPayload[]> = {};
+      const w = result as { entries?: () => Array<[Uri, TextEdit[]]> };
+      if (typeof w.entries === "function") {
+        for (const [uri, edits] of w.entries()) changes[uri.toString()] = edits.map(textEditPayload);
+      }
+      return { changes };
+    }
+    case "documentLink": {
+      result = await fn.call(provider, doc, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(documentLinkPayload);
+    }
+    case "color": {
+      if (method === "provideDocumentColors") {
+        result = await fn.call(provider, doc, token);
+        if (!Array.isArray(result)) return [];
+        return result.map(colorInfoPayload);
+      }
+      if (method === "provideColorPresentations") {
+        const color = args.context?.["color"] as { red: number; green: number; blue: number; alpha: number };
+        const r = new Range(args.range!.start.line, args.range!.start.character, args.range!.end.line, args.range!.end.character);
+        result = await fn.call(provider, color, { document: doc, range: r }, token);
+        if (!Array.isArray(result)) return [];
+        return result.map(colorPresentationPayload);
+      }
+      return null;
+    }
+    case "folding": {
+      result = await fn.call(provider, doc, ctxArg, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(foldingPayload);
+    }
+    case "selectionRange": {
+      const positions = (args.context?.["positions"] as PositionPayload[] | undefined)?.map((p) => new Position(p.line, p.character)) ?? [];
+      result = await fn.call(provider, doc, positions, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(selectionRangePayload);
+    }
+    case "signatureHelp": {
+      const pos = new Position(args.position!.line, args.position!.character);
+      result = await fn.call(provider, doc, pos, token, ctxArg);
+      return signatureHelpPayload(result);
+    }
+    default:
+      logActivation("warn", `provider kind ${record.kind} not implemented`);
+      return null;
+  }
 }
 
 // ── Message handler ─────────────────────────────────────────────────
 
 self.onmessage = (e: MessageEvent) => {
-  const msg = e.data;
+  const msg = e.data as MainToHostMessage;
+  // Give subscribers first crack for shim-internal wiring.
+  rpc.dispatch(msg);
 
-  if (msg.type === "start") {
-    loadExtensions(msg.dataDir)
-      .then(async (extensions) => {
-        await activateByEvent("*");
-        self.postMessage({ type: "loaded", extensions });
-      })
-      .catch((err: unknown) => {
-        const msg =
-          err instanceof Error ? err.message : err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : String(err);
-        self.postMessage({ type: "error", message: msg });
-      });
-  } else if (msg.type === "activateByEvent") {
-    const requestId = Number(msg.requestId);
-    activateByEvent(String(msg.event ?? ""))
-      .then(() => {
-        self.postMessage({ type: "requestResult", requestId, result: null });
-      })
-      .catch((err: unknown) => {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        self.postMessage({ type: "requestResult", requestId, error: errMsg });
-      });
-  } else if (msg.type === "executeCommand") {
-    const requestId = Number(msg.requestId);
-    const command = String(msg.command ?? "");
-    const args = Array.isArray(msg.args) ? msg.args : [];
-    runCommand(command, args)
-      .then(() => {
-        self.postMessage({ type: "requestResult", requestId, result: null });
-      })
-      .catch((err: unknown) => {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        self.postMessage({ type: "requestResult", requestId, error: errMsg });
-      });
-  } else if (msg.type === "readFileResult") {
-    const pending = pendingReads.get(msg.id);
-    if (pending) {
-      pendingReads.delete(msg.id);
-      if (msg.error) {
-        pending.resolve(null);
-      } else {
-        pending.resolve(msg.data);
+  switch (msg.type) {
+    case "start":
+      setDataDir(msg.dataDir);
+      loadExtensions(msg.dataDir)
+        .then(async (extensions) => {
+          await activateByEvent("*");
+          sendToMain({ type: "loaded", extensions: extensions as unknown[] });
+        })
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          sendToMain({ type: "error", message });
+        });
+      break;
+
+    case "activateByEvent":
+      activateByEvent(msg.event)
+        .then(() => sendToMain({ type: "requestResult", requestId: msg.requestId, result: null }))
+        .catch((err: unknown) => sendToMain({ type: "requestResult", requestId: msg.requestId, error: err instanceof Error ? err.message : String(err) }));
+      break;
+
+    case "executeCommand":
+      runCommand(msg.command, msg.args)
+        .then((result) => sendToMain({ type: "requestResult", requestId: msg.requestId, result: result ?? null }))
+        .catch((err: unknown) => sendToMain({ type: "requestResult", requestId: msg.requestId, error: err instanceof Error ? err.message : String(err) }));
+      break;
+
+    case "readFileResult": {
+      const pending = pendingReads.get(msg.id);
+      if (pending) {
+        pendingReads.delete(msg.id);
+        if (msg.error) pending.resolve(null);
+        else pending.resolve(msg.data);
       }
+      break;
+    }
+
+    case "readBinaryFileResult": {
+      const pending = pendingBinaryReads.get(msg.id);
+      if (pending) {
+        pendingBinaryReads.delete(msg.id);
+        if (msg.error) pending.resolve(null);
+        else pending.resolve(msg.bytes ?? null);
+      }
+      break;
+    }
+
+    case "document/open": {
+      const uriObj = Uri.parse(msg.uri);
+      textDocuments.open(msg.uri, uriObj, msg.languageId, msg.version, msg.text);
+      break;
+    }
+    case "document/change":
+      textDocuments.change(msg.uri, msg.version, msg.text);
+      break;
+    case "document/close":
+      textDocuments.close(msg.uri);
+      break;
+    case "document/save":
+      textDocuments.save(msg.uri);
+      break;
+    case "workspace/folders":
+      setWorkspaceFolders(msg.folders);
+      break;
+    case "configuration/update":
+      updateUserConfigValue(msg.key, msg.value);
+      break;
+    case "editor/active":
+      setActiveEditor(msg.uri);
+      break;
+
+    case "provider/invoke":
+      invokeProvider(msg.providerId, msg.method, msg.args as ProviderInvokeArgs, msg.requestId)
+        .then((result) => sendToMain({ type: "requestResult", requestId: msg.requestId, result: result ?? null }))
+        .catch((err: unknown) => sendToMain({ type: "requestResult", requestId: msg.requestId, error: err instanceof Error ? err.message : String(err) }));
+      break;
+
+    case "provider/cancel": {
+      const tok = providerCancellations.get(msg.requestId) as unknown as { _cancel?: () => void };
+      if (tok?._cancel) tok._cancel();
+      break;
+    }
+
+    case "requestResponse": {
+      const pending = pendingRequests.get(msg.requestId);
+      if (pending) {
+        pendingRequests.delete(msg.requestId);
+        if (msg.error) pending.reject(new Error(msg.error));
+        else pending.resolve(msg.result);
+      }
+      break;
     }
   }
 };
+
+// Pre-seed default workspace user config as soon as a workspace/folders
+// message updates it (handled above). Surface vscode to the assembled
+// namespace as well for convenience.
+(self as unknown as { vscode?: unknown }).vscode = vscodeNs;
+void vscodeWorkspace;
