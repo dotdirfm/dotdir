@@ -702,11 +702,84 @@ function extensionDirName(ref: ExtensionRef): string {
   return `${ref.publisher}-${ref.name}-${ref.version}`;
 }
 
+type NlsBundle = Record<string, string>;
+
+function localeCandidates(locale: string): string[] {
+  const normalized = locale.trim().toLowerCase().replace(/_/g, "-");
+  if (!normalized) return [];
+  const parts = normalized.split("-");
+  const candidates: string[] = [];
+  for (let i = parts.length; i > 0; i--) {
+    candidates.push(parts.slice(0, i).join("-"));
+  }
+  return candidates;
+}
+
+async function readNlsBundle(path: string): Promise<NlsBundle | null> {
+  const text = await readTextFile(path);
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const out: NlsBundle = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === "string") out[key] = value;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+async function loadManifestNlsBundle(extDir: string): Promise<NlsBundle> {
+  const locale =
+    ((self as typeof globalThis & { navigator?: { language?: string } }).navigator?.language ?? "en").trim() || "en";
+  const merged: NlsBundle = {};
+
+  // Base bundle always provides the fallback source.
+  const base = await readNlsBundle(join(extDir, "package.nls.json"));
+  if (base) Object.assign(merged, base);
+
+  // Locale-specific bundle overrides base keys when present.
+  const candidates = localeCandidates(locale);
+  for (const candidate of candidates) {
+    const localized = await readNlsBundle(join(extDir, `package.nls.${candidate}.json`));
+    if (localized) {
+      Object.assign(merged, localized);
+      break;
+    }
+  }
+
+  return merged;
+}
+
+function localizeManifestValue(value: unknown, bundle: NlsBundle): unknown {
+  if (typeof value === "string") {
+    const match = value.match(/^%([^%]+)%$/);
+    if (!match) return value;
+    const key = match[1] ?? "";
+    return bundle[key] ?? value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => localizeManifestValue(item, bundle));
+  }
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = localizeManifestValue(v, bundle);
+    }
+    return out;
+  }
+  return value;
+}
+
 async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtension | null> {
   try {
     const manifestText = await readTextFile(join(extDir, "package.json"));
     if (manifestText === null) return null;
-    const manifest: ExtensionManifest = JSON.parse(manifestText);
+    const rawManifest = JSON.parse(manifestText) as ExtensionManifest;
+    const nlsBundle = await loadManifestNlsBundle(extDir);
+    const manifest = localizeManifestValue(rawManifest, nlsBundle) as ExtensionManifest;
 
     const ref: ExtensionRef = {
       publisher: manifest.publisher || "unknown",

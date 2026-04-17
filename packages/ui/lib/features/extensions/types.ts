@@ -87,6 +87,28 @@ export interface ExtensionColorTheme {
   path: string; // relative path to JSON file
 }
 
+export interface ExtensionConfigurationPropertySchema {
+  type?: string | string[];
+  enum?: unknown[];
+  enumDescriptions?: string[];
+  markdownEnumDescriptions?: string[];
+  default?: unknown;
+  description?: string;
+  markdownDescription?: string;
+  deprecationMessage?: string;
+  markdownDeprecationMessage?: string;
+  scope?: string;
+  order?: number;
+  minimum?: number;
+  maximum?: number;
+  [key: string]: unknown;
+}
+
+export interface ExtensionConfigurationContribution {
+  title?: string;
+  properties?: Record<string, ExtensionConfigurationPropertySchema>;
+}
+
 /**
  * A shellIntegration contribution declares a shell that .dir can spawn:
  * how to find its executable and what init script to inject.
@@ -137,6 +159,8 @@ export interface ExtensionContributions {
   editors?: ExtensionEditorContribution[];
   fsProviders?: ExtensionFsProviderContribution[];
   shellIntegrations?: ExtensionShellIntegration[];
+  configuration?: ExtensionConfigurationContribution | ExtensionConfigurationContribution[];
+  configurationDefaults?: Record<string, Record<string, unknown>>;
 }
 
 export interface ExtensionManifest {

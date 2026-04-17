@@ -480,9 +480,40 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
     editor.trigger("keyboard", "actions.find", {});
   }
 
+  // When the suggest widget is visible, Monaco's stock keybindings route
+  // ArrowUp/Down/PageUp/PageDown/Home/End to the suggest-navigation actions
+  // instead of moving the cursor. The dotdir keymap intercepts those keys at
+  // the app level and dispatches `cursorUp`/etc. directly, so that context-
+  // sensitive behavior is lost. This table lets us restore it: if we're being
+  // asked to move the cursor while the suggest widget is open, we dispatch
+  // the corresponding suggestion-select action instead.
+  const SUGGEST_WIDGET_CURSOR_REMAP: Readonly<Record<string, string>> = {
+    cursorUp: "selectPrevSuggestion",
+    cursorDown: "selectNextSuggestion",
+    cursorPageUp: "selectPrevPageSuggestion",
+    cursorPageDown: "selectNextPageSuggestion",
+    cursorHome: "selectFirstSuggestion",
+    cursorEnd: "selectLastSuggestion",
+  };
+
+  // Monaco exposes suggest-widget visibility via a context key. There is no
+  // public accessor for it, so reach into the standalone editor's context key
+  // service. The shape has been stable for years; the `?? false` guard keeps
+  // us safe if Monaco ever renames/removes it.
+  function isSuggestWidgetVisible(editor: Monaco.editor.IStandaloneCodeEditor): boolean {
+    const svc = (editor as unknown as { _contextKeyService?: { getContextKeyValue?: (key: string) => unknown } })._contextKeyService;
+    return Boolean(svc?.getContextKeyValue?.("suggestWidgetVisible"));
+  }
+
   async function runEditorAction(editor: Monaco.editor.IStandaloneCodeEditor, actionId: string, payload?: unknown): Promise<void> {
     if (actionId === "actions.find") {
       await openFindWidget(editor);
+      return;
+    }
+
+    const remapped = SUGGEST_WIDGET_CURSOR_REMAP[actionId];
+    if (remapped && isSuggestWidgetVisible(editor)) {
+      editor.trigger("keyboard", remapped, {});
       return;
     }
 

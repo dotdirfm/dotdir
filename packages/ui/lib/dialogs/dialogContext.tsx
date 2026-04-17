@@ -16,6 +16,7 @@ import { ModalDialog } from "./ModalDialog";
 import { MoveConfigDialog } from "./MoveConfigDialog";
 import { OpenCreateFileDialog } from "./OpenCreateFileDialog";
 import { RenameDialog } from "./RenameDialog";
+import { SettingsDialog } from "./SettingsDialog";
 
 export interface MessageDialogButton {
   label: string;
@@ -126,6 +127,9 @@ export type DialogSpec =
     }
   | {
       type: "extensions";
+    }
+  | {
+      type: "settings";
     }
   | {
       type: "findFiles";
@@ -524,6 +528,8 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue, stackI
       );
     case "extensions":
       return <ExtensionsPanel onClose={ctx.closeDialog} />;
+    case "settings":
+      return <SettingsDialog onClose={ctx.closeDialog} />;
     case "findFiles":
       return (
         <FindFilesDialog

@@ -1359,6 +1359,20 @@ export function EditorContainer({
         const el = node as HTMLElement | null;
         return Boolean(el?.closest?.(".editor-widget"));
       };
+      // When Monaco's suggest widget is open, keyboard focus stays in the
+      // editor textarea — not in the widget — so the `.editor-widget` check
+      // above doesn't apply. If we let the command router handle the event in
+      // that case, Escape closes the editor and arrow keys move the cursor,
+      // instead of dismissing/navigating the suggestion list the way Monaco
+      // natively does. We explicitly carve those keys out here.
+      const isSuggestWidgetOpen = (): boolean => {
+        const widgets = document.querySelectorAll<HTMLElement>(".suggest-widget");
+        for (const w of widgets) {
+          if (w.classList.contains("visible")) return true;
+          if (w.offsetParent !== null && w.getBoundingClientRect().height > 0) return true;
+        }
+        return false;
+      };
       const isEditorNavigationKey =
         event.key === "ArrowUp" ||
         event.key === "ArrowDown" ||
@@ -1372,6 +1386,7 @@ export function EditorContainer({
         if (isMonacoEditorWidgetTarget(event.target) || isMonacoEditorWidgetTarget(document.activeElement)) {
           return false;
         }
+        if (isSuggestWidgetOpen()) return false;
       }
       if (isEditorNavigationKey) {
         if (isMonacoEditorWidgetTarget(event.target) || isMonacoEditorWidgetTarget(document.activeElement)) {

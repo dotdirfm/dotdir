@@ -2,6 +2,7 @@ export const TOGGLE_HIDDEN_FILES = "toggleHiddenFiles";
 export const TOGGLE_PANELS = "togglePanels";
 export const RUN_COMMANDS = "runCommands";
 export const SHOW_EXTENSIONS = "showExtensions";
+export const SHOW_SETTINGS = "showSettings";
 export const SHOW_FIND_FILES = "showFindFiles";
 export const SHOW_COMMAND_PALETTE = "showCommandPalette";
 export const CLOSE_VIEWER = "closeViewer";

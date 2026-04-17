@@ -14,6 +14,22 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { readFileText } from "@/features/file-system/fs";
 import { normalizePath } from "@/utils/path";
 import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import type {
+  CommandExecuteMsg,
+  ConfigurationReadMsg,
+  ConfigurationWriteMsg,
+  DiagnosticPayload,
+  DocumentSelectorPayload,
+  EditorApplyEditMsg,
+  EnvOpenExternalMsg,
+  HostToMainMessage,
+  MainToHostMessage,
+  MessageShowMsg,
+  OutputAppendMsg,
+  ProviderKind,
+  StatusBarUpdateMsg,
+  WorkspaceEditPayload,
+} from "./ehProtocol";
 import worker2 from "./extensionHost.worker.ts?worker&inline";
 import { ExtensionSettingsStore } from "./extensionSettings";
 import {
@@ -25,22 +41,6 @@ import {
   extensionRef,
   type LoadedExtension,
 } from "./types";
-import type {
-  HostToMainMessage,
-  MainToHostMessage,
-  ProviderKind,
-  DocumentSelectorPayload,
-  DiagnosticPayload,
-  WorkspaceEditPayload,
-  ConfigurationWriteMsg,
-  ConfigurationReadMsg,
-  MessageShowMsg,
-  EnvOpenExternalMsg,
-  EditorApplyEditMsg,
-  CommandExecuteMsg,
-  OutputAppendMsg,
-  StatusBarUpdateMsg,
-} from "./ehProtocol";
 
 type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
 
@@ -193,6 +193,13 @@ async function handleWorkerCommand(bridge: Bridge, command: string, args: unknow
 export class ExtensionHostClient {
   private worker: Worker | null = null;
   private listeners: ExtensionsLoadedCallback[] = [];
+  // The `loaded` message arrives asynchronously after the worker finishes
+  // reading extensions.json and activating `*` events. If a subscriber
+  // registers *after* that message has already been delivered (common during
+  // HMR or when mount ordering puts the subscriber's effect late), the event
+  // would otherwise be lost and the UI would see an empty extensions list.
+  // We latch the last payload here and replay it to late subscribers.
+  private lastLoaded: LoadedExtension[] | null = null;
   private starting = false;
   private nextRequestId = 1;
   private pendingRequests = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
@@ -221,6 +228,15 @@ export class ExtensionHostClient {
 
   onLoaded(cb: ExtensionsLoadedCallback): () => void {
     this.listeners.push(cb);
+    // Replay the latched payload so late subscribers never miss the initial
+    // `loaded` event. Deliver on a microtask so the caller can still set up
+    // whatever state it needs before the callback fires.
+    if (this.lastLoaded) {
+      const snapshot = this.lastLoaded;
+      queueMicrotask(() => {
+        if (this.listeners.includes(cb)) cb(snapshot);
+      });
+    }
     return () => {
       this.listeners = this.listeners.filter((l) => l !== cb);
     };
@@ -240,6 +256,7 @@ export class ExtensionHostClient {
     this.worker?.terminate();
     this.worker = null;
     this.workerReady = false;
+    this.lastLoaded = null;
     for (const [, pending] of this.pendingRequests) pending.reject(new Error("Extension host restarted"));
     this.pendingRequests.clear();
     await this.start();
@@ -249,6 +266,7 @@ export class ExtensionHostClient {
     this.worker?.terminate();
     this.worker = null;
     this.workerReady = false;
+    this.lastLoaded = null;
     for (const [, pending] of this.pendingRequests) pending.reject(new Error("Extension host disposed"));
     this.pendingRequests.clear();
     this.listeners = [];
@@ -380,7 +398,8 @@ export class ExtensionHostClient {
           ? (msg.extensions as unknown[]).map(normalizeLoadedExtensionPayload)
           : [];
         logLoadedExtensionSummary(extensions);
-        for (const cb of this.listeners) cb(extensions);
+        this.lastLoaded = extensions;
+        for (const cb of this.listeners.slice()) cb(extensions);
         return;
       }
       case "error":
@@ -583,23 +602,29 @@ export function ExtensionHostClientProvider({ children }: { children: ReactNode 
     if (!client || !dataDir) return;
     const store = new ExtensionSettingsStore(bridge, dataDir);
     let cancelled = false;
+
+    // Register listeners SYNCHRONOUSLY so that any `workspace.getConfiguration`
+    // read from an extension's `activate()` immediately finds a handler. The
+    // store starts with an empty map and is populated once `load()` resolves;
+    // extensions activated before then just see defaults (from manifest
+    // contributions), which is the correct behavior.
+    client.setConfigReadListener((key, section) => {
+      const fullKey = section ? `${section}.${key}` : key;
+      return store.get(fullKey);
+    });
+    client.setConfigWriteListener(async ({ section, key, value, target }) => {
+      await store.write({ section, key, value, target });
+      client.configurationUpdate(section ? `${section}.${key}` : key, value);
+    });
+
     void (async () => {
       const snapshot = await store.load();
       if (cancelled) return;
-      // Register listeners BEFORE the worker starts activating extensions so
-      // that `workspace.getConfiguration` reads during activation find values.
-      client.setConfigReadListener((key, section) => {
-        const fullKey = section ? `${section}.${key}` : key;
-        return store.get(fullKey);
-      });
-      client.setConfigWriteListener(async ({ section, key, value, target }) => {
-        await store.write({ section, key, value, target });
-        client.configurationUpdate(section ? `${section}.${key}` : key, value);
-      });
       for (const [fullKey, value] of Object.entries(snapshot)) {
         client.configurationUpdate(fullKey, value);
       }
     })();
+
     return () => {
       cancelled = true;
       client.setConfigReadListener(null);
@@ -621,7 +646,6 @@ export function ExtensionHostClientProvider({ children }: { children: ReactNode 
     });
     client.setMessageShowListener(async (msg) => {
       const level = msg.level === "error" ? "error" : msg.level === "warn" ? "warn" : "log";
-      // eslint-disable-next-line no-console
       console[level](`[ExtensionHost] ${msg.message}`);
       void bridge.utils.debugLog?.(`[ExtensionHost ${msg.level}] ${msg.message}`);
       return undefined;

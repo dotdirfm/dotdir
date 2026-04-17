@@ -60,6 +60,7 @@ import {
   SHELL_EXECUTE,
   SHOW_COMMAND_PALETTE,
   SHOW_EXTENSIONS,
+  SHOW_SETTINGS,
   SHOW_FIND_FILES,
   SWITCH_PANEL,
   TOGGLE_HIDDEN_FILES,
@@ -292,6 +293,13 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       commandRegistry.registerCommand(SHOW_EXTENSIONS, () =>
         showDialogRef.current({
           type: "extensions",
+        }),
+      ),
+    );
+    disposables.push(
+      commandRegistry.registerCommand(SHOW_SETTINGS, () =>
+        showDialogRef.current({
+          type: "settings",
         }),
       ),
     );

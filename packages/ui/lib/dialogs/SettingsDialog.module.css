@@ -1,0 +1,260 @@
+.dialog {
+  width: min(1480px, calc(100% - 64px));
+  height: min(940px, calc(100% - 64px));
+  max-width: calc(100% - 64px);
+  max-height: calc(100% - 64px);
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border-active);
+  border-radius: 4px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-secondary);
+}
+
+.search {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 13px;
+  border-radius: 3px;
+  border: 1px solid var(--input-border, var(--border));
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.search:focus {
+  outline: 2px solid var(--border-active);
+  outline-offset: 0;
+}
+
+.body {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+}
+
+.sidebar {
+  border-right: 1px solid var(--border);
+  overflow: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.groupList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.group,
+.groupActive {
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg);
+  padding: 6px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.group:hover {
+  background: var(--entry-hover);
+}
+
+.groupActive {
+  background: var(--entry-hover);
+  border-color: var(--border-active);
+}
+
+.main {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.settingsPane {
+  min-height: 100%;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settingCard {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settingHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.detailTitle {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.settingMenuButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--fg-secondary);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.settingMenuButton:hover {
+  background: var(--entry-hover);
+  color: var(--fg);
+}
+
+.settingMenuButton:focus,
+.settingMenuButton:focus-visible {
+  outline: 2px solid var(--border-active);
+  outline-offset: 0;
+}
+
+.settingMenu {
+  width: 240px;
+  background: var(--bg);
+  border: 1px solid var(--border-active);
+  border-radius: 2px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+  padding: 4px;
+}
+
+.detailKey {
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.description {
+  font-size: 12px;
+  color: var(--fg-secondary);
+  white-space: pre-wrap;
+}
+
+.input {
+  padding: 6px 8px;
+  font-size: 13px;
+  border-radius: 3px;
+  border: 1px solid var(--input-border, var(--border));
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.input:focus {
+  outline: 2px solid var(--border-active);
+  outline-offset: 0;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.metaBlock {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 12px;
+  color: var(--fg-secondary);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.jsonEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jsonText {
+  min-height: 180px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid var(--input-border, var(--border));
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--fg);
+  padding: 8px;
+  resize: vertical;
+}
+
+.jsonText:focus {
+  outline: 2px solid var(--border-active);
+  outline-offset: 0;
+}
+
+.error {
+  color: var(--error-fg);
+  font-size: 12px;
+}
+
+.primaryButton,
+.secondaryButton {
+  padding: 4px 12px;
+  border: 1px solid var(--border-active);
+  border-radius: 3px;
+  background: var(--bg-secondary);
+  color: var(--fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--fg-secondary);
+}
+
+.empty {
+  color: var(--fg-muted);
+  font-size: 12px;
+  padding: 8px;
+}
+
