@@ -176,6 +176,12 @@ export const Tabs = memo(function Tabs<T extends TabsItem>({
                 event.preventDefault();
                 onDoubleClickItem(item.id);
               } : undefined}
+              onAuxClick={onCloseItem ? (event) => {
+                // Middle-click closes tabs (common desktop tab UX).
+                if (event.button !== 1) return;
+                event.preventDefault();
+                onCloseItem(item.id);
+              } : undefined}
               title={item.title}
               draggable={Boolean(onReorderItems)}
               onDragStart={onReorderItems ? (event) => handleDragStart(event, index) : undefined}

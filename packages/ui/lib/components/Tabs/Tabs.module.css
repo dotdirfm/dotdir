@@ -93,6 +93,10 @@
   min-width: 48px;
 }
 
+.panelTab.temp .label {
+  font-style: italic;
+}
+
 .panelTab:hover {
   color: var(--fg);
   background: var(--entry-hover, rgba(255, 255, 255, 0.06));

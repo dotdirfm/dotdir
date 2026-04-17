@@ -44,7 +44,9 @@ export const PanelTabs = memo(function PanelTabs({
     () =>
       tabs.map((tab) => {
         const isPreview = tab.type === "preview";
-        const isTemp = isPreview && tab.isTemp && !tab.dirty;
+        // Temporary preview tabs are visually distinct (italic) until they are
+        // explicitly pinned (double-click) or promoted by edits.
+        const isTemp = isPreview && tab.isTemp;
         return {
           id: tab.id,
           label: tabLabel(tab),
@@ -63,7 +65,7 @@ export const PanelTabs = memo(function PanelTabs({
       onDoubleClickItem={onDoubleClickTab}
       onCloseItem={onCloseTab}
       onReorderItems={onReorderTabs}
-      getItemClassName={(item) => (item.temp ? panelTabsStyles.temp : undefined)}
+      getItemClassName={(item) => (item.temp ? "temp" : undefined)}
       rightSlot={
         <ActionBar>
           <NestedPopoverMenu
