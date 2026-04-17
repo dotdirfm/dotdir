@@ -1,7 +1,7 @@
 {
   "name": "fss-lang",
   "type": "module",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "File Style Sheets — a CSS-like language for describing how files should be rendered in a tree or panel.",
   "author": "Mikhail Isupov <lam0x86@mail.com>",
   "license": "MIT",
