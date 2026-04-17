@@ -151,6 +151,11 @@ export interface ExtensionManifest {
    * If present, the host will load it and call its exported `activate()` / `deactivate()`.
    */
   browser?: string;
+  /**
+   * VS Code-compatible activation events, e.g. `onLanguage:yaml`,
+   * `workspaceContains:Cargo.toml`, `onCommand:foo.bar`, or `*`.
+   */
+  activationEvents?: string[];
   contributes?: ExtensionContributions;
 }
 

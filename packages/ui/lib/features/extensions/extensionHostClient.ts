@@ -16,7 +16,15 @@ import { normalizePath } from "@/utils/path";
 import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import worker2 from "./extensionHost.worker.ts?worker&inline";
 import { ExtensionSettingsStore } from "./extensionSettings";
-import { extensionIconThemes, extensionRef, type LoadedExtension } from "./types";
+import {
+  extensionColorThemes,
+  extensionCommands,
+  extensionGrammarRefs,
+  extensionIconThemes,
+  extensionLanguages,
+  extensionRef,
+  type LoadedExtension,
+} from "./types";
 import type {
   HostToMainMessage,
   MainToHostMessage,
@@ -57,6 +65,39 @@ export type ApplyEditListener = (edit: WorkspaceEditPayload) => Promise<boolean>
 export type CommandRequestListener = (command: string, args: unknown[]) => Promise<unknown>;
 export type ConfigReadListener = (key: string, section?: string) => unknown;
 export type ConfigWriteListener = (msg: Omit<ConfigurationWriteMsg, "type" | "requestId">) => Promise<void>;
+
+/**
+ * Emit a dev-friendly summary of what the extension host actually loaded.
+ *
+ * The previous log only printed the *icon* theme contributions, which made it
+ * look like nothing else loaded even when 6 extensions were up. This prints
+ * one grouped line plus a per-extension breakdown of languages, grammars,
+ * commands, icon themes and color themes so you can tell at a glance whether a
+ * given extension's contributions were picked up.
+ */
+function logLoadedExtensionSummary(extensions: LoadedExtension[]): void {
+  const ids = extensions.map((e) => `${extensionRef(e).publisher}.${extensionRef(e).name}@${extensionRef(e).version}`);
+  const languages = extensions.flatMap((e) => extensionLanguages(e).map((l) => l.id));
+  const grammars = extensions.flatMap((e) => extensionGrammarRefs(e).map((g) => g.contribution.scopeName));
+  const commands = extensions.flatMap((e) => extensionCommands(e).map((c) => c.command));
+  const iconThemes = extensions.flatMap((e) =>
+    extensionIconThemes(e).map((t) => `${extensionRef(e).publisher}.${extensionRef(e).name}:${t.id}[${t.kind}]`),
+  );
+  const colorThemes = extensions.flatMap((e) =>
+    extensionColorThemes(e).map((t) => `${extensionRef(e).publisher}.${extensionRef(e).name}:${t.id}`),
+  );
+
+  console.groupCollapsed(
+    `[ExtHost] loaded ${extensions.length} extension(s); ${languages.length} language(s), ${grammars.length} grammar(s), ${commands.length} command(s), ${iconThemes.length} icon theme(s), ${colorThemes.length} color theme(s)`,
+  );
+  console.log("extensions:", ids);
+  if (languages.length) console.log("languages:", languages);
+  if (grammars.length) console.log("grammars:", grammars);
+  if (commands.length) console.log("commands:", commands);
+  if (iconThemes.length) console.log("iconThemes:", iconThemes);
+  if (colorThemes.length) console.log("colorThemes:", colorThemes);
+  console.groupEnd();
+}
 
 function normalizeLoadedExtensionPayload(raw: unknown): LoadedExtension {
   const value = raw as Record<string, unknown>;
@@ -338,17 +379,7 @@ export class ExtensionHostClient {
         const extensions: LoadedExtension[] = Array.isArray(msg.extensions)
           ? (msg.extensions as unknown[]).map(normalizeLoadedExtensionPayload)
           : [];
-        const fss = extensions.flatMap((e) =>
-          extensionIconThemes(e)
-            .filter((theme) => theme.kind === "fss")
-            .map((theme) => `${extensionRef(e).publisher}.${extensionRef(e).name}:${theme.id}`),
-        );
-        const vscode = extensions.flatMap((e) =>
-          extensionIconThemes(e)
-            .filter((theme) => theme.kind === "vscode")
-            .map((theme) => `${extensionRef(e).publisher}.${extensionRef(e).name}:${theme.id}`),
-        );
-        console.log("[ExtHost] loaded", extensions.length, "extensions; FSS:", fss, "vscode:", vscode);
+        logLoadedExtensionSummary(extensions);
         for (const cb of this.listeners) cb(extensions);
         return;
       }

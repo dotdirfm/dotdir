@@ -1,6 +1,17 @@
 import type * as Monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import type { StateStack } from "vscode-textmate";
-import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker.js?worker";
+// `?worker&inline` so the worker source is embedded as a base64 blob inside the
+// library bundle. Without `&inline` Vite's lib build emits a sibling
+// `/assets/*.worker-*.js` that isn't served by the consuming app (lives only
+// under `@dotdirfm/ui/dist/assets/`), causing Monaco to 404 and silently fall
+// back to running the worker on the main thread.
+//
+// Only the bare editor worker is needed — this app uses `./monacoEntry` which
+// drops Monaco's built-in JSON/CSS/HTML/TS language services (and all
+// basic-languages Monarch tokenizers). Language services are expected to come
+// from installed extensions, so the language-specific workers would just be
+// dead weight (each pulls in a megabyte-class language server).
+import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker.js?worker&inline";
 import monacoCssUrl from "monaco-editor/min/vs/editor/editor.main.css?url";
 import onigWasmUrl from "vscode-oniguruma/release/onig.wasm?url";
 import { useEffect, useRef } from "react";
@@ -83,7 +94,9 @@ const COMMON_SCOPE_SUFFIXES = new Set([
 
 let sharedMonacoModulePromise: Promise<typeof Monaco> | null = null;
 async function loadSharedMonaco(): Promise<typeof Monaco> {
-  return (sharedMonacoModulePromise ??= import("monaco-editor/esm/vs/editor/editor.main.js") as Promise<typeof Monaco>);
+  // `./monacoEntry` is the trimmed Monaco entry (editor core + contrib, no
+  // basic-languages, no built-in JSON/CSS/HTML/TS language services).
+  return (sharedMonacoModulePromise ??= import("./monacoEntry") as Promise<typeof Monaco>);
 }
 
 /**
@@ -366,7 +379,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
 
   async function ensureMonacoModule(): Promise<typeof Monaco> {
     if (monacoModule) return monacoModule;
-    const loaded = await (monacoModulePromise ??= import("monaco-editor/esm/vs/editor/editor.main.js"));
+    const loaded = await (monacoModulePromise ??= import("./monacoEntry"));
     monacoModule = loaded;
     return loaded;
   }
@@ -577,7 +590,12 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
     if (monacoReady) return;
     const monaco = await ensureMonacoModule();
     const globalTarget = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
-    (globalTarget as typeof globalThis & { MonacoEnvironment?: { getWorker: () => Worker } }).MonacoEnvironment = {
+    // We use `./monacoEntry` which strips out Monaco's built-in JSON/TS/CSS/HTML
+    // language services, so there are no language-specific worker labels to
+    // dispatch — only the core editor worker is ever requested.
+    (globalTarget as typeof globalThis & {
+      MonacoEnvironment?: { getWorker: (workerId: string, label: string) => Worker };
+    }).MonacoEnvironment = {
       getWorker: () => new (EditorWorker as new () => Worker)(),
     };
     monaco.editor.defineTheme("dotdir-dark", {

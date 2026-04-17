@@ -76,9 +76,20 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
             // Always resolve the language from the current registry — the value cached on
             // FsNode.lang can be stale if the folder was listed before an extension that
             // contributes the language finished loading.
-            const resolved = languageRegistryRef.current.getLanguageForFilename(item.entry.name);
+            const reg = languageRegistryRef.current;
+            const resolved = reg.getLanguageForFilename(item.entry.name);
             const cached = typeof item.entry.lang === "string" && item.entry.lang ? item.entry.lang : "plaintext";
             const langId = resolved && resolved !== "plaintext" ? resolved : cached;
+            if (langId === "plaintext") {
+              console.warn(
+                "[editFile] falling back to plaintext for",
+                item.entry.name,
+                "— registry knows",
+                reg.languages.length,
+                "languages:",
+                reg.languages.map((l) => l.id),
+              );
+            }
             void commandRegistry.executeCommand(EDIT_FILE, item.entry.path as string, item.entry.name, Number(item.entry.meta.size), langId);
           }
         }),
