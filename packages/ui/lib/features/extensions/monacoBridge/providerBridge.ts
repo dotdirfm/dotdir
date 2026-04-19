@@ -11,8 +11,11 @@
  */
 
 import type * as Monaco from "monaco-editor/esm/vs/editor/editor.api.js";
-import type { ExtensionHostClient, ProviderRegistration } from "../extensionHostClient";
 import type { DocumentSelectorPayload, ProviderKind } from "../ehProtocol";
+import type { ExtensionHostClient, ProviderRegistration } from "../extensionHostClient";
+import type {
+  rangeToMonaco
+} from "./typeAdapters";
 import {
   codeActionToMonaco,
   codeLensToMonaco,
@@ -27,7 +30,6 @@ import {
   locationToMonaco,
   monacoPositionToPayload,
   monacoRangeToPayload,
-  rangeToMonaco,
   selectionRangeToMonaco,
   signatureHelpToMonaco,
   symbolInformationToMonaco,
@@ -82,15 +84,25 @@ export class MonacoProviderBridge {
       case "completion": {
         const provider: Monaco.languages.CompletionItemProvider = {
           triggerCharacters,
-          provideCompletionItems: async (model, position) => {
+          provideCompletionItems: async (model, position, context) => {
             const word = model.getWordAtPosition(position);
             const defaultRange = word
               ? { startLineNumber: position.lineNumber, endLineNumber: position.lineNumber, startColumn: word.startColumn, endColumn: word.endColumn }
               : { startLineNumber: position.lineNumber, endLineNumber: position.lineNumber, startColumn: position.column, endColumn: position.column };
+            // Forward Monaco's CompletionContext verbatim (triggerKind + triggerCharacter).
+            // Many language servers (including yaml-language-server via vscode-languageclient)
+            // return `isIncomplete: true` and rely on `TriggerForIncompleteCompletions` on
+            // subsequent requests while the user keeps typing. Hard-coding `Invoke` breaks
+            // that contract and yields empty or generic-looking suggestion lists.
             const result = await this.invoke(reg.providerId, "provideCompletionItems", {
               uri: model.uri.toString(),
               position: monacoPositionToPayload(position),
-              context: { triggerKind: 0 },
+              context: {
+                triggerKind: context.triggerKind,
+                ...(context.triggerCharacter != null && context.triggerCharacter !== ""
+                  ? { triggerCharacter: context.triggerCharacter }
+                  : {}),
+              },
             });
             return completionListToMonaco(result as Parameters<typeof completionListToMonaco>[0], defaultRange) ?? undefined;
           },
