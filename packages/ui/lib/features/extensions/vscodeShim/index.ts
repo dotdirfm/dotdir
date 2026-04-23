@@ -160,6 +160,7 @@ export function createVscodeNamespace(): Record<string, unknown> {
     CallHierarchyItem: types.CallHierarchyItem,
     CallHierarchyIncomingCall: types.CallHierarchyIncomingCall,
     CallHierarchyOutgoingCall: types.CallHierarchyOutgoingCall,
+    TypeHierarchyItem: types.TypeHierarchyItem,
     SemanticTokens: types.SemanticTokens,
     SemanticTokensLegend: types.SemanticTokensLegend,
     SemanticTokensBuilder: types.SemanticTokensBuilder,

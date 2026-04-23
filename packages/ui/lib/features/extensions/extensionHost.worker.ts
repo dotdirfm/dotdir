@@ -249,7 +249,9 @@ installCommandAdapter({
 
 // ── Nested worker + importScripts polyfills ─────────────────────────
 
-async function fetchAsBlobUrl(rawUrl: string): Promise<string> {
+type WorkerScriptUrl = { url: string; revokeAfterCreate: boolean };
+
+async function fetchAsWorkerScriptUrl(rawUrl: string): Promise<WorkerScriptUrl> {
   // Try to resolve by reading the script text via our existing readFile RPC.
   // Falls back to fetch() for standard http(s) URLs.
   const path = urlToLocalPath(rawUrl);
@@ -260,11 +262,25 @@ async function fetchAsBlobUrl(rawUrl: string): Promise<string> {
     // relative paths so webpack-chunked LSP servers still resolve siblings
     // from the same extension directory.
     const rewritten = rewriteBundledUrlsToAbsolute(text, path);
-    return URL.createObjectURL(new Blob([rewritten], { type: "text/javascript" }));
+    return {
+      url: URL.createObjectURL(new Blob([rewritten], { type: "text/javascript" })),
+      revokeAfterCreate: true,
+    };
+  }
+  if (
+    rawUrl.startsWith("http://") ||
+    rawUrl.startsWith("https://") ||
+    rawUrl.startsWith("blob:") ||
+    rawUrl.startsWith("data:")
+  ) {
+    return { url: rawUrl, revokeAfterCreate: false };
   }
   const response = await fetch(rawUrl);
   const text = await response.text();
-  return URL.createObjectURL(new Blob([text], { type: "text/javascript" }));
+  return {
+    url: URL.createObjectURL(new Blob([text], { type: "text/javascript" })),
+    revokeAfterCreate: true,
+  };
 }
 
 function urlToLocalPath(rawUrl: string): string | null {
@@ -316,8 +332,13 @@ class ProxiedWorker {
 
   private async _bootstrap(scriptUrl: string, options?: WorkerOptions): Promise<void> {
     try {
-      const blobUrl = await fetchAsBlobUrl(scriptUrl);
-      const worker = new _OriginalWorker(blobUrl, options);
+      const resolved = await fetchAsWorkerScriptUrl(scriptUrl);
+      const worker = new _OriginalWorker(resolved.url, options);
+      if (resolved.revokeAfterCreate) {
+        // Worker clones script bytes at construction time, so revoking the
+        // temporary blob URL immediately avoids leaking object URLs.
+        URL.revokeObjectURL(resolved.url);
+      }
       this._impl = worker;
 
       worker.onmessage = (ev) => {
@@ -484,16 +505,8 @@ type BrowserExtensionModule = {
   default?: { activate?: (ctx: unknown) => unknown | Promise<unknown>; deactivate?: (ctx: unknown) => unknown | Promise<unknown> };
 };
 
-async function importBrowserModuleEsm(absScriptPath: string): Promise<BrowserExtensionModule> {
-  const moduleUrl = extensionScriptVfsUrl(absScriptPath);
-  const mod = await import(/* @vite-ignore */ moduleUrl);
-  return mod as BrowserExtensionModule;
-}
-
-async function importBrowserModuleCjs(absScriptPath: string, extDir: string): Promise<BrowserExtensionModule> {
-  const script = await readTextFile(absScriptPath);
-  if (script == null) throw new Error(`Browser script not found: ${absScriptPath}`);
-  const cjsWrapper = `
+function buildCjsWrapperSource(script: string, absScriptPath: string, extDir: string): string {
+  return `
 const __dotdir_vscode = globalThis.__dotdir_vscode_api;
 const module = { exports: {} };
 const exports = module.exports;
@@ -510,7 +523,20 @@ const __exp = module.exports && module.exports.__esModule && module.exports.defa
 export default __exp;
 export const activate = __exp?.activate;
 export const deactivate = __exp?.deactivate;
+//# sourceURL=${JSON.stringify(`dotdir-ext-cjs://${absScriptPath}`)}
 `;
+}
+
+async function importBrowserModuleEsm(absScriptPath: string): Promise<BrowserExtensionModule> {
+  const moduleUrl = extensionScriptVfsUrl(absScriptPath);
+  const mod = await import(/* @vite-ignore */ moduleUrl);
+  return mod as BrowserExtensionModule;
+}
+
+async function importBrowserModuleCjs(absScriptPath: string, extDir: string): Promise<BrowserExtensionModule> {
+  const script = await readTextFile(absScriptPath);
+  if (script == null) throw new Error(`Browser script not found: ${absScriptPath}`);
+  const cjsWrapper = buildCjsWrapperSource(script, absScriptPath, extDir);
   const cjsBlobUrl = URL.createObjectURL(new Blob([cjsWrapper], { type: "text/javascript" }));
   try {
     return (await import(/* @vite-ignore */ cjsBlobUrl)) as BrowserExtensionModule;

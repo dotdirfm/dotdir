@@ -11,14 +11,7 @@ import type { StateStack } from "vscode-textmate";
 // basic-languages Monarch tokenizers). Language services are expected to come
 // from installed extensions, so the language-specific workers would just be
 // dead weight (each pulls in a megabyte-class language server).
-import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker.js?worker&inline";
-import monacoCssUrl from "monaco-editor/min/vs/editor/editor.main.css?url";
-import onigWasmUrl from "vscode-oniguruma/release/onig.wasm?url";
-import { useEffect, useRef } from "react";
 import { useCommandRegistry } from "@/features/commands/commands";
-import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
-import { useExtensionHostClient, type ExtensionHostClient } from "@/features/extensions/extensionHostClient";
-import { attachMonacoBridges, type AttachedBridges } from "@/features/extensions/monacoBridge";
 import {
   DOTDIR_MONACO_EXECUTE_ACTION,
   MONACO_QUICK_COMMAND_ACTION,
@@ -26,6 +19,13 @@ import {
   type MonacoCommandContribution,
 } from "@/features/extensions/builtins/monacoCommandBridge";
 import type { ColorThemeData, DotDirGlobalApi, EditorExtensionApi, EditorProps } from "@/features/extensions/extensionApi";
+import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
+import { useExtensionHostClient, type ExtensionHostClient } from "@/features/extensions/extensionHostClient";
+import { attachMonacoBridges, type AttachedBridges } from "@/features/extensions/monacoBridge";
+import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker.js?worker&inline";
+import monacoCssText from "monaco-editor/min/vs/editor/editor.main.css?inline";
+import { useEffect, useRef } from "react";
+import onigWasmUrl from "vscode-oniguruma/release/onig.wasm?url";
 
 interface MonacoEditorSurfaceProps {
   hostApi: DotDirGlobalApi;
@@ -610,12 +610,11 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
   }
 
   async function ensureMonacoReady(): Promise<void> {
-    if (!monacoCssReady && typeof document !== "undefined" && document.head && monacoCssUrl) {
-      const link = document.createElement("link");
-      link.setAttribute("data-monaco", "true");
-      link.rel = "stylesheet";
-      link.href = monacoCssUrl;
-      document.head.appendChild(link);
+    if (!monacoCssReady && typeof document !== "undefined" && document.head && monacoCssText) {
+      const style = document.createElement("style");
+      style.setAttribute("data-monaco", "true");
+      style.textContent = monacoCssText;
+      document.head.appendChild(style);
       monacoCssReady = true;
     }
     if (monacoReady) return;
