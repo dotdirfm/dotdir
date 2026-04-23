@@ -224,6 +224,23 @@ export class Uri implements UriComponents {
   }
 }
 
+export class RelativePattern {
+  baseUri: Uri;
+  pattern: string;
+
+  constructor(base: Uri | string, pattern: string) {
+    this.baseUri = base instanceof Uri ? base : Uri.file(base);
+    this.pattern = pattern;
+  }
+
+  static is(thing: unknown): thing is RelativePattern {
+    if (thing instanceof RelativePattern) return true;
+    if (!thing || typeof thing !== "object") return false;
+    const anyThing = thing as { baseUri?: unknown; pattern?: unknown };
+    return Uri.isUri(anyThing.baseUri) && typeof anyThing.pattern === "string";
+  }
+}
+
 // ── Position & Range ────────────────────────────────────────────────
 
 export class Position {
@@ -744,6 +761,28 @@ export class CodeActionKind {
   }
 
   contains(other: CodeActionKind): boolean {
+    return this.value === "" || other.value === this.value || other.value.startsWith(`${this.value}.`);
+  }
+}
+
+export class DocumentDropOrPasteEditKind {
+  static readonly Empty = new DocumentDropOrPasteEditKind("");
+
+  readonly value: string;
+
+  constructor(value: string) {
+    this.value = value;
+  }
+
+  append(parts: string): DocumentDropOrPasteEditKind {
+    return new DocumentDropOrPasteEditKind(this.value ? `${this.value}.${parts}` : parts);
+  }
+
+  intersects(other: DocumentDropOrPasteEditKind): boolean {
+    return this.contains(other) || other.contains(this);
+  }
+
+  contains(other: DocumentDropOrPasteEditKind): boolean {
     return this.value === "" || other.value === this.value || other.value.startsWith(`${this.value}.`);
   }
 }

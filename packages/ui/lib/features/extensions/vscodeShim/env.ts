@@ -78,12 +78,16 @@ export const env = {
     logError: () => void;
     dispose: () => void;
   } {
+    // TODO(vscode-shim): implement telemetry logger routing and enable-state updates.
     return {
       onDidChangeEnableStates: onDidChangeTelemetryEnabled.event,
       isUsageEnabled: false,
       isErrorsEnabled: false,
+      // TODO(vscode-shim): forward usage telemetry events.
       logUsage: () => {},
+      // TODO(vscode-shim): forward error telemetry events.
       logError: () => {},
+      // TODO(vscode-shim): unregister telemetry logger resources.
       dispose: () => {},
     };
   },

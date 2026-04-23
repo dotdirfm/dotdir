@@ -50,15 +50,15 @@ export function ExtensionHostWorkspaceSync(): null {
   const left = useAtomValue(leftActiveTabAtom);
   const right = useAtomValue(rightActiveTabAtom);
   const loadedExtensions = useLoadedExtensions();
+  const leftPath = tabPath(left);
+  const rightPath = tabPath(right);
 
   const candidatePaths = useMemo(() => {
     const paths: string[] = [];
-    const leftPath = tabPath(left);
-    const rightPath = tabPath(right);
     if (leftPath) paths.push(leftPath);
     if (rightPath && rightPath !== leftPath) paths.push(rightPath);
     return paths;
-  }, [left, right]);
+  }, [leftPath, rightPath]);
 
   const activatedPatternsRef = useRef<Set<string>>(new Set());
 

@@ -11,7 +11,7 @@
  */
 
 import type * as Monaco from "monaco-editor/esm/vs/editor/editor.api.js";
-import type { DocumentSelectorPayload, ProviderKind } from "../ehProtocol";
+import type { CompletionListPayload, DocumentSelectorPayload, ProviderKind } from "../ehProtocol";
 import type { ExtensionHostClient, ProviderRegistration } from "../extensionHostClient";
 import type {
   rangeToMonaco
@@ -51,19 +51,42 @@ interface BridgeOptions {
   monaco: typeof Monaco;
 }
 
+const COMPLETION_COMMAND_RELAY_ID = "dotdir.extension.executeCompletionCommand";
+
 export class MonacoProviderBridge {
   private providerDisposables = new Map<number, Monaco.IDisposable>();
   private registerUnsubscribe?: () => void;
   private unregisterUnsubscribe?: () => void;
+  private completionCommandRelayDisposable?: Monaco.IDisposable;
+  private knownUnsupportedKinds = new Set<ProviderKind>([
+    "workspaceSymbol",
+    "callHierarchy",
+    "linkedEditingRange",
+    "documentRangeSemanticTokens",
+  ]);
+  private loggedUnsupportedKinds = new Set<ProviderKind>();
 
   constructor(private options: BridgeOptions) {}
 
   attach(): void {
+    this.completionCommandRelayDisposable = this.options.monaco.editor.registerCommand(
+      COMPLETION_COMMAND_RELAY_ID,
+      (_accessor, commandId: unknown, commandArgs: unknown) => {
+        const id = typeof commandId === "string" ? commandId : "";
+        if (!id) return;
+        const args = Array.isArray(commandArgs) ? commandArgs : [];
+        void this.options.extensionHost.executeCommand(id, args).catch((err) => {
+          console.warn(`[MonacoProviderBridge] completion command ${id} failed`, err);
+        });
+      },
+    );
     this.registerUnsubscribe = this.options.extensionHost.onProviderRegister((reg) => this.install(reg));
     this.unregisterUnsubscribe = this.options.extensionHost.onProviderUnregister((id) => this.remove(id));
   }
 
   detach(): void {
+    this.completionCommandRelayDisposable?.dispose();
+    this.completionCommandRelayDisposable = undefined;
     this.registerUnsubscribe?.();
     this.unregisterUnsubscribe?.();
     for (const [, d] of this.providerDisposables) d.dispose();
@@ -104,7 +127,11 @@ export class MonacoProviderBridge {
                   : {}),
               },
             });
-            return completionListToMonaco(result as Parameters<typeof completionListToMonaco>[0], defaultRange) ?? undefined;
+            const payload = result as CompletionListPayload | null;
+            const completionList = completionListToMonaco(payload, defaultRange);
+            if (!completionList || !payload) return completionList ?? undefined;
+            this.rewriteCompletionCommands(completionList, payload);
+            return completionList;
           },
         };
         disposable = monaco.languages.registerCompletionItemProvider(selector, provider);
@@ -362,6 +389,15 @@ export class MonacoProviderBridge {
         break;
       }
       default:
+        if (this.knownUnsupportedKinds.has(reg.kind)) {
+          // Known gap between VS Code provider surface and Monaco bridge support.
+          // Log once per kind to keep console noise low during extension startup.
+          if (!this.loggedUnsupportedKinds.has(reg.kind)) {
+            this.loggedUnsupportedKinds.add(reg.kind);
+            this.info(`Provider kind ${reg.kind} is currently unsupported by Monaco bridge`);
+          }
+          return;
+        }
         this.warn(`Provider kind ${reg.kind} not installed on Monaco`);
         return;
     }
@@ -391,6 +427,27 @@ export class MonacoProviderBridge {
 
   private warn(message: string): void {
     console.warn(`[MonacoProviderBridge] ${message}`);
+  }
+
+  private info(message: string): void {
+    console.info(`[MonacoProviderBridge] ${message}`);
+  }
+
+  private rewriteCompletionCommands(list: Monaco.languages.CompletionList, payload: CompletionListPayload): void {
+    const count = Math.min(list.suggestions.length, payload.items.length);
+    for (let i = 0; i < count; i++) {
+      const src = payload.items[i];
+      const dst = list.suggestions[i];
+      if (!src?.command || !dst) continue;
+      // Monaco standalone cannot execute extension-private command ids itself.
+      // Route such commands back through the extension host command executor.
+      if (src.command.command.startsWith("editor.")) continue;
+      dst.command = {
+        id: COMPLETION_COMMAND_RELAY_ID,
+        title: src.command.title,
+        arguments: [src.command.command, src.command.arguments ?? []],
+      };
+    }
   }
 }
 

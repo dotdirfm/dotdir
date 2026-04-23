@@ -18,6 +18,7 @@ import { commands } from "./commands";
 import { extensions, ExtensionMode } from "./extensions";
 
 const l10n = {
+  // TODO(vscode-shim): implement message formatting and argument interpolation.
   t: (message: string, ..._args: unknown[]): string => {
     if (typeof message !== "string") return "";
     return message;
@@ -27,6 +28,7 @@ const l10n = {
 };
 
 const debug = {
+  // TODO(vscode-shim): implement debug session lifecycle and adapter wiring.
   activeDebugSession: undefined,
   activeDebugConsole: { append: () => {}, appendLine: () => {} },
   breakpoints: [] as unknown[],
@@ -46,6 +48,7 @@ const debug = {
 };
 
 const tasks = {
+  // TODO(vscode-shim): implement task discovery/execution bridge.
   taskExecutions: [] as unknown[],
   onDidStartTask: new events.EventEmitter<unknown>().event,
   onDidStartTaskProcess: new events.EventEmitter<unknown>().event,
@@ -57,23 +60,34 @@ const tasks = {
 };
 
 const scm = {
+  // TODO(vscode-shim): implement source control providers and input handling.
   inputBox: { value: "", placeholder: "" },
   createSourceControl: (): { dispose(): void } => ({ dispose: () => {} }),
 };
 
 const comments = {
+  // TODO(vscode-shim): implement comments API surface.
   createCommentController: (): { dispose(): void } => ({ dispose: () => {} }),
 };
 
 const authentication = {
+  // TODO(vscode-shim): implement auth session storage and provider callbacks.
   getSession: async (): Promise<undefined> => undefined,
   onDidChangeSessions: new events.EventEmitter<unknown>().event,
   registerAuthenticationProvider: (): events.Disposable => new events.Disposable(() => {}),
 };
 
 const tests = {
+  // TODO(vscode-shim): implement testing API integration.
   createTestController: (): { dispose(): void } => ({ dispose: () => {} }),
   registerTestProvider: (): events.Disposable => new events.Disposable(() => {}),
+};
+
+const chat = {
+  // TODO(vscode-shim): implement chat participant/mapped-edits provider wiring.
+  registerMappedEditsProvider: (): events.Disposable => new events.Disposable(() => {}),
+  registerChatParticipant: (): { dispose(): void } => ({ dispose: () => {} }),
+  createChatParticipant: (): { dispose(): void } => ({ dispose: () => {} }),
 };
 
 const l10nFallback = l10n;
@@ -101,6 +115,7 @@ export function createVscodeNamespace(): Record<string, unknown> {
     UIKind: enums.UIKind,
     StatusBarAlignment: enums.StatusBarAlignment,
     ProgressLocation: enums.ProgressLocation,
+    LogLevel: enums.LogLevel,
     ExtensionMode,
     FileChangeType: enums.FileChangeType,
     InlineCompletionTriggerKind: enums.InlineCompletionTriggerKind,
@@ -112,6 +127,7 @@ export function createVscodeNamespace(): Record<string, unknown> {
 
     // value classes
     Uri: types.Uri,
+    RelativePattern: types.RelativePattern,
     Position: types.Position,
     Range: types.Range,
     Selection: types.Selection,
@@ -128,6 +144,7 @@ export function createVscodeNamespace(): Record<string, unknown> {
     SymbolInformation: types.SymbolInformation,
     DocumentSymbol: types.DocumentSymbol,
     CodeActionKind: types.CodeActionKind,
+    DocumentDropOrPasteEditKind: types.DocumentDropOrPasteEditKind,
     CodeAction: types.CodeAction,
     CodeLens: types.CodeLens,
     FoldingRange: types.FoldingRange,
@@ -167,6 +184,7 @@ export function createVscodeNamespace(): Record<string, unknown> {
     comments,
     authentication,
     tests,
+    chat,
     l10n: l10nFallback,
 
     // Version — match a reasonable recent VS Code for compatibility
@@ -178,7 +196,7 @@ export { enums, events, types };
 export { workspace } from "./workspace";
 export { languages } from "./languages";
 export { window } from "./window";
-export { commands, installCommandAdapter } from "./commands";
+export { commands, installCommandAdapter, stashCommandArguments, resolveStashedCommandArguments } from "./commands";
 export { env } from "./env";
 export { extensions, registerExtension, markExtensionActive } from "./extensions";
 export {

@@ -36,6 +36,8 @@ import {
   createVscodeNamespace,
   installWorkerRpc,
   installCommandAdapter,
+  stashCommandArguments,
+  resolveStashedCommandArguments,
   setActiveExtensionKey,
   setDataDir,
   setWorkspaceFolders,
@@ -464,6 +466,10 @@ function extensionScriptVfsUrl(absPath: string): string {
   return `vfs://vfs${encodePathPreservingSlashes(vfsPath)}`;
 }
 
+function extensionAssetUri(absPath: string): Uri {
+  return Uri.parse(extensionScriptVfsUrl(absPath));
+}
+
 function extensionWantsEvent(ext: WorkerLoadedExtension, event: string): boolean {
   const events = ext.manifest.activationEvents ?? [];
   if (events.length === 0) return event === "*";
@@ -584,7 +590,7 @@ function createMemento(scopeKey: string): {
 
 function createExtensionContext(ext: WorkerLoadedExtension, subs: Array<{ dispose: () => void }>): ExtensionContextShape {
   const id = extensionId(ext);
-  const extensionUri = Uri.file(ext.dirPath);
+  const extensionUri = extensionAssetUri(ext.dirPath);
   const globalStorageDir = join(ext.dirPath, "..", ".global-storage", id);
   const logDir = join(ext.dirPath, "..", ".logs", id);
   return {
@@ -599,7 +605,9 @@ function createExtensionContext(ext: WorkerLoadedExtension, subs: Array<{ dispos
     logUri: Uri.file(logDir),
     environmentVariableCollection: { persistent: false, replace: () => {}, append: () => {}, prepend: () => {}, get: () => undefined, forEach: () => {}, delete: () => {}, clear: () => {} },
     extensionMode: ExtensionMode.Production,
-    asAbsolutePath: (relative: string) => join(ext.dirPath, relative),
+    // Browser extensions should resolve bundle assets to extension web URLs,
+    // not host `file://` paths.
+    asAbsolutePath: (relative: string) => extensionScriptVfsUrl(join(ext.dirPath, relative)),
     secrets: { get: async () => undefined, store: async () => {}, delete: async () => {}, onDidChange: () => ({ dispose: () => {} }) },
     globalState: createMemento(`${id}:global`),
     workspaceState: createMemento(`${id}:workspace`),
@@ -693,7 +701,8 @@ async function runCommand(command: string, args: unknown[]): Promise<unknown> {
   await activateByEvent(`onCommand:${command}`);
   const handler = commandHandlers.get(command);
   if (!handler) return undefined;
-  return await handler(...args);
+  const resolvedArgs = resolveStashedCommandArguments(args);
+  return await handler(...resolvedArgs);
 }
 
 // ── Extension loading (from disk) ──────────────────────────────────
@@ -1006,6 +1015,18 @@ function completionItemPayload(item: unknown): CompletionItemPayload {
   } else if (ci.textEdit) {
     insertText = ci.textEdit.newText;
   }
+  const originalCommandArgs = ci.command?.arguments as unknown[] | undefined;
+  const needsStashing = Boolean(
+    originalCommandArgs?.some((arg) => {
+      if (arg == null) return false;
+      const t = typeof arg;
+      return t === "object" || t === "function";
+    }),
+  );
+  const stashedCommandArgs =
+    ci.command && needsStashing
+      ? stashCommandArguments(originalCommandArgs)
+      : undefined;
   return {
     label,
     kind: ci.kind,
@@ -1020,7 +1041,13 @@ function completionItemPayload(item: unknown): CompletionItemPayload {
     commitCharacters: ci.commitCharacters,
     preselect: ci.preselect,
     additionalTextEdits: ci.additionalTextEdits?.map(textEditPayload),
-    command: ci.command,
+    command: ci.command
+      ? {
+          command: ci.command.command,
+          title: ci.command.title,
+          arguments: stashedCommandArgs ? [stashedCommandArgs] : originalCommandArgs,
+        }
+      : undefined,
   };
 }
 

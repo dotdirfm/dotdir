@@ -179,6 +179,11 @@ interface OutputChannel {
   readonly name: string;
   append(value: string): void;
   appendLine(value: string): void;
+  trace(message: string, ...args: unknown[]): void;
+  debug(message: string, ...args: unknown[]): void;
+  info(message: string, ...args: unknown[]): void;
+  warn(message: string, ...args: unknown[]): void;
+  error(error: string | Error, ...args: unknown[]): void;
   clear(): void;
   replace(value: string): void;
   show(preserveFocus?: boolean): void;
@@ -192,10 +197,34 @@ export function createOutputChannel(name: string, _options?: string | { log?: bo
   const send = (text: string, newline: boolean) => {
     rpc.send({ type: "output/append", channel: name, text, newline });
   };
+  const stringifyArg = (value: unknown): string => {
+    if (value instanceof Error) return value.stack || value.message || String(value);
+    if (typeof value === "string") return value;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  };
+  const log = (level: "trace" | "debug" | "info" | "warn" | "error", message: string, ...args: unknown[]) => {
+    const suffix = args.length ? ` ${args.map(stringifyArg).join(" ")}` : "";
+    send(`[${level}] ${message}${suffix}`, true);
+  };
   return {
     name,
     append: (value) => send(value, false),
     appendLine: (value) => send(value, true),
+    trace: (message, ...args) => log("trace", message, ...args),
+    debug: (message, ...args) => log("debug", message, ...args),
+    info: (message, ...args) => log("info", message, ...args),
+    warn: (message, ...args) => log("warn", message, ...args),
+    error: (error, ...args) => {
+      if (error instanceof Error) {
+        log("error", error.message || String(error), ...(error.stack ? [error.stack, ...args] : args));
+        return;
+      }
+      log("error", error, ...args);
+    },
     clear: () => send("", false),
     replace: (value) => send(value, true),
     show: () => {},
@@ -270,6 +299,8 @@ export function createStatusBarItem(
 }
 
 // ── Quick pick / input box (stubs) ─────────────────────────────────
+// TODO(vscode-shim): replace quick/input box stubs with real UI-backed
+// implementations and proper event sequencing.
 
 export function createQuickPick<T extends { label: string }>(): {
   items: T[];
@@ -303,6 +334,7 @@ export function createQuickPick<T extends { label: string }>(): {
     matchOnDetail: false,
     selectedItems: [],
     activeItems: [],
+    // TODO(vscode-shim): open quick-pick UI.
     show: () => {},
     hide: () => {
       hide.fire();
@@ -340,6 +372,7 @@ export function createInputBox(): {
   return {
     value: "",
     password: false,
+    // TODO(vscode-shim): open input-box UI.
     show: () => {},
     hide: () => {
       hide.fire();
@@ -364,18 +397,22 @@ export async function showQuickPick<T extends { label: string } | string>(
 }
 
 export async function showInputBox(_options?: unknown): Promise<string | undefined> {
+  // TODO(vscode-shim): implement modal/freeform input flow.
   return undefined;
 }
 
 export async function showOpenDialog(_options?: unknown): Promise<Uri[] | undefined> {
+  // TODO(vscode-shim): implement filesystem picker integration.
   return undefined;
 }
 
 export async function showSaveDialog(_options?: unknown): Promise<Uri | undefined> {
+  // TODO(vscode-shim): implement save target picker integration.
   return undefined;
 }
 
 export async function showWorkspaceFolderPick(_options?: unknown): Promise<undefined> {
+  // TODO(vscode-shim): implement workspace folder picker.
   return undefined;
 }
 
@@ -385,6 +422,7 @@ export async function withProgress<T>(
   _options: { location: ProgressLocation; title?: string; cancellable?: boolean },
   task: (progress: { report(value: { message?: string; increment?: number }): void }, token: { isCancellationRequested: boolean }) => Thenable<T>,
 ): Promise<T> {
+  // TODO(vscode-shim): wire cancellation token and progress forwarding to host UI.
   const progress = { report: () => {} };
   const token = { isCancellationRequested: false };
   return task(progress, token);
@@ -393,6 +431,7 @@ export async function withProgress<T>(
 type Thenable<T> = PromiseLike<T>;
 
 // ── Decoration types (stub) ─────────────────────────────────────────
+// TODO(vscode-shim): support decoration options and disposal semantics.
 
 export function createTextEditorDecorationType(_options: unknown): { key: string; dispose(): void } {
   const key = `deco-${Math.random().toString(36).slice(2)}`;
@@ -419,18 +458,28 @@ export async function showTextDocument(
 }
 
 // ── Tabs (stub) ─────────────────────────────────────────────────────
+// TODO(vscode-shim): synchronize real tab groups/tabs from host editor state.
+
+const defaultTabGroup = {
+  isActive: true,
+  viewColumn: ViewColumn.Active,
+  activeTab: null as unknown,
+  tabs: [] as unknown[],
+};
 
 const tabGroups = {
-  all: [] as unknown[],
-  activeTabGroup: null as unknown,
+  all: [defaultTabGroup] as unknown[],
+  activeTabGroup: defaultTabGroup as unknown,
   onDidChangeTabs: new EventEmitter<unknown>().event,
   onDidChangeTabGroups: new EventEmitter<unknown>().event,
   close: async (): Promise<boolean> => true,
 };
 
 // ── TreeView / WebView / Terminal stubs ─────────────────────────────
+// TODO(vscode-shim): implement tree/webview/terminal APIs used by extensions.
 
 function notImplementedDisposable(): Disposable {
+  // TODO(vscode-shim): replace with real registration lifecycle hooks.
   return new Disposable(() => {});
 }
 

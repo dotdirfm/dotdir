@@ -216,6 +216,12 @@ export function registerDocumentHighlightProvider(selector: DocumentSelector, pr
   return makeProviderDisposable("documentHighlight", normalizeSelector(selector), provider);
 }
 
+export function registerMultiDocumentHighlightProvider(_selector: DocumentSelector, _provider: unknown): Disposable {
+  // TODO(vscode-shim): implement multi-document highlight provider support.
+  // For now we expose the API to satisfy extension activation contracts.
+  return new Disposable(() => {});
+}
+
 export function registerDocumentSymbolProvider(selector: DocumentSelector, provider: unknown): Disposable {
   return makeProviderDisposable("documentSymbol", normalizeSelector(selector), provider);
 }
@@ -308,22 +314,27 @@ export function registerDocumentRangeSemanticTokensProvider(
 }
 
 export function registerInlayHintsProvider(_selector: DocumentSelector, _provider: unknown): Disposable {
+  // TODO(vscode-shim): bridge inlay hints provider registration to Monaco.
   return new Disposable(() => {});
 }
 
 export function registerInlineValuesProvider(_selector: DocumentSelector, _provider: unknown): Disposable {
+  // TODO(vscode-shim): bridge inline values provider registration to Monaco.
   return new Disposable(() => {});
 }
 
 export function registerInlineCompletionItemProvider(_selector: DocumentSelector, _provider: unknown): Disposable {
+  // TODO(vscode-shim): bridge inline completion provider registration to Monaco.
   return new Disposable(() => {});
 }
 
 export function registerEvaluatableExpressionProvider(_selector: DocumentSelector, _provider: unknown): Disposable {
+  // TODO(vscode-shim): implement debug evaluatable-expression provider wiring.
   return new Disposable(() => {});
 }
 
 export function registerTypeHierarchyProvider(_selector: DocumentSelector, _provider: unknown): Disposable {
+  // TODO(vscode-shim): implement type hierarchy provider support.
   return new Disposable(() => {});
 }
 
@@ -333,11 +344,57 @@ export function setTextDocumentLanguage(doc: TextDocumentImpl, languageId: strin
 }
 
 export function setLanguageConfiguration(_language: string, _configuration: unknown): Disposable {
+  // TODO(vscode-shim): apply language configuration into Monaco behavior.
   return new Disposable(() => {});
 }
 
 export async function getLanguages(): Promise<string[]> {
+  // TODO(vscode-shim): return registered language ids from runtime registry.
   return [];
+}
+
+interface LanguageStatusItem {
+  id: string;
+  name: string;
+  selector: DocumentSelector;
+  text: string;
+  detail?: string;
+  severity: number;
+  busy: boolean;
+  command?: unknown;
+  accessibilityInformation?: unknown;
+  dispose(): void;
+}
+
+class LanguageStatusItemImpl implements LanguageStatusItem {
+  text = "";
+  detail?: string;
+  severity = 0;
+  busy = false;
+  command?: unknown;
+  accessibilityInformation?: unknown;
+  private disposed = false;
+
+  constructor(
+    public readonly id: string,
+    public readonly name: string,
+    public readonly selector: DocumentSelector,
+  ) {}
+
+  dispose(): void {
+    this.disposed = true;
+  }
+
+  get isDisposed(): boolean {
+    return this.disposed;
+  }
+}
+
+export function createLanguageStatusItem(id: string, selector: DocumentSelector): LanguageStatusItem {
+  // VS Code API accepts an id + selector and returns a mutable status item.
+  // We currently don't render language status UI, but extensions (e.g. TS)
+  // expect this function to exist and return a disposable object.
+  return new LanguageStatusItemImpl(id, id, normalizeSelector(selector));
 }
 
 // ── Assembled namespace ────────────────────────────────────────────
@@ -348,6 +405,7 @@ export const languages = {
   getDiagnostics,
   onDidChangeDiagnostics: onDidChangeDiagnosticsEmitter.event,
   getLanguages,
+  createLanguageStatusItem,
   setLanguageConfiguration,
   setTextDocumentLanguage,
   registerCompletionItemProvider,
@@ -358,6 +416,7 @@ export const languages = {
   registerDeclarationProvider,
   registerReferenceProvider,
   registerDocumentHighlightProvider,
+  registerMultiDocumentHighlightProvider,
   registerDocumentSymbolProvider,
   registerWorkspaceSymbolProvider,
   registerCodeActionsProvider,

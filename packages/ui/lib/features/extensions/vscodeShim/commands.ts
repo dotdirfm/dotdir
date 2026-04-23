@@ -14,9 +14,39 @@ export interface WorkerCommandRegistryAdapter {
 }
 
 let adapter: WorkerCommandRegistryAdapter | null = null;
+let nextStashedCommandArgsToken = 1;
+const stashedCommandArgs = new Map<number, unknown[]>();
+
+interface CommandArgsTokenPayload {
+  __dotdirCommandArgsToken: number;
+}
+
+function isCommandArgsTokenPayload(value: unknown): value is CommandArgsTokenPayload {
+  if (!value || typeof value !== "object") return false;
+  const anyValue = value as { __dotdirCommandArgsToken?: unknown };
+  return typeof anyValue.__dotdirCommandArgsToken === "number";
+}
 
 export function installCommandAdapter(impl: WorkerCommandRegistryAdapter): void {
   adapter = impl;
+}
+
+export function stashCommandArguments(args: unknown[] | undefined): CommandArgsTokenPayload | undefined {
+  if (!args) return undefined;
+  const token = nextStashedCommandArgsToken++;
+  stashedCommandArgs.set(token, args);
+  return { __dotdirCommandArgsToken: token };
+}
+
+export function resolveStashedCommandArguments(args: unknown[]): unknown[] {
+  if (args.length !== 1 || !isCommandArgsTokenPayload(args[0])) return args;
+  const token = args[0].__dotdirCommandArgsToken;
+  const stashed = stashedCommandArgs.get(token);
+  stashedCommandArgs.delete(token);
+  if (!stashed) {
+    logActivation("warn", `stashed command args token ${token} was not found`);
+  }
+  return stashed ?? [];
 }
 
 function getAdapter(): WorkerCommandRegistryAdapter {
@@ -42,7 +72,7 @@ export async function executeCommand<T = unknown>(command: string, ...rest: unkn
   logActivation("info", `vscode.commands.executeCommand ${command}`);
   const registry = getAdapter();
   if (registry.hasWorkerCommand(command)) {
-    return (await registry.executeWorkerCommand(command, rest)) as T;
+    return (await registry.executeWorkerCommand(command, resolveStashedCommandArguments(rest))) as T;
   }
   // Forward to main thread
   const rpc = getRpc();

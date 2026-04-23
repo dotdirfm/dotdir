@@ -134,6 +134,23 @@ function toStringArray(content: CompletionItemPayload["documentation"]): string 
   return { value: content.value, isTrusted: false };
 }
 
+function toMonacoCompletionCommand(
+  command: CompletionItemPayload["command"],
+): Monaco.languages.Command | undefined {
+  if (!command) return undefined;
+  const id = command.command;
+  // Extension/private command ids (e.g. `_typescript.applyCompletionCommand`)
+  // are not registered in Monaco's standalone command service. Passing them
+  // through makes acceptSelectedSuggestion throw at runtime. Keep only
+  // Monaco/editor commands that are known to exist in the standalone runtime.
+  if (!id.startsWith("editor.")) return undefined;
+  return {
+    id,
+    title: command.title,
+    arguments: command.arguments as unknown[] | undefined,
+  };
+}
+
 export function completionItemToMonaco(
   item: CompletionItemPayload,
   defaultRange: Monaco.IRange,
@@ -167,9 +184,7 @@ export function completionItemToMonaco(
     range,
     commitCharacters: item.commitCharacters,
     additionalTextEdits: item.additionalTextEdits?.map((e) => ({ range: rangeToMonaco(e.range), text: e.newText })),
-    command: item.command
-      ? { id: item.command.command, title: item.command.title, arguments: item.command.arguments as unknown[] | undefined }
-      : undefined,
+    command: toMonacoCompletionCommand(item.command),
   } as Monaco.languages.CompletionItem;
 }
 

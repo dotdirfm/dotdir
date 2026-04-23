@@ -18,6 +18,7 @@ import type { Bridge } from "@/features/bridge";
 import { dirname, isRootPath, join } from "@/utils/path";
 
 const WORKSPACE_MARKER = ".dir";
+const workspaceRootCache = new Map<string, string | null>();
 
 /** Max directories visited while evaluating a glob to bound worst-case cost. */
 const MAX_DIR_VISITS = 2000;
@@ -29,15 +30,30 @@ const MAX_DIR_VISITS = 2000;
  */
 export async function findWorkspaceRoot(bridge: Bridge, startPath: string): Promise<string | null> {
   if (!startPath) return null;
+  const cached = workspaceRootCache.get(startPath);
+  if (cached !== undefined) return cached;
   let cur = startPath;
+  const visited: string[] = [];
   while (true) {
+    visited.push(cur);
+    const hit = workspaceRootCache.get(cur);
+    if (hit !== undefined) {
+      for (const p of visited) workspaceRootCache.set(p, hit);
+      return hit;
+    }
     try {
-      if (await bridge.fs.exists(join(cur, WORKSPACE_MARKER))) return cur;
+      if (await bridge.fs.exists(join(cur, WORKSPACE_MARKER))) {
+        for (const p of visited) workspaceRootCache.set(p, cur);
+        return cur;
+      }
     } catch {
       // Treat errors as "not a workspace here" and keep walking up.
     }
     const parent = dirname(cur);
-    if (parent === cur || isRootPath(cur)) return null;
+    if (parent === cur || isRootPath(cur)) {
+      for (const p of visited) workspaceRootCache.set(p, null);
+      return null;
+    }
     cur = parent;
   }
 }

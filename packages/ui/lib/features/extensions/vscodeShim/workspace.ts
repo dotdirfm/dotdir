@@ -362,6 +362,7 @@ class FileSystemWatcher extends Disposable {
   readonly onDidDelete = new EventEmitter<Uri>().event;
 
   constructor() {
+    // TODO(vscode-shim): implement watcher subscription and event fanout.
     super(() => {});
   }
 
@@ -388,10 +389,12 @@ export function createFileSystemWatcher(
 // ── Misc ────────────────────────────────────────────────────────────
 
 export function registerTextDocumentContentProvider(_scheme: string, _provider: unknown): Disposable {
+  // TODO(vscode-shim): serve virtual documents via content providers.
   return new Disposable(() => {});
 }
 
 export function registerFileSystemProvider(_scheme: string, _provider: unknown, _options?: unknown): Disposable {
+  // TODO(vscode-shim): support custom fs providers and route fs operations.
   return new Disposable(() => {});
 }
 
@@ -449,6 +452,7 @@ export const workspace = {
     return workspaceFolders[0]!.name;
   },
   get workspaceFile(): Uri | undefined {
+    // TODO(vscode-shim): expose workspace file URI when multi-root/workspace files are supported.
     return undefined;
   },
   get textDocuments(): TextDocumentImpl[] {
@@ -489,6 +493,7 @@ export const workspace = {
   onDidSaveNotebookDocument: new EventEmitter<unknown>().event,
   onWillSaveNotebookDocument: new EventEmitter<unknown>().event,
   registerNotebookSerializer(): Disposable {
+    // TODO(vscode-shim): implement notebook serializer registration.
     return new Disposable(() => {});
   },
   isTrusted: true,
