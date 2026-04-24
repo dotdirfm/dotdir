@@ -293,6 +293,14 @@ function openVsxNamespaceUrl(namespace: string): string {
 }
 
 function featureSectionsForInstalled(ext: LoadedExtension): Array<{ label: string; items: string[] }> {
+  const activation =
+    ext.compatibility.activation === "supported"
+      ? "Activation supported"
+      : `${ext.compatibility.activation === "failed" ? "Activation failed" : "Activation unsupported"}${ext.compatibility.reason ? `: ${ext.compatibility.reason}` : ""}`;
+  const runtime = ext.runtime.activationEntry
+    ? `Activation entry: ${ext.runtime.activationEntry.sourceField} ${ext.runtime.activationEntry.format} (${ext.runtime.activationEntry.path})`
+    : "Activation entry: none";
+  const trust = `Trust tier: ${ext.trustTier}`;
   const commands = extensionCommands(ext).map((item) => item.title || item.command);
   const keybindings = extensionKeybindings(ext).map((item) => `${item.key} → ${item.command}`);
   const viewers = extensionViewers(ext).map((item) => item.label);
@@ -305,6 +313,7 @@ function featureSectionsForInstalled(ext: LoadedExtension): Array<{ label: strin
   const colorThemes = extensionColorThemes(ext).map((item) => item.label);
 
   return [
+    { label: "Compatibility", items: [activation, runtime, trust] },
     { label: "Icon Themes", items: iconThemes },
     { label: "Color Themes", items: colorThemes },
     { label: "Languages", items: languages },
@@ -1087,6 +1096,11 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
                     <span className={styles["ext-source-pill"]}>
                       {selectedItem.source === "installed" ? "Installed" : selectedItem.source === "dotdir" ? ".dir" : "Open VSX"}
                     </span>
+                    {selectedInstalled && selectedInstalled.compatibility.activation !== "supported" && (
+                      <span className={styles["ext-source-pill"]}>
+                        {selectedInstalled.compatibility.activation === "failed" ? "Activation Failed" : "Static Only"}
+                      </span>
+                    )}
                     {selectedItem.kind !== "installed" && selectedItem.publisher.toLowerCase().includes("github") && (
                       <span className={styles["ext-meta-with-icon"]}>
                         <FaGithub aria-hidden="true" /> {selectedItem.publisher}

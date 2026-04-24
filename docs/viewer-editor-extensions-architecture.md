@@ -1,5 +1,9 @@
 # Viewer & Editor Extensions — Architecture Plan
 
+For the broader extension runtime, manifest loading, worker host, marketplace, and contribution architecture, see [Extensions Architecture](./extensions-architecture.md).
+
+Current runtime rule: built-in `file-viewer` and `monaco` surfaces render as trusted React components without an iframe. Custom viewer/editor contributions, including Open VSX-sourced entries, always render in sandboxed iframes.
+
 ## 1. Current State
 
 - **Viewers**: `FileViewer` (text, read-only) and `ImageViewer` (images/video, read-only) are hardcoded in `app.tsx`. Selection is by `isMediaFile(fileName)`; everything else uses `FileViewer`.

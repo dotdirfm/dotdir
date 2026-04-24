@@ -19,7 +19,7 @@ import styles from "@/styles/viewers.module.css";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
 import { getStyleHostElement } from "@/utils/styleHost";
-import { useFsProviderRegistry } from "@/viewerEditorRegistry";
+import { isBuiltInExtensionDirPath, useFsProviderRegistry } from "@/viewerEditorRegistry";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const LazyFileViewerSurface = lazy(async () => {
@@ -81,7 +81,8 @@ async function readFromContainer(
   return provider.readFileRange(hostFile, innerPath, offset, length);
 }
 
-function resolveBuiltInSurface(kind: ContainerProps["kind"], contributionId?: string) {
+function resolveBuiltInSurface(kind: ContainerProps["kind"], extensionDirPath: string, contributionId?: string) {
+  if (!isBuiltInExtensionDirPath(extensionDirPath)) return null;
   if (kind === "viewer" && contributionId === "file-viewer") {
     return LazyFileViewerSurface;
   }
@@ -92,7 +93,7 @@ function resolveBuiltInSurface(kind: ContainerProps["kind"], contributionId?: st
 }
 
 function BuiltInExtensionContainer(containerProps: ContainerProps) {
-  const BuiltInSurface = resolveBuiltInSurface(containerProps.kind, containerProps.contributionId);
+  const BuiltInSurface = resolveBuiltInSurface(containerProps.kind, containerProps.extensionDirPath, containerProps.contributionId);
   const { kind, props, className, style, active } = containerProps;
   const bridge = useBridge();
   const fsProviderRegistry = useFsProviderRegistry();
@@ -297,10 +298,14 @@ function BuiltInExtensionContainer(containerProps: ContainerProps) {
 }
 
 export function ExtensionContainer(containerProps: ContainerProps) {
-  if (resolveBuiltInSurface(containerProps.kind, containerProps.contributionId)) {
+  if (resolveBuiltInSurface(containerProps.kind, containerProps.extensionDirPath, containerProps.contributionId)) {
     return <BuiltInExtensionContainer {...containerProps} />;
   }
 
+  return <IframeExtensionContainer {...containerProps} />;
+}
+
+function IframeExtensionContainer(containerProps: ContainerProps) {
   const { extensionDirPath, entry, kind, props, onClose, className, style, active } = containerProps;
 
   const bridge = useBridge();

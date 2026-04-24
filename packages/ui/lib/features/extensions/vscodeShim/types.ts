@@ -8,12 +8,12 @@
  */
 
 import {
-  CompletionItemKind,
   DiagnosticSeverity,
   DocumentHighlightKind,
-  EndOfLine,
-  FoldingRangeKind,
-  SymbolKind,
+  type CompletionItemKind,
+  type EndOfLine,
+  type FoldingRangeKind,
+  type SymbolKind,
 } from "./enums";
 
 // ── Uri ─────────────────────────────────────────────────────────────

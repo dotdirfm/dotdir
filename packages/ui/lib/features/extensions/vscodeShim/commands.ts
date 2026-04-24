@@ -3,7 +3,7 @@
  * command registry (see `runCommand` in extensionHost.worker.ts).
  */
 
-import { Disposable } from "./events";
+import type { Disposable } from "./events";
 import { getRpc, logActivation } from "./runtime";
 
 export interface WorkerCommandRegistryAdapter {

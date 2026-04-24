@@ -170,6 +170,10 @@ export interface ExtensionManifest {
   displayName?: string;
   description?: string;
   icon?: string; // relative path to icon image
+  /** VS Code desktop extension entry. Used only when compatible with the worker runtime. */
+  main?: string;
+  /** Module format hint for activation entries. */
+  type?: string;
   /**
    * Optional browser activation script entry.
    * If present, the host will load it and call its exported `activate()` / `deactivate()`.
@@ -259,11 +263,34 @@ export interface LoadedExtensionContributions {
   shellIntegrations?: Array<LoadedShellIntegration>;
 }
 
+export type ExtensionActivationCompatibility = "supported" | "unsupported" | "failed";
+export type ExtensionRuntimeEntryFormat = "esm" | "cjs";
+export type ExtensionRuntimeEntrySource = "browser" | "main";
+export type ExtensionTrustTier = "builtin" | "worker" | "iframe" | "provider";
+
+export interface ExtensionCompatibility {
+  activation: ExtensionActivationCompatibility;
+  reason?: string;
+}
+
+export interface ExtensionActivationEntry {
+  path: string;
+  format: ExtensionRuntimeEntryFormat;
+  sourceField: ExtensionRuntimeEntrySource;
+}
+
+export interface ExtensionRuntimeMetadata {
+  activationEntry?: ExtensionActivationEntry;
+}
+
 export interface LoadedExtension {
   identity: LoadedExtensionIdentity;
   location: LoadedExtensionLocation;
   assets: LoadedExtensionAssets;
   contributions: LoadedExtensionContributions;
+  compatibility: ExtensionCompatibility;
+  runtime: ExtensionRuntimeMetadata;
+  trustTier: ExtensionTrustTier;
 }
 
 export function extensionRef(ext: LoadedExtension): ExtensionRef {

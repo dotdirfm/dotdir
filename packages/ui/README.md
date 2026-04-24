@@ -75,6 +75,10 @@ const ref = useRef<DotDirHandle>(null);
 ref.current?.focus();
 ```
 
+## Architecture
+
+For a top-level map of the package boundaries, provider stack, runtime flows, extension system, and source layout, see [ARCHITECTURE.md](./ARCHITECTURE.md).
+
 ## Bridge Contract
 
 Your `Bridge` implementation is responsible for all host integration.

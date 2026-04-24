@@ -86,6 +86,9 @@ function logLoadedExtensionSummary(extensions: LoadedExtension[]): void {
   const colorThemes = extensions.flatMap((e) =>
     extensionColorThemes(e).map((t) => `${extensionRef(e).publisher}.${extensionRef(e).name}:${t.id}`),
   );
+  const unsupported = extensions
+    .filter((e) => e.compatibility.activation !== "supported")
+    .map((e) => `${extensionRef(e).publisher}.${extensionRef(e).name}:${e.compatibility.activation}`);
 
   console.groupCollapsed(
     `[ExtHost] loaded ${extensions.length} extension(s); ${languages.length} language(s), ${grammars.length} grammar(s), ${commands.length} command(s), ${iconThemes.length} icon theme(s), ${colorThemes.length} color theme(s)`,
@@ -96,6 +99,7 @@ function logLoadedExtensionSummary(extensions: LoadedExtension[]): void {
   if (commands.length) console.log("commands:", commands);
   if (iconThemes.length) console.log("iconThemes:", iconThemes);
   if (colorThemes.length) console.log("colorThemes:", colorThemes);
+  if (unsupported.length) console.log("activationCompatibility:", unsupported);
   console.groupEnd();
 }
 
@@ -124,6 +128,9 @@ function normalizeLoadedExtensionPayload(raw: unknown): LoadedExtension {
       fsProviders: value.fsProviders as LoadedExtension["contributions"]["fsProviders"],
       shellIntegrations: value.shellIntegrations as LoadedExtension["contributions"]["shellIntegrations"],
     },
+    compatibility: { activation: "supported" },
+    runtime: {},
+    trustTier: "worker",
   };
 }
 

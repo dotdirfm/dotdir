@@ -56,92 +56,31 @@ import {
 } from "./vscodeShim";
 import { Disposable } from "./vscodeShim/events";
 import {
-  CompletionItem,
-  CompletionItemLabel,
   CompletionList,
-  Diagnostic,
-  DocumentLink,
   DocumentSymbol,
-  FoldingRange,
-  Hover,
-  Location,
   MarkdownString,
   Position,
   Range,
-  SelectionRange,
-  SymbolInformation,
-  TextEdit,
   Uri,
+  type CompletionItem,
+  type CompletionItemLabel,
+  type Diagnostic,
+  type DocumentLink,
+  type FoldingRange,
+  type Hover,
+  type Location,
   type MarkedString,
+  type SelectionRange,
+  type SymbolInformation,
+  type TextEdit,
 } from "./vscodeShim/types";
 import { ExtensionMode, registerExtension as _reg } from "./vscodeShim/extensions";
+import { extensionDirName, normalizeExtensionManifest } from "./manifestNormalizer";
+import type { ExtensionManifest, ExtensionRef, LoadedExtension } from "./types";
 
 void _reg;
 
-// ── Types duplicated from loader (avoid DOM imports) ────────────────
-
-interface ExtensionIconTheme { id: string; label: string; path: string }
-interface ExtensionLanguage { id: string; aliases?: string[]; extensions?: string[]; filenames?: string[]; configuration?: string }
-interface ExtensionGrammar { language: string; scopeName: string; path: string; embeddedLanguages?: Record<string, string> }
-interface LoadedGrammarRef { contribution: ExtensionGrammar; path: string }
-interface ExtensionViewerContribution { id: string; label: string; patterns: string[]; mimeTypes?: string[]; entry: string; priority?: number }
-interface ExtensionEditorContribution { id: string; label: string; patterns: string[]; mimeTypes?: string[]; langId?: string; entry: string; priority?: number }
-interface ExtensionColorTheme { id?: string; label: string; uiTheme: string; path: string }
-interface ExtensionCommand { command: string; title: string; category?: string; icon?: string }
-interface ExtensionKeybinding { command: string; key: string; mac?: string; when?: string; args?: unknown }
-interface ExtensionFsProviderContribution { id: string; label: string; patterns: string[]; entry: string; priority?: number; runtime?: "frontend" | "backend" }
-interface ExtensionShellIntegration {
-  shell: string; label: string; scriptPath: string; executableCandidates: string[];
-  platforms?: ("darwin" | "linux" | "unix" | "windows")[];
-  hiddenCdTemplate?: string; cwdEscape?: "posix" | "powershell" | "cmd";
-  lineEnding?: "\n" | "\r\n"; spawnArgs?: string[]; scriptArg?: boolean;
-}
-interface ExtensionContributions {
-  iconTheme?: ExtensionIconTheme; iconThemes?: ExtensionIconTheme[]; themes?: ExtensionColorTheme[];
-  languages?: ExtensionLanguage[]; grammars?: ExtensionGrammar[];
-  viewers?: ExtensionViewerContribution[]; editors?: ExtensionEditorContribution[];
-  commands?: ExtensionCommand[]; keybindings?: ExtensionKeybinding[];
-  fsProviders?: ExtensionFsProviderContribution[]; shellIntegrations?: ExtensionShellIntegration[];
-  configuration?: { properties?: Record<string, { default?: unknown }> } | Array<{ properties?: Record<string, { default?: unknown }> }>;
-  configurationDefaults?: Record<string, Record<string, unknown>>;
-}
-
-interface ExtensionManifest {
-  name: string; version: string; publisher: string;
-  displayName?: string; description?: string; icon?: string;
-  activationEvents?: string[]; browser?: string; main?: string; type?: string;
-  contributes?: ExtensionContributions;
-}
-
-interface ExtensionRef {
-  publisher: string; name: string; version: string;
-  source?: "dotdir-marketplace" | "open-vsx-marketplace";
-  autoUpdate?: boolean; path?: string;
-}
-
-interface WorkerLoadedColorTheme { id: string; label: string; uiTheme: string; jsonPath: string }
-
-export interface WorkerLoadedExtension {
-  ref: ExtensionRef;
-  manifest: ExtensionManifest;
-  dirPath: string;
-  iconUrl?: string;
-  iconThemes?: Array<{ id: string; label: string; kind: "fss" | "vscode"; path: string; basePath?: string; sourceId?: string; fss?: string }>;
-  colorThemes?: WorkerLoadedColorTheme[];
-  languages?: ExtensionLanguage[];
-  grammarRefs?: LoadedGrammarRef[];
-  viewers?: ExtensionViewerContribution[];
-  editors?: ExtensionEditorContribution[];
-  commands?: ExtensionCommand[];
-  keybindings?: ExtensionKeybinding[];
-  fsProviders?: ExtensionFsProviderContribution[];
-  shellIntegrations?: Array<{
-    shell: string; label: string; script: string; executableCandidates: string[];
-    platforms?: ("darwin" | "linux" | "unix" | "windows")[];
-    hiddenCdTemplate?: string; cwdEscape?: "posix" | "powershell" | "cmd";
-    lineEnding?: "\n" | "\r\n"; spawnArgs?: string[]; scriptArg?: boolean;
-  }>;
-}
+export type WorkerLoadedExtension = LoadedExtension;
 
 // ── Mutable worker-scoped state ─────────────────────────────────────
 
@@ -458,11 +397,13 @@ const vscodeNs = createVscodeNamespace();
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function activationKey(ext: WorkerLoadedExtension): string {
-  return `${ext.ref.publisher}.${ext.ref.name}.${ext.ref.version}`;
+  const ref = ext.identity.ref;
+  return `${ref.publisher}.${ref.name}.${ref.version}`;
 }
 
 function extensionId(ext: WorkerLoadedExtension): string {
-  return `${ext.ref.publisher}.${ext.ref.name}`;
+  const ref = ext.identity.ref;
+  return `${ref.publisher}.${ref.name}`;
 }
 
 function encodePathPreservingSlashes(path: string): string {
@@ -492,7 +433,7 @@ function extensionAssetUri(absPath: string): Uri {
 }
 
 function extensionWantsEvent(ext: WorkerLoadedExtension, event: string): boolean {
-  const events = ext.manifest.activationEvents ?? [];
+  const events = ext.identity.manifest.activationEvents ?? [];
   if (events.length === 0) return event === "*";
   return events.includes("*") || events.includes(event);
 }
@@ -505,26 +446,15 @@ type BrowserExtensionModule = {
   default?: { activate?: (ctx: unknown) => unknown | Promise<unknown>; deactivate?: (ctx: unknown) => unknown | Promise<unknown> };
 };
 
-function buildCjsWrapperSource(script: string, absScriptPath: string, extDir: string): string {
-  return `
-const __dotdir_vscode = globalThis.__dotdir_vscode_api;
-const module = { exports: {} };
-const exports = module.exports;
-const require = (id) => {
-  if (id === "vscode") return __dotdir_vscode;
-  throw new Error("Unsupported browser require: " + id);
-};
-const __filename = ${JSON.stringify(absScriptPath)};
-const __dirname = ${JSON.stringify(extDir)};
-(function(module, exports, require, globalThis, self, __filename, __dirname){
-${script}
-})(module, exports, require, globalThis, self, __filename, __dirname);
-const __exp = module.exports && module.exports.__esModule && module.exports.default ? module.exports.default : module.exports;
-export default __exp;
-export const activate = __exp?.activate;
-export const deactivate = __exp?.deactivate;
-//# sourceURL=${JSON.stringify(`dotdir-ext-cjs://${absScriptPath}`)}
-`;
+type CjsModuleRecord =
+  | { kind: "js"; code: string; dirname: string }
+  | { kind: "json"; value: unknown; dirname: string };
+
+class UnsupportedExtensionModuleError extends Error {
+  constructor(id: string) {
+    super(`Unsupported extension module "${id}". DotDir supports web-compatible CJS only: "vscode" plus extension-relative JS/JSON modules.`);
+    this.name = "UnsupportedExtensionModuleError";
+  }
 }
 
 async function importBrowserModuleEsm(absScriptPath: string): Promise<BrowserExtensionModule> {
@@ -533,10 +463,142 @@ async function importBrowserModuleEsm(absScriptPath: string): Promise<BrowserExt
   return mod as BrowserExtensionModule;
 }
 
-async function importBrowserModuleCjs(absScriptPath: string, extDir: string): Promise<BrowserExtensionModule> {
-  const script = await readTextFile(absScriptPath);
-  if (script == null) throw new Error(`Browser script not found: ${absScriptPath}`);
-  const cjsWrapper = buildCjsWrapperSource(script, absScriptPath, extDir);
+function staticRequireIds(code: string): string[] {
+  const ids: string[] = [];
+  const re = /\brequire\s*\(\s*["']([^"']+)["']\s*\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(code)) !== null) {
+    ids.push(match[1] ?? "");
+  }
+  return ids;
+}
+
+function isRelativeRequire(id: string): boolean {
+  return id.startsWith("./") || id.startsWith("../");
+}
+
+async function resolveCjsModulePath(fromPath: string, id: string): Promise<string> {
+  if (!isRelativeRequire(id)) throw new UnsupportedExtensionModuleError(id);
+
+  const base = normalizePath(join(dirname(fromPath), id));
+  const candidates = [
+    base,
+    `${base}.js`,
+    `${base}.json`,
+    join(base, "index.js"),
+    join(base, "index.json"),
+  ];
+  for (const candidate of candidates) {
+    const content = await readTextFile(candidate);
+    if (content !== null) return candidate;
+  }
+  throw new Error(`Cannot resolve extension module "${id}" from ${fromPath}`);
+}
+
+async function buildCjsModuleGraph(entryPath: string): Promise<Map<string, CjsModuleRecord>> {
+  const modules = new Map<string, CjsModuleRecord>();
+  const visiting = new Set<string>();
+
+  const visit = async (path: string): Promise<void> => {
+    const normalizedPath = normalizePath(path);
+    if (modules.has(normalizedPath) || visiting.has(normalizedPath)) return;
+    visiting.add(normalizedPath);
+
+    const source = await readTextFile(normalizedPath);
+    if (source === null) throw new Error(`Extension module not found: ${normalizedPath}`);
+
+    if (normalizedPath.endsWith(".json")) {
+      modules.set(normalizedPath, { kind: "json", value: JSON.parse(source), dirname: dirname(normalizedPath) });
+      visiting.delete(normalizedPath);
+      return;
+    }
+
+    modules.set(normalizedPath, { kind: "js", code: source, dirname: dirname(normalizedPath) });
+    for (const id of staticRequireIds(source)) {
+      if (id === "vscode") continue;
+      if (!isRelativeRequire(id)) continue;
+      await visit(await resolveCjsModulePath(normalizedPath, id));
+    }
+    visiting.delete(normalizedPath);
+  };
+
+  await visit(entryPath);
+  return modules;
+}
+
+function buildCjsWrapperSource(entryPath: string, modules: Map<string, CjsModuleRecord>): string {
+  const moduleEntries = Array.from(modules.entries()).map(([path, record]) => {
+    if (record.kind === "json") {
+      return [path, { kind: "json", value: record.value, dirname: record.dirname }];
+    }
+    return [path, { kind: "js", code: record.code, dirname: record.dirname }];
+  });
+  return `
+const __dotdir_vscode = globalThis.__dotdir_vscode_api;
+const __dotdir_modules = new Map(${JSON.stringify(moduleEntries)});
+const __dotdir_cache = new Map();
+const __dotdir_join = (left, right) => {
+  const stack = [];
+  const raw = (left + "/" + right).replace(/\\\\/g, "/").split("/");
+  for (const part of raw) {
+    if (!part || part === ".") continue;
+    if (part === "..") stack.pop();
+    else stack.push(part);
+  }
+  return (left.startsWith("/") ? "/" : "") + stack.join("/");
+};
+const __dotdir_dirname = (path) => {
+  const idx = path.lastIndexOf("/");
+  return idx <= 0 ? "/" : path.slice(0, idx);
+};
+const __dotdir_has = (path) => __dotdir_modules.has(path);
+const __dotdir_resolve = (fromPath, id) => {
+  if (id === "vscode") return "vscode";
+  if (!(id.startsWith("./") || id.startsWith("../"))) {
+    const err = new Error('Unsupported extension module "' + id + '". DotDir supports web-compatible CJS only: "vscode" plus extension-relative JS/JSON modules.');
+    err.name = "UnsupportedExtensionModuleError";
+    throw err;
+  }
+  const base = __dotdir_join(__dotdir_dirname(fromPath), id);
+  const candidates = [base, base + ".js", base + ".json", __dotdir_join(base, "index.js"), __dotdir_join(base, "index.json")];
+  for (const candidate of candidates) {
+    if (__dotdir_has(candidate)) return candidate;
+  }
+  throw new Error('Cannot resolve extension module "' + id + '" from ' + fromPath);
+};
+const __dotdir_require = (id, fromPath) => {
+  const resolved = __dotdir_resolve(fromPath, id);
+  if (resolved === "vscode") return __dotdir_vscode;
+  if (__dotdir_cache.has(resolved)) return __dotdir_cache.get(resolved).exports;
+  const record = __dotdir_modules.get(resolved);
+  if (!record) throw new Error("Extension module not found: " + resolved);
+  if (record.kind === "json") {
+    const jsonModule = { exports: record.value };
+    __dotdir_cache.set(resolved, jsonModule);
+    return jsonModule.exports;
+  }
+  const module = { exports: {} };
+  __dotdir_cache.set(resolved, module);
+  const exports = module.exports;
+  const require = (nextId) => __dotdir_require(nextId, resolved);
+  const __filename = resolved;
+  const __dirname = record.dirname;
+  const fn = new Function("module", "exports", "require", "globalThis", "self", "__filename", "__dirname", record.code + "\\n//# sourceURL=dotdir-ext-cjs://" + resolved);
+  fn(module, exports, require, globalThis, self, __filename, __dirname);
+  return module.exports;
+};
+const __entry = __dotdir_require(${JSON.stringify(entryPath)}, ${JSON.stringify(entryPath)});
+const __exp = __entry && __entry.__esModule && __entry.default ? __entry.default : __entry;
+export default __exp;
+export const activate = __exp?.activate;
+export const deactivate = __exp?.deactivate;
+`;
+}
+
+async function importBrowserModuleCjs(absScriptPath: string): Promise<BrowserExtensionModule> {
+  const resolvedScriptPath = await resolveBrowserScriptPath(absScriptPath);
+  const graph = await buildCjsModuleGraph(resolvedScriptPath);
+  const cjsWrapper = buildCjsWrapperSource(resolvedScriptPath, graph);
   const cjsBlobUrl = URL.createObjectURL(new Blob([cjsWrapper], { type: "text/javascript" }));
   try {
     return (await import(/* @vite-ignore */ cjsBlobUrl)) as BrowserExtensionModule;
@@ -616,13 +678,15 @@ function createMemento(scopeKey: string): {
 
 function createExtensionContext(ext: WorkerLoadedExtension, subs: Array<{ dispose: () => void }>): ExtensionContextShape {
   const id = extensionId(ext);
-  const extensionUri = extensionAssetUri(ext.dirPath);
-  const globalStorageDir = join(ext.dirPath, "..", ".global-storage", id);
-  const logDir = join(ext.dirPath, "..", ".logs", id);
+  const extDir = ext.location.dirPath;
+  const manifest = ext.identity.manifest;
+  const extensionUri = extensionAssetUri(extDir);
+  const globalStorageDir = join(extDir, "..", ".global-storage", id);
+  const logDir = join(extDir, "..", ".logs", id);
   return {
     subscriptions: subs,
     extensionUri,
-    extensionPath: ext.dirPath,
+    extensionPath: extDir,
     globalStoragePath: globalStorageDir,
     globalStorageUri: Uri.file(globalStorageDir),
     storagePath: undefined,
@@ -633,16 +697,16 @@ function createExtensionContext(ext: WorkerLoadedExtension, subs: Array<{ dispos
     extensionMode: ExtensionMode.Production,
     // Browser extensions should resolve bundle assets to extension web URLs,
     // not host `file://` paths.
-    asAbsolutePath: (relative: string) => extensionScriptVfsUrl(join(ext.dirPath, relative)),
+    asAbsolutePath: (relative: string) => extensionScriptVfsUrl(join(extDir, relative)),
     secrets: { get: async () => undefined, store: async () => {}, delete: async () => {}, onDidChange: () => ({ dispose: () => {} }) },
     globalState: createMemento(`${id}:global`),
     workspaceState: createMemento(`${id}:workspace`),
     extension: {
       id,
       extensionUri,
-      extensionPath: ext.dirPath,
+      extensionPath: extDir,
       isActive: false,
-      packageJSON: ext.manifest as unknown as Record<string, unknown>,
+      packageJSON: manifest as unknown as Record<string, unknown>,
       extensionKind: 1,
       exports: undefined,
     },
@@ -664,52 +728,64 @@ function createExtensionContext(ext: WorkerLoadedExtension, subs: Array<{ dispos
 async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
   const key = activationKey(ext);
   if (activeExtensions.has(key)) return;
-  if (!ext.manifest.browser) return;
+  const activationEntry = ext.runtime.activationEntry;
+  if (!activationEntry) return;
 
   setActiveExtensionKey(key);
+  try {
+    const resolvedScriptPath = await resolveBrowserScriptPath(activationEntry.path);
+    logActivation(
+      "info",
+      `loading ${activationEntry.sourceField} script ${resolvedScriptPath} via ${activationEntry.format === "esm" ? "esm" : "cjs-wrapper"}`,
+    );
 
-  const relScript = normalizePath(ext.manifest.browser).replace(/^\/+/, "");
-  const absScriptPath = join(ext.dirPath, relScript);
-  const resolvedScriptPath = await resolveBrowserScriptPath(absScriptPath);
-  const isEsm = String(ext.manifest.type ?? "").trim().toLowerCase() === "module";
-  logActivation("info", `loading browser script ${resolvedScriptPath} via ${isEsm ? "esm" : "cjs-wrapper"}`);
+    const mod = activationEntry.format === "esm"
+      ? await importBrowserModuleEsm(resolvedScriptPath)
+      : await importBrowserModuleCjs(resolvedScriptPath);
+    const activate = mod.activate ?? mod.default?.activate;
+    const deactivate = mod.deactivate ?? mod.default?.deactivate;
+    if (typeof activate !== "function") {
+      ext.compatibility = { activation: "unsupported", reason: "Activation entry has no activate() export." };
+      logActivation("warn", "activation entry has no activate() export");
+      return;
+    }
 
-  const mod = isEsm
-    ? await importBrowserModuleEsm(resolvedScriptPath)
-    : await importBrowserModuleCjs(resolvedScriptPath, ext.dirPath);
-  const activate = mod.activate ?? mod.default?.activate;
-  const deactivate = mod.deactivate ?? mod.default?.deactivate;
-  if (typeof activate !== "function") {
-    logActivation("warn", "browser entry has no activate() export");
-    return;
+    const subs: Array<{ dispose: () => void }> = [];
+    const ctx = createExtensionContext(ext, subs);
+
+    // Register in vscode.extensions.all before activation so the extension
+    // can resolve itself during activate().
+    registerExtension({
+      id: extensionId(ext),
+      extensionUri: ctx.extensionUri,
+      extensionPath: ctx.extensionPath,
+      isActive: false,
+      packageJSON: ext.identity.manifest as unknown as Record<string, unknown>,
+      extensionKind: 1,
+      exports: undefined,
+      activate: async () => undefined,
+    });
+
+    const exports = await activate(ctx);
+    markExtensionActive(extensionId(ext), exports);
+    ext.compatibility = { activation: "supported" };
+    logActivation("info", "activated");
+    activeExtensions.set(key, { subscriptions: subs, deactivate });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    ext.compatibility =
+      err instanceof Error && err.name === "UnsupportedExtensionModuleError"
+        ? { activation: "unsupported", reason: message }
+        : { activation: "failed", reason: message };
+    throw err;
+  } finally {
+    setActiveExtensionKey(null);
   }
-
-  const subs: Array<{ dispose: () => void }> = [];
-  const ctx = createExtensionContext(ext, subs);
-
-  // Register in vscode.extensions.all before activation so the extension
-  // can resolve itself during activate().
-  registerExtension({
-    id: extensionId(ext),
-    extensionUri: ctx.extensionUri,
-    extensionPath: ctx.extensionPath,
-    isActive: false,
-    packageJSON: ext.manifest as unknown as Record<string, unknown>,
-    extensionKind: 1,
-    exports: undefined,
-    activate: async () => undefined,
-  });
-
-  const exports = await activate(ctx);
-  markExtensionActive(extensionId(ext), exports);
-  logActivation("info", "activated");
-  activeExtensions.set(key, { subscriptions: subs, deactivate });
-  setActiveExtensionKey(null);
 }
 
 async function activateByEvent(event: string): Promise<void> {
   for (const ext of loadedExtensions.values()) {
-    if (!ext.manifest.browser) continue;
+    if (!ext.runtime.activationEntry) continue;
     if (!extensionWantsEvent(ext, event)) continue;
     try {
       await activateExtension(ext);
@@ -731,193 +807,6 @@ async function runCommand(command: string, args: unknown[]): Promise<unknown> {
   return await handler(...resolvedArgs);
 }
 
-// ── Extension loading (from disk) ──────────────────────────────────
-
-function extensionDirName(ref: ExtensionRef): string {
-  return `${ref.publisher}-${ref.name}-${ref.version}`;
-}
-
-type NlsBundle = Record<string, string>;
-
-function localeCandidates(locale: string): string[] {
-  const normalized = locale.trim().toLowerCase().replace(/_/g, "-");
-  if (!normalized) return [];
-  const parts = normalized.split("-");
-  const candidates: string[] = [];
-  for (let i = parts.length; i > 0; i--) {
-    candidates.push(parts.slice(0, i).join("-"));
-  }
-  return candidates;
-}
-
-async function readNlsBundle(path: string): Promise<NlsBundle | null> {
-  const text = await readTextFile(path);
-  if (!text) return null;
-  try {
-    const parsed = JSON.parse(text);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-    const out: NlsBundle = {};
-    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof value === "string") out[key] = value;
-    }
-    return out;
-  } catch {
-    return null;
-  }
-}
-
-async function loadManifestNlsBundle(extDir: string): Promise<NlsBundle> {
-  const locale =
-    ((self as typeof globalThis & { navigator?: { language?: string } }).navigator?.language ?? "en").trim() || "en";
-  const merged: NlsBundle = {};
-
-  // Base bundle always provides the fallback source.
-  const base = await readNlsBundle(join(extDir, "package.nls.json"));
-  if (base) Object.assign(merged, base);
-
-  // Locale-specific bundle overrides base keys when present.
-  const candidates = localeCandidates(locale);
-  for (const candidate of candidates) {
-    const localized = await readNlsBundle(join(extDir, `package.nls.${candidate}.json`));
-    if (localized) {
-      Object.assign(merged, localized);
-      break;
-    }
-  }
-
-  return merged;
-}
-
-function localizeManifestValue(value: unknown, bundle: NlsBundle): unknown {
-  if (typeof value === "string") {
-    const match = value.match(/^%([^%]+)%$/);
-    if (!match) return value;
-    const key = match[1] ?? "";
-    return bundle[key] ?? value;
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => localizeManifestValue(item, bundle));
-  }
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = localizeManifestValue(v, bundle);
-    }
-    return out;
-  }
-  return value;
-}
-
-async function loadExtensionFromDir(extDir: string): Promise<WorkerLoadedExtension | null> {
-  try {
-    const manifestText = await readTextFile(join(extDir, "package.json"));
-    if (manifestText === null) return null;
-    const rawManifest = JSON.parse(manifestText) as ExtensionManifest;
-    const nlsBundle = await loadManifestNlsBundle(extDir);
-    const manifest = localizeManifestValue(rawManifest, nlsBundle) as ExtensionManifest;
-
-    const ref: ExtensionRef = {
-      publisher: manifest.publisher || "unknown",
-      name: manifest.name || "unknown",
-      version: manifest.version || "0.0.0",
-    };
-
-    const iconThemes: NonNullable<WorkerLoadedExtension["iconThemes"]> = [];
-    if (manifest.contributes?.iconTheme?.path) {
-      const theme = manifest.contributes.iconTheme;
-      const themePath = join(extDir, theme.path);
-      if (themePath.endsWith(".json")) {
-        iconThemes.push({ id: theme.id || "default", label: theme.label || manifest.displayName || manifest.name, kind: "vscode", path: themePath, sourceId: theme.id });
-      } else {
-        iconThemes.push({ id: theme.id || "default", label: theme.label || manifest.displayName || manifest.name, kind: "fss", path: themePath, basePath: dirname(themePath), sourceId: theme.id });
-      }
-    }
-
-    if (manifest.contributes?.iconThemes?.length) {
-      iconThemes.push(
-        ...manifest.contributes.iconThemes.map((theme, index) => ({
-          id: theme.id || `${theme.label}#${index}`,
-          label: theme.label,
-          kind: theme.path.endsWith(".json") ? ("vscode" as const) : ("fss" as const),
-          path: join(extDir, theme.path),
-          basePath: theme.path.endsWith(".json") ? undefined : dirname(join(extDir, theme.path)),
-          sourceId: theme.id,
-        })),
-      );
-    }
-
-    const languages = manifest.contributes?.languages;
-
-    let grammarRefs: LoadedGrammarRef[] | undefined;
-    if (manifest.contributes?.grammars?.length) {
-      grammarRefs = [];
-      for (const grammarContrib of manifest.contributes.grammars) {
-        const grammarPath = join(extDir, grammarContrib.path);
-        grammarRefs.push({ contribution: grammarContrib, path: grammarPath });
-      }
-    }
-
-    let colorThemes: WorkerLoadedColorTheme[] | undefined;
-    if (manifest.contributes?.themes?.length) {
-      colorThemes = manifest.contributes.themes.map((t, i) => ({
-        id: t.id || `${t.label}#${i}`,
-        label: t.label,
-        uiTheme: t.uiTheme,
-        jsonPath: join(extDir, t.path),
-      }));
-    }
-
-    const viewers = manifest.contributes?.viewers;
-    const editors = manifest.contributes?.editors;
-    const commands = manifest.contributes?.commands;
-    const keybindings = manifest.contributes?.keybindings;
-    const fsProviders = manifest.contributes?.fsProviders;
-
-    let shellIntegrations: WorkerLoadedExtension["shellIntegrations"];
-    if (manifest.contributes?.shellIntegrations?.length) {
-      shellIntegrations = [];
-      for (const si of manifest.contributes.shellIntegrations) {
-        const script = await readTextFile(join(extDir, si.scriptPath));
-        if (script !== null) {
-          shellIntegrations.push({
-            shell: si.shell,
-            label: si.label,
-            script,
-            executableCandidates: si.executableCandidates ?? [],
-            platforms: si.platforms,
-            hiddenCdTemplate: si.hiddenCdTemplate,
-            cwdEscape: si.cwdEscape,
-            lineEnding: si.lineEnding,
-            spawnArgs: si.spawnArgs,
-            scriptArg: si.scriptArg,
-          });
-        }
-      }
-    }
-
-    const loaded: WorkerLoadedExtension = {
-      ref,
-      manifest,
-      dirPath: extDir,
-      iconUrl: manifest.icon ? join(extDir, normalizePath(manifest.icon).replace(/^\/+/, "")) : undefined,
-      iconThemes: iconThemes.length > 0 ? iconThemes : undefined,
-      colorThemes,
-      languages,
-      grammarRefs,
-      viewers,
-      editors,
-      commands,
-      keybindings,
-      fsProviders,
-      shellIntegrations,
-    };
-    loadManifestConfig(manifest);
-    return loaded;
-  } catch {
-    return null;
-  }
-}
-
 async function loadExtensions(dataDir: string): Promise<WorkerLoadedExtension[]> {
   const loaded: WorkerLoadedExtension[] = [];
 
@@ -935,11 +824,15 @@ async function loadExtensions(dataDir: string): Promise<WorkerLoadedExtension[]>
   for (const ref of refs) {
     if (!ref.publisher || !ref.name || !ref.version) continue;
     const extDir = ref.path ? normalizePath(ref.path) : join(extensionsDir, extensionDirName(ref));
-    const ext = await loadExtensionFromDir(extDir);
+    const ext = await normalizeExtensionManifest({
+      extDir,
+      ref,
+      locale: ((self as typeof globalThis & { navigator?: { language?: string } }).navigator?.language ?? "en").trim() || "en",
+      readTextFile,
+      trustTier: "worker",
+    }).catch(() => null);
     if (ext) {
-      ext.ref.source = ref.source;
-      ext.ref.autoUpdate = ref.autoUpdate;
-      if (ref.path) ext.ref.path = normalizePath(ref.path);
+      loadManifestConfig(ext.identity.manifest);
       loaded.push(ext);
     }
   }
@@ -952,11 +845,9 @@ async function loadExtensions(dataDir: string): Promise<WorkerLoadedExtension[]>
 
 // ── Provider invocation dispatch ───────────────────────────────────
 
-const providerCancellations = new Map<number, { isCancellationRequested: boolean; onCancellationRequested: ReturnType<typeof noopCancelEvent> }>();
+type ProviderCancellationRecord = { isCancellationRequested: boolean; onCancellationRequested: (listener: () => void) => { dispose: () => void } };
 
-function noopCancelEvent() {
-  return (_l: () => void) => ({ dispose() {} });
-}
+const providerCancellations = new Map<number, ProviderCancellationRecord>();
 
 function makeCancellationToken(requestId: number): {
   isCancellationRequested: boolean;

@@ -5,11 +5,11 @@
  * or a no-op).
  */
 
-import { ProgressLocation, StatusBarAlignment, ViewColumn } from "./enums";
+import { StatusBarAlignment, ViewColumn, type ProgressLocation } from "./enums";
 import { Disposable, EventEmitter } from "./events";
 import { getRpc, logActivation } from "./runtime";
 import { textDocuments } from "./textDocument";
-import { Position, Range, Selection, Uri } from "./types";
+import { Range, Selection, Uri, type Position } from "./types";
 import type { TextDocumentImpl } from "./textDocument";
 
 // ── TextEditor (synthetic — backed by main-thread Monaco) ───────────

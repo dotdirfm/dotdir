@@ -17,7 +17,11 @@ import {
 } from "@/features/extensions/types";
 import { createContext, createElement, useContext, useRef, useSyncExternalStore, type ReactNode } from "react";
 
-const BUILTIN_EXTENSION_DIR_PATH = "__dotdir_builtin__";
+export const BUILTIN_EXTENSION_DIR_PATH = "__dotdir_builtin__";
+
+export function isBuiltInExtensionDirPath(extensionDirPath: string): boolean {
+  return extensionDirPath === BUILTIN_EXTENSION_DIR_PATH;
+}
 
 const BUILTIN_FILE_VIEWER: ExtensionViewerContribution = {
   id: "file-viewer",

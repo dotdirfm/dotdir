@@ -3,9 +3,10 @@
  * `all` work inside the worker.
  */
 
-import { ExtensionKind, ExtensionMode } from "./enums";
+import { ExtensionMode } from "./enums";
 import { EventEmitter } from "./events";
-import { Uri } from "./types";
+import type { ExtensionKind } from "./enums";
+import type { Uri } from "./types";
 
 export interface ExtensionMetadata {
   id: string;

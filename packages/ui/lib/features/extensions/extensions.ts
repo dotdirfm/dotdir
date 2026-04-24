@@ -1,9 +1,9 @@
 import type { Bridge } from "@/features/bridge";
 import { readFileText } from "@/features/file-system/fs";
 import { deleteFilesystemPathRecursive } from "@/features/file-system/utils";
-import { dirname, join, normalizePath } from "@/utils/path";
+import { join, normalizePath } from "@/utils/path";
+import { extensionDirName, normalizeExtensionManifest } from "./manifestNormalizer";
 import {
-  type ExtensionManifest,
   type ExtensionRef,
   type LoadedColorTheme,
   type LoadedExtension,
@@ -12,10 +12,6 @@ import {
   extensionIconThemes,
   extensionRef,
 } from "./types";
-
-function extensionDirName(ref: ExtensionRef): string {
-  return `${ref.publisher}-${ref.name}-${ref.version}`;
-}
 
 async function getExtensionsDir(dataDir: string): Promise<string> {
   return join(dataDir, "extensions");
@@ -53,132 +49,18 @@ export async function loadExtensions(bridge: Bridge, dataDir: string): Promise<L
     if (!ref.publisher || !ref.name || !ref.version) continue;
     try {
       const extDir = ref.path ? normalizePath(ref.path) : join(extensionsDir, extensionDirName(ref));
-      const manifest: ExtensionManifest = JSON.parse(await readFileText(bridge, join(extDir, "package.json")));
-
-      const iconThemes: LoadedExtension["assets"]["iconThemes"] = [];
-      if (manifest.contributes?.iconTheme?.path) {
-        const theme = manifest.contributes.iconTheme;
-        const themePath = join(extDir, theme.path);
-        if (themePath.endsWith(".json")) {
-          iconThemes.push({
-            id: theme.id || "default",
-            label: theme.label || manifest.displayName || manifest.name,
-            kind: "vscode",
-            path: themePath,
-            sourceId: theme.id,
-          });
-        } else {
-          iconThemes.push({
-            id: theme.id || "default",
-            label: theme.label || manifest.displayName || manifest.name,
-            kind: "fss",
-            path: themePath,
-            basePath: dirname(themePath),
-            sourceId: theme.id,
-          });
-        }
-      }
-      if (manifest.contributes?.iconThemes?.length) {
-        iconThemes.push(
-          ...manifest.contributes.iconThemes.map((theme, index) => ({
-            id: theme.id || `${theme.label}#${index}`,
-            label: theme.label,
-            kind: theme.path.endsWith(".json") ? "vscode" as const : "fss" as const,
-            path: join(extDir, theme.path),
-            basePath: theme.path.endsWith(".json") ? undefined : dirname(join(extDir, theme.path)),
-            sourceId: theme.id,
-          })),
-        );
-      }
-
-      // Load language contributions
-      const languages = manifest.contributes?.languages;
-
-      // Load grammar contributions
-      let grammarRefs: LoadedExtension["contributions"]["grammarRefs"];
-      if (manifest.contributes?.grammars?.length) {
-        grammarRefs = [];
-        for (const grammarContrib of manifest.contributes.grammars) {
+      const ext = await normalizeExtensionManifest({
+        extDir,
+        ref,
+        readTextFile: async (path) => {
           try {
-            const grammarPath = join(extDir, grammarContrib.path);
-            grammarRefs.push({
-              contribution: grammarContrib,
-              path: grammarPath,
-            });
+            return await readFileText(bridge, path);
           } catch {
-            // Skip grammars that fail to load
+            return null;
           }
-        }
-      }
-
-      // Load color theme contributions
-      let colorThemes: LoadedExtension["assets"]["colorThemes"];
-      if (manifest.contributes?.themes?.length) {
-        colorThemes = manifest.contributes.themes.map((t, i) => ({
-          id: t.id || `${t.label}#${i}`,
-          label: t.label,
-          uiTheme: t.uiTheme,
-          jsonPath: join(extDir, t.path),
-        }));
-      }
-
-      // Load command and keybinding contributions
-      const commands = manifest.contributes?.commands;
-      const keybindings = manifest.contributes?.keybindings;
-
-      // Load viewer, editor, and fsProvider contributions
-      const viewers = manifest.contributes?.viewers;
-      const editors = manifest.contributes?.editors;
-      const fsProviders = manifest.contributes?.fsProviders;
-
-      // Load shell integration contributions
-      let shellIntegrations: LoadedExtension["contributions"]["shellIntegrations"];
-      if (manifest.contributes?.shellIntegrations?.length) {
-        shellIntegrations = [];
-        for (const si of manifest.contributes.shellIntegrations) {
-          try {
-            const script = await readFileText(bridge, join(extDir, si.scriptPath));
-            shellIntegrations.push({
-              shell: si.shell,
-              label: si.label,
-              script,
-              executableCandidates: si.executableCandidates ?? [],
-              platforms: si.platforms,
-              hiddenCdTemplate: si.hiddenCdTemplate,
-              cwdEscape: si.cwdEscape,
-              lineEnding: si.lineEnding,
-              spawnArgs: si.spawnArgs,
-              scriptArg: si.scriptArg,
-            });
-          } catch {
-            // Skip scripts that fail to load
-          }
-        }
-      }
-
-      loaded.push({
-        identity: {
-          ref,
-          manifest,
-        },
-        location: {
-          dirPath: extDir,
-        },
-        assets: {
-          iconThemes: iconThemes.length > 0 ? iconThemes : undefined,
-          colorThemes,
-        },
-        contributions: {
-          languages,
-          grammarRefs,
-          commands,
-          keybindings,
-          viewers,
-          editors,
-          fsProviders,
-          shellIntegrations,
         },
       });
+      if (ext) loaded.push(ext);
     } catch {
       continue;
     }
