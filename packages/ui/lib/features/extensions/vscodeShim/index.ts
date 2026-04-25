@@ -199,7 +199,7 @@ export { languages } from "./languages";
 export { window } from "./window";
 export { commands, installCommandAdapter, stashCommandArguments, resolveStashedCommandArguments } from "./commands";
 export { env } from "./env";
-export { extensions, registerExtension, markExtensionActive } from "./extensions";
+export { extensions, registerExtension, markExtensionActive, markExtensionInactive } from "./extensions";
 export {
   installWorkerRpc,
   getRpc,

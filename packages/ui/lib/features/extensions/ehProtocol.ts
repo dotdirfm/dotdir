@@ -255,6 +255,20 @@ export interface WorkspaceFoldersMsg {
   folders: Array<{ uri: string; name: string }>;
 }
 
+export interface WorkspaceActivationRootPayload {
+  rootPath: string;
+  uri: string;
+  name: string;
+  languages: string[];
+  activationEvents: string[];
+}
+
+export interface WorkspaceActivationContextMsg {
+  type: "workspace/activationContext";
+  roots: WorkspaceActivationRootPayload[];
+  deactivateDelayMs: number;
+}
+
 export interface ConfigurationUpdateMsg {
   type: "configuration/update";
   section?: string;
@@ -298,6 +312,7 @@ export type MainToHostMessage =
   | DocumentCloseMsg
   | DocumentSaveMsg
   | WorkspaceFoldersMsg
+  | WorkspaceActivationContextMsg
   | ConfigurationUpdateMsg
   | ActiveEditorMsg
   | ProviderInvokeMsg

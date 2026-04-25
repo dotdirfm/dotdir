@@ -1,7 +1,8 @@
 import type { ConflictResolution, CopyOptions, FileSearchMatch, FileSearchRequest, MoveOptions } from "@/features/bridge";
+import type { EditorDocumentTab } from "@/entities/tab/model/types";
 import { useCommandRegistry } from "@/features/commands/commands";
-import { type EditorProps, type ViewerProps } from "@/features/extensions/extensionApi";
-import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
+import { type ViewerProps } from "@/features/extensions/extensionApi";
+import { TabbedEditorContainer, ViewerContainer, type EditorOpenDocumentTarget } from "@/features/extensions/ExtensionContainer";
 import { ExtensionsPanel } from "@/features/extensions/ExtensionsPanel/ExtensionsPanel";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ConflictDialog } from "./ConflictDialog";
@@ -161,12 +162,14 @@ export type DialogSpec =
   | {
       type: "editor";
       surfaceKey?: string;
-      contributionId?: string;
-      extensionDirPath: string;
-      entry: string;
-      props: EditorProps;
+      tabs: EditorDocumentTab[];
+      activeTabId: string;
       onClose: () => void;
-      onDirtyChange?: (dirty: boolean) => void;
+      onSelectTab: (id: string) => void;
+      onCloseTab: (id: string) => void;
+      onReorderTabs?: (fromIndex: number, toIndex: number) => void;
+      onDirtyChange: (id: string, dirty: boolean) => void;
+      onOpenDocument: (target: EditorOpenDocumentTarget) => void | Promise<void>;
     };
 
 export type DialogUpdate =
@@ -203,7 +206,10 @@ function assignExtensionDialogSurfaceKey(
   if (spec.type !== "viewer" && spec.type !== "editor") return spec;
   if (spec.surfaceKey) return spec;
   const currentSurfaceKey =
-    current?.type === spec.type && current.extensionDirPath === spec.extensionDirPath && current.entry === spec.entry ? current.surfaceKey : undefined;
+    current?.type === spec.type &&
+    (spec.type === "editor" || (current.type === "viewer" && current.extensionDirPath === spec.extensionDirPath && current.entry === spec.entry))
+      ? current.surfaceKey
+      : undefined;
   return {
     ...spec,
     surfaceKey: currentSurfaceKey ?? `dialog-surface-${++nextSurfaceIdRef.current}`,
@@ -576,19 +582,7 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue, stackI
         />
       );
     case "editor":
-      return (
-        <EditorContainer
-          contributionId={dialog.contributionId}
-          extensionDirPath={dialog.extensionDirPath}
-          entry={dialog.entry}
-          filePath={dialog.props.filePath}
-          fileName={dialog.props.fileName}
-          langId={dialog.props.langId}
-          stackIndex={stackIndex}
-          onClose={dialog.onClose}
-          onDirtyChange={dialog.onDirtyChange}
-        />
-      );
+      return null;
     default:
       return null;
   }
@@ -614,18 +608,17 @@ function renderExtensionDialogSurface(dialog: ExtensionDialogSpec, visible: bool
   }
 
   return (
-    <EditorContainer
+    <TabbedEditorContainer
       key={dialog.surfaceKey}
-      contributionId={dialog.contributionId}
-      extensionDirPath={dialog.extensionDirPath}
-      entry={dialog.entry}
-      filePath={dialog.props.filePath}
-      fileName={dialog.props.fileName}
-      langId={dialog.props.langId}
+      tabs={dialog.tabs}
+      activeTabId={dialog.activeTabId}
       stackIndex={stackIndex}
       visible={visible}
-      onClose={dialog.onClose}
+      onSelectTab={dialog.onSelectTab}
+      onCloseTab={dialog.onCloseTab}
+      onReorderTabs={dialog.onReorderTabs}
       onDirtyChange={dialog.onDirtyChange}
+      onOpenDocument={dialog.onOpenDocument}
     />
   );
 }

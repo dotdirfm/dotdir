@@ -1,13 +1,27 @@
 import { useDialog } from "@/dialogs/dialogContext";
-import { activePanelSideAtom, leftActiveTabAtom, leftActiveTabIdAtom, leftTabsAtom, rightActiveTabAtom, rightActiveTabIdAtom, rightTabsAtom } from "@/entities/tab/model/tabsAtoms";
+import type { EditorDocumentTab, EditorSelection } from "@/entities/tab/model/types";
+import {
+  activePanelSideAtom,
+  genTabId,
+  leftActiveTabAtom,
+  leftActiveTabIdAtom,
+  leftTabsAtom,
+  modalEditorActiveTabIdAtom,
+  modalEditorTabsAtom,
+  rightActiveTabAtom,
+  rightActiveTabIdAtom,
+  rightTabsAtom,
+} from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
+import type { EditorOpenDocumentTarget } from "@/features/extensions/ExtensionContainer";
+import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { useShowHidden } from "@/features/settings/useUserSettings";
 import { useFocusContext } from "@/focusContext";
 import { CONTAINER_SEP } from "@/utils/containerPath";
 import { isMediaFile } from "@/utils/mediaFiles";
 import { basename } from "@/utils/path";
-import { useEditorRegistry, useFsProviderRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
+import { useFsProviderRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -33,28 +47,6 @@ function sameViewerDialog(
   );
 }
 
-function sameEditorDialog(
-  dialog: ReturnType<typeof useDialog>["dialog"],
-  next:
-    | {
-        extensionDirPath: string;
-        entry: string;
-        filePath: string;
-        fileName: string;
-        langId: string;
-      }
-    | null,
-): boolean {
-  if (!dialog || dialog.type !== "editor" || !next) return false;
-  return (
-    dialog.extensionDirPath === next.extensionDirPath &&
-    dialog.entry === next.entry &&
-    dialog.props.filePath === next.filePath &&
-    dialog.props.fileName === next.fileName &&
-    dialog.props.langId === next.langId
-  );
-}
-
 type UseViewerEditorStateResult = {
   handleViewFile: (filePath: string, fileName: string, fileSize: number) => void;
   handleEditFile: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
@@ -67,20 +59,23 @@ type UseViewerEditorStateResult = {
 export function useViewerEditorState(): UseViewerEditorStateResult {
   const bridge = useBridge();
   const viewerRegistry = useViewerRegistry();
-  const editorRegistry = useEditorRegistry();
   const fsProviderRegistry = useFsProviderRegistry();
+  const languageRegistry = useLanguageRegistry();
   const focusContext = useFocusContext();
   const { navigateTo } = useActivePanelNavigation();
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: "left" | "right" } | null>(null);
-  const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
+  const editorTabs = useAtomValue(modalEditorTabsAtom);
+  const activeEditorTabId = useAtomValue(modalEditorActiveTabIdAtom);
+  const setEditorTabs = useSetAtom(modalEditorTabsAtom);
+  const setActiveEditorTabId = useSetAtom(modalEditorActiveTabIdAtom);
   const setLeftTabs = useSetAtom(leftTabsAtom);
   const setRightTabs = useSetAtom(rightTabsAtom);
   const leftActiveTabId = useAtomValue(leftActiveTabIdAtom);
   const rightActiveTabId = useAtomValue(rightActiveTabIdAtom);
   const leftActiveTab = useAtomValue(leftActiveTabAtom);
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
-  const [editorDirty, setEditorDirty] = useState(false);
   const editorCloseConfirmOpenRef = useRef(false);
+  const editorNavigationVersionRef = useRef(0);
   const { showHidden } = useShowHidden();
   const { dialog, showDialog, replaceDialog, closeDialog } = useDialog();
 
@@ -88,14 +83,53 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   const activePanelSideRef = useRef(activePanelSide);
   activePanelSideRef.current = activePanelSide;
 
+  const openEditorTab = useCallback(
+    (filePath: string, fileName: string, fileSize: number, langId: string, selection?: EditorSelection) => {
+      const navigationVersion = selection ? ++editorNavigationVersionRef.current : undefined;
+      setViewerFile(null);
+      setEditorTabs((prev) => {
+        const existing = prev.find((tab) => tab.filePath === filePath);
+        if (existing) {
+          setActiveEditorTabId(existing.id);
+          return prev.map((tab) =>
+            tab.id === existing.id
+              ? {
+                  ...tab,
+                  fileName,
+                  fileSize,
+                  langId: langId || tab.langId,
+                  selection,
+                  navigationVersion: navigationVersion ?? tab.navigationVersion,
+                }
+              : tab,
+          );
+        }
+        const tab: EditorDocumentTab = {
+          id: genTabId(),
+          type: "editor-document",
+          filePath,
+          fileName,
+          fileSize,
+          langId: langId || "plaintext",
+          dirty: false,
+          selection,
+          navigationVersion,
+        };
+        setActiveEditorTabId(tab.id);
+        return [...prev, tab];
+      });
+    },
+    [setActiveEditorTabId, setEditorTabs],
+  );
+
   const handleViewFile = useCallback(
     (filePath: string, fileName: string, fileSize: number) => {
       if (fsProviderRegistry.resolve(basename(filePath))) {
         void navigateTo(filePath + CONTAINER_SEP);
         return;
       }
-      setEditorDirty(false);
-      setEditorFile(null);
+      setEditorTabs([]);
+      setActiveEditorTabId(null);
       setViewerFile({
         path: filePath,
         name: fileName,
@@ -103,16 +137,14 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
         panel: activePanelSideRef.current,
       });
     },
-    [activePanelSideRef, fsProviderRegistry, navigateTo, setEditorFile, setViewerFile],
+    [activePanelSideRef, fsProviderRegistry, navigateTo, setActiveEditorTabId, setEditorTabs, setViewerFile],
   );
 
   const handleEditFile = useCallback(
     (filePath: string, fileName: string, fileSize: number, langId: string) => {
-      setViewerFile(null);
-      setEditorDirty(false);
-      setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
+      openEditorTab(filePath, fileName, fileSize, langId);
     },
-    [setEditorFile, setViewerFile],
+    [openEditorTab],
   );
 
   const handleOpenCreateFileConfirm = useCallback(
@@ -122,53 +154,85 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
         await bridge.fs.writeFile(filePath, "");
       }
       const size = exists ? (await bridge.fs.stat(filePath)).size : 0;
-      setViewerFile(null);
-      setEditorDirty(false);
-      setEditorFile({ path: filePath, name: fileName, size, langId });
+      openEditorTab(filePath, fileName, size, langId);
     },
-    [bridge, setEditorFile, setViewerFile],
+    [bridge, openEditorTab],
   );
 
   const requestCloseViewer = useCallback(() => {
     setViewerFile(null);
   }, []);
 
+  const activeEditorTab = useMemo(
+    () => editorTabs.find((tab) => tab.id === activeEditorTabId) ?? editorTabs[0] ?? null,
+    [activeEditorTabId, editorTabs],
+  );
+
+  const closeEditorTabNow = useCallback(
+    (id: string) => {
+      setEditorTabs((prev) => {
+        const index = prev.findIndex((tab) => tab.id === id);
+        if (index < 0) return prev;
+        const next = prev.filter((tab) => tab.id !== id);
+        setActiveEditorTabId((current) => {
+          if (current !== id) return current;
+          return next[Math.min(index, next.length - 1)]?.id ?? null;
+        });
+        if (next.length === 0) {
+          focusContext.restore();
+        }
+        return next;
+      });
+    },
+    [focusContext, setActiveEditorTabId, setEditorTabs],
+  );
+
+  const requestCloseEditorTab = useCallback(
+    (id: string) => {
+      if (editorCloseConfirmOpenRef.current) return;
+      const tab = editorTabs.find((item) => item.id === id);
+      if (!tab) return;
+      if (!tab.dirty) {
+        closeEditorTabNow(id);
+        return;
+      }
+      editorCloseConfirmOpenRef.current = true;
+      showDialog({
+        type: "message",
+        title: "Unsaved Changes",
+        message: `Close "${tab.fileName}" and discard unsaved changes?`,
+        buttons: [
+          {
+            label: "Cancel",
+            default: true,
+            onClick: () => {
+              editorCloseConfirmOpenRef.current = false;
+              requestAnimationFrame(() => {
+                focusContext.request("editor");
+              });
+            },
+          },
+          {
+            label: "Discard",
+            onClick: () => {
+              editorCloseConfirmOpenRef.current = false;
+              closeEditorTabNow(id);
+            },
+          },
+        ],
+      });
+    },
+    [closeEditorTabNow, editorTabs, focusContext, showDialog],
+  );
+
   const requestCloseEditor = useCallback(() => {
     if (editorCloseConfirmOpenRef.current) return;
-    if (!editorDirty || !editorFile) {
+    if (!activeEditorTab) {
       focusContext.restore();
-      setEditorDirty(false);
-      setEditorFile(null);
       return;
     }
-    editorCloseConfirmOpenRef.current = true;
-    showDialog({
-      type: "message",
-      title: "Unsaved Changes",
-      message: `Close "${editorFile.name}" and discard unsaved changes?`,
-      buttons: [
-        {
-          label: "Cancel",
-          default: true,
-          onClick: () => {
-            editorCloseConfirmOpenRef.current = false;
-            requestAnimationFrame(() => {
-              focusContext.request("editor");
-            });
-          },
-        },
-        {
-          label: "Discard",
-          onClick: () => {
-            editorCloseConfirmOpenRef.current = false;
-            focusContext.restore();
-            setEditorDirty(false);
-            setEditorFile(null);
-          },
-        },
-      ],
-    });
-  }, [editorDirty, editorFile, focusContext, setEditorFile, showDialog]);
+    requestCloseEditorTab(activeEditorTab.id);
+  }, [activeEditorTab, focusContext, requestCloseEditorTab]);
 
   const viewerPanelEntries = useMemo(() => {
     if (!viewerFile) return [];
@@ -233,8 +297,44 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
     [getMatchingFiles, setViewerFile, viewerFile],
   );
 
+  const handleSelectEditorTab = useCallback(
+    (id: string) => {
+      setActiveEditorTabId(id);
+    },
+    [setActiveEditorTabId],
+  );
+
+  const handleReorderEditorTabs = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      setEditorTabs((prev) => {
+        if (fromIndex < 0 || fromIndex >= prev.length || toIndex < 0 || toIndex >= prev.length || fromIndex === toIndex) return prev;
+        const next = [...prev];
+        const [item] = next.splice(fromIndex, 1);
+        if (!item) return prev;
+        next.splice(toIndex, 0, item);
+        return next;
+      });
+    },
+    [setEditorTabs],
+  );
+
+  const handleEditorDirtyChange = useCallback(
+    (id: string, dirty: boolean) => {
+      setEditorTabs((prev) => prev.map((tab) => (tab.id === id ? { ...tab, dirty } : tab)));
+    },
+    [setEditorTabs],
+  );
+
+  const handleOpenEditorDocument = useCallback(
+    async (target: EditorOpenDocumentTarget) => {
+      const stat = await bridge.fs.stat(target.filePath);
+      const fileName = basename(target.filePath);
+      openEditorTab(target.filePath, fileName, stat.size, languageRegistry.getLanguageForFilename(fileName), target.selection);
+    },
+    [bridge.fs, languageRegistry, openEditorTab],
+  );
+
   const viewerResolved = viewerFile ? viewerRegistry.resolve(viewerFile.name) : null;
-  const editorResolved = editorFile ? editorRegistry.resolve(editorFile.name) : null;
   useEffect(() => {
     if (!viewerFile) return;
     const viewerActiveName = isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
@@ -330,38 +430,26 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
 
   useEffect(() => {
     const topDialogType = dialog?.type;
-    if (!editorFile) {
+    if (editorTabs.length === 0) {
       if (topDialogType === "editor") {
         closeDialog();
       }
       return;
     }
 
-    if (!editorResolved) {
-      if (topDialogType !== "message") {
-        showDialog({
-          type: "message",
-          title: "No editor",
-          message: "No editor extension found for this file type. Install an editor extension (e.g. Monaco Editor) from the extensions panel.",
-          buttons: [{ label: "OK", default: true, onClick: requestCloseEditor }],
-        });
-      }
-      return;
-    }
+    const activeTabId = activeEditorTabId && editorTabs.some((tab) => tab.id === activeEditorTabId) ? activeEditorTabId : editorTabs[0]!.id;
 
     if (topDialogType === "findFilesResults") {
       showDialog({
         type: "editor",
-        contributionId: editorResolved.contribution.id,
-        extensionDirPath: editorResolved.extensionDirPath,
-        entry: editorResolved.contribution.entry,
-        props: {
-          filePath: editorFile.path,
-          fileName: editorFile.name,
-          langId: editorFile.langId,
-        },
+        tabs: editorTabs,
+        activeTabId,
         onClose: requestCloseEditor,
-        onDirtyChange: setEditorDirty,
+        onSelectTab: handleSelectEditorTab,
+        onCloseTab: requestCloseEditorTab,
+        onReorderTabs: handleReorderEditorTabs,
+        onDirtyChange: handleEditorDirtyChange,
+        onOpenDocument: handleOpenEditorDocument,
       });
       return;
     }
@@ -370,33 +458,35 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
       return;
     }
 
-    const desiredEditor = {
-      contributionId: editorResolved.contribution.id,
-      extensionDirPath: editorResolved.extensionDirPath,
-      entry: editorResolved.contribution.entry,
-      filePath: editorFile.path,
-      fileName: editorFile.name,
-      langId: editorFile.langId,
-    };
-
-    if (sameEditorDialog(dialog, desiredEditor)) {
+    if (dialog?.type === "editor" && dialog.tabs === editorTabs && dialog.activeTabId === activeTabId) {
       return;
     }
 
     replaceDialog({
       type: "editor",
-      contributionId: desiredEditor.contributionId,
-      extensionDirPath: desiredEditor.extensionDirPath,
-      entry: desiredEditor.entry,
-      props: {
-        filePath: desiredEditor.filePath,
-        fileName: desiredEditor.fileName,
-        langId: desiredEditor.langId,
-      },
+      tabs: editorTabs,
+      activeTabId,
       onClose: requestCloseEditor,
-      onDirtyChange: setEditorDirty,
+      onSelectTab: handleSelectEditorTab,
+      onCloseTab: requestCloseEditorTab,
+      onReorderTabs: handleReorderEditorTabs,
+      onDirtyChange: handleEditorDirtyChange,
+      onOpenDocument: handleOpenEditorDocument,
     });
-  }, [closeDialog, dialog, editorFile, editorResolved, replaceDialog, requestCloseEditor, showDialog]);
+  }, [
+    activeEditorTabId,
+    closeDialog,
+    dialog,
+    editorTabs,
+    handleEditorDirtyChange,
+    handleOpenEditorDocument,
+    handleReorderEditorTabs,
+    handleSelectEditorTab,
+    replaceDialog,
+    requestCloseEditor,
+    requestCloseEditorTab,
+    showDialog,
+  ]);
 
   return {
     handleViewFile,

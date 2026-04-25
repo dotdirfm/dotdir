@@ -1,9 +1,8 @@
 /**
  * Workspace-root detection + `workspaceContains:<glob>` activation support.
  *
- * A "workspace" in dotdir is any directory that contains a `.dir` subfolder.
- * When the user navigates into such a folder (or any descendant of it),
- * that folder is the workspace root for any panel rooted underneath it.
+ * A "workspace" in DotDir is the nearest current-or-parent directory whose
+ * `.dir/settings.json` opts in with `{ "workspace": true }`.
  *
  * The extension host's `workspaceContains:<glob>` activation event matches the
  * same VS Code semantics: the glob is evaluated relative to the workspace
@@ -15,35 +14,42 @@
  */
 
 import type { Bridge } from "@/features/bridge";
-import { dirname, isRootPath, join } from "@/utils/path";
+import { readFileText } from "@/features/file-system/fs";
+import { dirname, isRootPath, join, normalizePath } from "@/utils/path";
+import { parse as parseJsonc, type ParseError } from "jsonc-parser";
 
 const WORKSPACE_MARKER = ".dir";
+const WORKSPACE_SETTINGS = "settings.json";
 const workspaceRootCache = new Map<string, string | null>();
 
 /** Max directories visited while evaluating a glob to bound worst-case cost. */
 const MAX_DIR_VISITS = 2000;
 
 /**
- * Walk up from `startPath` and return the closest ancestor that contains a
- * `.dir` subfolder, or null if none is found. The input path itself is
- * checked first so navigating *to* a workspace root works immediately.
+ * Walk up from `startPath` and return the nearest opted-in workspace root, or
+ * null if none is found. For files, pass `kind: "file"` so the search starts
+ * from the parent directory.
  */
-export async function findWorkspaceRoot(bridge: Bridge, startPath: string): Promise<string | null> {
+export async function findWorkspaceRoot(bridge: Bridge, startPath: string, kind: "file" | "directory" = "directory"): Promise<string | null> {
   if (!startPath) return null;
-  const cached = workspaceRootCache.get(startPath);
+  const normalizedStart = normalizePath(startPath);
+  const cacheKey = `${kind}:${normalizedStart}`;
+  const cached = workspaceRootCache.get(cacheKey);
   if (cached !== undefined) return cached;
-  let cur = startPath;
+  let cur = kind === "file" ? dirname(normalizedStart) : normalizedStart;
   const visited: string[] = [];
   while (true) {
     visited.push(cur);
-    const hit = workspaceRootCache.get(cur);
+    const hit = workspaceRootCache.get(`directory:${cur}`);
     if (hit !== undefined) {
-      for (const p of visited) workspaceRootCache.set(p, hit);
+      for (const p of visited) workspaceRootCache.set(`directory:${p}`, hit);
+      workspaceRootCache.set(cacheKey, hit);
       return hit;
     }
     try {
-      if (await bridge.fs.exists(join(cur, WORKSPACE_MARKER))) {
-        for (const p of visited) workspaceRootCache.set(p, cur);
+      if (await isWorkspaceRoot(bridge, cur)) {
+        for (const p of visited) workspaceRootCache.set(`directory:${p}`, cur);
+        workspaceRootCache.set(cacheKey, cur);
         return cur;
       }
     } catch {
@@ -51,17 +57,31 @@ export async function findWorkspaceRoot(bridge: Bridge, startPath: string): Prom
     }
     const parent = dirname(cur);
     if (parent === cur || isRootPath(cur)) {
-      for (const p of visited) workspaceRootCache.set(p, null);
+      for (const p of visited) workspaceRootCache.set(`directory:${p}`, null);
+      workspaceRootCache.set(cacheKey, null);
       return null;
     }
     cur = parent;
   }
 }
 
+export function clearWorkspaceRootCache(): void {
+  workspaceRootCache.clear();
+}
+
+async function isWorkspaceRoot(bridge: Bridge, dir: string): Promise<boolean> {
+  const settingsPath = join(dir, WORKSPACE_MARKER, WORKSPACE_SETTINGS);
+  const text = await readFileText(bridge, settingsPath);
+  const errors: ParseError[] = [];
+  const parsed = parseJsonc(text, errors, { allowTrailingComma: true });
+  if (errors.length > 0 || !parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+  return (parsed as { workspace?: unknown }).workspace === true;
+}
+
 /**
  * Parse a `workspaceContains:<glob>` activation event value and evaluate the
- * glob against the given workspace root. Supports `*` (non-slash wildcard
- * within a single segment) and `**` (any number of path segments).
+ * glob against the given workspace root. Supports common VS Code-style
+ * patterns: `*`, `?`, `**`, and simple brace groups like `*.{js,ts}`.
  */
 export async function workspaceContainsMatch(bridge: Bridge, root: string, pattern: string): Promise<boolean> {
   const segments = pattern.split("/").filter((s) => s.length > 0);
@@ -117,7 +137,33 @@ async function matchSegments(
 }
 
 function segmentToRegex(seg: string): RegExp {
-  // Escape regex metacharacters except `*`, then convert `*` to `.*`.
-  const escaped = seg.replace(/[.+^${}()|[\]\\?]/g, "\\$&").replace(/\*/g, ".*");
-  return new RegExp(`^${escaped}$`);
+  let source = "";
+  for (let i = 0; i < seg.length; i++) {
+    const ch = seg[i]!;
+    if (ch === "*") {
+      source += ".*";
+    } else if (ch === "?") {
+      source += ".";
+    } else if (ch === "{") {
+      const end = seg.indexOf("}", i + 1);
+      if (end > i + 1) {
+        const alts = seg
+          .slice(i + 1, end)
+          .split(",")
+          .filter(Boolean)
+          .map(escapeRegex);
+        source += alts.length ? `(?:${alts.join("|")})` : "\\{";
+        i = end;
+      } else {
+        source += "\\{";
+      }
+    } else {
+      source += escapeRegex(ch);
+    }
+  }
+  return new RegExp(`^${source}$`);
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.+^${}()|[\]\\]/g, "\\$&");
 }

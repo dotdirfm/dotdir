@@ -42,6 +42,15 @@ import {
   type LoadedExtension,
 } from "./types";
 
+type FsEntryLike = {
+  kind: string;
+  mode?: number;
+};
+
+function isDirectoryLikeEntry(entry: FsEntryLike): boolean {
+  return entry.kind === "directory" || (entry.kind === "symlink" && ((entry.mode ?? 0) & 0o170000) === 0o040000);
+}
+
 type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
 
 export interface ProviderRegistration {
@@ -65,6 +74,11 @@ export type ApplyEditListener = (edit: WorkspaceEditPayload) => Promise<boolean>
 export type CommandRequestListener = (command: string, args: unknown[]) => Promise<unknown>;
 export type ConfigReadListener = (key: string, section?: string) => unknown;
 export type ConfigWriteListener = (msg: Omit<ConfigurationWriteMsg, "type" | "requestId">) => Promise<void>;
+
+export interface ProviderCancellationToken {
+  readonly isCancellationRequested?: boolean;
+  onCancellationRequested(listener: () => void): { dispose(): void };
+}
 
 /**
  * Emit a dev-friendly summary of what the extension host actually loaded.
@@ -142,7 +156,10 @@ async function handleWorkerCommand(bridge: Bridge, command: string, args: unknow
         const exists = await bridge.fs.exists(p);
         if (!exists) return null;
         const st = await bridge.fs.stat(p);
-        const isDir = await bridge.fs.entries(p).then(() => true, () => false);
+        const parent = normalizePath(p.slice(0, p.lastIndexOf("/")) || "/");
+        const name = p.slice(p.lastIndexOf("/") + 1);
+        const parentEntry = await bridge.fs.entries(parent).then((entries) => entries.find((entry) => entry.name === name), () => undefined);
+        const isDir = parentEntry ? isDirectoryLikeEntry(parentEntry) : await bridge.fs.entries(p).then(() => true, () => false);
         return { size: st.size, mtimeMs: st.mtimeMs, isDir };
       } catch {
         return null;
@@ -172,7 +189,7 @@ async function handleWorkerCommand(bridge: Bridge, command: string, args: unknow
     case "__dotdir/fs.readDir": {
       const p = normalizePath(String(args[0] ?? ""));
       const entries = await bridge.fs.entries(p);
-      return entries.map((e) => ({ name: e.name, isDir: e.kind === "directory" }));
+      return entries.map((e) => ({ name: e.name, isDir: isDirectoryLikeEntry(e) }));
     }
     case "__dotdir/fs.createDir": {
       const p = normalizePath(String(args[0] ?? ""));
@@ -346,6 +363,13 @@ export class ExtensionHostClient {
     this.post({ type: "workspace/folders", folders });
   }
 
+  setWorkspaceActivationContext(
+    roots: Array<{ rootPath: string; uri: string; name: string; languages: string[]; activationEvents: string[] }>,
+    deactivateDelayMs: number,
+  ): void {
+    this.post({ type: "workspace/activationContext", roots, deactivateDelayMs });
+  }
+
   configurationUpdate(key: string, value: unknown, section?: string): void {
     this.post({ type: "configuration/update", key, value, section });
   }
@@ -354,8 +378,16 @@ export class ExtensionHostClient {
     this.post({ type: "editor/active", uri });
   }
 
-  invokeProvider(providerId: number, method: string, args: unknown): Promise<unknown> {
-    return this.request<unknown>({ type: "provider/invoke", providerId, method, args });
+  async invokeProvider(providerId: number, method: string, args: unknown, cancellationToken?: ProviderCancellationToken): Promise<unknown> {
+    const requestId = this.nextRequestId++;
+    const cancellationSub = cancellationToken?.onCancellationRequested(() => this.cancelProviderRequest(requestId));
+    try {
+      const result = this.requestWithId<unknown>({ type: "provider/invoke", providerId, method, args }, requestId);
+      if (cancellationToken?.isCancellationRequested) this.cancelProviderRequest(requestId);
+      return await result;
+    } finally {
+      cancellationSub?.dispose();
+    }
   }
 
   cancelProviderRequest(requestId: number): void {
@@ -482,9 +514,13 @@ export class ExtensionHostClient {
   }
 
   private async request<T>(message: Record<string, unknown> & { type: string }): Promise<T> {
+    const requestId = this.nextRequestId++;
+    return await this.requestWithId<T>(message, requestId);
+  }
+
+  private async requestWithId<T>(message: Record<string, unknown> & { type: string }, requestId: number): Promise<T> {
     if (!this.worker) await this.start();
     if (!this.worker) throw new Error("Extension host is not running");
-    const requestId = this.nextRequestId++;
     return await new Promise<T>((resolve, reject) => {
       this.pendingRequests.set(requestId, { resolve: resolve as (v: unknown) => void, reject });
       this.worker!.postMessage({ ...message, requestId });

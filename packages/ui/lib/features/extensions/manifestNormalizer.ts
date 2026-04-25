@@ -92,6 +92,11 @@ function normalizeRelativePath(path: string): string {
   return normalizePath(path).replace(/^\/+/, "");
 }
 
+function isUiOnlyDesktopExtension(manifest: ExtensionManifest): boolean {
+  const kinds = manifest.extensionKind ?? [];
+  return kinds.length > 0 && kinds.every((kind) => String(kind).toLowerCase() === "ui");
+}
+
 function resolveActivationEntry(manifest: ExtensionManifest, extDir: string): LoadedExtension["runtime"]["activationEntry"] {
   const isModule = String(manifest.type ?? "").trim().toLowerCase() === "module";
   const format = isModule ? "esm" : "cjs";
@@ -102,6 +107,7 @@ function resolveActivationEntry(manifest: ExtensionManifest, extDir: string): Lo
       sourceField: "browser",
     };
   }
+  if (isUiOnlyDesktopExtension(manifest)) return undefined;
   if (manifest.main) {
     return {
       path: join(extDir, normalizeRelativePath(manifest.main)),
@@ -222,6 +228,10 @@ export async function normalizeExtensionManifest({
   }));
 
   const activationEntry = resolveActivationEntry(manifest, extDir);
+  const compatibilityReason =
+    !activationEntry && isUiOnlyDesktopExtension(manifest) && manifest.main && !manifest.browser
+      ? "Desktop UI extension has no browser activation entry; static contributions loaded only."
+      : "No browser or main activation entry declared.";
 
   return {
     identity: {
@@ -247,7 +257,7 @@ export async function normalizeExtensionManifest({
     },
     compatibility: activationEntry
       ? { activation: "supported" }
-      : { activation: "unsupported", reason: "No browser or main activation entry declared." },
+      : { activation: "unsupported", reason: compatibilityReason },
     runtime: {
       activationEntry,
     },

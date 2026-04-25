@@ -102,6 +102,32 @@ describe("normalizeExtensionManifest", () => {
     });
   });
 
+  it("keeps desktop UI-only extensions static when browser activation is absent", async () => {
+    const ext = await normalizeExtensionManifest({
+      extDir: "/ext/ui-only",
+      readTextFile: createReader({
+        "/ext/ui-only/package.json": JSON.stringify({
+          publisher: "pub",
+          name: "ui-only",
+          version: "1.0.0",
+          main: "./extension.js",
+          extensionKind: ["ui"],
+          activationEvents: ["*"],
+          contributes: {
+            commands: [{ command: "ui-only.enable", title: "Enable" }],
+          },
+        }),
+      }),
+    });
+
+    expect(ext?.runtime.activationEntry).toBeUndefined();
+    expect(ext?.compatibility).toEqual({
+      activation: "unsupported",
+      reason: "Desktop UI extension has no browser activation entry; static contributions loaded only.",
+    });
+    expect(ext?.contributions.commands?.[0]?.command).toBe("ui-only.enable");
+  });
+
   it("returns null when package.json is missing and throws on malformed JSON", async () => {
     await expect(
       normalizeExtensionManifest({

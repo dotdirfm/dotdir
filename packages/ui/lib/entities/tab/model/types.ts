@@ -33,3 +33,22 @@ export type PreviewTab = PreviewTabState & {
 };
 
 export type PanelTab = FileListTab | PreviewTab;
+
+export type EditorSelection = {
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber?: number;
+  endColumn?: number;
+};
+
+export type EditorDocumentTab = {
+  id: string;
+  type: "editor-document";
+  filePath: string;
+  fileName: string;
+  fileSize: number;
+  langId: string;
+  dirty?: boolean;
+  selection?: EditorSelection;
+  navigationVersion?: number;
+};

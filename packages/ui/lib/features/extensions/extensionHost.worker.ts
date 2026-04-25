@@ -31,6 +31,8 @@ import type {
   SignatureHelpPayload,
   CodeActionPayload,
   CodeLensPayload,
+  ProviderKind,
+  WorkspaceActivationRootPayload,
 } from "./ehProtocol";
 import {
   createVscodeNamespace,
@@ -48,11 +50,13 @@ import {
   textDocuments,
   registerExtension,
   markExtensionActive,
+  markExtensionInactive,
   getProvider,
   logActivation,
   workspace as vscodeWorkspace,
   type WorkerRpc,
   type WorkerRpcHandler,
+  type TextDocumentImpl,
 } from "./vscodeShim";
 import { Disposable } from "./vscodeShim/events";
 import {
@@ -76,6 +80,7 @@ import {
 } from "./vscodeShim/types";
 import { ExtensionMode, registerExtension as _reg } from "./vscodeShim/extensions";
 import { extensionDirName, normalizeExtensionManifest } from "./manifestNormalizer";
+import { providerSupportsMethod } from "./providerDefinitions";
 import type { ExtensionManifest, ExtensionRef, LoadedExtension } from "./types";
 
 void _reg;
@@ -85,10 +90,19 @@ export type WorkerLoadedExtension = LoadedExtension;
 // ── Mutable worker-scoped state ─────────────────────────────────────
 
 const loadedExtensions = new Map<string, WorkerLoadedExtension>();
-const activeExtensions = new Map<
-  string,
-  { subscriptions: Array<{ dispose: () => void }>; deactivate?: (ctx: unknown) => unknown | Promise<unknown> }
->();
+interface ActiveExtensionRecord {
+  extensionId: string;
+  subscriptions: Array<{ dispose: () => void }>;
+  deactivate?: (ctx: unknown) => unknown | Promise<unknown>;
+  globalEvents: Set<string>;
+  workspaceRoots: Set<string>;
+  deactivateTimer?: ReturnType<typeof setTimeout>;
+}
+
+const activeExtensions = new Map<string, ActiveExtensionRecord>();
+let workspaceDeactivateDelayMs = 30_000;
+let workspaceEventRoots = new Map<string, Set<string>>();
+const failedActivationKeys = new Set<string>();
 
 const commandHandlers = new Map<string, (...args: unknown[]) => unknown | Promise<unknown>>();
 
@@ -438,6 +452,10 @@ function extensionWantsEvent(ext: WorkerLoadedExtension, event: string): boolean
   return events.includes("*") || events.includes(event);
 }
 
+function isWorkspaceScopedActivationEvent(event: string): boolean {
+  return event.startsWith("onLanguage:") || event.startsWith("workspaceContains:");
+}
+
 // ── Browser module loading ─────────────────────────────────────────
 
 type BrowserExtensionModule = {
@@ -554,6 +572,7 @@ const __dotdir_dirname = (path) => {
 const __dotdir_has = (path) => __dotdir_modules.has(path);
 const __dotdir_resolve = (fromPath, id) => {
   if (id === "vscode") return "vscode";
+  if (__dotdir_has(id)) return id;
   if (!(id.startsWith("./") || id.startsWith("../"))) {
     const err = new Error('Unsupported extension module "' + id + '". DotDir supports web-compatible CJS only: "vscode" plus extension-relative JS/JSON modules.');
     err.name = "UnsupportedExtensionModuleError";
@@ -725,11 +744,64 @@ function createExtensionContext(ext: WorkerLoadedExtension, subs: Array<{ dispos
   };
 }
 
-async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
+function cancelPendingDeactivation(record: ActiveExtensionRecord): void {
+  if (!record.deactivateTimer) return;
+  clearTimeout(record.deactivateTimer);
+  record.deactivateTimer = undefined;
+}
+
+function markActivationReason(ext: WorkerLoadedExtension, reason: { kind: "global"; event: string } | { kind: "workspace"; rootPath: string; event: string }): void {
+  const record = activeExtensions.get(activationKey(ext));
+  if (!record) return;
+  cancelPendingDeactivation(record);
+  if (reason.kind === "global") record.globalEvents.add(reason.event);
+  else record.workspaceRoots.add(reason.rootPath);
+}
+
+function scheduleDeactivateIfUnused(key: string): void {
+  const record = activeExtensions.get(key);
+  if (!record || record.globalEvents.size > 0 || record.workspaceRoots.size > 0 || record.deactivateTimer) return;
+  record.deactivateTimer = setTimeout(() => {
+    void deactivateExtensionIfUnused(key);
+  }, workspaceDeactivateDelayMs);
+}
+
+async function deactivateExtensionIfUnused(key: string): Promise<void> {
+  const record = activeExtensions.get(key);
+  if (!record || record.globalEvents.size > 0 || record.workspaceRoots.size > 0) return;
+  activeExtensions.delete(key);
+  cancelPendingDeactivation(record);
+  setActiveExtensionKey(key);
+  try {
+    try {
+      await record.deactivate?.({});
+    } catch (err) {
+      logActivation("warn", `deactivate failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    for (const disposable of record.subscriptions) {
+      try {
+        disposable.dispose();
+      } catch {
+        // Keep deactivation best-effort; one bad disposable should not leak the rest.
+      }
+    }
+    markExtensionInactive(record.extensionId);
+    logActivation("info", "deactivated after workspace idle timeout");
+  } finally {
+    setActiveExtensionKey(null);
+  }
+}
+
+async function activateExtension(ext: WorkerLoadedExtension): Promise<boolean> {
   const key = activationKey(ext);
-  if (activeExtensions.has(key)) return;
+  if (failedActivationKeys.has(key)) return false;
+  const active = activeExtensions.get(key);
+  if (active) {
+    cancelPendingDeactivation(active);
+    return true;
+  }
   const activationEntry = ext.runtime.activationEntry;
-  if (!activationEntry) return;
+  if (!activationEntry) return false;
 
   setActiveExtensionKey(key);
   try {
@@ -747,7 +819,7 @@ async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
     if (typeof activate !== "function") {
       ext.compatibility = { activation: "unsupported", reason: "Activation entry has no activate() export." };
       logActivation("warn", "activation entry has no activate() export");
-      return;
+      return false;
     }
 
     const subs: Array<{ dispose: () => void }> = [];
@@ -769,14 +841,17 @@ async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
     const exports = await activate(ctx);
     markExtensionActive(extensionId(ext), exports);
     ext.compatibility = { activation: "supported" };
+    failedActivationKeys.delete(key);
     logActivation("info", "activated");
-    activeExtensions.set(key, { subscriptions: subs, deactivate });
+    activeExtensions.set(key, { extensionId: extensionId(ext), subscriptions: subs, deactivate, globalEvents: new Set(), workspaceRoots: new Set() });
+    return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     ext.compatibility =
       err instanceof Error && err.name === "UnsupportedExtensionModuleError"
         ? { activation: "unsupported", reason: message }
         : { activation: "failed", reason: message };
+    failedActivationKeys.add(key);
     throw err;
   } finally {
     setActiveExtensionKey(null);
@@ -784,11 +859,19 @@ async function activateExtension(ext: WorkerLoadedExtension): Promise<void> {
 }
 
 async function activateByEvent(event: string): Promise<void> {
+  if (isWorkspaceScopedActivationEvent(event)) {
+    const roots = workspaceEventRoots.get(event);
+    if (!roots || roots.size === 0) return;
+    for (const rootPath of roots) {
+      await activateByWorkspaceEvent(rootPath, event);
+    }
+    return;
+  }
   for (const ext of loadedExtensions.values()) {
     if (!ext.runtime.activationEntry) continue;
     if (!extensionWantsEvent(ext, event)) continue;
     try {
-      await activateExtension(ext);
+      if (await activateExtension(ext)) markActivationReason(ext, { kind: "global", event });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("[ExtHost] activate failed:", activationKey(ext), err);
@@ -796,6 +879,64 @@ async function activateByEvent(event: string): Promise<void> {
       logActivation("error", message, event);
       setActiveExtensionKey(null);
     }
+  }
+}
+
+async function activateByWorkspaceEvent(rootPath: string, event: string): Promise<void> {
+  for (const ext of loadedExtensions.values()) {
+    if (!ext.runtime.activationEntry) continue;
+    if (!extensionWantsEvent(ext, event)) continue;
+    try {
+      if (await activateExtension(ext)) markActivationReason(ext, { kind: "workspace", rootPath, event });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[ExtHost] workspace activate failed:", activationKey(ext), rootPath, err);
+      setActiveExtensionKey(activationKey(ext));
+      logActivation("error", message, event);
+      setActiveExtensionKey(null);
+    }
+  }
+}
+
+async function applyWorkspaceActivationContext(roots: WorkspaceActivationRootPayload[], deactivateDelayMs: number): Promise<void> {
+  workspaceDeactivateDelayMs = Number.isFinite(deactivateDelayMs) ? Math.max(0, Math.floor(deactivateDelayMs)) : 30_000;
+  const nextRoots = new Set(roots.map((root) => root.rootPath));
+  const nextEventRoots = new Map<string, Set<string>>();
+
+  for (const root of roots) {
+    for (const event of root.activationEvents) {
+      let eventRoots = nextEventRoots.get(event);
+      if (!eventRoots) {
+        eventRoots = new Set();
+        nextEventRoots.set(event, eventRoots);
+      }
+      eventRoots.add(root.rootPath);
+    }
+  }
+  workspaceEventRoots = nextEventRoots;
+
+  for (const [, record] of activeExtensions) {
+    for (const root of Array.from(record.workspaceRoots)) {
+      if (!nextRoots.has(root)) record.workspaceRoots.delete(root);
+    }
+    if (record.globalEvents.size > 0 || record.workspaceRoots.size > 0) cancelPendingDeactivation(record);
+  }
+
+  for (const root of roots) {
+    for (const event of root.activationEvents) {
+      await activateByWorkspaceEvent(root.rootPath, event);
+    }
+  }
+
+  if (roots.length > 0) {
+    logActivation(
+      "info",
+      `workspace activation context: ${roots.map((root) => `${root.rootPath} [${root.activationEvents.join(", ")}]`).join("; ")}`,
+    );
+  }
+
+  for (const [key] of activeExtensions) {
+    scheduleDeactivateIfUnused(key);
   }
 }
 
@@ -839,13 +980,18 @@ async function loadExtensions(dataDir: string): Promise<WorkerLoadedExtension[]>
 
   console.log("[ExtHost] loaded", loaded.length, "extensions");
   loadedExtensions.clear();
+  failedActivationKeys.clear();
   for (const ext of loaded) loadedExtensions.set(activationKey(ext), ext);
   return loaded;
 }
 
 // ── Provider invocation dispatch ───────────────────────────────────
 
-type ProviderCancellationRecord = { isCancellationRequested: boolean; onCancellationRequested: (listener: () => void) => { dispose: () => void } };
+type ProviderCancellationRecord = {
+  readonly isCancellationRequested: boolean;
+  onCancellationRequested(listener: () => void): { dispose: () => void };
+  _cancel(): void;
+};
 
 const providerCancellations = new Map<number, ProviderCancellationRecord>();
 
@@ -855,7 +1001,7 @@ function makeCancellationToken(requestId: number): {
 } {
   let cancelled = false;
   const listeners = new Set<() => void>();
-  const token = {
+  const token: ProviderCancellationRecord = {
     get isCancellationRequested() {
       return cancelled;
     },
@@ -865,27 +1011,21 @@ function makeCancellationToken(requestId: number): {
         dispose: () => listeners.delete(listener),
       };
     },
-  };
-  providerCancellations.set(requestId, {
-    get isCancellationRequested() {
-      return cancelled;
-    },
-    onCancellationRequested: () => ({ dispose: () => {} }),
-  } as unknown as (typeof providerCancellations extends Map<number, infer V> ? V : never));
-  const cancel = () => {
-    if (cancelled) return;
-    cancelled = true;
-    for (const l of listeners) {
-      try {
-        l();
-      } catch {
-        // ignore
+    _cancel: () => {
+      if (cancelled) return;
+      cancelled = true;
+      for (const l of listeners) {
+        try {
+          l();
+        } catch {
+          // ignore
+        }
       }
-    }
-    listeners.clear();
-    providerCancellations.delete(requestId);
+      listeners.clear();
+      providerCancellations.delete(requestId);
+    },
   };
-  (token as unknown as { _cancel: () => void })._cancel = cancel;
+  providerCancellations.set(requestId, token);
   return token;
 }
 
@@ -1034,6 +1174,13 @@ function symbolPayload(s: unknown): DocumentSymbolPayload | SymbolInformationPay
 }
 
 function locationPayload(l: unknown): LocationPayload {
+  const link = l as { targetUri?: Uri; targetRange?: Range; targetSelectionRange?: Range };
+  if (link.targetUri && link.targetRange) {
+    return {
+      uri: link.targetUri.toString(),
+      range: rangePayload(link.targetSelectionRange ?? link.targetRange),
+    };
+  }
   const loc = l as Location;
   return { uri: loc.uri.toString(), range: rangePayload(loc.range) };
 }
@@ -1111,7 +1258,7 @@ function codeLensPayload(l: unknown): CodeLensPayload {
 // ── Invoke provider ───────────────────────────────────────────────
 
 interface ProviderInvokeArgs {
-  uri: string;
+  uri?: string;
   position?: PositionPayload;
   range?: RangePayload;
   context?: Record<string, unknown>;
@@ -1120,139 +1267,167 @@ interface ProviderInvokeArgs {
   options?: Record<string, unknown>;
 }
 
+type ProviderFunction = (...args: unknown[]) => unknown;
+
+interface ProviderInvokerContext {
+  provider: Record<string, ProviderFunction>;
+  fn: ProviderFunction;
+  method: string;
+  args: ProviderInvokeArgs;
+  ctxArg: Record<string, unknown>;
+  token: ReturnType<typeof makeCancellationToken>;
+  doc?: TextDocumentImpl;
+}
+
+type ProviderInvoker = (context: ProviderInvokerContext) => Promise<unknown>;
+
+function requirePosition(args: ProviderInvokeArgs): Position {
+  if (!args.position) throw new Error("Provider invocation missing position");
+  return new Position(args.position.line, args.position.character);
+}
+
+function requireRange(args: ProviderInvokeArgs): Range {
+  if (!args.range) throw new Error("Provider invocation missing range");
+  return new Range(args.range.start.line, args.range.start.character, args.range.end.line, args.range.end.character);
+}
+
+const locationProviderInvoker: ProviderInvoker = async ({ fn, provider, args, token, doc }) => {
+  const result = await fn.call(provider, doc, requirePosition(args), token);
+  if (!result) return null;
+  const arr = Array.isArray(result) ? result : [result];
+  return arr.map(locationPayload);
+};
+
+const providerInvokers: Partial<Record<ProviderKind, ProviderInvoker>> = {
+  completion: async ({ fn, provider, args, ctxArg, token, doc }) => {
+    const result = await fn.call(provider, doc, requirePosition(args), token, ctxArg);
+    return completionListPayload(result);
+  },
+  hover: async ({ fn, provider, args, token, doc }) => {
+    const result = await fn.call(provider, doc, requirePosition(args), token);
+    return hoverPayload(result);
+  },
+  definition: locationProviderInvoker,
+  typeDefinition: locationProviderInvoker,
+  implementation: locationProviderInvoker,
+  declaration: locationProviderInvoker,
+  reference: async ({ fn, provider, args, ctxArg, token, doc }) => {
+    const result = await fn.call(provider, doc, requirePosition(args), ctxArg, token);
+    if (!Array.isArray(result)) return [];
+    return result.map(locationPayload);
+  },
+  documentHighlight: async ({ fn, provider, args, token, doc }) => {
+    const result = await fn.call(provider, doc, requirePosition(args), token);
+    if (!Array.isArray(result)) return [];
+    return result.map(docHighlightPayload);
+  },
+  documentSymbol: async ({ fn, provider, token, doc }) => {
+    const result = await fn.call(provider, doc, token);
+    if (!Array.isArray(result)) return [];
+    return result.map(symbolPayload);
+  },
+  workspaceSymbol: async ({ fn, provider, args, token }) => {
+    const result = await fn.call(provider, args.context?.["query"] ?? "", token);
+    if (!Array.isArray(result)) return [];
+    return result.map(symbolPayload);
+  },
+  codeAction: async ({ fn, provider, args, ctxArg, token, doc }) => {
+    const result = await fn.call(provider, doc, requireRange(args), ctxArg, token);
+    if (!Array.isArray(result)) return [];
+    return result.map(codeActionPayload);
+  },
+  codeLens: async ({ fn, provider, token, doc }) => {
+    const result = await fn.call(provider, doc, token);
+    if (!Array.isArray(result)) return [];
+    return result.map(codeLensPayload);
+  },
+  documentFormatting: async ({ fn, provider, args, token, doc }) => {
+    const result = await fn.call(provider, doc, args.options ?? {}, token);
+    if (!Array.isArray(result)) return [];
+    return result.map(textEditPayload);
+  },
+  documentRangeFormatting: async ({ fn, provider, args, token, doc }) => {
+    const result = await fn.call(provider, doc, requireRange(args), args.options ?? {}, token);
+    if (!Array.isArray(result)) return [];
+    return result.map(textEditPayload);
+  },
+  onTypeFormatting: async ({ fn, provider, args, token, doc }) => {
+    const result = await fn.call(provider, doc, requirePosition(args), args.ch ?? "", args.options ?? {}, token);
+    if (!Array.isArray(result)) return [];
+    return result.map(textEditPayload);
+  },
+  rename: async ({ fn, provider, args, token, doc }) => {
+    const result = await fn.call(provider, doc, requirePosition(args), args.newName ?? "", token);
+    if (!result) return null;
+    const changes: Record<string, TextEditPayload[]> = {};
+    const w = result as { entries?: () => Array<[Uri, TextEdit[]]> };
+    if (typeof w.entries === "function") {
+      for (const [uri, edits] of w.entries()) changes[uri.toString()] = edits.map(textEditPayload);
+    }
+    return { changes };
+  },
+  documentLink: async ({ fn, provider, token, doc }) => {
+    const result = await fn.call(provider, doc, token);
+    if (!Array.isArray(result)) return [];
+    return result.map(documentLinkPayload);
+  },
+  color: async ({ fn, provider, method, args, token, doc }) => {
+    if (method === "provideDocumentColors") {
+      const result = await fn.call(provider, doc, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(colorInfoPayload);
+    }
+    if (method === "provideColorPresentations") {
+      const color = args.context?.["color"] as { red: number; green: number; blue: number; alpha: number };
+      const result = await fn.call(provider, color, { document: doc, range: requireRange(args) }, token);
+      if (!Array.isArray(result)) return [];
+      return result.map(colorPresentationPayload);
+    }
+    return null;
+  },
+  folding: async ({ fn, provider, ctxArg, token, doc }) => {
+    const result = await fn.call(provider, doc, ctxArg, token);
+    if (!Array.isArray(result)) return [];
+    return result.map(foldingPayload);
+  },
+  selectionRange: async ({ fn, provider, args, token, doc }) => {
+    const positions = (args.context?.["positions"] as PositionPayload[] | undefined)?.map((p) => new Position(p.line, p.character)) ?? [];
+    const result = await fn.call(provider, doc, positions, token);
+    if (!Array.isArray(result)) return [];
+    return result.map(selectionRangePayload);
+  },
+  signatureHelp: async ({ fn, provider, args, ctxArg, token, doc }) => {
+    const result = await fn.call(provider, doc, requirePosition(args), token, ctxArg);
+    return signatureHelpPayload(result);
+  },
+};
+
+const documentlessProviderKinds = new Set<ProviderKind>(["workspaceSymbol"]);
+
 async function invokeProvider(providerId: number, method: string, args: ProviderInvokeArgs, requestId: number): Promise<unknown> {
   const record = getProvider(providerId);
   if (!record) throw new Error(`No provider registered for id ${providerId}`);
+  if (!providerSupportsMethod(record.kind, method)) {
+    throw new Error(`Provider kind ${record.kind} does not support method ${method}`);
+  }
   const provider = record.provider as Record<string, (...a: unknown[]) => unknown>;
   const fn = provider[method];
   if (typeof fn !== "function") throw new Error(`Provider ${record.kind} has no method ${method}`);
-  const doc = textDocuments.get(args.uri);
-  if (!doc) throw new Error(`No document for ${args.uri}`);
+  const invoker = providerInvokers[record.kind];
+  if (!invoker) {
+    logActivation("warn", `provider kind ${record.kind} not implemented`);
+    return null;
+  }
+  const doc = args.uri ? textDocuments.get(args.uri) : undefined;
+  if (!doc && !documentlessProviderKinds.has(record.kind)) {
+    throw new Error(`No document for ${args.uri ?? "<missing uri>"}`);
+  }
   const token = makeCancellationToken(requestId);
   const ctxArg = args.context ?? {};
-
-  let result: unknown;
-  switch (record.kind) {
-    case "completion": {
-      const pos = new Position(args.position!.line, args.position!.character);
-      result = await fn.call(provider, doc, pos, token, ctxArg);
-      return completionListPayload(result);
-    }
-    case "hover": {
-      const pos = new Position(args.position!.line, args.position!.character);
-      result = await fn.call(provider, doc, pos, token);
-      return hoverPayload(result);
-    }
-    case "definition":
-    case "typeDefinition":
-    case "implementation":
-    case "declaration": {
-      const pos = new Position(args.position!.line, args.position!.character);
-      result = await fn.call(provider, doc, pos, token);
-      if (!result) return null;
-      const arr = Array.isArray(result) ? result : [result];
-      return arr.map((l) => (l && (l as { uri?: Uri }).uri ? locationPayload(l) : locationPayload(l)));
-    }
-    case "reference": {
-      const pos = new Position(args.position!.line, args.position!.character);
-      result = await fn.call(provider, doc, pos, ctxArg, token);
-      if (!Array.isArray(result)) return [];
-      return result.map(locationPayload);
-    }
-    case "documentHighlight": {
-      const pos = new Position(args.position!.line, args.position!.character);
-      result = await fn.call(provider, doc, pos, token);
-      if (!Array.isArray(result)) return [];
-      return result.map(docHighlightPayload);
-    }
-    case "documentSymbol": {
-      result = await fn.call(provider, doc, token);
-      if (!Array.isArray(result)) return [];
-      return result.map(symbolPayload);
-    }
-    case "workspaceSymbol": {
-      result = await fn.call(provider, args.context?.["query"] ?? "", token);
-      if (!Array.isArray(result)) return [];
-      return result.map(symbolPayload);
-    }
-    case "codeAction": {
-      const r = new Range(args.range!.start.line, args.range!.start.character, args.range!.end.line, args.range!.end.character);
-      result = await fn.call(provider, doc, r, ctxArg, token);
-      if (!Array.isArray(result)) return [];
-      return result.map(codeActionPayload);
-    }
-    case "codeLens": {
-      result = await fn.call(provider, doc, token);
-      if (!Array.isArray(result)) return [];
-      return result.map(codeLensPayload);
-    }
-    case "documentFormatting": {
-      result = await fn.call(provider, doc, args.options ?? {}, token);
-      if (!Array.isArray(result)) return [];
-      return result.map(textEditPayload);
-    }
-    case "documentRangeFormatting": {
-      const r = new Range(args.range!.start.line, args.range!.start.character, args.range!.end.line, args.range!.end.character);
-      result = await fn.call(provider, doc, r, args.options ?? {}, token);
-      if (!Array.isArray(result)) return [];
-      return result.map(textEditPayload);
-    }
-    case "onTypeFormatting": {
-      const pos = new Position(args.position!.line, args.position!.character);
-      result = await fn.call(provider, doc, pos, args.ch ?? "", args.options ?? {}, token);
-      if (!Array.isArray(result)) return [];
-      return result.map(textEditPayload);
-    }
-    case "rename": {
-      const pos = new Position(args.position!.line, args.position!.character);
-      result = await fn.call(provider, doc, pos, args.newName ?? "", token);
-      if (!result) return null;
-      const changes: Record<string, TextEditPayload[]> = {};
-      const w = result as { entries?: () => Array<[Uri, TextEdit[]]> };
-      if (typeof w.entries === "function") {
-        for (const [uri, edits] of w.entries()) changes[uri.toString()] = edits.map(textEditPayload);
-      }
-      return { changes };
-    }
-    case "documentLink": {
-      result = await fn.call(provider, doc, token);
-      if (!Array.isArray(result)) return [];
-      return result.map(documentLinkPayload);
-    }
-    case "color": {
-      if (method === "provideDocumentColors") {
-        result = await fn.call(provider, doc, token);
-        if (!Array.isArray(result)) return [];
-        return result.map(colorInfoPayload);
-      }
-      if (method === "provideColorPresentations") {
-        const color = args.context?.["color"] as { red: number; green: number; blue: number; alpha: number };
-        const r = new Range(args.range!.start.line, args.range!.start.character, args.range!.end.line, args.range!.end.character);
-        result = await fn.call(provider, color, { document: doc, range: r }, token);
-        if (!Array.isArray(result)) return [];
-        return result.map(colorPresentationPayload);
-      }
-      return null;
-    }
-    case "folding": {
-      result = await fn.call(provider, doc, ctxArg, token);
-      if (!Array.isArray(result)) return [];
-      return result.map(foldingPayload);
-    }
-    case "selectionRange": {
-      const positions = (args.context?.["positions"] as PositionPayload[] | undefined)?.map((p) => new Position(p.line, p.character)) ?? [];
-      result = await fn.call(provider, doc, positions, token);
-      if (!Array.isArray(result)) return [];
-      return result.map(selectionRangePayload);
-    }
-    case "signatureHelp": {
-      const pos = new Position(args.position!.line, args.position!.character);
-      result = await fn.call(provider, doc, pos, token, ctxArg);
-      return signatureHelpPayload(result);
-    }
-    default:
-      logActivation("warn", `provider kind ${record.kind} not implemented`);
-      return null;
+  try {
+    return await invoker({ provider, fn, method, args, ctxArg, token, doc });
+  } finally {
+    providerCancellations.delete(requestId);
   }
 }
 
@@ -1326,6 +1501,11 @@ self.onmessage = (e: MessageEvent) => {
     case "workspace/folders":
       setWorkspaceFolders(msg.folders);
       break;
+    case "workspace/activationContext":
+      applyWorkspaceActivationContext(msg.roots, msg.deactivateDelayMs).catch((err: unknown) => {
+        logActivation("error", `workspace activation context failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
+      break;
     case "configuration/update":
       updateUserConfigValue(msg.key, msg.value);
       break;
@@ -1340,8 +1520,7 @@ self.onmessage = (e: MessageEvent) => {
       break;
 
     case "provider/cancel": {
-      const tok = providerCancellations.get(msg.requestId) as unknown as { _cancel?: () => void };
-      if (tok?._cancel) tok._cancel();
+      providerCancellations.get(msg.requestId)?._cancel();
       break;
     }
 

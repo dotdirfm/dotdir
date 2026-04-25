@@ -11,6 +11,7 @@ export interface ExtensionLanguage {
   aliases?: string[];
   extensions?: string[];
   filenames?: string[];
+  filenamePatterns?: string[];
   configuration?: string; // relative path to language-configuration.json
 }
 
@@ -172,6 +173,8 @@ export interface ExtensionManifest {
   icon?: string; // relative path to icon image
   /** VS Code desktop extension entry. Used only when compatible with the worker runtime. */
   main?: string;
+  /** VS Code extension host preference. UI-only desktop extensions are not worker-compatible unless they provide browser. */
+  extensionKind?: string[];
   /** Module format hint for activation entries. */
   type?: string;
   /**

@@ -18,10 +18,13 @@ import {
   registerMonacoCommandContributions,
   type MonacoCommandContribution,
 } from "@/features/extensions/builtins/monacoCommandBridge";
+import type { EditorOpenDocumentTarget } from "@/features/extensions/ExtensionContainer";
+import type { EditorSelection } from "@/entities/tab/model/types";
 import type { ColorThemeData, DotDirGlobalApi, EditorExtensionApi, EditorProps } from "@/features/extensions/extensionApi";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
 import { useExtensionHostClient, type ExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { attachMonacoBridges, type AttachedBridges } from "@/features/extensions/monacoBridge";
+import { dirname, join, normalizePath } from "@/utils/path";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker.js?worker&inline";
 import monacoCssText from "monaco-editor/min/vs/editor/editor.main.css?inline";
 import { useEffect, useRef } from "react";
@@ -32,11 +35,21 @@ interface MonacoEditorSurfaceProps {
   props: EditorProps;
   active?: boolean;
   onInteract?: () => void;
+  selection?: EditorSelection;
+  navigationVersion?: number;
+  onOpenDocument?: (target: EditorOpenDocumentTarget) => void | Promise<void>;
 }
 
 interface MonacoEditorSurfaceRuntime {
   onCommandContributionsChange?: (commands: MonacoCommandContribution[]) => void;
+  canOpenDocument?: () => boolean;
+  onOpenDocument?: (target: EditorOpenDocumentTarget) => void | Promise<void>;
+  getSelection?: () => EditorSelection | undefined;
 }
+
+type MonacoEditorExtensionApi = EditorExtensionApi & {
+  revealSelection?: (selection: EditorSelection | undefined) => void;
+};
 
 type MonacoResolvedKeybindingLike = {
   getUserSettingsLabel?: () => string | null;
@@ -45,6 +58,16 @@ type MonacoResolvedKeybindingLike = {
 
 type MonacoStandaloneKeybindingServiceLike = {
   lookupKeybinding: (commandId: string) => MonacoResolvedKeybindingLike | undefined;
+};
+
+type MonacoEditorApiWithOpenHandler = typeof Monaco.editor & {
+  registerEditorOpener?: (opener: {
+    openCodeEditor: (
+      source: Monaco.editor.ICodeEditor,
+      resource: Monaco.Uri,
+      selectionOrPosition?: Monaco.IRange | Monaco.IPosition | null,
+    ) => boolean | Promise<boolean>;
+  }) => { dispose: () => void };
 };
 
 class TMState implements Monaco.languages.IState {
@@ -216,6 +239,100 @@ function toDotdirMonacoKeybinding(
   return { key: label };
 }
 
+function selectionFromMonacoSelection(value: Monaco.IRange | Monaco.IPosition | null | undefined): EditorSelection | undefined {
+  if (!value) return undefined;
+  const maybeRange = value as Partial<Monaco.IRange & Monaco.IPosition>;
+  if (typeof maybeRange.startLineNumber === "number" && typeof maybeRange.startColumn === "number") {
+    return {
+      startLineNumber: maybeRange.startLineNumber,
+      startColumn: maybeRange.startColumn,
+      endLineNumber: maybeRange.endLineNumber ?? maybeRange.startLineNumber,
+      endColumn: maybeRange.endColumn ?? maybeRange.startColumn,
+    };
+  }
+  return {
+    startLineNumber: maybeRange.lineNumber ?? 1,
+    startColumn: maybeRange.column ?? 1,
+    endLineNumber: maybeRange.lineNumber ?? 1,
+    endColumn: maybeRange.column ?? 1,
+  };
+}
+
+function revealEditorSelection(editor: Monaco.editor.IStandaloneCodeEditor, selection: EditorSelection | undefined): void {
+  if (!selection) return;
+  const range = {
+    startLineNumber: selection.startLineNumber,
+    startColumn: selection.startColumn,
+    endLineNumber: selection.endLineNumber ?? selection.startLineNumber,
+    endColumn: selection.endColumn ?? selection.startColumn,
+  };
+  editor.setSelection(range);
+  editor.revealRangeInCenter(range, 0);
+}
+
+function relativeImportSpecifierFromLine(line: string): string | null {
+  const patterns = [
+    /\bfrom\s*["']([^"']+)["']/,
+    /\bimport\s*["']([^"']+)["']/,
+    /\brequire\s*\(\s*["']([^"']+)["']\s*\)/,
+  ];
+  for (const pattern of patterns) {
+    const match = line.match(pattern);
+    const specifier = match?.[1]?.trim();
+    if (specifier?.startsWith(".")) return specifier;
+  }
+  return null;
+}
+
+async function fileExists(hostApi: DotDirGlobalApi, path: string): Promise<boolean> {
+  try {
+    await hostApi.statFile(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveSameFileImportTarget(
+  hostApi: DotDirGlobalApi,
+  sourceFilePath: string,
+  model: Monaco.editor.ITextModel | null,
+  selection: EditorSelection | undefined,
+): Promise<string | null> {
+  if (!model || !selection) return null;
+  const line = model.getLineContent(selection.startLineNumber);
+  const specifier = relativeImportSpecifierFromLine(line);
+  if (!specifier) return null;
+
+  const basePath = normalizePath(join(dirname(sourceFilePath), specifier));
+  const lastSegment = basePath.split("/").pop() ?? "";
+  const hasExtension = /\.[^/.]+$/.test(lastSegment);
+  const candidates = hasExtension
+    ? [basePath]
+    : [
+        basePath,
+        `${basePath}.ts`,
+        `${basePath}.tsx`,
+        `${basePath}.js`,
+        `${basePath}.jsx`,
+        `${basePath}.mjs`,
+        `${basePath}.cjs`,
+        `${basePath}.json`,
+        join(basePath, "index.ts"),
+        join(basePath, "index.tsx"),
+        join(basePath, "index.js"),
+        join(basePath, "index.jsx"),
+        join(basePath, "index.mjs"),
+        join(basePath, "index.cjs"),
+        join(basePath, "index.json"),
+      ];
+
+  for (const candidate of candidates) {
+    if (await fileExists(hostApi, candidate)) return candidate;
+  }
+  return null;
+}
+
 function normalizeColor(value: unknown): string | null {
   if (!value || typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -297,7 +414,7 @@ function buildMonacoTheme(themeData: ColorThemeData): { base: "vs" | "vs-dark"; 
   return { base, rules, colors };
 }
 
-function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: MonacoEditorSurfaceRuntime): EditorExtensionApi {
+function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: MonacoEditorSurfaceRuntime): MonacoEditorExtensionApi {
   let editorInstance: Monaco.editor.IStandaloneCodeEditor | null = null;
   let rootEl: HTMLDivElement | null = null;
   let mounted = false;
@@ -773,6 +890,30 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
       overflowWidgetsDomNode: getOverflowWidgetsHost(),
     });
     editorInstance = editor;
+    const editorOpenerDisposable = (monaco.editor as MonacoEditorApiWithOpenHandler).registerEditorOpener?.({
+      async openCodeEditor(source, resource, selectionOrPosition) {
+        if (source !== editor) return false;
+        if (resource.scheme !== "file") return false;
+        const filePath = resource.fsPath || resource.path;
+        if (!filePath) return false;
+        if (!runtime?.canOpenDocument?.()) return false;
+        const handler = runtime.onOpenDocument;
+        if (!handler) return false;
+        const selection = selectionFromMonacoSelection(selectionOrPosition);
+        if (filePath === props.filePath) {
+          const importTarget = await resolveSameFileImportTarget(hostApi, props.filePath, editor.getModel(), selection);
+          if (!importTarget) return false;
+          await handler({ filePath: importTarget });
+          return true;
+        }
+        await handler({
+          filePath,
+          selection,
+        });
+        return true;
+      },
+    });
+    revealEditorSelection(editor, runtime?.getSelection?.());
 
     if (themeUnsubscribe) themeUnsubscribe();
     if (cssVarThemeObserver) {
@@ -898,6 +1039,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
         disposeFindCommand = null;
       }
       disposeExecuteActionCommand();
+      editorOpenerDisposable?.dispose();
       if (focusListener) focusListener();
       if (themeUnsubscribe) {
         themeUnsubscribe();
@@ -965,17 +1107,25 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
         setEditorLanguage(langId);
       });
     },
+    revealSelection(selection: EditorSelection | undefined): void {
+      if (!mounted || !editorInstance) return;
+      revealEditorSelection(editorInstance, selection);
+    },
   };
 }
 
-export function MonacoEditorSurface({ hostApi, props, active, onInteract }: MonacoEditorSurfaceProps) {
+export function MonacoEditorSurface({ hostApi, props, active, onInteract, selection, navigationVersion, onOpenDocument }: MonacoEditorSurfaceProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const apiRef = useRef<EditorExtensionApi | null>(null);
+  const apiRef = useRef<MonacoEditorExtensionApi | null>(null);
   const commandRegistry = useCommandRegistry();
   const extensionHost = useExtensionHostClient();
   const monacoCommandDisposerRef = useRef<(() => void) | null>(null);
   const monacoCommandSignatureRef = useRef<string>("");
   const activatedLanguageEventsRef = useRef(new Set<string>());
+  const selectionRef = useRef(selection);
+  const onOpenDocumentRef = useRef(onOpenDocument);
+  selectionRef.current = selection;
+  onOpenDocumentRef.current = onOpenDocument;
 
   if (!apiRef.current) {
     apiRef.current = createMonacoEditorExtensionApi(hostApi, {
@@ -998,6 +1148,15 @@ export function MonacoEditorSurface({ hostApi, props, active, onInteract }: Mona
         monacoCommandSignatureRef.current = nextSignature;
         monacoCommandDisposerRef.current?.();
         monacoCommandDisposerRef.current = registerMonacoCommandContributions(commandRegistry, commands);
+      },
+      getSelection() {
+        return selectionRef.current;
+      },
+      canOpenDocument() {
+        return Boolean(onOpenDocumentRef.current);
+      },
+      onOpenDocument(target) {
+        return onOpenDocumentRef.current?.(target);
       },
     });
   }
@@ -1032,6 +1191,11 @@ export function MonacoEditorSurface({ hostApi, props, active, onInteract }: Mona
     if (!api?.setLanguage) return;
     api.setLanguage(props.langId);
   }, [props.langId]);
+
+  useEffect(() => {
+    if (active === false) return;
+    apiRef.current?.revealSelection?.(selection);
+  }, [active, navigationVersion, selection]);
 
   useEffect(() => {
     const api = apiRef.current;

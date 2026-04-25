@@ -1,7 +1,7 @@
 import type { PanelSide } from "@/entities/panel/model/types";
 import { atom } from "jotai";
 import { dirname, join } from "@/utils/path";
-import type { FileListTab, PanelTab } from "./types";
+import type { EditorDocumentTab, FileListTab, PanelTab } from "./types";
 
 let nextTabId = 0;
 export function genTabId(): string {
@@ -43,6 +43,8 @@ export const leftTabsAtom = atom<PanelTab[]>([defaultLeftTab]);
 export const rightTabsAtom = atom<PanelTab[]>([defaultRightTab]);
 export const leftActiveTabIdAtom = atom<string>(defaultLeftTab.id);
 export const rightActiveTabIdAtom = atom<string>(defaultRightTab.id);
+export const modalEditorTabsAtom = atom<EditorDocumentTab[]>([]);
+export const modalEditorActiveTabIdAtom = atom<string | null>(null);
 
 // Derived: active tab index per panel
 export const leftActiveIndexAtom = atom((get) => get(leftTabsAtom).findIndex((t) => t.id === get(leftActiveTabIdAtom)));

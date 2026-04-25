@@ -5,6 +5,8 @@
  */
 
 import type { Bridge } from "@/features/bridge";
+import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
+import type { EditorDocumentTab, EditorSelection } from "@/entities/tab/model/types";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
@@ -19,7 +21,7 @@ import styles from "@/styles/viewers.module.css";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
 import { getStyleHostElement } from "@/utils/styleHost";
-import { isBuiltInExtensionDirPath, useFsProviderRegistry } from "@/viewerEditorRegistry";
+import { isBuiltInExtensionDirPath, useEditorRegistry, useFsProviderRegistry } from "@/viewerEditorRegistry";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const LazyFileViewerSurface = lazy(async () => {
@@ -57,9 +59,17 @@ interface EditorContainerProps extends ExtensionContainerProps {
   kind: "editor";
   props: EditorProps;
   onDirtyChange?: (dirty: boolean) => void;
+  selection?: EditorSelection;
+  navigationVersion?: number;
+  onOpenDocument?: (target: EditorOpenDocumentTarget) => void | Promise<void>;
 }
 
 export type ContainerProps = ViewerContainerProps | EditorContainerProps;
+
+export type EditorOpenDocumentTarget = {
+  filePath: string;
+  selection?: EditorSelection;
+};
 
 /** Read a byte range from a file inside a container (e.g. ZIP) via the fsProvider. */
 async function readFromContainer(
@@ -291,7 +301,19 @@ function BuiltInExtensionContainer(containerProps: ContainerProps) {
           </div>
         }
       >
-        <BuiltInSurface hostApi={hostApi} props={props as never} active={active} onInteract={() => onInteractRef.current?.()} />
+        {containerProps.kind === "editor" ? (
+          <BuiltInSurface
+            hostApi={hostApi}
+            props={props as never}
+            active={active}
+            onInteract={() => onInteractRef.current?.()}
+            selection={containerProps.selection}
+            navigationVersion={containerProps.navigationVersion}
+            onOpenDocument={containerProps.onOpenDocument}
+          />
+        ) : (
+          <BuiltInSurface hostApi={hostApi} props={props as never} active={active} onInteract={() => onInteractRef.current?.()} />
+        )}
       </Suspense>
     </div>
   );
@@ -1313,6 +1335,130 @@ export function ViewerContainer({
   );
 }
 
+interface TabbedEditorContainerProps {
+  tabs: EditorDocumentTab[];
+  activeTabId: string;
+  stackIndex?: number;
+  visible?: boolean;
+  onSelectTab: (id: string) => void;
+  onCloseTab: (id: string) => void;
+  onReorderTabs?: (fromIndex: number, toIndex: number) => void;
+  onDirtyChange: (id: string, dirty: boolean) => void;
+  onOpenDocument: (target: EditorOpenDocumentTarget) => void | Promise<void>;
+}
+
+export function TabbedEditorContainer({
+  tabs,
+  activeTabId,
+  stackIndex = 0,
+  visible,
+  onSelectTab,
+  onCloseTab,
+  onReorderTabs,
+  onDirtyChange,
+  onOpenDocument,
+}: TabbedEditorContainerProps) {
+  const editorRegistry = useEditorRegistry();
+  const isVisible = visible ?? true;
+  const { containerRef } = useExtensionSurfaceFocus({
+    focusLayer: "editor",
+    isVisible,
+    isEditableTarget(node) {
+      const el = node as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName?.toLowerCase();
+      return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
+    },
+    allowCommandRouting(event) {
+      return event.ctrlKey || event.metaKey || event.altKey || /^F\d{1,2}$/.test(event.key) || event.key === "Escape";
+    },
+  });
+
+  const tabItems = useMemo<Array<TabsItem & { dirty?: boolean }>>(
+    () =>
+      tabs.map((tab) => ({
+        id: tab.id,
+        label: `${tab.dirty ? "* " : ""}${tab.fileName}`,
+        title: tab.filePath,
+        dirty: tab.dirty,
+      })),
+    [tabs],
+  );
+
+  return (
+    <ExtensionShellLayout
+      containerRef={containerRef}
+      visible={isVisible}
+      inlineClassName={styles["file-viewer-inline"]}
+      overlayClassName={styles["file-editor-overlay"]}
+      frameClassName={styles["file-editor"]}
+      stackIndex={stackIndex}
+    >
+      <Tabs
+        items={tabItems}
+        activeItemId={activeTabId}
+        onSelectItem={onSelectTab}
+        onCloseItem={onCloseTab}
+        onReorderItems={onReorderTabs}
+        getItemClassName={(item) => (item.dirty ? "dirty" : undefined)}
+      />
+      <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+        {tabs.map((tab) => {
+          const resolvedEditor = editorRegistry.resolve(tab.fileName);
+          const tabVisible = tab.id === activeTabId;
+          if (!resolvedEditor) {
+            return (
+              <div
+                key={tab.id}
+                inert={!tabVisible}
+                style={{
+                  display: tabVisible ? "flex" : "none",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "100%",
+                  color: "var(--fg-muted, #888)",
+                  textAlign: "center",
+                }}
+              >
+                No editor extension for this file type. Install editor extensions from the extensions panel.
+              </div>
+            );
+          }
+          return (
+            <div
+              key={tab.id}
+              inert={!tabVisible}
+              style={{
+                visibility: tabVisible ? "visible" : "hidden",
+                position: "absolute",
+                inset: 0,
+                opacity: tabVisible ? 1 : 0,
+                pointerEvents: tabVisible ? "auto" : "none",
+              }}
+            >
+              <EditorContainer
+                contributionId={resolvedEditor.contribution.id}
+                extensionDirPath={resolvedEditor.extensionDirPath}
+                entry={resolvedEditor.contribution.entry}
+                filePath={tab.filePath}
+                fileName={tab.fileName}
+                langId={tab.langId}
+                inline
+                visible={tabVisible}
+                onClose={() => onCloseTab(tab.id)}
+                onDirtyChange={(dirty) => onDirtyChange(tab.id, dirty)}
+                selection={tab.selection}
+                navigationVersion={tab.navigationVersion}
+                onOpenDocument={onOpenDocument}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </ExtensionShellLayout>
+  );
+}
+
 interface EditorContainerWrapperProps {
   contributionId?: string;
   extensionDirPath: string;
@@ -1328,6 +1474,9 @@ interface EditorContainerWrapperProps {
   languages?: EditorProps["languages"];
   grammars?: EditorProps["grammars"];
   onInteract?: () => void;
+  selection?: EditorSelection;
+  navigationVersion?: number;
+  onOpenDocument?: (target: EditorOpenDocumentTarget) => void | Promise<void>;
 }
 
 export function EditorContainer({
@@ -1343,6 +1492,9 @@ export function EditorContainer({
   onClose,
   onDirtyChange,
   onInteract,
+  selection,
+  navigationVersion,
+  onOpenDocument,
 }: EditorContainerWrapperProps) {
   const languageRegistry = useLanguageRegistry();
   const languages = languageRegistry.languages;
@@ -1502,6 +1654,9 @@ export function EditorContainer({
           onClose={handleClose}
           onDirtyChange={onDirtyChange}
           onInteract={onInteract}
+          selection={selection}
+          navigationVersion={navigationVersion}
+          onOpenDocument={onOpenDocument}
           style={{ width: "100%", height: "100%" }}
         />
       </div>

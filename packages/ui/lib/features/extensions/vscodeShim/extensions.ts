@@ -34,6 +34,13 @@ export function markExtensionActive(id: string, exports: unknown): void {
   ext.exports = exports;
 }
 
+export function markExtensionInactive(id: string): void {
+  const ext = registry.get(id);
+  if (!ext) return;
+  ext.isActive = false;
+  ext.exports = undefined;
+}
+
 export const extensions = {
   get all(): ExtensionMetadata[] {
     return Array.from(registry.values());

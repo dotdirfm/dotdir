@@ -1,32 +1,41 @@
 /**
  * Extension Host Workspace Sync
  *
- * Derives the set of active "workspace roots" from the currently-open file
- * list tabs and pushes it to the extension host worker. A workspace root is
- * the nearest ancestor directory that contains a `.dir` subfolder; any panel
- * whose path lives under such a directory contributes that root. If no panel
- * is inside a workspace, the active tab's directory is used as a fallback so
- * LSP-backed extensions (e.g. yaml-language-server) still have a sane root
- * for resolving relative schema paths.
- *
- * In addition to sending workspaceFolders over to the worker, this component
- * evaluates every loaded extension's `workspaceContains:<glob>` activation
- * events against each real workspace root and asks the host to activate
- * matching extensions. Each (root, pattern) pair is only evaluated once per
- * session.
+ * Builds one opened-resource view from all panel tabs, resolves opted-in
+ * DotDir workspace roots, and sends the resulting workspace activation context
+ * to the extension host worker. Runtime LSP activation is scoped to these
+ * roots; static extension contributions still load globally.
  */
 
+import type { EditorDocumentTab, PanelTab } from "@/entities/tab/model/types";
+import { leftTabsAtom, modalEditorTabsAtom, rightTabsAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
-import { leftActiveTabAtom, rightActiveTabAtom } from "@/entities/tab/model/tabsAtoms";
-import { extensionManifest } from "@/features/extensions/types";
+import { extensionLanguages, extensionManifest, type ExtensionLanguage } from "@/features/extensions/types";
 import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
-import { findWorkspaceRoot, workspaceContainsMatch } from "@/features/extensions/workspaceContains";
-import { basename } from "@/utils/path";
+import { clearWorkspaceRootCache, findWorkspaceRoot, workspaceContainsMatch } from "@/features/extensions/workspaceContains";
+import { useExtensionSettings } from "@/features/settings/useExtensionSettings";
+import { basename, join, normalizePath } from "@/utils/path";
 import { useAtomValue } from "jotai";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useExtensionHostClient } from "./extensionHostClient";
 
-type ResolvedRoot = { path: string; isWorkspace: boolean };
+const DEFAULT_LSP_DEACTIVATE_DELAY_MS = 30_000;
+
+export type OpenedResource = {
+  id: string;
+  kind: "file" | "directory";
+  path: string;
+  langId?: string;
+  source: "left-tab" | "right-tab" | "modal-editor-tab";
+};
+
+export type ActiveWorkspaceRoot = {
+  rootPath: string;
+  uri: string;
+  name: string;
+  resources: OpenedResource[];
+  languages: string[];
+};
 
 function pathToFileUri(path: string): string {
   if (!path) return "";
@@ -38,83 +47,238 @@ function pathToFileUri(path: string): string {
   return `file:///${encoded}`;
 }
 
-function tabPath(tab: { type: string; path?: string } | null): string {
-  if (!tab) return "";
-  if (tab.type === "filelist" || tab.type === "preview") return tab.path ?? "";
-  return "";
+function resourceFromTab(tab: PanelTab, source: OpenedResource["source"]): OpenedResource | null {
+  if (tab.type === "filelist") {
+    const path = normalizePath(tab.path);
+    if (!path) return null;
+    return { id: `${source}:${tab.id}`, kind: "directory", path, source };
+  }
+  const path = normalizePath(join(tab.path, tab.name));
+  if (!path) return null;
+  return {
+    id: `${source}:${tab.id}`,
+    kind: "file",
+    path,
+    langId: tab.langId,
+    source,
+  };
+}
+
+export function deriveOpenedResources(leftTabs: PanelTab[], rightTabs: PanelTab[]): OpenedResource[] {
+  const resources: OpenedResource[] = [];
+  for (const tab of leftTabs) {
+    const resource = resourceFromTab(tab, "left-tab");
+    if (resource) resources.push(resource);
+  }
+  for (const tab of rightTabs) {
+    const resource = resourceFromTab(tab, "right-tab");
+    if (resource) resources.push(resource);
+  }
+  return resources;
+}
+
+function resourceFromEditorTab(tab: EditorDocumentTab): OpenedResource | null {
+  const path = normalizePath(tab.filePath);
+  if (!path) return null;
+  return {
+    id: `modal-editor-tab:${tab.id}`,
+    kind: "file",
+    path,
+    langId: tab.langId,
+    source: "modal-editor-tab",
+  };
+}
+
+export function deriveOpenedResourcesWithModalTabs(leftTabs: PanelTab[], rightTabs: PanelTab[], modalEditorTabs: EditorDocumentTab[]): OpenedResource[] {
+  const resources = deriveOpenedResources(leftTabs, rightTabs);
+  for (const tab of modalEditorTabs) {
+    const resource = resourceFromEditorTab(tab);
+    if (resource) resources.push(resource);
+  }
+  return resources;
+}
+
+function normalizeDeactivateDelay(value: unknown): number {
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  if (!Number.isFinite(n)) return DEFAULT_LSP_DEACTIVATE_DELAY_MS;
+  return Math.max(0, Math.floor(n));
+}
+
+function uniqueStrings(values: Iterable<string | undefined>): string[] {
+  return Array.from(new Set(Array.from(values).filter((value): value is string => Boolean(value))));
+}
+
+function openedResourceSignature(resources: OpenedResource[]): string {
+  return resources
+    .map((resource) => [resource.id, resource.kind, resource.path, resource.langId ?? "", resource.source].join("\u0000"))
+    .sort()
+    .join("\u0001");
+}
+
+function workspaceContextSignature(
+  roots: Array<{ rootPath: string; uri: string; name: string; languages: string[]; activationEvents: string[] }>,
+  deactivateDelayMs: number,
+): string {
+  return JSON.stringify({
+    deactivateDelayMs,
+    roots: roots
+      .map((root) => ({
+        rootPath: root.rootPath,
+        uri: root.uri,
+        name: root.name,
+        languages: [...root.languages].sort(),
+        activationEvents: [...root.activationEvents].sort(),
+      }))
+      .sort((a, b) => a.rootPath.localeCompare(b.rootPath)),
+  });
+}
+
+function languagePatterns(language: ExtensionLanguage): string[] {
+  const patterns: string[] = [];
+  for (const filename of language.filenames ?? []) {
+    if (!filename) continue;
+    patterns.push(filename, `**/${filename}`);
+  }
+  for (const filenamePattern of language.filenamePatterns ?? []) {
+    if (!filenamePattern) continue;
+    patterns.push(filenamePattern, `**/${filenamePattern}`);
+  }
+  for (const extension of language.extensions ?? []) {
+    if (!extension) continue;
+    const suffix = extension.startsWith(".") ? extension : `.${extension}`;
+    patterns.push(`*${suffix}`, `**/*${suffix}`);
+  }
+  return patterns;
 }
 
 export function ExtensionHostWorkspaceSync(): null {
   const client = useExtensionHostClient();
   const bridge = useBridge();
-  const left = useAtomValue(leftActiveTabAtom);
-  const right = useAtomValue(rightActiveTabAtom);
+  const leftTabs = useAtomValue(leftTabsAtom);
+  const rightTabs = useAtomValue(rightTabsAtom);
+  const modalEditorTabs = useAtomValue(modalEditorTabsAtom);
   const loadedExtensions = useLoadedExtensions();
-  const leftPath = tabPath(left);
-  const rightPath = tabPath(right);
+  const extensionSettings = useExtensionSettings();
+  const [workspaceSettingsVersion, setWorkspaceSettingsVersion] = useState(0);
+  const workspaceContainsCacheRef = useRef<Map<string, boolean>>(new Map());
+  const lastWorkspaceContextSignatureRef = useRef("");
+  const openedResourcesRef = useRef<OpenedResource[]>([]);
 
-  const candidatePaths = useMemo(() => {
-    const paths: string[] = [];
-    if (leftPath) paths.push(leftPath);
-    if (rightPath && rightPath !== leftPath) paths.push(rightPath);
-    return paths;
-  }, [leftPath, rightPath]);
+  const openedResources = useMemo(() => deriveOpenedResourcesWithModalTabs(leftTabs, rightTabs, modalEditorTabs), [leftTabs, modalEditorTabs, rightTabs]);
+  const openedResourcesSignature = useMemo(() => openedResourceSignature(openedResources), [openedResources]);
+  openedResourcesRef.current = openedResources;
+  const deactivateDelayMs = normalizeDeactivateDelay(extensionSettings.get("dotdir.lsp.deactivateDelayMs"));
 
-  const activatedPatternsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    return bridge.fs.onFsChange((event) => {
+      if (event.name !== "settings.json" && event.name !== ".dir") return;
+      clearWorkspaceRootCache();
+      workspaceContainsCacheRef.current.clear();
+      setWorkspaceSettingsVersion((version) => version + 1);
+    });
+  }, [bridge]);
 
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
-      const resolved = await Promise.all(
-        candidatePaths.map<Promise<ResolvedRoot | null>>(async (p) => {
-          const root = await findWorkspaceRoot(bridge, p);
-          if (root) return { path: root, isWorkspace: true };
-          return p ? { path: p, isWorkspace: false } : null;
-        }),
-      );
-      if (cancelled) return;
-
-      const seen = new Set<string>();
-      const roots: ResolvedRoot[] = [];
-      for (const r of resolved) {
-        if (!r) continue;
-        if (seen.has(r.path)) continue;
-        seen.add(r.path);
-        roots.push(r);
+      const openedResources = openedResourcesRef.current;
+      const rootToResources = new Map<string, OpenedResource[]>();
+      for (const resource of openedResources) {
+        const root = await findWorkspaceRoot(bridge, resource.path, resource.kind).catch(() => null);
+        if (cancelled) return;
+        if (!root) continue;
+        const resources = rootToResources.get(root) ?? [];
+        resources.push(resource);
+        rootToResources.set(root, resources);
       }
 
-      client.setWorkspaceFolders(
-        roots.map(({ path }) => ({ uri: pathToFileUri(path), name: basename(path) || path })),
-      );
+      const roots: ActiveWorkspaceRoot[] = Array.from(rootToResources.entries()).map(([rootPath, resources]) => ({
+        rootPath,
+        uri: pathToFileUri(rootPath),
+        name: basename(rootPath) || rootPath,
+        resources,
+        languages: uniqueStrings(resources.map((resource) => resource.langId)),
+      }));
 
-      const workspaceRoots = roots.filter((r) => r.isWorkspace).map((r) => r.path);
-      if (workspaceRoots.length === 0) return;
+      client.setWorkspaceFolders(roots.map(({ uri, name }) => ({ uri, name })));
 
-      for (const ext of loadedExtensions) {
-        const manifest = extensionManifest(ext);
-        const events = manifest.activationEvents ?? [];
-        for (const event of events) {
-          if (!event.startsWith("workspaceContains:")) continue;
-          const pattern = event.slice("workspaceContains:".length);
-          if (!pattern) continue;
-          for (const root of workspaceRoots) {
-            const key = `${root}::${event}`;
-            if (activatedPatternsRef.current.has(key)) continue;
-            const matched = await workspaceContainsMatch(bridge, root, pattern).catch(() => false);
+      const activationRoots: Array<ActiveWorkspaceRoot & { activationEvents: string[] }> = [];
+      const contributedLanguages = loadedExtensions.flatMap((ext) => extensionLanguages(ext));
+      for (const root of roots) {
+        const activationEvents = new Set<string>();
+        const languages = new Set(root.languages);
+        for (const language of root.languages) activationEvents.add(`onLanguage:${language}`);
+
+        for (const language of contributedLanguages) {
+          const patterns = languagePatterns(language);
+          for (const pattern of patterns) {
+            const key = `${root.rootPath}::language:${language.id}:${pattern}`;
+            let matched = workspaceContainsCacheRef.current.get(key);
+            if (matched === undefined) {
+              matched = await workspaceContainsMatch(bridge, root.rootPath, pattern).catch(() => false);
+              workspaceContainsCacheRef.current.set(key, matched);
+            }
             if (cancelled) return;
             if (!matched) continue;
-            activatedPatternsRef.current.add(key);
-            void client.activateByEvent(event).catch(() => {});
+            languages.add(language.id);
+            activationEvents.add(`onLanguage:${language.id}`);
+            break;
           }
         }
+
+        for (const ext of loadedExtensions) {
+          const events = extensionManifest(ext).activationEvents ?? [];
+          for (const event of events) {
+            if (!event.startsWith("workspaceContains:")) continue;
+            const pattern = event.slice("workspaceContains:".length);
+            if (!pattern) continue;
+            const key = `${root.rootPath}::${event}`;
+            let matched = workspaceContainsCacheRef.current.get(key);
+            if (matched === undefined) {
+              matched = await workspaceContainsMatch(bridge, root.rootPath, pattern).catch(() => false);
+              workspaceContainsCacheRef.current.set(key, matched);
+            }
+            if (cancelled) return;
+            if (matched) activationEvents.add(event);
+          }
+        }
+
+        activationRoots.push({ ...root, languages: Array.from(languages), activationEvents: Array.from(activationEvents) });
       }
+
+      const contextRoots = activationRoots.map(({ rootPath, uri, name, languages, activationEvents }) => ({
+        rootPath,
+        uri,
+        name,
+        languages,
+        activationEvents,
+      }));
+      const nextContextSignature = workspaceContextSignature(contextRoots, deactivateDelayMs);
+      if (lastWorkspaceContextSignatureRef.current === nextContextSignature) return;
+      lastWorkspaceContextSignatureRef.current = nextContextSignature;
+
+      if (contextRoots.length > 0) {
+        console.info(
+          "[ExtensionHostWorkspaceSync] active workspace roots",
+          contextRoots.map((root) => ({
+            rootPath: root.rootPath,
+            languages: root.languages,
+            activationEvents: root.activationEvents,
+          })),
+        );
+      }
+
+      client.setWorkspaceActivationContext(
+        contextRoots,
+        deactivateDelayMs,
+      );
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [bridge, client, candidatePaths, loadedExtensions]);
+  }, [bridge, client, deactivateDelayMs, loadedExtensions, openedResourcesSignature, workspaceSettingsVersion]);
 
   return null;
 }
