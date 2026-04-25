@@ -10,7 +10,7 @@
 
 import type { Bridge } from "@/features/bridge";
 import { readAppDirs } from "@/features/bridge/appDirs";
-import { useBridge } from "@/features/bridge/useBridge";
+import { useBridge, useBridgeFactory } from "@/features/bridge/useBridge";
 import { readFileText } from "@/features/file-system/fs";
 import { normalizePath } from "@/utils/path";
 import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -622,28 +622,37 @@ export class ExtensionHostClient {
 const ExtensionHostClientContext = createContext<ExtensionHostClient | null>(null);
 
 export function ExtensionHostClientProvider({ children }: { children: ReactNode }) {
-  const bridge = useBridge();
+  const uiBridge = useBridge();
+  const bridgeFactory = useBridgeFactory();
+  const [extensionBridge, setExtensionBridge] = useState<Bridge | null>(null);
   const [dataDir, setDataDir] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setExtensionBridge(null);
+    setDataDir(null);
     void (async () => {
-      const dirs = await readAppDirs(bridge);
+      const nextBridge = await bridgeFactory({ purpose: "extension-host", workerId: `extension-host-${Date.now().toString(36)}` });
+      if (cancelled) return;
+      setExtensionBridge(nextBridge);
+      const dirs = await readAppDirs(nextBridge);
       if (!cancelled) setDataDir(dirs.dataDir);
-    })();
+    })().catch((error) => {
+      console.error("[ExtensionHostClientProvider] failed to initialize extension bridge", error);
+    });
     return () => {
       cancelled = true;
     };
-  }, [bridge]);
+  }, [bridgeFactory]);
 
   const client = useMemo(() => {
-    if (!dataDir) return null;
-    return new ExtensionHostClient(bridge, dataDir);
-  }, [bridge, dataDir]);
+    if (!dataDir || !extensionBridge) return null;
+    return new ExtensionHostClient(extensionBridge, dataDir);
+  }, [dataDir, extensionBridge]);
 
   useEffect(() => {
-    if (!client || !dataDir) return;
-    const store = new ExtensionSettingsStore(bridge, dataDir);
+    if (!client || !dataDir || !extensionBridge) return;
+    const store = new ExtensionSettingsStore(extensionBridge, dataDir);
     let cancelled = false;
 
     // Register listeners SYNCHRONOUSLY so that any `workspace.getConfiguration`
@@ -673,28 +682,28 @@ export function ExtensionHostClientProvider({ children }: { children: ReactNode 
       client.setConfigReadListener(null);
       client.setConfigWriteListener(null);
     };
-  }, [client, bridge, dataDir]);
+  }, [client, dataDir, extensionBridge]);
 
   useEffect(() => {
-    if (!client) return;
+    if (!client || !extensionBridge) return;
     // Default output → debugLog so extension chatter shows up in the console.
     const unsubOutput = client.onOutput(({ channel, text, newline }) => {
       const line = `[${channel}] ${text}${newline ? "" : ""}`;
-      void bridge.utils.debugLog?.(line);
+      void uiBridge.utils.debugLog?.(line);
     });
     const unsubStatus = client.onStatusBar((msg) => {
       if (msg.text) {
-        void bridge.utils.debugLog?.(`[statusbar ${msg.id}] ${msg.text}`);
+        void uiBridge.utils.debugLog?.(`[statusbar ${msg.id}] ${msg.text}`);
       }
     });
     client.setMessageShowListener(async (msg) => {
       const level = msg.level === "error" ? "error" : msg.level === "warn" ? "warn" : "log";
       console[level](`[ExtensionHost] ${msg.message}`);
-      void bridge.utils.debugLog?.(`[ExtensionHost ${msg.level}] ${msg.message}`);
+      void uiBridge.utils.debugLog?.(`[ExtensionHost ${msg.level}] ${msg.message}`);
       return undefined;
     });
     client.setCommandRequestListener(async (command, args) => {
-      return handleWorkerCommand(bridge, command, args);
+      return handleWorkerCommand(extensionBridge, command, args);
     });
     return () => {
       unsubOutput();
@@ -702,7 +711,7 @@ export function ExtensionHostClientProvider({ children }: { children: ReactNode 
       client.setMessageShowListener(null);
       client.setCommandRequestListener(null);
     };
-  }, [client, bridge]);
+  }, [client, extensionBridge, uiBridge]);
 
   useEffect(() => {
     if (!client) return;

@@ -1,7 +1,7 @@
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DialogProvider } from "@/dialogs/dialogContext";
-import type { Bridge } from "@/features/bridge";
-import { BridgeProvider, useBridge } from "@/features/bridge/useBridge";
+import type { Bridge, BridgeFactory } from "@/features/bridge";
+import { BridgeFactoryProvider, BridgeProvider, useBridge } from "@/features/bridge/useBridge";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { ExtensionHostClientProvider } from "@/features/extensions/extensionHostClient";
@@ -10,7 +10,7 @@ import { FssProvider } from "@/features/fss/fss";
 import { PanelControllersProvider } from "@/features/panels/panelControllers";
 import { UserSettingsProvider } from "@/features/settings/useUserSettings";
 import { Provider as JotaiProvider } from "jotai";
-import { forwardRef, Suspense, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, Suspense, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { App, type AppHandle } from "./app";
 import { AppRuntimeProvider } from "./appRuntime";
 import { AppServicesProvider } from "./appServices";
@@ -19,6 +19,9 @@ import baseStyles from "./styles/base.module.css";
 
 export type {
   Bridge,
+  BridgeFactory,
+  BridgeFactoryOptions,
+  BridgePurpose,
   ConflictResolution,
   CopyOptions,
   CopyProgressEvent,
@@ -42,7 +45,7 @@ export { defaultResolveVfsUrl };
 export type { AppHandle, VfsUrlKind, VfsUrlResolver };
 
 export type DotDirProps = {
-  bridge: Bridge;
+  bridgeFactory: BridgeFactory;
   widget: React.ReactNode;
   resolveVfsUrl?: VfsUrlResolver;
 };
@@ -81,7 +84,34 @@ function DotDirContent({ widget, appRef }: { widget: React.ReactNode; appRef: Re
   );
 }
 
-export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ bridge, widget, resolveVfsUrl = defaultResolveVfsUrl }, ref) {
+function DotDirBridgeRoot({
+  bridgeFactory,
+  children,
+}: {
+  bridgeFactory: BridgeFactory;
+  children: React.ReactNode;
+}) {
+  const [bridge, setBridge] = useState<Bridge | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBridge(null);
+    void Promise.resolve(bridgeFactory({ purpose: "ui" })).then((nextBridge) => {
+      if (!cancelled) setBridge(nextBridge);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bridgeFactory]);
+
+  if (!bridge) {
+    return <div className={baseStyles["loading"]}>Loading...</div>;
+  }
+
+  return <BridgeProvider bridge={bridge}>{children}</BridgeProvider>;
+}
+
+export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ bridgeFactory, widget, resolveVfsUrl = defaultResolveVfsUrl }, ref) {
   const rootRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<AppHandle>(null);
 
@@ -99,18 +129,20 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
     <div ref={rootRef} className={baseStyles["dotdir-root"]} data-dotdir-style-host="true">
       <VfsUrlResolverProvider resolveVfsUrl={resolveVfsUrl}>
         <JotaiProvider>
-          <BridgeProvider bridge={bridge}>
-            <AppServicesProvider>
-              <FssProvider>
-                <ExtensionHostClientProvider>
-                  <PanelControllersProvider>
-                    <ExtensionHostWorkspaceSync />
-                    <DotDirContent widget={widget} appRef={appRef} />
-                  </PanelControllersProvider>
-                </ExtensionHostClientProvider>
-              </FssProvider>
-            </AppServicesProvider>
-          </BridgeProvider>
+          <BridgeFactoryProvider bridgeFactory={bridgeFactory}>
+            <DotDirBridgeRoot bridgeFactory={bridgeFactory}>
+              <AppServicesProvider>
+                <FssProvider>
+                  <ExtensionHostClientProvider>
+                    <PanelControllersProvider>
+                      <ExtensionHostWorkspaceSync />
+                      <DotDirContent widget={widget} appRef={appRef} />
+                    </PanelControllersProvider>
+                  </ExtensionHostClientProvider>
+                </FssProvider>
+              </AppServicesProvider>
+            </DotDirBridgeRoot>
+          </BridgeFactoryProvider>
         </JotaiProvider>
       </VfsUrlResolverProvider>
     </div>

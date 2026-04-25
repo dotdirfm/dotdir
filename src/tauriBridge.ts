@@ -49,7 +49,8 @@ interface RustPtyExitEvent {
   ptyId: number;
 }
 
-export const tauriBridge: Bridge = {
+export function createTauriBridge(): Bridge {
+  return {
   fs: {
     async entries(dirPath: string): Promise<FsEntry[]> {
       return await invoke<FsEntry[]>("fs_entries", { dirPath });
@@ -518,4 +519,5 @@ export const tauriBridge: Bridge = {
       return new Uint8Array(bytes).buffer;
     },
   },
-};
+  };
+}

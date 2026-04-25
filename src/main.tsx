@@ -1,10 +1,10 @@
 import "@dotdirfm/ui/dotdir.css";
 
-import { defaultResolveVfsUrl, DotDir } from "@dotdirfm/ui";
+import { defaultResolveVfsUrl, DotDir, type Bridge, type BridgeFactory, type BridgeFactoryOptions } from "@dotdirfm/ui";
 import { invoke, isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { createRoot } from "react-dom/client";
 import { AccountWidget } from "./components/AccountWidget";
-import { tauriBridge } from "./tauriBridge";
+import { createTauriBridge } from "./tauriBridge";
 import { createWsBridge } from "./wsBridge";
 
 declare global {
@@ -24,12 +24,17 @@ async function writeBootLog(message: string): Promise<void> {
   }
 }
 
-async function initBridge() {
-  if (isTauriApp()) {
-    return tauriBridge;
-  } else {
-    return await createWsBridge(`ws://${location.host}/ws`);
-  }
+function createBridgeFactory(): BridgeFactory {
+  const cache = new Map<string, Promise<Bridge>>();
+  return (options: BridgeFactoryOptions) => {
+    const key = `${options.purpose}:${options.workerId ?? "default"}`;
+    let bridge = cache.get(key);
+    if (!bridge) {
+      bridge = Promise.resolve(isTauriApp() ? createTauriBridge() : createWsBridge(`ws://${location.host}/ws`));
+      cache.set(key, bridge);
+    }
+    return bridge;
+  };
 }
 
 type InstallDeepLinkDetail =
@@ -99,8 +104,9 @@ window.addEventListener("unhandledrejection", (event) => {
 
 try {
   await writeBootLog("main.tsx starting");
-  const bridge = await initBridge();
-  await writeBootLog("bridge initialized");
+  const bridgeFactory = createBridgeFactory();
+  const uiBridge = await bridgeFactory({ purpose: "ui" });
+  await writeBootLog("bridge factory initialized");
 
   let pendingInstallDeepLink: InstallDeepLinkDetail | null = null;
 
@@ -122,7 +128,7 @@ try {
       if (!detail) {
         return;
       }
-      bridge.extensions.install.emitRequest?.(detail);
+      uiBridge.extensions.install.emitRequest?.(detail);
     });
   }
 
@@ -135,7 +141,7 @@ try {
   const root = createRoot(container);
   root.render(
     <DotDir
-      bridge={bridge}
+      bridgeFactory={bridgeFactory}
       widget={<AccountWidget />}
       resolveVfsUrl={defaultResolveVfsUrl}
     />,
@@ -143,7 +149,7 @@ try {
 
   if (pendingInstallDeepLink) {
     queueMicrotask(() => {
-      bridge.extensions.install.emitRequest?.(pendingInstallDeepLink);
+      uiBridge.extensions.install.emitRequest?.(pendingInstallDeepLink);
     });
   }
   appBooted = true;

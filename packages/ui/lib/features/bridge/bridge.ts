@@ -292,3 +292,12 @@ export interface Bridge {
     readFileRange(wasmPath: string, containerPath: string, innerPath: string, offset: number, length: number): Promise<ArrayBuffer>;
   };
 }
+
+export type BridgePurpose = "ui" | "extension-host" | "fs-provider";
+
+export interface BridgeFactoryOptions {
+  purpose: BridgePurpose;
+  workerId?: string;
+}
+
+export type BridgeFactory = (options: BridgeFactoryOptions) => Bridge | Promise<Bridge>;
