@@ -19,9 +19,9 @@ import {
   CLOSE_EDITOR,
   CLOSE_TAB,
   CLOSE_VIEWER,
-  CURSOR_DOWN,
   CURSOR_DOCUMENT_END,
   CURSOR_DOCUMENT_START,
+  CURSOR_DOWN,
   CURSOR_END,
   CURSOR_HOME,
   CURSOR_LEFT,
@@ -32,9 +32,9 @@ import {
   CURSOR_WORD_LEFT,
   CURSOR_WORD_RIGHT,
   DOTDIR_CANCEL_NAVIGATION,
+  DOTDIR_CLOSE_WINDOW,
   DOTDIR_EDITOR_FIND,
   DOTDIR_EDITOR_SAVE,
-  DOTDIR_CLOSE_WINDOW,
   DOTDIR_EXIT,
   DOTDIR_FOCUS_LEFT_PANEL,
   DOTDIR_FOCUS_RIGHT_PANEL,
@@ -60,8 +60,8 @@ import {
   SHELL_EXECUTE,
   SHOW_COMMAND_PALETTE,
   SHOW_EXTENSIONS,
-  SHOW_SETTINGS,
   SHOW_FIND_FILES,
+  SHOW_SETTINGS,
   SWITCH_PANEL,
   TERMINAL_FOCUS,
   TOGGLE_HIDDEN_FILES,
@@ -71,9 +71,9 @@ import {
 import { useCommandRegistry } from "@/features/commands/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
 import { runCommandSequence, type RunCommandsArgs } from "@/features/commands/runCommands";
-import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
-import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { DOTDIR_MONACO_EXECUTE_ACTION } from "@/features/extensions/builtins/monacoCommandBridge";
+import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
+import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";

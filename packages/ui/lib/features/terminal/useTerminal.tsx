@@ -4,8 +4,8 @@ import {
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import type { TerminalProfile } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
-import { useCommandRegistry } from "@/features/commands/commands";
 import { TERMINAL_FOCUS } from "@/features/commands/commandIds";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { formatHiddenCd, normalizeTerminalPath } from "@/features/terminal/path";
 import { terminalActiveSessionIdAtom, terminalSessionsAtom } from "@/features/terminal/terminalAtoms";
