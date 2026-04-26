@@ -53,12 +53,6 @@ function buildExtensionLayers(extensions: LoadedExtension[], activeIconTheme?: s
       })),
   );
   const filtered = activeIconTheme ? withFss.filter((entry) => entry.key === activeIconTheme) : [];
-  console.log("[FSS] setExtensionLayers", {
-    total: extensions.length,
-    withFss: withFss.map((e) => e.key),
-    activeIconTheme: activeIconTheme ?? "(all)",
-    layersAdded: filtered.map((e) => e.key),
-  });
   return filtered.map((entry) => createLayer(resolveIconUrls(entry.theme.fss, normalizePath(entry.theme.basePath)), "/", LayerPriority.USER));
 }
 

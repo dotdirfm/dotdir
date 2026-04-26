@@ -201,8 +201,6 @@ export function ExtensionHostWorkspaceSync(): null {
         languages: uniqueStrings(resources.map((resource) => resource.langId)),
       }));
 
-      client.setWorkspaceFolders(roots.map(({ uri, name }) => ({ uri, name })));
-
       const activationRoots: Array<ActiveWorkspaceRoot & { activationEvents: string[] }> = [];
       const contributedLanguages = loadedExtensions.flatMap((ext) => extensionLanguages(ext));
       for (const root of roots) {
@@ -258,17 +256,7 @@ export function ExtensionHostWorkspaceSync(): null {
       if (lastWorkspaceContextSignatureRef.current === nextContextSignature) return;
       lastWorkspaceContextSignatureRef.current = nextContextSignature;
 
-      if (contextRoots.length > 0) {
-        console.info(
-          "[ExtensionHostWorkspaceSync] active workspace roots",
-          contextRoots.map((root) => ({
-            rootPath: root.rootPath,
-            languages: root.languages,
-            activationEvents: root.activationEvents,
-          })),
-        );
-      }
-
+      client.setWorkspaceFolders(roots.map(({ uri, name }) => ({ uri, name })));
       client.setWorkspaceActivationContext(
         contextRoots,
         deactivateDelayMs,

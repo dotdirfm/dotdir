@@ -185,7 +185,6 @@ export class CommandRegistry {
       }) ?? registrations[registrations.length - 1];
     if (!selected) return;
 
-    console.log("[dotdir:command]", id, ...args);
     try {
       await selected.handler(...args);
     } catch (err) {

@@ -260,6 +260,10 @@ export async function normalizeExtensionManifest({
       : { activation: "unsupported", reason: compatibilityReason },
     runtime: {
       activationEntry,
+      runtimeKind: activationEntry ? "vscode-service" : "dotdir-surface",
+      activationStatus: activationEntry ? "supported" : "static-only",
+      activationReason: activationEntry ? undefined : compatibilityReason,
+      serviceExtensionId: `${ref.publisher}.${ref.name}`,
     },
     trustTier,
   };

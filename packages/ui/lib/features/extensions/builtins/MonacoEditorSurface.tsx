@@ -1,5 +1,4 @@
 import type * as Monaco from "monaco-editor/esm/vs/editor/editor.api.js";
-import type { StateStack } from "vscode-textmate";
 // `?worker&inline` so the worker source is embedded as a base64 blob inside the
 // library bundle. Without `&inline` Vite's lib build emits a sibling
 // `/assets/*.worker-*.js` that isn't served by the consuming app (lives only
@@ -22,13 +21,10 @@ import type { EditorOpenDocumentTarget } from "@/features/extensions/ExtensionCo
 import type { EditorSelection } from "@/entities/tab/model/types";
 import type { ColorThemeData, DotDirGlobalApi, EditorExtensionApi, EditorProps } from "@/features/extensions/extensionApi";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
-import { useExtensionHostClient, type ExtensionHostClient } from "@/features/extensions/extensionHostClient";
-import { attachMonacoBridges, type AttachedBridges } from "@/features/extensions/monacoBridge";
+import { installExtensionHostIframeWorkerUrl, useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { dirname, join, normalizePath } from "@/utils/path";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker.js?worker&inline";
-import monacoCssText from "monaco-editor/min/vs/editor/editor.main.css?inline";
 import { useEffect, useRef } from "react";
-import onigWasmUrl from "vscode-oniguruma/release/onig.wasm?url";
 
 interface MonacoEditorSurfaceProps {
   hostApi: DotDirGlobalApi;
@@ -70,58 +66,6 @@ type MonacoEditorApiWithOpenHandler = typeof Monaco.editor & {
   }) => { dispose: () => void };
 };
 
-class TMState implements Monaco.languages.IState {
-  constructor(private readonly ruleStackValue: StateStack) {}
-
-  get ruleStack(): StateStack {
-    return this.ruleStackValue;
-  }
-
-  clone(): TMState {
-    return new TMState(this.ruleStackValue);
-  }
-
-  equals(other: Monaco.languages.IState): boolean {
-    return other instanceof TMState && other.ruleStackValue === this.ruleStackValue;
-  }
-}
-
-const COMMON_SCOPE_SUFFIXES = new Set([
-  "js",
-  "jsx",
-  "ts",
-  "tsx",
-  "json",
-  "yaml",
-  "yml",
-  "md",
-  "rs",
-  "py",
-  "go",
-  "java",
-  "c",
-  "cpp",
-  "h",
-  "hpp",
-  "css",
-  "scss",
-  "less",
-  "html",
-  "xml",
-  "toml",
-  "ini",
-  "sh",
-  "bash",
-  "zsh",
-]);
-
-let sharedMonacoModulePromise: Promise<typeof Monaco> | null = null;
-async function loadSharedMonaco(): Promise<typeof Monaco> {
-  // `./monacoEntry` is the trimmed Monaco entry (editor core + contrib, no
-  // basic-languages, no built-in JSON/CSS/HTML/TS language services).
-  return (sharedMonacoModulePromise ??= import("./monacoEntry") as Promise<typeof Monaco>);
-}
-
 /**
  * Shared body-level container for Monaco overflow widgets (suggestion popup,
  * hover, parameter hints, find widget, ...). Editors mount with
@@ -146,70 +90,16 @@ function getOverflowWidgetsHost(): HTMLDivElement {
   return host;
 }
 
-/**
- * Colors for Monaco's floating widgets. Without these the hover/suggest
- * popups render transparent on top of the editor viewport.
- */
-function overlayWidgetColors(isDark: boolean): Record<string, string> {
-  if (isDark) {
-    return {
-      "editorHoverWidget.background": "#252526",
-      "editorHoverWidget.border": "#454545",
-      "editorHoverWidget.foreground": "#d4d4d4",
-      "editorHoverWidget.statusBarBackground": "#2c2c2d",
-      "editorWidget.background": "#252526",
-      "editorWidget.foreground": "#d4d4d4",
-      "editorWidget.border": "#454545",
-      "editorSuggestWidget.background": "#252526",
-      "editorSuggestWidget.border": "#454545",
-      "editorSuggestWidget.foreground": "#d4d4d4",
-      "editorSuggestWidget.selectedBackground": "#094771",
-      "editorSuggestWidget.highlightForeground": "#0097fb",
-      "list.hoverBackground": "#2a2d2e",
-      "list.activeSelectionBackground": "#094771",
-      "list.activeSelectionForeground": "#ffffff",
-    };
-  }
-  return {
-    "editorHoverWidget.background": "#f3f3f3",
-    "editorHoverWidget.border": "#c8c8c8",
-    "editorHoverWidget.foreground": "#1e1e1e",
-    "editorHoverWidget.statusBarBackground": "#ebebeb",
-    "editorWidget.background": "#f3f3f3",
-    "editorWidget.foreground": "#1e1e1e",
-    "editorWidget.border": "#c8c8c8",
-    "editorSuggestWidget.background": "#f3f3f3",
-    "editorSuggestWidget.border": "#c8c8c8",
-    "editorSuggestWidget.foreground": "#1e1e1e",
-    "editorSuggestWidget.selectedBackground": "#cde6f8",
-    "editorSuggestWidget.highlightForeground": "#0066bf",
-    "list.hoverBackground": "#e8e8e8",
-    "list.activeSelectionBackground": "#cde6f8",
-    "list.activeSelectionForeground": "#1e1e1e",
-  };
+function builtInMonacoTheme(isDark: boolean): "vs" | "vs-dark" {
+  return isDark ? "vs-dark" : "vs";
 }
 
-let attachedBridgeClient: ExtensionHostClient | null = null;
-let attachedBridges: AttachedBridges | null = null;
-
-export async function ensureMonacoBridgesAttached(client: ExtensionHostClient): Promise<void> {
-  if (attachedBridgeClient === client) return;
-  if (attachedBridges) {
-    attachedBridges.detach();
-    attachedBridges = null;
-    attachedBridgeClient = null;
+function safeSetMonacoTheme(monaco: typeof Monaco, name: string): void {
+  try {
+    monaco.editor.setTheme(name);
+  } catch {
+    // The VS Code service runtime owns theme application. This is best-effort.
   }
-  const monaco = await loadSharedMonaco();
-  attachedBridges = attachMonacoBridges(monaco, client);
-  attachedBridgeClient = client;
-}
-
-function stripLangSuffix(scope: string): string {
-  const match = scope.match(/^(.*)\.([a-zA-Z0-9_-]+)$/);
-  if (!match) return scope;
-  const suffix = match[2]!.toLowerCase();
-  if (!COMMON_SCOPE_SUFFIXES.has(suffix)) return scope;
-  return match[1]!;
 }
 
 function getMonacoKeybindingService(
@@ -333,108 +223,23 @@ async function resolveSameFileImportTarget(
   return null;
 }
 
-function normalizeColor(value: unknown): string | null {
-  if (!value || typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (trimmed.startsWith("#")) {
-    const hex = trimmed.slice(1);
-    if (hex.length === 6 || hex.length === 8) return trimmed;
-    if (hex.length === 3) return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
-    if (hex.length === 4) return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
-    return null;
-  }
-  try {
-    const ctx = document.createElement("canvas").getContext("2d");
-    if (!ctx) return null;
-    ctx.fillStyle = trimmed;
-    return ctx.fillStyle.startsWith("#") ? ctx.fillStyle : null;
-  } catch {
-    return null;
-  }
-}
-
-function normalizeTokenColor(value: string): string | null {
-  const normalized = normalizeColor(value);
-  if (!normalized) return null;
-  const hex = normalized.slice(1);
-  return hex.length === 8 ? hex.slice(0, 6) : hex;
-}
-
-function buildMonacoTheme(themeData: ColorThemeData): { base: "vs" | "vs-dark"; rules: Monaco.editor.ITokenThemeRule[]; colors: Record<string, string> } {
-  const base: "vs" | "vs-dark" = themeData.kind === "light" ? "vs" : "vs-dark";
-  const rules: Monaco.editor.ITokenThemeRule[] = [];
-  const colors: Record<string, string> = {};
-
-  if (themeData.colors) {
-    for (const [key, value] of Object.entries(themeData.colors)) {
-      const normalized = normalizeColor(value);
-      if (normalized) colors[key] = normalized;
-    }
-  }
-
-  if (Array.isArray(themeData.tokenColors)) {
-    for (const entry of themeData.tokenColors) {
-      if (!entry || typeof entry !== "object") continue;
-      const tokenColor = entry as {
-        scope?: string | string[];
-        settings?: { foreground?: string; fontStyle?: string; background?: string };
-      };
-      if (!tokenColor.settings) continue;
-      const rawScopes = Array.isArray(tokenColor.scope) ? tokenColor.scope : tokenColor.scope ? [tokenColor.scope] : [""];
-      const scopes: string[] = [];
-      for (const rawScope of rawScopes) {
-        if (!rawScope) continue;
-        for (const scopePart of String(rawScope).split(",")) {
-          const trimmed = scopePart.trim();
-          if (!trimmed) continue;
-          const simple = trimmed.split(/\s+/)[0]!;
-          if (simple.startsWith("-")) continue;
-          scopes.push(simple);
-          const stripped = stripLangSuffix(simple);
-          if (stripped && stripped !== simple) scopes.push(stripped);
-        }
-      }
-      if (scopes.length === 0) scopes.push("");
-      for (const scope of scopes) {
-        const rule: Monaco.editor.ITokenThemeRule = { token: scope };
-        if (tokenColor.settings.foreground) {
-          const fg = normalizeTokenColor(tokenColor.settings.foreground);
-          if (fg) rule.foreground = fg;
-        }
-        if (tokenColor.settings.fontStyle) rule.fontStyle = tokenColor.settings.fontStyle;
-        if (tokenColor.settings.background) {
-          const bg = normalizeTokenColor(tokenColor.settings.background);
-          if (bg) rule.background = bg;
-        }
-        rules.push(rule);
-      }
-    }
-  }
-
-  return { base, rules, colors };
-}
-
 function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: MonacoEditorSurfaceRuntime): MonacoEditorExtensionApi {
   let editorInstance: Monaco.editor.IStandaloneCodeEditor | null = null;
   let rootEl: HTMLDivElement | null = null;
   let mounted = false;
   let monacoReady = false;
+  const monacoCssText = "";
   let monacoCssReady = false;
   let focusListener: (() => void) | null = null;
   let disposeSaveCommand: (() => void) | null = null;
   let disposeFindCommand: (() => void) | null = null;
   let monacoModule: typeof Monaco | null = null;
   let monacoModulePromise: Promise<any> | null = null;
-  let textMateModulePromise: Promise<any> | null = null;
-  let onigurumaModulePromise: Promise<any> | null = null;
-  let onigWasmLoadPromise: Promise<void> | null = null;
   let themeUnsubscribe: (() => void) | null = null;
   let cssVarThemeObserver: MutationObserver | null = null;
   let lastFilePath: string | null = null;
   let latestProps: EditorProps | null = null;
   let unmountFn: (() => void) | null = null;
-  const grammarJsonCache = new Map<string, object | null>();
-  const activatedTokenProviders = new Set<string>();
   const reservedDotdirEditorKeys = new Set(["f1", "ctrl+f1", "cmd+f1", "f2", "ctrl+s", "cmd+s"]);
 
   function publishEditorCommands(editor: Monaco.editor.IStandaloneCodeEditor | null): void {
@@ -475,23 +280,6 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
     }
 
     runtime.onCommandContributionsChange(commands);
-  }
-
-  async function ensureOnigurumaWasmLoaded(): Promise<void> {
-    if (onigWasmLoadPromise) return onigWasmLoadPromise;
-    onigWasmLoadPromise = (async () => {
-      let wasm: ArrayBuffer | null = null;
-      try {
-        const res = await fetch(onigWasmUrl);
-        wasm = await res.arrayBuffer();
-      } catch {
-        wasm = null;
-      }
-      if (!wasm) return;
-      const oniguruma = await (onigurumaModulePromise ??= import("vscode-oniguruma"));
-      await oniguruma.loadWASM(wasm);
-    })();
-    return onigWasmLoadPromise;
   }
 
   async function ensureMonacoModule(): Promise<typeof Monaco> {
@@ -644,9 +432,9 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
   }
 
   async function ensureTextMateLanguage(props: EditorProps, targetLangId: string): Promise<void> {
-    const { languages = [], grammars = [] } = props;
+    const { languages = [] } = props;
     if (!targetLangId) return;
-    if (languages.length === 0 && grammars.length === 0) return;
+    if (languages.length === 0) return;
     const monaco = await ensureMonacoModule();
 
     for (const lang of languages) {
@@ -658,72 +446,6 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
         filenames: lang.filenames,
       });
     }
-
-    if (grammars.length === 0) return;
-    await ensureOnigurumaWasmLoaded();
-    const textmate = await (textMateModulePromise ??= import("vscode-textmate"));
-    const oniguruma = await (onigurumaModulePromise ??= import("vscode-oniguruma"));
-
-    const languageToScope = new Map<string, string>();
-    const scopeToPath = new Map<string, string>();
-    for (const grammar of grammars) {
-      const scopeName = grammar.contribution.scopeName;
-      if (grammar.path) scopeToPath.set(scopeName, grammar.path);
-      if (grammar.contribution.language) {
-        languageToScope.set(grammar.contribution.language.toLowerCase(), scopeName);
-      }
-    }
-
-    const targetLanguageId = targetLangId.toLowerCase();
-    const targetScopeName = languageToScope.get(targetLanguageId);
-    if (!targetScopeName) return;
-    const activatedKey = `${targetLanguageId}\0${targetScopeName}`;
-    if (activatedTokenProviders.has(activatedKey)) return;
-
-    const tmRegistry = new textmate.Registry({
-      onigLib: Promise.resolve({
-        createOnigScanner: (patterns: string[]) => oniguruma.createOnigScanner(patterns),
-        createOnigString: (value: string) => oniguruma.createOnigString(value),
-      }),
-      loadGrammar: async (scopeName: string) => {
-        const cached = grammarJsonCache.get(scopeName);
-        if (cached !== undefined) return cached ? (cached as never) : null;
-        const grammarPath = scopeToPath.get(scopeName);
-        if (!grammarPath) {
-          grammarJsonCache.set(scopeName, null);
-          return null;
-        }
-        try {
-          const jsonText = await hostApi.readFileText(grammarPath);
-          const parsed = JSON.parse(jsonText) as object;
-          grammarJsonCache.set(scopeName, parsed);
-          return parsed as never;
-        } catch {
-          grammarJsonCache.set(scopeName, null);
-          return null;
-        }
-      },
-    });
-
-    const grammar = await tmRegistry.loadGrammar(targetScopeName).catch(() => null);
-    if (!grammar) return;
-    monaco.languages.setTokensProvider(targetLangId, {
-      getInitialState: () => new TMState(textmate.INITIAL),
-      tokenize: (line: string, state: Monaco.languages.IState) => {
-        const tmState = state as TMState;
-        const result = grammar.tokenizeLine(line, tmState.ruleStack);
-        const tokens: Monaco.languages.IToken[] = result.tokens.map((token: { startIndex: number; scopes: string[] }) => ({
-          startIndex: token.startIndex,
-          scopes: stripLangSuffix(token.scopes[token.scopes.length - 1] ?? "source"),
-        }));
-        return {
-          tokens,
-          endState: new TMState(result.ruleStack),
-        };
-      },
-    });
-
-    activatedTokenProviders.add(activatedKey);
   }
 
   async function ensureMonacoReady(): Promise<void> {
@@ -735,54 +457,33 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
       monacoCssReady = true;
     }
     if (monacoReady) return;
-    const monaco = await ensureMonacoModule();
+    await ensureMonacoModule();
     const globalTarget = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : self;
     // We use `./monacoEntry` which strips out Monaco's built-in JSON/TS/CSS/HTML
     // language services, so there are no language-specific worker labels to
     // dispatch — only the core editor worker is ever requested.
+    const existingMonacoEnvironment = (globalTarget as typeof globalThis & {
+      MonacoEnvironment?: {
+        getWorker?: (workerId: string, label: string) => Worker;
+        getWorkerUrl?: (workerId: string, label: string) => string | undefined;
+        getWorkerOptions?: (workerId: string, label: string) => WorkerOptions | undefined;
+      };
+    }).MonacoEnvironment ?? {};
     (globalTarget as typeof globalThis & {
-      MonacoEnvironment?: { getWorker: (workerId: string, label: string) => Worker };
+      MonacoEnvironment?: {
+        getWorker: (workerId: string, label: string) => Worker;
+        getWorkerUrl?: (workerId: string, label: string) => string | undefined;
+        getWorkerOptions?: (workerId: string, label: string) => WorkerOptions | undefined;
+      };
     }).MonacoEnvironment = {
+      ...existingMonacoEnvironment,
       getWorker: () => new (EditorWorker as new () => Worker)(),
     };
-    monaco.editor.defineTheme("dotdir-dark", {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "6A9955", fontStyle: "italic" },
-        { token: "string", foreground: "CE9178" },
-        { token: "keyword", foreground: "569CD6" },
-        { token: "entity.name.type", foreground: "4EC9B0" },
-        { token: "entity.name.function", foreground: "DCDCAA" },
-        { token: "variable", foreground: "9CDCFE" },
-      ],
-      colors: {
-        "editor.background": "#1e1e1e",
-        "editor.foreground": "#d4d4d4",
-        ...overlayWidgetColors(true),
-      },
-    });
-    monaco.editor.defineTheme("dotdir-light", {
-      base: "vs",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "008000", fontStyle: "italic" },
-        { token: "string", foreground: "A31515" },
-        { token: "keyword", foreground: "0000FF" },
-        { token: "entity.name.type", foreground: "267F99" },
-        { token: "entity.name.function", foreground: "795E26" },
-        { token: "variable", foreground: "001080" },
-      ],
-      colors: overlayWidgetColors(false),
-    });
+    installExtensionHostIframeWorkerUrl();
     monacoReady = true;
   }
 
   function applyColorThemeToEditor(themeData: ColorThemeData): void {
-    const monaco = getMonacoModule();
-    const { base, rules, colors } = buildMonacoTheme(themeData);
-    monaco.editor.defineTheme("dotdir-custom", { base, inherit: true, rules, colors });
-    monaco.editor.setTheme("dotdir-custom");
     if (rootEl?.parentElement) {
       rootEl.parentElement.className = themeData.kind === "light" ? "dotdir-light" : "dotdir-dark";
     }
@@ -790,20 +491,7 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
 
   function applyCssVarThemeToEditor(isDark: boolean): void {
     const monaco = getMonacoModule();
-    const computed = getComputedStyle(document.documentElement);
-    const bg = normalizeColor(computed.getPropertyValue("--bg")) ?? (isDark ? "#1e1e1e" : "#ffffff");
-    const fg = normalizeColor(computed.getPropertyValue("--fg")) ?? (isDark ? "#d4d4d4" : "#1e1e1e");
-    monaco.editor.defineTheme("dotdir-css", {
-      base: isDark ? "vs-dark" : "vs",
-      inherit: true,
-      rules: [],
-      colors: {
-        "editor.background": bg,
-        "editor.foreground": fg,
-        ...overlayWidgetColors(isDark),
-      },
-    });
-    monaco.editor.setTheme("dotdir-css");
+    safeSetMonacoTheme(monaco, builtInMonacoTheme(isDark));
   }
 
   async function createEditorMount(root: HTMLElement, props: EditorProps): Promise<() => void> {
@@ -812,21 +500,16 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
     const monaco = getMonacoModule();
 
     const colorTheme = hostApi.getColorTheme();
-    let monacoTheme: string;
     let isDark: boolean;
     let usingVsCodeTheme = false;
 
     if (colorTheme && (colorTheme.colors || (Array.isArray(colorTheme.tokenColors) && colorTheme.tokenColors.length > 0))) {
-      const { base, rules, colors } = buildMonacoTheme(colorTheme);
-      monaco.editor.defineTheme("dotdir-custom", { base, inherit: true, rules, colors });
-      monacoTheme = "dotdir-custom";
       isDark = colorTheme.kind !== "light";
       usingVsCodeTheme = true;
     } else {
       const theme = await hostApi.getTheme();
       isDark = theme !== "light";
       applyCssVarThemeToEditor(isDark);
-      monacoTheme = "dotdir-css";
       usingVsCodeTheme = false;
     }
 
@@ -862,7 +545,6 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
 
     const editor = monaco.editor.create(editorHost, {
       model,
-      theme: monacoTheme,
       automaticLayout: true,
       minimap: { enabled: false },
       fontSize: 13,
@@ -1160,12 +842,6 @@ export function MonacoEditorSurface({ hostApi, props, active, onInteract, select
       },
     });
   }
-
-  useEffect(() => {
-    void ensureMonacoBridgesAttached(extensionHost).catch((err) => {
-      console.warn("[MonacoEditorSurface] failed to attach extension-host bridges", err);
-    });
-  }, [extensionHost]);
 
   useEffect(() => {
     const root = rootRef.current;

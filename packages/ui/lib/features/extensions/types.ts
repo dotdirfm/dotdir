@@ -267,6 +267,8 @@ export interface LoadedExtensionContributions {
 }
 
 export type ExtensionActivationCompatibility = "supported" | "unsupported" | "failed";
+export type ExtensionRuntimeKind = "vscode-service" | "dotdir-surface" | "dotdir-fs-provider";
+export type ExtensionActivationStatus = "static-only" | "supported" | "active" | "unsupported" | "failed";
 export type ExtensionRuntimeEntryFormat = "esm" | "cjs";
 export type ExtensionRuntimeEntrySource = "browser" | "main";
 export type ExtensionTrustTier = "builtin" | "worker" | "iframe" | "provider";
@@ -284,6 +286,10 @@ export interface ExtensionActivationEntry {
 
 export interface ExtensionRuntimeMetadata {
   activationEntry?: ExtensionActivationEntry;
+  runtimeKind?: ExtensionRuntimeKind;
+  activationStatus?: ExtensionActivationStatus;
+  activationReason?: string;
+  serviceExtensionId?: string;
 }
 
 export interface LoadedExtension {

@@ -1,629 +1,608 @@
-/**
- * Extension Host Client
- *
- * Owns the Extension Host Web Worker from the main thread. Translates
- * document/editor/workspace/configuration events into RPC messages for
- * the worker, and routes provider/diagnostic/output/message/command
- * requests coming back out of the worker to the appropriate main-thread
- * sinks (DocumentTracker, ProviderBridge, DiagnosticsBridge, ...).
- */
-
-import type { Bridge } from "@/features/bridge";
+import type { Bridge, FsChangeEvent, FsEntry } from "@/features/bridge";
 import { readAppDirs } from "@/features/bridge/appDirs";
 import { useBridge, useBridgeFactory } from "@/features/bridge/useBridge";
-import { readFileText } from "@/features/file-system/fs";
-import { normalizePath } from "@/utils/path";
+import { loadExtensions } from "@/features/extensions/extensions";
+import { extensionManifest, extensionRef, type LoadedExtension } from "@/features/extensions/types";
+import { dirname, join } from "@/utils/path";
+import { initialize, getService, IExtensionService } from "@codingame/monaco-vscode-api";
+import { registerAssets } from "@codingame/monaco-vscode-api/assets";
+import { Event } from "@codingame/monaco-vscode-api/vscode/vs/base/common/event";
+import { URI } from "@codingame/monaco-vscode-api/vscode/vs/base/common/uri";
+import getConfigurationServiceOverride, { initUserConfiguration, reinitializeWorkspace, updateUserConfiguration } from "@codingame/monaco-vscode-configuration-service-override";
+import getEnvironmentServiceOverride from "@codingame/monaco-vscode-environment-service-override";
+import getEditorServiceOverride from "@codingame/monaco-vscode-editor-service-override";
+import getExtensionServiceOverride from "@codingame/monaco-vscode-extensions-service-override";
+import { ExtensionHostKind, registerExtension, type IExtensionManifest, type RegisterExtensionResult } from "@codingame/monaco-vscode-api/extensions";
+import getFileServiceOverride, {
+  FileChangeType,
+  FileSystemProviderError,
+  FileSystemProviderErrorCode,
+  FileSystemProviderCapabilities,
+  FileType,
+  registerCustomProvider,
+  type IFileChange,
+  type IFileDeleteOptions,
+  type IFileOverwriteOptions,
+  type IFileSystemProviderWithFileReadWriteCapability,
+  type IFileWriteOptions,
+  type IStat,
+  type IWatchOptions,
+} from "@codingame/monaco-vscode-files-service-override";
+import getKeybindingsServiceOverride from "@codingame/monaco-vscode-keybindings-service-override";
+import getLanguagesServiceOverride from "@codingame/monaco-vscode-languages-service-override";
+import getLifecycleServiceOverride from "@codingame/monaco-vscode-lifecycle-service-override";
+import getLocalizationServiceOverride from "@codingame/monaco-vscode-localization-service-override";
+import getModelServiceOverride from "@codingame/monaco-vscode-model-service-override";
+import getMonarchServiceOverride from "@codingame/monaco-vscode-monarch-service-override";
+import getQuickAccessServiceOverride from "@codingame/monaco-vscode-quickaccess-service-override";
+import getStorageServiceOverride from "@codingame/monaco-vscode-storage-service-override";
+import getTextMateServiceOverride from "@codingame/monaco-vscode-textmate-service-override";
+import { whenReady as defaultThemesReady } from "@codingame/monaco-vscode-theme-defaults-default-extension";
+import getThemeServiceOverride from "@codingame/monaco-vscode-theme-service-override";
 import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type {
-  CommandExecuteMsg,
-  ConfigurationReadMsg,
-  ConfigurationWriteMsg,
-  DiagnosticPayload,
-  DocumentSelectorPayload,
-  EditorApplyEditMsg,
-  EnvOpenExternalMsg,
-  HostToMainMessage,
-  MainToHostMessage,
-  MessageShowMsg,
-  OutputAppendMsg,
-  ProviderKind,
-  StatusBarUpdateMsg,
-  WorkspaceEditPayload,
-} from "./ehProtocol";
-import worker2 from "./extensionHost.worker.ts?worker&inline";
-import { ExtensionSettingsStore } from "./extensionSettings";
-import {
-  extensionColorThemes,
-  extensionCommands,
-  extensionGrammarRefs,
-  extensionIconThemes,
-  extensionLanguages,
-  extensionRef,
-  type LoadedExtension,
-} from "./types";
+import extensionHostIframeUrl from "./vscodeRuntime/extensionHostIframe.html?url&no-inline";
+import extensionHostWorkerMainUrl from "./vscodeRuntime/extensionHostWorkerMain.worker.ts?worker&url";
 
-type FsEntryLike = {
-  kind: string;
-  mode?: number;
-};
-
-function isDirectoryLikeEntry(entry: FsEntryLike): boolean {
-  return entry.kind === "directory" || (entry.kind === "symlink" && ((entry.mode ?? 0) & 0o170000) === 0o040000);
-}
-
-type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
-
-export interface ProviderRegistration {
-  providerId: number;
-  kind: ProviderKind;
-  selector: DocumentSelectorPayload;
-  metadata?: Record<string, unknown>;
-}
-
-export type ProviderRegisterListener = (reg: ProviderRegistration) => void;
-export type ProviderUnregisterListener = (providerId: number) => void;
-
-export type DiagnosticsListener = (event: { owner: string; uri: string; diagnostics: DiagnosticPayload[] }) => void;
-export type DiagnosticsClearListener = (event: { owner: string; uri?: string }) => void;
-
+export type ExtensionsLoadedCallback = (extensions: LoadedExtension[]) => void;
 export type OutputAppendListener = (event: { channel: string; text: string; newline: boolean }) => void;
-export type StatusBarListener = (event: StatusBarUpdateMsg) => void;
-export type MessageShowListener = (event: MessageShowMsg) => Promise<string | undefined>;
+export type StatusBarListener = (event: { id: string; text?: string }) => void;
+export type MessageShowListener = (event: { level: "info" | "warn" | "error"; message: string }) => Promise<string | undefined>;
 export type OpenExternalListener = (uri: string) => Promise<boolean>;
-export type ApplyEditListener = (edit: WorkspaceEditPayload) => Promise<boolean>;
+export type ApplyEditListener = (edit: unknown) => Promise<boolean>;
 export type CommandRequestListener = (command: string, args: unknown[]) => Promise<unknown>;
 export type ConfigReadListener = (key: string, section?: string) => unknown;
-export type ConfigWriteListener = (msg: Omit<ConfigurationWriteMsg, "type" | "requestId">) => Promise<void>;
+export type ConfigWriteListener = (msg: { section?: string; key: string; value: unknown; target?: string }) => Promise<void>;
 
-export interface ProviderCancellationToken {
-  readonly isCancellationRequested?: boolean;
-  onCancellationRequested(listener: () => void): { dispose(): void };
-}
+type WorkspaceFolderInput = { uri: string; name: string };
+type RegisterLocalExtensionFileUrl = RegisterExtensionResult & {
+  registerFileUrl(path: string, url: string, metadata?: { mimeType?: string; size?: number }): { dispose(): void };
+};
+type RegisteredServiceExtension = {
+  registration: RegisterExtensionResult;
+  fileDisposables: Array<{ dispose(): void }>;
+  objectUrls: string[];
+};
 
-/**
- * Emit a dev-friendly summary of what the extension host actually loaded.
- *
- * The previous log only printed the *icon* theme contributions, which made it
- * look like nothing else loaded even when 6 extensions were up. This prints
- * one grouped line plus a per-extension breakdown of languages, grammars,
- * commands, icon themes and color themes so you can tell at a glance whether a
- * given extension's contributions were picked up.
- */
-function logLoadedExtensionSummary(extensions: LoadedExtension[]): void {
-  const ids = extensions.map((e) => `${extensionRef(e).publisher}.${extensionRef(e).name}@${extensionRef(e).version}`);
-  const languages = extensions.flatMap((e) => extensionLanguages(e).map((l) => l.id));
-  const grammars = extensions.flatMap((e) => extensionGrammarRefs(e).map((g) => g.contribution.scopeName));
-  const commands = extensions.flatMap((e) => extensionCommands(e).map((c) => c.command));
-  const iconThemes = extensions.flatMap((e) =>
-    extensionIconThemes(e).map((t) => `${extensionRef(e).publisher}.${extensionRef(e).name}:${t.id}[${t.kind}]`),
-  );
-  const colorThemes = extensions.flatMap((e) =>
-    extensionColorThemes(e).map((t) => `${extensionRef(e).publisher}.${extensionRef(e).name}:${t.id}`),
-  );
-  const unsupported = extensions
-    .filter((e) => e.compatibility.activation !== "supported")
-    .map((e) => `${extensionRef(e).publisher}.${extensionRef(e).name}:${e.compatibility.activation}`);
+const textEncoder = new TextEncoder();
+const defaultUserConfiguration: Record<string, unknown> = {
+  "workbench.colorTheme": "Default Dark Modern",
+  "workbench.iconTheme": "vs-minimal",
+};
 
-  console.groupCollapsed(
-    `[ExtHost] loaded ${extensions.length} extension(s); ${languages.length} language(s), ${grammars.length} grammar(s), ${commands.length} command(s), ${iconThemes.length} icon theme(s), ${colorThemes.length} color theme(s)`,
-  );
-  console.log("extensions:", ids);
-  if (languages.length) console.log("languages:", languages);
-  if (grammars.length) console.log("grammars:", grammars);
-  if (commands.length) console.log("commands:", commands);
-  if (iconThemes.length) console.log("iconThemes:", iconThemes);
-  if (colorThemes.length) console.log("colorThemes:", colorThemes);
-  if (unsupported.length) console.log("activationCompatibility:", unsupported);
-  console.groupEnd();
-}
+registerAssets({
+  "vs/workbench/services/extensions/worker/webWorkerExtensionHostIframe.html": extensionHostIframeUrl,
+});
 
-function normalizeLoadedExtensionPayload(raw: unknown): LoadedExtension {
-  const value = raw as Record<string, unknown>;
-  if ("identity" in value && "location" in value && "assets" in value && "contributions" in value) {
-    return raw as unknown as LoadedExtension;
-  }
-  return {
-    identity: {
-      ref: value.ref as LoadedExtension["identity"]["ref"],
-      manifest: value.manifest as LoadedExtension["identity"]["manifest"],
+type MonacoEnvironmentLike = {
+  getWorker?: (workerId: string, label: string) => Worker;
+  getWorkerUrl?: (workerId: string, label: string) => string | undefined;
+  getWorkerOptions?: (workerId: string, label: string) => WorkerOptions | undefined;
+};
+
+export function installExtensionHostIframeWorkerUrl(): void {
+  if (typeof globalThis === "undefined") return;
+  const target = globalThis as typeof globalThis & { MonacoEnvironment?: MonacoEnvironmentLike };
+  const existing = target.MonacoEnvironment ?? {};
+  if (existing.getWorkerUrl?.("__dotdir_probe__", "webWorkerExtensionHostIframe") === extensionHostIframeUrl) return;
+  const previousGetWorkerUrl = existing.getWorkerUrl?.bind(existing);
+  const previousGetWorkerOptions = existing.getWorkerOptions?.bind(existing);
+  target.MonacoEnvironment = {
+    ...existing,
+    getWorkerUrl: (workerId, label) => {
+      if (label === "webWorkerExtensionHostIframe") return extensionHostIframeUrl;
+      if (label === "extensionHostWorkerMain") return extensionHostWorkerMainUrl;
+      return previousGetWorkerUrl?.(workerId, label);
     },
-    location: { dirPath: String(value.dirPath ?? "") },
-    assets: {
-      iconThemes: value.iconThemes as LoadedExtension["assets"]["iconThemes"],
-      colorThemes: value.colorThemes as LoadedExtension["assets"]["colorThemes"],
+    getWorkerOptions: (workerId, label) => {
+      if (label === "extensionHostWorkerMain") return { type: "module", name: "ExtensionHostWorker" };
+      return previousGetWorkerOptions?.(workerId, label);
     },
-    contributions: {
-      languages: value.languages as LoadedExtension["contributions"]["languages"],
-      grammarRefs: value.grammarRefs as LoadedExtension["contributions"]["grammarRefs"],
-      commands: value.commands as LoadedExtension["contributions"]["commands"],
-      keybindings: value.keybindings as LoadedExtension["contributions"]["keybindings"],
-      viewers: value.viewers as LoadedExtension["contributions"]["viewers"],
-      editors: value.editors as LoadedExtension["contributions"]["editors"],
-      fsProviders: value.fsProviders as LoadedExtension["contributions"]["fsProviders"],
-      shellIntegrations: value.shellIntegrations as LoadedExtension["contributions"]["shellIntegrations"],
-    },
-    compatibility: { activation: "supported" },
-    runtime: {},
-    trustTier: "worker",
   };
 }
 
-async function handleWorkerCommand(bridge: Bridge, command: string, args: unknown[]): Promise<unknown> {
-  switch (command) {
-    case "__dotdir/fs.stat": {
-      const p = normalizePath(String(args[0] ?? ""));
-      try {
-        const exists = await bridge.fs.exists(p);
-        if (!exists) return null;
-        const st = await bridge.fs.stat(p);
-        const parent = normalizePath(p.slice(0, p.lastIndexOf("/")) || "/");
-        const name = p.slice(p.lastIndexOf("/") + 1);
-        const parentEntry = await bridge.fs.entries(parent).then((entries) => entries.find((entry) => entry.name === name), () => undefined);
-        const isDir = parentEntry ? isDirectoryLikeEntry(parentEntry) : await bridge.fs.entries(p).then(() => true, () => false);
-        return { size: st.size, mtimeMs: st.mtimeMs, isDir };
-      } catch {
-        return null;
-      }
-    }
-    case "__dotdir/fs.writeFile": {
-      const p = normalizePath(String(args[0] ?? ""));
-      const text = String(args[1] ?? "");
-      await bridge.fs.writeFile(p, text);
-      return null;
-    }
-    case "__dotdir/fs.delete": {
-      const p = normalizePath(String(args[0] ?? ""));
-      if (bridge.fs.removeFile) {
-        await bridge.fs.removeFile(p);
-      } else {
-        await bridge.fs.moveToTrash([p]);
-      }
-      return null;
-    }
-    case "__dotdir/fs.rename": {
-      const from = normalizePath(String(args[0] ?? ""));
-      const to = normalizePath(String(args[1] ?? ""));
-      await bridge.fs.rename.rename(from, to);
-      return null;
-    }
-    case "__dotdir/fs.readDir": {
-      const p = normalizePath(String(args[0] ?? ""));
-      const entries = await bridge.fs.entries(p);
-      return entries.map((e) => ({ name: e.name, isDir: isDirectoryLikeEntry(e) }));
-    }
-    case "__dotdir/fs.createDir": {
-      const p = normalizePath(String(args[0] ?? ""));
-      await bridge.fs.createDir(p);
-      return null;
-    }
-    case "__dotdir/fs.copy": {
-      const from = normalizePath(String(args[0] ?? ""));
-      const to = normalizePath(String(args[1] ?? ""));
-      // Minimal copy: read + write
-      const bytes = await bridge.fs.readFile(from);
-      await bridge.fs.writeBinaryFile(to, new Uint8Array(bytes));
-      return null;
-    }
-    case "__dotdir/openFile": {
-      // Best-effort: log; real panel navigation happens elsewhere.
-      void bridge.utils.debugLog?.(`[ExtensionHost] openFile requested: ${String(args[0] ?? "")}`);
-      return null;
-    }
-    default:
-      return null;
+installExtensionHostIframeWorkerUrl();
+
+function pathFromUri(resource: URI): string {
+  return decodeURIComponent(resource.path);
+}
+
+function fileTypeFromEntry(entry: FsEntry): FileType {
+  if (entry.kind === "directory") return FileType.Directory;
+  if (entry.kind === "symlink") return FileType.SymbolicLink;
+  if (entry.kind === "unknown") return FileType.Unknown;
+  return FileType.File;
+}
+
+function changeTypeFromBridge(event: FsChangeEvent): FileChangeType {
+  if (event.type === "appeared") return FileChangeType.ADDED;
+  if (event.type === "disappeared") return FileChangeType.DELETED;
+  return FileChangeType.UPDATED;
+}
+
+function toFileNotFound(resource: URI): FileSystemProviderError {
+  return FileSystemProviderError.create(`File not found: ${resource.toString()}`, FileSystemProviderErrorCode.FileNotFound);
+}
+
+function toProviderError(error: unknown, resource: URI): Error {
+  if (error instanceof FileSystemProviderError) return error;
+  const message = stringifyProviderError(error);
+  if (/not found|no such file|does not exist|ENOENT/i.test(message)) return toFileNotFound(resource);
+  return error instanceof Error ? error : new Error(message);
+}
+
+function stringifyProviderError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
   }
 }
 
-export class ExtensionHostClient {
-  private worker: Worker | null = null;
-  private listeners: ExtensionsLoadedCallback[] = [];
-  // The `loaded` message arrives asynchronously after the worker finishes
-  // reading extensions.json and activating `*` events. If a subscriber
-  // registers *after* that message has already been delivered (common during
-  // HMR or when mount ordering puts the subscriber's effect late), the event
-  // would otherwise be lost and the UI would see an empty extensions list.
-  // We latch the last payload here and replay it to late subscribers.
-  private lastLoaded: LoadedExtension[] | null = null;
-  private starting = false;
-  private nextRequestId = 1;
-  private pendingRequests = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+function optionalWorkspaceConfigContent(path: string): Uint8Array | null {
+  if (path.endsWith("/.vscode/tasks.json")) return textEncoder.encode('{"version":"2.0.0","tasks":[]}\n');
+  if (path.endsWith("/.vscode/launch.json")) return textEncoder.encode('{"version":"0.2.0","configurations":[]}\n');
+  if (path.endsWith("/.vscode/mcp.json")) return textEncoder.encode("{}\n");
+  return null;
+}
 
-  // Bridge listeners registered by main-thread subsystems.
-  private providerRegisterListeners = new Set<ProviderRegisterListener>();
-  private providerUnregisterListeners = new Set<ProviderUnregisterListener>();
-  private diagnosticsListeners = new Set<DiagnosticsListener>();
-  private diagnosticsClearListeners = new Set<DiagnosticsClearListener>();
-  private outputListeners = new Set<OutputAppendListener>();
-  private statusBarListeners = new Set<StatusBarListener>();
-  private messageShowListener: MessageShowListener | null = null;
-  private openExternalListener: OpenExternalListener | null = null;
-  private applyEditListener: ApplyEditListener | null = null;
-  private commandRequestListener: CommandRequestListener | null = null;
-  private configReadListener: ConfigReadListener | null = null;
-  private configWriteListener: ConfigWriteListener | null = null;
+function sanitizeServiceManifest(manifest: Record<string, unknown>, ext: LoadedExtension): IExtensionManifest {
+  const ref = extensionRef(ext);
+  const sanitized: Record<string, unknown> = {
+    ...manifest,
+    publisher: ref.publisher,
+    name: ref.name,
+    version: ref.version,
+    engines: (manifest.engines as { vscode: string } | undefined) ?? { vscode: "*" },
+  };
+  const activationEntry = ext.runtime.activationEntry;
+  if (activationEntry) {
+    sanitized[activationEntry.sourceField] = relativeExtensionPath(ext, activationEntry.path);
+  }
+  delete sanitized.enabledApiProposals;
+  delete sanitized.originalEnabledApiProposals;
+  return sanitized as unknown as IExtensionManifest;
+}
 
-  private queuedOutbound: MainToHostMessage[] = [];
-  private workerReady = false;
+function relativeExtensionPath(ext: LoadedExtension, path: string): string {
+  const root = ext.location.dirPath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const normalizedPath = path.replace(/\\/g, "/");
+  if (normalizedPath.startsWith(`${root}/`)) return `./${normalizedPath.slice(root.length + 1)}`;
+  return normalizedPath.startsWith("./") ? normalizedPath : `./${normalizedPath.replace(/^\/+/, "")}`;
+}
 
-  constructor(
-    private bridge: Bridge,
-    private dataDir: string,
-  ) {}
+function extensionFileMimeType(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) return "text/javascript";
+  if (lower.endsWith(".json") || lower.endsWith(".map")) return "application/json";
+  if (lower.endsWith(".css")) return "text/css";
+  if (lower.endsWith(".html")) return "text/html";
+  if (lower.endsWith(".wasm")) return "application/wasm";
+  if (lower.endsWith(".svg")) return "image/svg+xml";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".woff")) return "font/woff";
+  if (lower.endsWith(".woff2")) return "font/woff2";
+  return "application/octet-stream";
+}
 
-  onLoaded(cb: ExtensionsLoadedCallback): () => void {
-    this.listeners.push(cb);
-    // Replay the latched payload so late subscribers never miss the initial
-    // `loaded` event. Deliver on a microtask so the caller can still set up
-    // whatever state it needs before the callback fires.
-    if (this.lastLoaded) {
-      const snapshot = this.lastLoaded;
-      queueMicrotask(() => {
-        if (this.listeners.includes(cb)) cb(snapshot);
-      });
-    }
-    return () => {
-      this.listeners = this.listeners.filter((l) => l !== cb);
+class DotDirFileSystemProvider implements IFileSystemProviderWithFileReadWriteCapability {
+  readonly capabilities = FileSystemProviderCapabilities.FileReadWrite | FileSystemProviderCapabilities.PathCaseSensitive;
+  readonly onDidChangeCapabilities = Event.None;
+
+  private readonly changeListeners = new Set<(changes: readonly IFileChange[]) => void>();
+  private watchCounter = 0;
+  private readonly watchIds = new Map<string, string>();
+
+  readonly onDidChangeFile = (listener: (changes: readonly IFileChange[]) => void): { dispose(): void } => {
+    this.changeListeners.add(listener);
+    return {
+      dispose: () => {
+        this.changeListeners.delete(listener);
+      },
     };
-  }
+  };
 
-  async start(): Promise<void> {
-    if (this.worker || this.starting) return;
-    this.starting = true;
-    try {
-      this.spawnWorker();
-    } finally {
-      this.starting = false;
-    }
-  }
-
-  async restart(): Promise<void> {
-    this.worker?.terminate();
-    this.worker = null;
-    this.workerReady = false;
-    this.lastLoaded = null;
-    for (const [, pending] of this.pendingRequests) pending.reject(new Error("Extension host restarted"));
-    this.pendingRequests.clear();
-    await this.start();
-  }
-
-  dispose(): void {
-    this.worker?.terminate();
-    this.worker = null;
-    this.workerReady = false;
-    this.lastLoaded = null;
-    for (const [, pending] of this.pendingRequests) pending.reject(new Error("Extension host disposed"));
-    this.pendingRequests.clear();
-    this.listeners = [];
-  }
-
-  // ── Inbound subscriptions (provider, diagnostics, ...) ────────────
-
-  onProviderRegister(cb: ProviderRegisterListener): () => void {
-    this.providerRegisterListeners.add(cb);
-    return () => this.providerRegisterListeners.delete(cb);
-  }
-  onProviderUnregister(cb: ProviderUnregisterListener): () => void {
-    this.providerUnregisterListeners.add(cb);
-    return () => this.providerUnregisterListeners.delete(cb);
-  }
-  onDiagnostics(cb: DiagnosticsListener): () => void {
-    this.diagnosticsListeners.add(cb);
-    return () => this.diagnosticsListeners.delete(cb);
-  }
-  onDiagnosticsClear(cb: DiagnosticsClearListener): () => void {
-    this.diagnosticsClearListeners.add(cb);
-    return () => this.diagnosticsClearListeners.delete(cb);
-  }
-  onOutput(cb: OutputAppendListener): () => void {
-    this.outputListeners.add(cb);
-    return () => this.outputListeners.delete(cb);
-  }
-  onStatusBar(cb: StatusBarListener): () => void {
-    this.statusBarListeners.add(cb);
-    return () => this.statusBarListeners.delete(cb);
-  }
-  setMessageShowListener(listener: MessageShowListener | null): void {
-    this.messageShowListener = listener;
-  }
-  setOpenExternalListener(listener: OpenExternalListener | null): void {
-    this.openExternalListener = listener;
-  }
-  setApplyEditListener(listener: ApplyEditListener | null): void {
-    this.applyEditListener = listener;
-  }
-  setCommandRequestListener(listener: CommandRequestListener | null): void {
-    this.commandRequestListener = listener;
-  }
-  setConfigReadListener(listener: ConfigReadListener | null): void {
-    this.configReadListener = listener;
-  }
-  setConfigWriteListener(listener: ConfigWriteListener | null): void {
-    this.configWriteListener = listener;
-  }
-
-  // ── Outbound: document / editor / workspace / configuration ──────
-
-  documentOpen(uri: string, languageId: string, version: number, text: string): void {
-    this.post({ type: "document/open", uri, languageId, version, text });
-  }
-
-  documentChange(uri: string, version: number, text: string): void {
-    this.post({ type: "document/change", uri, version, text });
-  }
-
-  documentClose(uri: string): void {
-    this.post({ type: "document/close", uri });
-  }
-
-  documentSave(uri: string): void {
-    this.post({ type: "document/save", uri });
-  }
-
-  setWorkspaceFolders(folders: Array<{ uri: string; name: string }>): void {
-    this.post({ type: "workspace/folders", folders });
-  }
-
-  setWorkspaceActivationContext(
-    roots: Array<{ rootPath: string; uri: string; name: string; languages: string[]; activationEvents: string[] }>,
-    deactivateDelayMs: number,
-  ): void {
-    this.post({ type: "workspace/activationContext", roots, deactivateDelayMs });
-  }
-
-  configurationUpdate(key: string, value: unknown, section?: string): void {
-    this.post({ type: "configuration/update", key, value, section });
-  }
-
-  setActiveEditor(uri: string | null): void {
-    this.post({ type: "editor/active", uri });
-  }
-
-  async invokeProvider(providerId: number, method: string, args: unknown, cancellationToken?: ProviderCancellationToken): Promise<unknown> {
-    const requestId = this.nextRequestId++;
-    const cancellationSub = cancellationToken?.onCancellationRequested(() => this.cancelProviderRequest(requestId));
-    try {
-      const result = this.requestWithId<unknown>({ type: "provider/invoke", providerId, method, args }, requestId);
-      if (cancellationToken?.isCancellationRequested) this.cancelProviderRequest(requestId);
-      return await result;
-    } finally {
-      cancellationSub?.dispose();
-    }
-  }
-
-  cancelProviderRequest(requestId: number): void {
-    this.post({ type: "provider/cancel", requestId });
-  }
-
-  async activateByEvent(event: string): Promise<void> {
-    await this.request<void>({ type: "activateByEvent", event });
-  }
-
-  async executeCommand(command: string, args: unknown[] = []): Promise<unknown> {
-    return await this.request<unknown>({ type: "executeCommand", command, args });
-  }
-
-  // ── Internals ─────────────────────────────────────────────────────
-
-  private spawnWorker(): void {
-    const worker = new worker2();
-
-    worker.onmessage = (e: MessageEvent) => {
-      this.handleMessage(worker, e.data as HostToMainMessage);
-    };
-    worker.onerror = (e) => {
-      console.error("[ExtensionHost] Worker runtime error:", e);
-    };
-
-    this.worker = worker;
-    this.workerReady = true;
-    void (async () => {
-      worker.postMessage({ type: "start", dataDir: this.dataDir } satisfies MainToHostMessage);
-      // Flush queued outbound messages that tried to send before the worker existed.
-      const queued = this.queuedOutbound.splice(0);
-      for (const msg of queued) worker.postMessage(msg);
-    })();
-  }
-
-  private handleMessage(worker: Worker, msg: HostToMainMessage): void {
-    switch (msg.type) {
-      case "readFile":
-        void this.handleFileRead(worker, msg.id, msg.path);
-        return;
-      case "readBinaryFile":
-        void this.handleBinaryRead(worker, msg.id, msg.path);
-        return;
-      case "loaded": {
-        const extensions: LoadedExtension[] = Array.isArray(msg.extensions)
-          ? (msg.extensions as unknown[]).map(normalizeLoadedExtensionPayload)
-          : [];
-        logLoadedExtensionSummary(extensions);
-        this.lastLoaded = extensions;
-        for (const cb of this.listeners.slice()) cb(extensions);
-        return;
-      }
-      case "error":
-        console.error("[ExtensionHost] Worker error:", msg.message);
-        void this.bridge.utils.debugLog?.(`[ExtensionHost] worker error: ${String(msg.message ?? "unknown")}`);
-        return;
-      case "activationLog": {
-        const text = `[ExtensionHost:${msg.level}] ${msg.extension}${msg.event ? ` event=${msg.event}` : ""} ${msg.message}`.trim();
-        if (msg.level === "error") console.error(text);
-        else if (msg.level === "warn") console.warn(text);
-        else console.log(text);
-        void this.bridge.utils.debugLog?.(text);
-        return;
-      }
-      case "requestResult": {
-        const pending = this.pendingRequests.get(msg.requestId);
-        if (!pending) return;
-        this.pendingRequests.delete(msg.requestId);
-        if (msg.error) pending.reject(new Error(String(msg.error)));
-        else pending.resolve(msg.result);
-        return;
-      }
-      case "provider/register": {
-        for (const cb of this.providerRegisterListeners) cb({ providerId: msg.providerId, kind: msg.kind, selector: msg.selector, metadata: msg.metadata });
-        return;
-      }
-      case "provider/unregister": {
-        for (const cb of this.providerUnregisterListeners) cb(msg.providerId);
-        return;
-      }
-      case "diagnostics/set": {
-        for (const cb of this.diagnosticsListeners) cb({ owner: msg.owner, uri: msg.uri, diagnostics: msg.diagnostics });
-        return;
-      }
-      case "diagnostics/clear": {
-        for (const cb of this.diagnosticsClearListeners) cb({ owner: msg.owner, uri: msg.uri });
-        return;
-      }
-      case "output/append":
-        for (const cb of this.outputListeners) cb(msg satisfies OutputAppendMsg);
-        return;
-      case "statusbar/update":
-        for (const cb of this.statusBarListeners) cb(msg);
-        return;
-      case "message/show":
-        void this.handleMessageShow(worker, msg);
-        return;
-      case "env/openExternal":
-        void this.handleOpenExternal(worker, msg);
-        return;
-      case "editor/applyEdit":
-        void this.handleApplyEdit(worker, msg);
-        return;
-      case "command/execute":
-        void this.handleCommandExecute(worker, msg);
-        return;
-      case "configuration/read":
-        void this.handleConfigRead(worker, msg);
-        return;
-      case "configuration/write":
-        void this.handleConfigWrite(worker, msg);
-        return;
-    }
-  }
-
-  private post(message: MainToHostMessage): void {
-    if (!this.worker || !this.workerReady) {
-      this.queuedOutbound.push(message);
-      void this.start();
-      return;
-    }
-    this.worker.postMessage(message);
-  }
-
-  private async request<T>(message: Record<string, unknown> & { type: string }): Promise<T> {
-    const requestId = this.nextRequestId++;
-    return await this.requestWithId<T>(message, requestId);
-  }
-
-  private async requestWithId<T>(message: Record<string, unknown> & { type: string }, requestId: number): Promise<T> {
-    if (!this.worker) await this.start();
-    if (!this.worker) throw new Error("Extension host is not running");
-    return await new Promise<T>((resolve, reject) => {
-      this.pendingRequests.set(requestId, { resolve: resolve as (v: unknown) => void, reject });
-      this.worker!.postMessage({ ...message, requestId });
+  constructor(private readonly bridge: Bridge) {
+    this.bridge.fs.onFsChange((event) => {
+      const watchRoot = this.watchIds.get(event.watchId);
+      if (!watchRoot) return;
+      const resource = URI.file(event.name ? join(watchRoot, event.name) : watchRoot);
+      this.fire([{ resource, type: changeTypeFromBridge(event) }]);
     });
   }
 
-  private async handleFileRead(worker: Worker, id: number, path: string): Promise<void> {
+  async stat(resource: URI): Promise<IStat> {
+    const path = pathFromUri(resource);
+    if (!(await this.exists(path))) throw toFileNotFound(resource);
     try {
-      const normalizedPath = normalizePath(path);
-      const text = await readFileText(this.bridge, normalizedPath);
-      worker.postMessage({ type: "readFileResult", id, data: text } satisfies MainToHostMessage);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes("Not a file:") || message.includes("ENOENT")) {
-        worker.postMessage({ type: "readFileResult", id, data: null } satisfies MainToHostMessage);
-        return;
+      const entries = await this.bridge.fs.entries(path);
+      return {
+        type: FileType.Directory,
+        ctime: 0,
+        mtime: Date.now(),
+        size: entries.length,
+      };
+    } catch {
+      try {
+        const stat = await this.bridge.fs.stat(path);
+        return {
+          type: FileType.File,
+          ctime: stat.mtimeMs,
+          mtime: stat.mtimeMs,
+          size: stat.size,
+        };
+      } catch (error) {
+        throw toProviderError(error, resource);
       }
-      worker.postMessage({ type: "readFileResult", id, data: null, error: "read failed" } satisfies MainToHostMessage);
     }
   }
 
-  private async handleBinaryRead(worker: Worker, id: number, path: string): Promise<void> {
+  async readdir(resource: URI): Promise<[string, FileType][]> {
+    const path = pathFromUri(resource);
+    if (!(await this.exists(path))) throw toFileNotFound(resource);
     try {
-      const normalizedPath = normalizePath(path);
-      const bytes = await this.bridge.fs.readFile(normalizedPath);
-      worker.postMessage({ type: "readBinaryFileResult", id, bytes } satisfies MainToHostMessage, [bytes]);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      worker.postMessage({ type: "readBinaryFileResult", id, error: message } satisfies MainToHostMessage);
+      const entries = await this.bridge.fs.entries(path);
+      return entries.map((entry) => [entry.name, fileTypeFromEntry(entry)]);
+    } catch (error) {
+      throw toProviderError(error, resource);
     }
   }
 
-  private async handleMessageShow(worker: Worker, msg: MessageShowMsg): Promise<void> {
+  async readFile(resource: URI): Promise<Uint8Array> {
+    const path = pathFromUri(resource);
+    const optionalContent = optionalWorkspaceConfigContent(path);
+    if (optionalContent && !(await this.exists(path))) return optionalContent;
+    if (!(await this.exists(path))) throw toFileNotFound(resource);
     try {
-      const result = this.messageShowListener ? await this.messageShowListener(msg) : undefined;
-      worker.postMessage({ type: "requestResponse", requestId: msg.requestId, result: result ?? null } satisfies MainToHostMessage);
-    } catch (err) {
-      worker.postMessage({ type: "requestResponse", requestId: msg.requestId, error: err instanceof Error ? err.message : String(err) } satisfies MainToHostMessage);
+      return new Uint8Array(await this.bridge.fs.readFile(path));
+    } catch (error) {
+      throw toProviderError(error, resource);
     }
   }
 
-  private async handleOpenExternal(worker: Worker, msg: EnvOpenExternalMsg): Promise<void> {
-    try {
-      const ok = this.openExternalListener ? await this.openExternalListener(msg.uri) : await this.openExternalFallback(msg.uri);
-      worker.postMessage({ type: "requestResponse", requestId: msg.requestId, result: ok } satisfies MainToHostMessage);
-    } catch (err) {
-      worker.postMessage({ type: "requestResponse", requestId: msg.requestId, error: err instanceof Error ? err.message : String(err) } satisfies MainToHostMessage);
-    }
+  async writeFile(resource: URI, content: Uint8Array, _opts: IFileWriteOptions): Promise<void> {
+    await this.bridge.fs.writeBinaryFile(pathFromUri(resource), content);
   }
 
-  private async openExternalFallback(uri: string): Promise<boolean> {
+  watch(resource: URI, _opts: IWatchOptions): { dispose(): void } {
+    const path = pathFromUri(resource);
+    const watchId = `vscode-service-${++this.watchCounter}`;
+    this.watchIds.set(watchId, path);
+    void this.bridge.fs.watch(watchId, path).catch(() => {
+      this.watchIds.delete(watchId);
+    });
+    return {
+      dispose: () => {
+        this.watchIds.delete(watchId);
+        void this.bridge.fs.unwatch(watchId).catch(() => {});
+      },
+    };
+  }
+
+  async mkdir(resource: URI): Promise<void> {
+    await this.bridge.fs.createDir(pathFromUri(resource));
+  }
+
+  async delete(resource: URI, _opts: IFileDeleteOptions): Promise<void> {
+    const path = pathFromUri(resource);
+    if (this.bridge.fs.removeFile) {
+      await this.bridge.fs.removeFile(path);
+      return;
+    }
+    await this.bridge.fs.moveToTrash([path]);
+  }
+
+  async rename(from: URI, to: URI, _opts: IFileOverwriteOptions): Promise<void> {
+    const fromPath = pathFromUri(from);
+    const toPath = pathFromUri(to);
+    if (dirname(fromPath) !== dirname(toPath)) {
+      throw new Error("DotDir VS Code filesystem provider only supports same-directory rename.");
+    }
+    await this.bridge.fs.rename.rename(fromPath, toPath.split("/").pop() ?? toPath);
+  }
+
+  private fire(changes: IFileChange[]): void {
+    for (const listener of this.changeListeners) listener(changes);
+  }
+
+  private async exists(path: string): Promise<boolean> {
     try {
-      await this.bridge.utils.openExternal?.(uri);
-      return true;
+      return await this.bridge.fs.exists(path);
     } catch {
       return false;
     }
   }
+}
 
-  private async handleApplyEdit(worker: Worker, msg: EditorApplyEditMsg): Promise<void> {
-    try {
-      const ok = this.applyEditListener ? await this.applyEditListener(msg.edit) : false;
-      worker.postMessage({ type: "requestResponse", requestId: msg.requestId, result: ok } satisfies MainToHostMessage);
-    } catch (err) {
-      worker.postMessage({ type: "requestResponse", requestId: msg.requestId, error: err instanceof Error ? err.message : String(err) } satisfies MainToHostMessage);
-    }
+let servicesPromise: Promise<void> | null = null;
+let registeredFileProvider = false;
+
+async function initializeVscodeServices(bridge: Bridge, dataDir: string): Promise<void> {
+  if (servicesPromise) return servicesPromise;
+  installExtensionHostIframeWorkerUrl();
+  if (!registeredFileProvider) {
+    registerCustomProvider("file", new DotDirFileSystemProvider(bridge));
+    registeredFileProvider = true;
+  }
+  await initUserConfiguration(JSON.stringify(defaultUserConfiguration)).catch(() => {});
+  servicesPromise = initialize({
+    ...getEnvironmentServiceOverride(),
+    ...getFileServiceOverride(),
+    ...getConfigurationServiceOverride(),
+    ...getModelServiceOverride(),
+    ...getLanguagesServiceOverride(),
+    ...getMonarchServiceOverride(),
+    ...getEditorServiceOverride(async () => undefined),
+    ...getKeybindingsServiceOverride(),
+    ...getThemeServiceOverride(),
+    ...getTextMateServiceOverride(),
+    ...getQuickAccessServiceOverride(),
+    ...getLifecycleServiceOverride(),
+    ...getStorageServiceOverride(),
+    ...getLocalizationServiceOverride({
+      availableLanguages: [{ locale: "en", languageName: "English" }],
+      setLocale: async () => {},
+      clearLocale: async () => {},
+    }),
+    ...getExtensionServiceOverride({ enableWorkerExtensionHost: true }),
+  }, undefined, {
+    productConfiguration: {
+      nameShort: "DotDir",
+      nameLong: "DotDir",
+      applicationName: "dotdir",
+      dataFolderName: dataDir,
+      version: "0.0.0",
+    },
+  })
+    .then(async () => {
+      await defaultThemesReady;
+    })
+    .catch((error) => {
+      servicesPromise = null;
+      throw error;
+    });
+  return servicesPromise;
+}
+
+export class ExtensionHostClient {
+  private loadedSnapshot: LoadedExtension[] = [];
+  private readonly loadedListeners = new Set<ExtensionsLoadedCallback>();
+  private readonly configurationValues = new Map<string, unknown>();
+  private readonly activatedEvents = new Set<string>();
+  private registeredExtensions: RegisteredServiceExtension[] = [];
+  private disposed = false;
+  private lastWorkspaceFoldersSignature = "";
+  private lastWorkspaceActivationSignature = "";
+
+  constructor(
+    private readonly bridge: Bridge,
+    private readonly dataDir: string,
+  ) {}
+
+  onLoaded(cb: ExtensionsLoadedCallback): () => void {
+    this.loadedListeners.add(cb);
+    if (this.loadedSnapshot.length > 0) queueMicrotask(() => this.loadedListeners.has(cb) && cb(this.loadedSnapshot));
+    return () => {
+      this.loadedListeners.delete(cb);
+    };
   }
 
-  private async handleCommandExecute(worker: Worker, msg: CommandExecuteMsg): Promise<void> {
-    try {
-      const result = this.commandRequestListener ? await this.commandRequestListener(msg.command, msg.args) : undefined;
-      worker.postMessage({ type: "requestResponse", requestId: msg.requestId, result: result ?? null } satisfies MainToHostMessage);
-    } catch (err) {
-      worker.postMessage({ type: "requestResponse", requestId: msg.requestId, error: err instanceof Error ? err.message : String(err) } satisfies MainToHostMessage);
-    }
+  async start(): Promise<void> {
+    if (this.disposed) return;
+    await initializeVscodeServices(this.bridge, this.dataDir);
+    const extensions = await loadExtensions(this.bridge, this.dataDir);
+    await this.replaceServiceExtensions(extensions);
+    this.loadedSnapshot = extensions;
+    for (const listener of this.loadedListeners) listener(extensions);
   }
 
-  private async handleConfigRead(worker: Worker, msg: ConfigurationReadMsg): Promise<void> {
-    try {
-      const result = this.configReadListener ? this.configReadListener(msg.key, msg.section) : undefined;
-      worker.postMessage({ type: "requestResponse", requestId: msg.requestId, result: result ?? null } satisfies MainToHostMessage);
-    } catch (err) {
-      worker.postMessage({ type: "requestResponse", requestId: msg.requestId, error: err instanceof Error ? err.message : String(err) } satisfies MainToHostMessage);
-    }
+  async restart(): Promise<void> {
+    await this.disposeRegisteredExtensions();
+    await this.start();
   }
 
-  private async handleConfigWrite(worker: Worker, msg: ConfigurationWriteMsg): Promise<void> {
-    try {
-      if (this.configWriteListener) {
-        await this.configWriteListener({ section: msg.section, key: msg.key, value: msg.value, target: msg.target });
+  dispose(): void {
+    this.disposed = true;
+    this.loadedListeners.clear();
+    void this.disposeRegisteredExtensions();
+  }
+
+  onOutput(_cb: OutputAppendListener): () => void {
+    return () => {};
+  }
+
+  onStatusBar(_cb: StatusBarListener): () => void {
+    return () => {};
+  }
+
+  setMessageShowListener(_listener: MessageShowListener | null): void {}
+  setOpenExternalListener(_listener: OpenExternalListener | null): void {}
+  setApplyEditListener(_listener: ApplyEditListener | null): void {}
+  setCommandRequestListener(_listener: CommandRequestListener | null): void {}
+  setConfigReadListener(_listener: ConfigReadListener | null): void {}
+  setConfigWriteListener(_listener: ConfigWriteListener | null): void {}
+
+  documentOpen(_uri: string, _languageId: string, _version: number, _text: string): void {}
+  documentChange(_uri: string, _version: number, _text: string): void {}
+  documentClose(_uri: string): void {}
+  documentSave(_uri: string): void {}
+  setActiveEditor(_uri: string | null): void {}
+
+  setWorkspaceFolders(folders: WorkspaceFolderInput[]): void {
+    const signature = JSON.stringify(folders.map((folder) => ({ uri: folder.uri, name: folder.name })).sort((a, b) => a.uri.localeCompare(b.uri)));
+    if (this.lastWorkspaceFoldersSignature === signature) return;
+    this.lastWorkspaceFoldersSignature = signature;
+    const first = folders[0];
+    const workspace = first ? { id: `dotdir:${first.uri}`, uri: URI.parse(first.uri) } : { id: "dotdir:empty" };
+    void reinitializeWorkspace(workspace).catch((error) => {
+      console.warn("[VscodeRuntime] failed to update workspace folders", error);
+    });
+  }
+
+  setWorkspaceActivationContext(
+    roots: Array<{ rootPath: string; uri: string; name: string; languages: string[]; activationEvents: string[] }>,
+    _deactivateDelayMs: number,
+  ): void {
+    const signature = JSON.stringify(roots.map((root) => ({
+      rootPath: root.rootPath,
+      uri: root.uri,
+      languages: [...root.languages].sort(),
+      activationEvents: [...root.activationEvents].sort(),
+    })).sort((a, b) => a.rootPath.localeCompare(b.rootPath)));
+    if (this.lastWorkspaceActivationSignature === signature) return;
+    this.lastWorkspaceActivationSignature = signature;
+    for (const root of roots) {
+      for (const event of root.activationEvents) {
+        if (this.activatedEvents.has(event)) continue;
+        this.activatedEvents.add(event);
+        void this.activateByEvent(event).catch((error) => {
+          this.activatedEvents.delete(event);
+          console.warn(`[VscodeRuntime] activation failed for ${event}`, error);
+        });
       }
-      worker.postMessage({ type: "requestResponse", requestId: msg.requestId, result: null } satisfies MainToHostMessage);
-    } catch (err) {
-      worker.postMessage({ type: "requestResponse", requestId: msg.requestId, error: err instanceof Error ? err.message : String(err) } satisfies MainToHostMessage);
     }
+  }
+
+  configurationUpdate(key: string, value: unknown, _section?: string): void {
+    if (value === undefined) this.configurationValues.delete(key);
+    else this.configurationValues.set(key, value);
+    void updateUserConfiguration(JSON.stringify({ ...defaultUserConfiguration, ...Object.fromEntries(this.configurationValues) }, null, 2)).catch((error) => {
+      console.warn("[VscodeRuntime] failed to update configuration", error);
+    });
+  }
+
+  async activateByEvent(event: string): Promise<void> {
+    await initializeVscodeServices(this.bridge, this.dataDir);
+    const extensionService = await getService(IExtensionService);
+    await extensionService.activateByEvent(event);
+  }
+
+  async executeCommand(command: string, args: unknown[] = []): Promise<unknown> {
+    await initializeVscodeServices(this.bridge, this.dataDir);
+    const vscode = await import("vscode");
+    return vscode.commands.executeCommand(command, ...args);
+  }
+
+  private async replaceServiceExtensions(extensions: LoadedExtension[]): Promise<void> {
+    await this.disposeRegisteredExtensions();
+    this.activatedEvents.clear();
+    for (const ext of extensions) {
+      const manifest = extensionManifest(ext) as unknown as Record<string, unknown>;
+      const serviceManifest = sanitizeServiceManifest(manifest, ext);
+      const extensionHostKind = ext.runtime.activationEntry ? ExtensionHostKind.LocalWebWorker : undefined;
+      const registration = registerExtension(
+        serviceManifest,
+        extensionHostKind,
+      );
+      const registered: RegisteredServiceExtension = {
+        registration,
+        fileDisposables: [],
+        objectUrls: [],
+      };
+      this.registeredExtensions.push(registered);
+      if ("registerFileUrl" in registration) {
+        await this.registerExtensionPackageFiles(ext, registration as RegisterLocalExtensionFileUrl, registered);
+      }
+    }
+    await Promise.all(this.registeredExtensions.map(({ registration }) => registration.whenReady().catch((error) => {
+      console.warn(`[VscodeRuntime] extension ${registration.id} failed to become ready`, error);
+    })));
+  }
+
+  private async disposeRegisteredExtensions(): Promise<void> {
+    const registrations = this.registeredExtensions.splice(0);
+    await Promise.all(registrations.map(async (registered) => {
+      for (const disposable of registered.fileDisposables.splice(0)) {
+        try {
+          disposable.dispose();
+        } catch {
+          // ignore disposal failures from already-removed extension file entries
+        }
+      }
+      for (const url of registered.objectUrls.splice(0)) {
+        URL.revokeObjectURL(url);
+      }
+      await registered.registration.dispose().catch(() => {});
+    }));
+  }
+
+  private async registerExtensionPackageFiles(
+    ext: LoadedExtension,
+    registration: RegisterLocalExtensionFileUrl,
+    registered: RegisteredServiceExtension,
+  ): Promise<void> {
+    const seen = new Set<string>();
+    const walk = async (dirPath: string, relativeDir: string): Promise<void> => {
+      let entries: FsEntry[];
+      try {
+        entries = await this.bridge.fs.entries(dirPath);
+      } catch (error) {
+        console.warn(`[VscodeRuntime] failed to list extension files for ${registration.id}: ${dirPath}`, error);
+        return;
+      }
+      for (const entry of entries) {
+        if (entry.name === "." || entry.name === "..") continue;
+        const absolutePath = join(dirPath, entry.name);
+        const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+        if (entry.kind === "directory") {
+          await walk(absolutePath, relativePath);
+          continue;
+        }
+        if (entry.kind !== "file" && entry.kind !== "symlink") continue;
+        await this.registerExtensionPackageFile(registration, registered, seen, absolutePath, relativePath, entry.size);
+      }
+    };
+    await walk(ext.location.dirPath, "");
+  }
+
+  private async registerExtensionPackageFile(
+    registration: RegisterLocalExtensionFileUrl,
+    registered: RegisteredServiceExtension,
+    seen: Set<string>,
+    absolutePath: string,
+    relativePath: string,
+    size: number,
+  ): Promise<void> {
+    const normalizedRelativePath = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!normalizedRelativePath || seen.has(normalizedRelativePath)) return;
+    let bytes: Uint8Array;
+    try {
+      bytes = new Uint8Array(await this.bridge.fs.readFile(absolutePath));
+    } catch (error) {
+      console.warn(`[VscodeRuntime] failed to read extension file ${absolutePath}`, error);
+      return;
+    }
+    const mimeType = extensionFileMimeType(normalizedRelativePath);
+    const blobBytes: Uint8Array<ArrayBuffer> =
+      bytes.buffer instanceof ArrayBuffer
+        ? new Uint8Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+        : new Uint8Array(Array.from(bytes));
+    const url = URL.createObjectURL(new Blob([blobBytes], { type: mimeType }));
+    registered.objectUrls.push(url);
+    const registerPath = (path: string) => {
+      if (seen.has(path)) return;
+      try {
+        registered.fileDisposables.push(registration.registerFileUrl(path, url, { mimeType, size: size || bytes.byteLength }));
+        seen.add(path);
+      } catch {
+        // Some VS Code paths normalize to the same extension-file URI. Keeping
+        // the first registration is enough.
+      }
+    };
+    registerPath(normalizedRelativePath);
+    if (normalizedRelativePath.endsWith(".js")) registerPath(normalizedRelativePath.slice(0, -3));
   }
 }
 
 const ExtensionHostClientContext = createContext<ExtensionHostClient | null>(null);
 
 export function ExtensionHostClientProvider({ children }: { children: ReactNode }) {
-  const uiBridge = useBridge();
   const bridgeFactory = useBridgeFactory();
+  const uiBridge = useBridge();
   const [extensionBridge, setExtensionBridge] = useState<Bridge | null>(null);
   const [dataDir, setDataDir] = useState<string | null>(null);
 
@@ -632,96 +611,31 @@ export function ExtensionHostClientProvider({ children }: { children: ReactNode 
     setExtensionBridge(null);
     setDataDir(null);
     void (async () => {
-      const nextBridge = await bridgeFactory({ purpose: "extension-host", workerId: `extension-host-${Date.now().toString(36)}` });
+      const nextBridge = await bridgeFactory({ purpose: "extension-host", workerId: `vscode-runtime-${Date.now().toString(36)}` });
+      const dirs = await readAppDirs(nextBridge);
       if (cancelled) return;
       setExtensionBridge(nextBridge);
-      const dirs = await readAppDirs(nextBridge);
-      if (!cancelled) setDataDir(dirs.dataDir);
+      setDataDir(dirs.dataDir);
     })().catch((error) => {
-      console.error("[ExtensionHostClientProvider] failed to initialize extension bridge", error);
+      void uiBridge.utils.debugLog?.(`[VscodeRuntime] failed to initialize bridge: ${String(error)}`);
+      console.error("[VscodeRuntime] failed to initialize bridge", error);
     });
     return () => {
       cancelled = true;
     };
-  }, [bridgeFactory]);
+  }, [bridgeFactory, uiBridge]);
 
   const client = useMemo(() => {
-    if (!dataDir || !extensionBridge) return null;
+    if (!extensionBridge || !dataDir) return null;
     return new ExtensionHostClient(extensionBridge, dataDir);
   }, [dataDir, extensionBridge]);
 
   useEffect(() => {
-    if (!client || !dataDir || !extensionBridge) return;
-    const store = new ExtensionSettingsStore(extensionBridge, dataDir);
-    let cancelled = false;
-
-    // Register listeners SYNCHRONOUSLY so that any `workspace.getConfiguration`
-    // read from an extension's `activate()` immediately finds a handler. The
-    // store starts with an empty map and is populated once `load()` resolves;
-    // extensions activated before then just see defaults (from manifest
-    // contributions), which is the correct behavior.
-    client.setConfigReadListener((key, section) => {
-      const fullKey = section ? `${section}.${key}` : key;
-      return store.get(fullKey);
-    });
-    client.setConfigWriteListener(async ({ section, key, value, target }) => {
-      await store.write({ section, key, value, target });
-      client.configurationUpdate(section ? `${section}.${key}` : key, value);
-    });
-
-    void (async () => {
-      const snapshot = await store.load();
-      if (cancelled) return;
-      for (const [fullKey, value] of Object.entries(snapshot)) {
-        client.configurationUpdate(fullKey, value);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      client.setConfigReadListener(null);
-      client.setConfigWriteListener(null);
-    };
-  }, [client, dataDir, extensionBridge]);
-
-  useEffect(() => {
-    if (!client || !extensionBridge) return;
-    // Default output → debugLog so extension chatter shows up in the console.
-    const unsubOutput = client.onOutput(({ channel, text, newline }) => {
-      const line = `[${channel}] ${text}${newline ? "" : ""}`;
-      void uiBridge.utils.debugLog?.(line);
-    });
-    const unsubStatus = client.onStatusBar((msg) => {
-      if (msg.text) {
-        void uiBridge.utils.debugLog?.(`[statusbar ${msg.id}] ${msg.text}`);
-      }
-    });
-    client.setMessageShowListener(async (msg) => {
-      const level = msg.level === "error" ? "error" : msg.level === "warn" ? "warn" : "log";
-      console[level](`[ExtensionHost] ${msg.message}`);
-      void uiBridge.utils.debugLog?.(`[ExtensionHost ${msg.level}] ${msg.message}`);
-      return undefined;
-    });
-    client.setCommandRequestListener(async (command, args) => {
-      return handleWorkerCommand(extensionBridge, command, args);
-    });
-    return () => {
-      unsubOutput();
-      unsubStatus();
-      client.setMessageShowListener(null);
-      client.setCommandRequestListener(null);
-    };
-  }, [client, extensionBridge, uiBridge]);
-
-  useEffect(() => {
     if (!client) return;
-    return () => {
-      client.dispose();
-    };
+    return () => client.dispose();
   }, [client]);
 
   if (!client) return null;
-
   return createElement(ExtensionHostClientContext.Provider, { value: client }, children);
 }
 

@@ -1,4 +1,5 @@
 import { useBridge } from "@/features/bridge/useBridge";
+import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { findColorTheme, findIconTheme } from "@/features/extensions/extensions";
 import type { LoadedExtension } from "@/features/extensions/types";
 import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
@@ -35,6 +36,7 @@ export function useExtensionThemeRuntime({
   setExtensionFssLayers,
 }: ThemeRuntimeParams) {
   const bridge = useBridge();
+  const extensionHost = useExtensionHostClient();
   const activeIconThemeRef = useLatestRef(activeIconTheme);
   const activeColorThemeRef = useLatestRef(activeColorTheme);
   const systemThemeRef = useLatestRef(systemTheme);
@@ -98,6 +100,7 @@ export function useExtensionThemeRuntime({
       if (!themeKey) {
         getStyleHostElement().dataset.theme = systemThemeRef.current;
         setIconThemeKindRef.current(systemThemeRef.current);
+        extensionHost.configurationUpdate("workbench.colorTheme", systemThemeRef.current === "light" ? "Default Light Modern" : "Default Dark Modern");
         clearColorTheme();
         return;
       }
@@ -105,12 +108,14 @@ export function useExtensionThemeRuntime({
       if (!match) {
         getStyleHostElement().dataset.theme = systemThemeRef.current;
         setIconThemeKindRef.current(systemThemeRef.current);
+        extensionHost.configurationUpdate("workbench.colorTheme", systemThemeRef.current === "light" ? "Default Light Modern" : "Default Dark Modern");
         clearColorTheme();
         return;
       }
       const kind = uiThemeToKind(match.theme.uiTheme);
       getStyleHostElement().dataset.theme = kind;
       setIconThemeKindRef.current(kind);
+      extensionHost.configurationUpdate("workbench.colorTheme", match.theme.id || match.theme.label);
       try {
         await loadAndApplyColorTheme(bridge, match.theme.jsonPath, match.theme.uiTheme);
       } catch (error) {
@@ -118,6 +123,7 @@ export function useExtensionThemeRuntime({
         console.warn("[ExtHost] Failed to load color theme:", themeKey, error);
         getStyleHostElement().dataset.theme = systemThemeRef.current;
         setIconThemeKindRef.current(systemThemeRef.current);
+        extensionHost.configurationUpdate("workbench.colorTheme", systemThemeRef.current === "light" ? "Default Light Modern" : "Default Dark Modern");
         clearColorTheme();
       }
     };
@@ -130,6 +136,7 @@ export function useExtensionThemeRuntime({
     bridge,
     colorThemeApplyGenerationRef,
     ensureActiveIconThemeFssLoaded,
+    extensionHost,
     iconThemeApplyGenerationRef,
     latestExtensionsRef,
     refreshAllRef,
@@ -172,6 +179,7 @@ export function useExtensionThemeRuntime({
     if (!activeColorTheme) {
       getStyleHostElement().dataset.theme = systemTheme;
       setIconThemeKindRef.current(systemTheme);
+      extensionHost.configurationUpdate("workbench.colorTheme", systemTheme === "light" ? "Default Light Modern" : "Default Dark Modern");
       clearColorTheme();
       return;
     }
@@ -179,19 +187,22 @@ export function useExtensionThemeRuntime({
     if (!match) {
       getStyleHostElement().dataset.theme = systemTheme;
       setIconThemeKindRef.current(systemTheme);
+      extensionHost.configurationUpdate("workbench.colorTheme", systemTheme === "light" ? "Default Light Modern" : "Default Dark Modern");
       clearColorTheme();
       return;
     }
     const kind = uiThemeToKind(match.theme.uiTheme);
     getStyleHostElement().dataset.theme = kind;
     setIconThemeKindRef.current(kind);
+    extensionHost.configurationUpdate("workbench.colorTheme", match.theme.id || match.theme.label);
     loadAndApplyColorTheme(bridge, match.theme.jsonPath, match.theme.uiTheme).catch(() => {
       if (generation !== colorThemeApplyGenerationRef.current) return;
       getStyleHostElement().dataset.theme = systemTheme;
       setIconThemeKindRef.current(systemTheme);
+      extensionHost.configurationUpdate("workbench.colorTheme", systemTheme === "light" ? "Default Light Modern" : "Default Dark Modern");
       clearColorTheme();
     });
-  }, [activeColorTheme, bridge, colorThemeApplyGenerationRef, latestExtensionsRef, setIconThemeKindRef, systemTheme, themesReady]);
+  }, [activeColorTheme, bridge, colorThemeApplyGenerationRef, extensionHost, latestExtensionsRef, setIconThemeKindRef, systemTheme, themesReady]);
 
   return { applyInitialThemes };
 }

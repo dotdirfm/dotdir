@@ -5,6 +5,7 @@ import dts from "vite-plugin-dts";
 export default defineConfig({
   plugins: [dts()],
   build: {
+    assetsInlineLimit: 0,
     // Wipe `dist/` between builds — otherwise removed imports (e.g. dropped
     // Monaco language workers) leave stale sibling chunks like
     // `dist/assets/ts.worker-*.js` hanging around forever.
