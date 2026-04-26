@@ -63,7 +63,8 @@ export type ConflictResolution =
   | { type: "skipAll" }
   | { type: "cancel" };
 
-export interface CopyProgress {
+export interface EventKindProgress {
+  kind: "progress";
   bytesCopied: number;
   bytesTotal: number;
   filesDone: number;
@@ -71,28 +72,30 @@ export interface CopyProgress {
   currentFile: string;
 }
 
+export interface EventKindConflict {
+  kind: "conflict";
+  src: string;
+  dest: string;
+  srcSize: number;
+  srcMtimeMs: number;
+  destSize: number;
+  destMtimeMs: number;
+}
+
+export interface EventKindDone {
+  kind: "done";
+  filesDone: number;
+  bytesCopied: number;
+}
+
+export interface EventKindError {
+  kind: "error";
+  message: string;
+}
+
 export type CopyProgressEvent = {
   copyId: number;
-  event:
-    | {
-        kind: "progress";
-        bytesCopied: number;
-        bytesTotal: number;
-        filesDone: number;
-        filesTotal: number;
-        currentFile: string;
-      }
-    | {
-        kind: "conflict";
-        src: string;
-        dest: string;
-        srcSize: number;
-        srcMtimeMs: number;
-        destSize: number;
-        destMtimeMs: number;
-      }
-    | { kind: "done"; filesDone: number; bytesCopied: number }
-    | { kind: "error"; message: string };
+  event: EventKindProgress | EventKindConflict | EventKindDone | EventKindError;
 };
 
 export interface MoveOptions {
@@ -101,16 +104,12 @@ export interface MoveOptions {
 
 export type MoveProgressEvent = {
   moveId: number;
-  event:
-    | { kind: "progress"; bytesCopied: number; bytesTotal: number; filesDone: number; filesTotal: number; currentFile: string }
-    | { kind: "conflict"; src: string; dest: string; srcSize: number; srcMtimeMs: number; destSize: number; destMtimeMs: number }
-    | { kind: "done"; filesDone: number; bytesCopied: number }
-    | { kind: "error"; message: string };
+  event: EventKindProgress | EventKindConflict | EventKindDone | EventKindError;
 };
 
 export type DeleteProgressEvent = {
   deleteId: number;
-  event: { kind: "progress"; filesDone: number; currentFile: string } | { kind: "done"; filesDone: number } | { kind: "error"; message: string };
+  event: { kind: "progress"; filesDone: number; currentFile: string } | { kind: "done"; filesDone: number } | EventKindError;
 };
 
 export interface FileSearchRequest {

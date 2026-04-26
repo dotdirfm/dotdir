@@ -6,7 +6,7 @@ import { AppRuntimeContext, type AppRuntimeContextValue } from "./appRuntimeCont
 
 export function AppRuntimeProvider({ children }: { children: ReactNode }) {
   const uiState = useProvideUiState();
-  const terminal = useProvideTerminal();
+  const terminal = useProvideTerminal(uiState);
   const commandLine = useProvideCommandLine(terminal);
 
   const value = useMemo<AppRuntimeContextValue>(

@@ -1,4 +1,3 @@
-import { useAppRuntimeContext } from "@/appRuntimeContext";
 import { useDialog } from "@/dialogs/dialogContext";
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
@@ -8,13 +7,16 @@ import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { useUserSettings } from "@/features/settings/useUserSettings";
 import { normalizeTerminalPath } from "@/features/terminal/path";
 import type { TerminalContextValue } from "@/features/terminal/useTerminal";
+import { useTerminal } from "@/features/terminal/useTerminal";
 import { normalizePath, resolveDotSegments } from "@/utils/path";
 import { useAtomValue } from "jotai";
 import {
-  useCallback,
-  useMemo,
-  useRef,
-  type ReactNode,
+    createContext,
+    useCallback,
+    useContext,
+    useMemo,
+    useRef,
+    type ReactNode,
 } from "react";
 
 export type CommandLineContextValue = {
@@ -133,12 +135,17 @@ export function useProvideCommandLine(terminal: Pick<TerminalContextValue, "acti
   );
 }
 
+const CommandLineContext = createContext<CommandLineContextValue | null>(null);
+
 export function CommandLineProvider({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  const terminal = useTerminal();
+  const value = useProvideCommandLine(terminal);
+  return <CommandLineContext.Provider value={value}>{children}</CommandLineContext.Provider>;
 }
 
 export function useCommandLine() {
-  const { commandLine } = useAppRuntimeContext();
+  const commandLine = useContext(CommandLineContext);
+  if (!commandLine) throw new Error("CommandLineProvider not mounted");
   return {
     execute: commandLine.execute,
     paste: commandLine.paste,
@@ -146,7 +153,8 @@ export function useCommandLine() {
 }
 
 export function useCommandLineRegistration() {
-  const { commandLine } = useAppRuntimeContext();
+  const commandLine = useContext(CommandLineContext);
+  if (!commandLine) throw new Error("CommandLineProvider not mounted");
   return {
     setPasteHandler: commandLine.setPasteHandler,
   };

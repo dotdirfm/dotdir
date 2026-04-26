@@ -2,6 +2,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DialogProvider } from "@/dialogs/dialogContext";
 import type { Bridge } from "@/features/bridge";
 import { BridgeProvider, useBridge } from "@/features/bridge/useBridge";
+import { CommandLineProvider } from "@/features/command-line/useCommandLine";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { ExtensionHostClientProvider } from "@/features/extensions/extensionHostClient";
@@ -9,32 +10,33 @@ import { ExtensionHostWorkspaceSync } from "@/features/extensions/extensionHostW
 import { FssProvider } from "@/features/fss/fss";
 import { PanelControllersProvider } from "@/features/panels/panelControllers";
 import { UserSettingsProvider } from "@/features/settings/useUserSettings";
+import { TerminalProvider } from "@/features/terminal/useTerminal";
+import { UiStateProvider } from "@/features/ui-state/uiState";
 import { Provider as JotaiProvider } from "jotai";
 import { forwardRef, Suspense, useEffect, useImperativeHandle, useRef } from "react";
 import { App, type AppHandle } from "./app";
-import { AppRuntimeProvider } from "./appRuntime";
 import { AppServicesProvider } from "./appServices";
 import { defaultResolveVfsUrl, VfsUrlResolverProvider, type VfsUrlKind, type VfsUrlResolver } from "./features/file-system/vfs";
 import baseStyles from "./styles/base.module.css";
 
 export type {
-  Bridge,
-  ConflictResolution,
-  CopyOptions,
-  CopyProgressEvent,
-  CreateWindowOptions,
-  DeleteProgressEvent,
-  ExtensionInstallProgressEvent,
-  ExtensionInstallRequest,
-  FileSearchMatch,
-  FileSearchProgressEvent,
-  FileSearchRequest,
-  FsChangeEvent,
-  FsChangeType,
-  FsEntry,
-  MoveOptions,
-  MoveProgressEvent,
-  PtyLaunchInfo
+    Bridge,
+    ConflictResolution,
+    CopyOptions,
+    CopyProgressEvent,
+    CreateWindowOptions,
+    DeleteProgressEvent,
+    ExtensionInstallProgressEvent,
+    ExtensionInstallRequest,
+    FileSearchMatch,
+    FileSearchProgressEvent,
+    FileSearchRequest,
+    FsChangeEvent,
+    FsChangeType,
+    FsEntry,
+    MoveOptions,
+    MoveProgressEvent,
+    PtyLaunchInfo
 } from "@/features/bridge";
 export { extensionIframeBootstrapSource } from "./features/extensions/iframeBootstrap";
 export { basename, dirname, join, normalizePath } from "./utils/path";
@@ -71,9 +73,13 @@ function DotDirContent({ widget, appRef }: { widget: React.ReactNode; appRef: Re
       <Suspense fallback={<div className={baseStyles["loading"]}>Loading...</div>}>
         <DialogProvider>
           <UserSettingsProvider>
-            <AppRuntimeProvider>
-              <App ref={appRef} widget={widget} />
-            </AppRuntimeProvider>
+            <UiStateProvider>
+              <TerminalProvider>
+                <CommandLineProvider>
+                  <App ref={appRef} widget={widget} />
+                </CommandLineProvider>
+              </TerminalProvider>
+            </UiStateProvider>
           </UserSettingsProvider>
         </DialogProvider>
       </Suspense>

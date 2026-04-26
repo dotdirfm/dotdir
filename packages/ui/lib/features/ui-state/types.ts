@@ -15,11 +15,21 @@ export interface WindowGeometryState {
   isMaximized?: boolean;
 }
 
+export interface PersistedTerminalSession {
+  profileId: string;
+}
+
+export interface PersistedTerminalState {
+  activeSessionId: string | null;
+  sessions: PersistedTerminalSession[];
+}
+
 /** Per-window UI state persisted across launches. Not watched — read once on startup. */
 export interface DotDirWindowLayout {
   leftPanel?: PanelPersistedState;
   rightPanel?: PanelPersistedState;
   activePanel?: "left" | "right";
+  terminalSessions?: PersistedTerminalState;
 }
 
 export interface DotDirUiLayoutIndex {
