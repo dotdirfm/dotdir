@@ -1,5 +1,5 @@
 import type { ConflictResolution, CopyOptions, FileSearchMatch, FileSearchRequest, MoveOptions } from "@/features/bridge";
-import { useCommandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import { type EditorProps, type ViewerProps } from "@/features/extensions/extensionApi";
 import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
 import { ExtensionsPanel } from "@/features/extensions/ExtensionsPanel/ExtensionsPanel";

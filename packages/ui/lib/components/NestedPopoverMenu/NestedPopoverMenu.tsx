@@ -9,8 +9,8 @@ import {
   CURSOR_PAGE_UP,
   CURSOR_RIGHT,
   CURSOR_UP,
-} from "@/features/commands/commandIds";
-import { useCommandRegistry } from "@/features/commands/commands";
+} from "@dotdirfm/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import { DropdownSurface } from "@/components/DropdownSurface/DropdownSurface";
 import { useFocusContext, useManagedFocusLayer } from "@/focusContext";
 import { cx } from "@/utils/cssModules";

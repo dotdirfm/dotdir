@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { CommandRegistry } from "../lib/features/commands/commands";
-import { runCommandSequence } from "../lib/features/commands/runCommands";
+import { CommandRegistry } from "@dotdirfm/commands";
+import { runCommandSequence } from "@dotdirfm/commands";
 
 function createKeyboardEvent({
   key,

@@ -6,7 +6,7 @@ import {
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import type { TerminalProfile } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
-import { useCommandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { normalizeTerminalPath } from "@/features/terminal/path";
 import { useTerminalState, type TerminalState } from "@/features/terminal/useTerminalState";

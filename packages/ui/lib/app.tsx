@@ -5,7 +5,7 @@ import { PanelGroup } from "@/components/PanelGroup/PanelGroup";
 import { DialogHolder, useDialog } from "@/dialogs/dialogContext";
 import { useBridge } from "@/features/bridge/useBridge";
 import { CommandLine } from "@/features/command-line/CommandLine/CommandLine";
-import { useCommandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import { useBuiltInCommands } from "@/features/commands/useBuiltInCommands";
 import { useCommandRouting } from "@/features/commands/useCommandRouting";
 import { useExtensionRuntime } from "@/features/extensions/useExtensionRuntime";

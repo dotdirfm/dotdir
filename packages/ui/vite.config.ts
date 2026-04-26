@@ -18,6 +18,7 @@ export default defineConfig({
     },
     rolldownOptions: {
       external: [
+        "@dotdirfm/commands",
         "react",
         "react/jsx-runtime",
         "react-dom",

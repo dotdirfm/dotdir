@@ -1,4 +1,4 @@
-import type { Keybinding, KeybindingLayer } from "@/features/commands/commands";
+import type { Keybinding, KeybindingLayer } from "@dotdirfm/commands";
 import { MONACO_QUICK_COMMAND_ACTION } from "@/features/extensions/builtins/monacoCommandBridge";
 import {
   ACCEPT,
@@ -70,7 +70,7 @@ import {
   SWITCH_PANEL,
   TOGGLE_HIDDEN_FILES,
   TOGGLE_PANELS,
-} from "./commandIds";
+} from "@dotdirfm/commands";
 
 export type Disposable = () => void;
 

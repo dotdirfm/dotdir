@@ -1,6 +1,6 @@
 import type { ActionQueue } from "@/components/FileList/actionQueue";
 import { useBridge } from "@/features/bridge/useBridge";
-import { useCommandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import {
   CURSOR_DOWN,
   CURSOR_END,
@@ -32,7 +32,7 @@ import {
   SELECT_PAGE_UP,
   SELECT_RIGHT,
   SELECT_UP,
-} from "@/features/commands/commandIds";
+} from "@dotdirfm/commands";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { dirname } from "@/utils/path";
 import { useEffect, useMemo, useRef, type RefObject } from "react";

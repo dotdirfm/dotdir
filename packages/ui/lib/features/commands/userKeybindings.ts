@@ -9,7 +9,7 @@ import { useBridge } from "@/features/bridge/useBridge";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/features/file-system/jsoncFileWatcher";
 import { join } from "@/utils/path";
 import { useEffect } from "react";
-import { type Keybinding, useCommandRegistry } from "./commands";
+import { type Keybinding, useCommandRegistry } from "@dotdirfm/commands";
 
 function validateKeybindings(parsed: unknown): Keybinding[] | null {
   if (!Array.isArray(parsed)) {

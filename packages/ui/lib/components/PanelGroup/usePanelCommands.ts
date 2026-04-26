@@ -1,5 +1,5 @@
 import type { PanelSide } from "@/entities/panel/model/types";
-import { useCommandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import {
   CLOSE_TAB,
   EDIT_IN_OPPOSITE_PANEL,
@@ -9,7 +9,7 @@ import {
   OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_CURRENT_TAB,
   OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_NEW_TAB,
   PREVIEW_IN_OPPOSITE_PANEL,
-} from "@/features/commands/commandIds";
+} from "@dotdirfm/commands";
 import { OPPOSITE_PANEL } from "@/entities/panel/model/panelSide";
 import { createFilelistTab, createPreviewTab } from "@/entities/tab/model/tabsAtoms";
 import type { PanelTab } from "@/entities/tab/model/types";

@@ -1,8 +1,8 @@
 import { ActionQueue } from "@/components/FileList/actionQueue";
 import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
-import { SHELL_EXECUTE, VIEW_FILE } from "@/features/commands/commandIds";
-import { useCommandRegistry } from "@/features/commands/commands";
+import { SHELL_EXECUTE, VIEW_FILE } from "@dotdirfm/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import { useFileStyleResolver } from "@/features/fss/fileStyleResolver";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { useMediaQuery } from "@/hooks/useMediaQuery";

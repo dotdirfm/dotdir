@@ -3,7 +3,7 @@ import { DialogProvider } from "@/dialogs/dialogContext";
 import type { Bridge } from "@/features/bridge";
 import { BridgeProvider, useBridge } from "@/features/bridge/useBridge";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
-import { useCommandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import { ExtensionHostClientProvider } from "@/features/extensions/extensionHostClient";
 import { ExtensionHostWorkspaceSync } from "@/features/extensions/extensionHostWorkspaceSync";
 import { FssProvider } from "@/features/fss/fss";

@@ -1,5 +1,5 @@
-import { useCommandRegistry } from "@/features/commands/commands";
-import { DOTDIR_EXIT, SHOW_COMMAND_PALETTE, SHOW_EXTENSIONS, TOGGLE_HIDDEN_FILES, TOGGLE_PANELS } from "@/features/commands/commandIds";
+import { useCommandRegistry } from "@dotdirfm/commands";
+import { DOTDIR_EXIT, SHOW_COMMAND_PALETTE, SHOW_EXTENSIONS, TOGGLE_HIDDEN_FILES, TOGGLE_PANELS } from "@dotdirfm/commands";
 import { useFocusContext } from "@/focusContext";
 import styles from "@/styles/terminal.module.css";
 import { FitAddon } from "@xterm/addon-fit";

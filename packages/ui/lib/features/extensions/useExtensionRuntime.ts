@@ -1,7 +1,7 @@
 import { systemThemeAtom, themesReadyAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
-import { useCommandRegistry } from "@/features/commands/commands";
-import { DOTDIR_RESTART_EXTENSION_HOST } from "@/features/commands/commandIds";
+import { useCommandRegistry } from "@dotdirfm/commands";
+import { DOTDIR_RESTART_EXTENSION_HOST } from "@dotdirfm/commands";
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { type InstallRequest } from "@/features/extensions/runtime/shared";

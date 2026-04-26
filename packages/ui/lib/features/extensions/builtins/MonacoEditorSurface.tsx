@@ -15,7 +15,7 @@ import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker.js?worker&in
 import monacoCssUrl from "monaco-editor/min/vs/editor/editor.main.css?url";
 import onigWasmUrl from "vscode-oniguruma/release/onig.wasm?url";
 import { useEffect, useRef } from "react";
-import { useCommandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
 import { useExtensionHostClient, type ExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { attachMonacoBridges, type AttachedBridges } from "@/features/extensions/monacoBridge";

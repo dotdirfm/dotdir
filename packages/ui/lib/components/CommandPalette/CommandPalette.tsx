@@ -9,13 +9,13 @@ import {
   CURSOR_PAGE_DOWN,
   CURSOR_PAGE_UP,
   CURSOR_UP,
-} from "@/features/commands/commandIds";
+} from "@dotdirfm/commands";
 import {
   formatKeybinding,
   useCommandRegistry,
   type Command,
   type Keybinding,
-} from "@/features/commands/commands";
+} from "@dotdirfm/commands";
 import { useFocusContext } from "@/focusContext";
 import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
 import { useAtom } from "jotai";

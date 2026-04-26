@@ -1,4 +1,4 @@
-import type { CommandContribution, CommandRegistry, Keybinding } from "@/features/commands/commands";
+import type { CommandContribution, CommandRegistry, Keybinding } from "@dotdirfm/commands";
 import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 
 export type MonacoCommandContribution = {

@@ -1,4 +1,4 @@
-import { useCommandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import { useFocusContext } from "@/focusContext";
 import { useEffect, type RefObject } from "react";
 

@@ -1,4 +1,4 @@
-import { type Command, type Keybinding, useCommandRegistry } from "@/features/commands/commands";
+import { type Command, type Keybinding, useCommandRegistry } from "@dotdirfm/commands";
 import { useFocusContext } from "@/focusContext";
 import { cx } from "@/utils/cssModules";
 import { useCallback, useEffect, useState } from "react";

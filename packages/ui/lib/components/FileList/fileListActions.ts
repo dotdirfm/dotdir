@@ -1,7 +1,7 @@
 import type { ActionQueue } from "@/components/FileList/actionQueue";
 import { useCommandLine } from "@/features/command-line/useCommandLine";
-import { useCommandRegistry } from "@/features/commands/commands";
-import { EDIT_FILE, SHELL_EXECUTE, VIEW_FILE } from "@/features/commands/commandIds";
+import { useCommandRegistry } from "@dotdirfm/commands";
+import { EDIT_FILE, SHELL_EXECUTE, VIEW_FILE } from "@dotdirfm/commands";
 import { useFileOperationHandlers } from "@/features/file-ops/fileOperationHandlers";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import type { FsNode } from "fss-lang";

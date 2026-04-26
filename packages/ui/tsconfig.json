@@ -22,6 +22,7 @@
 
     "paths": {
       "@/*": ["./lib/*"],
+      "@dotdirfm/commands": ["../commands/dist/index.d.mts"],
       "@dotdirfm/extension-api": ["../extension-api/dist/index.d.ts"]
     },
   },

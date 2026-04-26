@@ -1,6 +1,6 @@
 import type { TerminalProfile } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
-import { useCommandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import { registerExtensionKeybindings } from "@/features/commands/registerKeybindings";
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
 import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";

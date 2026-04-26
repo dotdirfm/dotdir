@@ -14,12 +14,12 @@ import {
 } from "@/entities/tab/model/tabsAtoms";
 import type { PanelTab } from "@/entities/tab/model/types";
 import { useBridge } from "@/features/bridge/useBridge";
-import { useCommandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import {
   DOTDIR_OPEN_LEFT_PANEL_MENU,
   DOTDIR_OPEN_RIGHT_PANEL_MENU,
   LIST_OPEN,
-} from "@/features/commands/commandIds";
+} from "@dotdirfm/commands";
 import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { type FileListPanelController } from "@/features/panels/useFileListPanel";

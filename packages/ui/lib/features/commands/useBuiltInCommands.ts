@@ -66,10 +66,10 @@ import {
   TOGGLE_HIDDEN_FILES,
   TOGGLE_PANELS,
   VIEW_FILE,
-} from "@/features/commands/commandIds";
-import { useCommandRegistry } from "@/features/commands/commands";
+} from "@dotdirfm/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
-import { runCommandSequence, type RunCommandsArgs } from "@/features/commands/runCommands";
+import { runCommandSequence, type RunCommandsArgs } from "@dotdirfm/commands";
 import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { DOTDIR_MONACO_EXECUTE_ACTION } from "@/features/extensions/builtins/monacoCommandBridge";

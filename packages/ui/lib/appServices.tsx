@@ -1,4 +1,4 @@
-import { CommandRegistryProvider } from "@/features/commands/commands";
+import { CommandRegistryProvider } from "@dotdirfm/commands";
 import { FileSystemWatchRegistryProvider } from "@/features/file-system/fs";
 import { FocusProvider } from "@/focusContext";
 import { ViewerEditorRegistryProvider } from "@/viewerEditorRegistry";

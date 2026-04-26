@@ -24,7 +24,7 @@
   "scripts": {
     "dev": "vite",
     "watch": "vite build --watch",
-    "build": "pnpm --filter fss-lang build && pnpm --filter @dotdirfm/extension-api build && tsc && vite build",
+    "build": "pnpm --filter @dotdirfm/commands build && pnpm --filter fss-lang build && pnpm --filter @dotdirfm/extension-api build && tsc && vite build",
     "lint": "eslint lib vite.config.ts",
     "lint:fix": "eslint lib vite.config.ts --fix",
     "fmt": "eslint lib vite.config.ts --fix",
@@ -56,6 +56,7 @@
     "react": "^19.0.0"
   },
   "dependencies": {
+    "@dotdirfm/commands": "workspace:*",
     "@dotdirfm/extension-api": "workspace:*",
     "@tanstack/react-virtual": "^3.13.23",
     "@xterm/addon-fit": "^0.11.0",

@@ -6,7 +6,7 @@
 
 import type { Bridge } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
-import { useCommandRegistry } from "@/features/commands/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { ColorThemeData, DotDirCommandsApi, DotDirGlobalApi, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
@@ -301,6 +301,10 @@ export function ExtensionContainer(containerProps: ContainerProps) {
     return <BuiltInExtensionContainer {...containerProps} />;
   }
 
+  return <IframeExtensionContainer {...containerProps} />;
+}
+
+function IframeExtensionContainer(containerProps: ContainerProps) {
   const { extensionDirPath, entry, kind, props, onClose, className, style, active } = containerProps;
 
   const bridge = useBridge();

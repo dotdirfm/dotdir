@@ -1418,3 +1418,4 @@ self.onmessage = (e: MessageEvent) => {
 // namespace as well for convenience.
 (self as unknown as { vscode?: unknown }).vscode = vscodeNs;
 void vscodeWorkspace;
+

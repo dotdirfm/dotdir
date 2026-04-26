@@ -21,8 +21,8 @@ import {
     SELECT_RIGHT,
     SELECT_WORD_LEFT,
     SELECT_WORD_RIGHT,
-} from "@/features/commands/commandIds";
-import { useCommandRegistry } from "@/features/commands/commands";
+} from "@dotdirfm/commands";
+import { useCommandRegistry } from "@dotdirfm/commands";
 import { registerCommandLineKeybindings } from "@/features/commands/registerKeybindings";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import terminalStyles from "@/styles/terminal.module.css";

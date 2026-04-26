@@ -82,8 +82,8 @@ import {
     TOGGLE_HIDDEN_FILES,
     TOGGLE_PANELS,
     VIEW_FILE,
-} from "./commandIds";
-import type { CommandContribution } from "./commands";
+} from "@dotdirfm/commands";
+import type { CommandContribution } from "@dotdirfm/commands";
 
 export const builtInCommandContributions: CommandContribution[] = [
   // ── View ──────────────────────────────────────────────────────────────────
