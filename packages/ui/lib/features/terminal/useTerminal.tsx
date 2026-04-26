@@ -1,11 +1,11 @@
 import {
   panelsVisibleAtom,
-  terminalFocusRequestKeyAtom,
 } from "@/atoms";
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import type { TerminalProfile } from "@/features/bridge";
 import { useBridge } from "@/features/bridge/useBridge";
 import { useCommandRegistry } from "@/features/commands/commands";
+import { TERMINAL_FOCUS } from "@/features/commands/commandIds";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { formatHiddenCd, normalizeTerminalPath } from "@/features/terminal/path";
 import { terminalActiveSessionIdAtom, terminalSessionsAtom } from "@/features/terminal/terminalAtoms";
@@ -14,7 +14,7 @@ import type { ManagedTerminalSession } from "@/features/terminal/types";
 import { useUiState } from "@/features/ui-state/uiState";
 import { useFocusContext } from "@/focusContext";
 import { normalizePath } from "@/utils/path";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import {
   createContext,
   useCallback,
@@ -77,7 +77,6 @@ function useProvideTerminal(): TerminalContextValue {
   const [profilesLoaded, setProfilesLoaded] = useState(false);
 
   const [panelsVisible, setPanelsVisible] = useAtom(panelsVisibleAtom);
-  const setTerminalFocusRequestKey = useSetAtom(terminalFocusRequestKeyAtom);
   const [sessions, setSessions] = useAtom(terminalSessionsAtom);
   const [activeSessionId, setActiveSessionId] = useAtom(terminalActiveSessionIdAtom);
 
@@ -358,7 +357,7 @@ function useProvideTerminal(): TerminalContextValue {
       restorePanelsAfterCommandSessionIdRef.current = shouldRestorePanels ? activeSession.id : null;
       setPanelsVisible(false);
       focusContext.request("terminal");
-      setTerminalFocusRequestKey((k) => k + 1);
+      void commandRegistry.executeCommand(TERMINAL_FOCUS);
       try {
         await executeCommandInCwd(cmd, cwd);
       } catch (error) {
@@ -369,7 +368,7 @@ function useProvideTerminal(): TerminalContextValue {
         throw error;
       }
     },
-    [activeSession, executeCommandInCwd, focusContext, setPanelsVisible, setTerminalFocusRequestKey],
+    [activeSession, executeCommandInCwd, focusContext, setPanelsVisible, commandRegistry],
   );
 
   return useMemo(

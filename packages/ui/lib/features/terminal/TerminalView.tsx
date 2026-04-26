@@ -1,5 +1,5 @@
 import { useCommandRegistry } from "@/features/commands/commands";
-import { DOTDIR_EXIT, SHOW_COMMAND_PALETTE, SHOW_EXTENSIONS, TOGGLE_HIDDEN_FILES, TOGGLE_PANELS } from "@/features/commands/commandIds";
+import { DOTDIR_EXIT, SHOW_COMMAND_PALETTE, SHOW_EXTENSIONS, TERMINAL_FOCUS, TOGGLE_HIDDEN_FILES, TOGGLE_PANELS } from "@/features/commands/commandIds";
 import { useFocusContext } from "@/focusContext";
 import styles from "@/styles/terminal.module.css";
 import { FitAddon } from "@xterm/addon-fit";
@@ -12,7 +12,6 @@ import type { TerminalSession } from "./TerminalSession";
 interface TerminalViewProps {
   session: TerminalSession;
   expanded?: boolean;
-  focusRequestKey?: number;
 }
 
 const TERMINAL_ROUTED_COMMANDS = [
@@ -32,7 +31,7 @@ function resolveTerminalTheme() {
   };
 }
 
-export function TerminalView({ session, expanded = false, focusRequestKey = 0 }: TerminalViewProps) {
+export function TerminalView({ session, expanded = false }: TerminalViewProps) {
   const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -233,9 +232,15 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
   }, [commandRegistry, focusContext, session]);
 
   useEffect(() => {
+    return commandRegistry.registerCommand(TERMINAL_FOCUS, () => {
+      focusContext.request("terminal");
+    });
+  }, [commandRegistry, focusContext]);
+
+  useEffect(() => {
     if (!expanded) return;
     focusContext.request("terminal");
-  }, [expanded, focusContext, focusRequestKey]);
+  }, [expanded, focusContext]);
 
   useEffect(() => {
     const term = termRef.current;

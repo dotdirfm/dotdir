@@ -1,4 +1,4 @@
-import { panelsVisibleAtom, terminalFocusRequestKeyAtom } from "@/atoms";
+import { panelsVisibleAtom } from "@/atoms";
 import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import { TerminalView } from "@/features/terminal/TerminalView";
 import { useTerminal } from "@/features/terminal/useTerminal";
@@ -74,13 +74,12 @@ export function TerminalToolbar() {
 export function Terminal() {
   const { activeSession } = useTerminal();
   const panelsVisible = useAtomValue(panelsVisibleAtom);
-  const focusRequestKey = useAtomValue(terminalFocusRequestKeyAtom);
 
   return (
     <div className={styles["terminal-panel"]}>
       <div className={styles["terminal-body"]}>
         {activeSession ? (
-          <TerminalView key={activeSession.id} session={activeSession.session} expanded={!panelsVisible} focusRequestKey={focusRequestKey} />
+          <TerminalView key={activeSession.id} session={activeSession.session} expanded={!panelsVisible} />
         ) : (
           <div className={styles["terminal-loading"]}>Loading terminal...</div>
         )}

@@ -1,4 +1,4 @@
-import { commandPaletteOpenAtom, panelsVisibleAtom, terminalFocusRequestKeyAtom } from "@/atoms";
+import { commandPaletteOpenAtom, panelsVisibleAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import {
   activePanelSideAtom,
@@ -63,6 +63,7 @@ import {
   SHOW_SETTINGS,
   SHOW_FIND_FILES,
   SWITCH_PANEL,
+  TERMINAL_FOCUS,
   TOGGLE_HIDDEN_FILES,
   TOGGLE_PANELS,
   VIEW_FILE,
@@ -114,8 +115,6 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   languageRegistryRef.current = languageRegistry;
 
   const { paste: pasteToCommandLine } = useCommandLine();
-  const pasteToCommandLineRef = useRef(pasteToCommandLine);
-  pasteToCommandLineRef.current = pasteToCommandLine;
 
   const { runCommand, activeCwd, activeSession } = useTerminal();
   const runCommandRef = useRef(runCommand);
@@ -161,7 +160,6 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const leftActiveTab = useAtomValue(leftActiveTabAtom);
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
   const setPanelsVisible = useSetAtom(panelsVisibleAtom);
-  const setTerminalFocusRequestKey = useSetAtom(terminalFocusRequestKeyAtom);
   const setCommandPaletteOpen = useSetAtom(commandPaletteOpenAtom);
 
   const leftActiveTabRef = useRef(leftActiveTab);
@@ -282,7 +280,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
           if (next) {
             focusContextRef.current.request("panel");
           } else {
-            setTerminalFocusRequestKey((k) => k + 1);
+            void commandRegistry.executeCommand(TERMINAL_FOCUS);
           }
           return next;
         }),
@@ -610,7 +608,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         const path = leftActiveTabRef.current?.type === "filelist" ? leftActiveTabRef.current.path : "";
         if (!path) return;
         const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
-        pasteToCommandLineRef.current(arg);
+        pasteToCommandLine(arg);
       }),
     );
     disposables.push(
@@ -618,7 +616,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
         const path = rightActiveTabRef.current?.type === "filelist" ? rightActiveTabRef.current.path : "";
         if (!path) return;
         const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
-        pasteToCommandLineRef.current(arg);
+        pasteToCommandLine(arg);
       }),
     );
 
@@ -634,5 +632,5 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // the latest state through refs above, so dependency churn here only causes
     // unnecessary unregister/register storms.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [commandRegistry]);
+  }, [pasteToCommandLine, commandRegistry]);
 }
