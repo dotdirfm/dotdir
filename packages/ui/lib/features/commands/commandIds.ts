@@ -87,3 +87,4 @@ export const COMMANDLINE_EXECUTE = "commandLine.execute";
 export const COMMANDLINE_COPY = "commandLine.copy";
 export const COMMANDLINE_CUT = "commandLine.cut";
 export const COMMANDLINE_PASTE = "commandLine.paste";
+export const COMMANDLINE_INSERT_TEXT = "commandLine.insertText";

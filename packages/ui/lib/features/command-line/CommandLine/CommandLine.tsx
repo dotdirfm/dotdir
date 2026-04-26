@@ -1,26 +1,27 @@
 import { panelsVisibleAtom } from "@/atoms";
-import { useCommandLine, useCommandLineRegistration } from "@/features/command-line/useCommandLine";
+import { useCommandLine } from "@/features/command-line/useCommandLine";
 import {
-    CLEAR,
-    COMMANDLINE_COPY,
-    COMMANDLINE_CUT,
-    COMMANDLINE_EXECUTE,
-    COMMANDLINE_PASTE,
-    CURSOR_END,
-    CURSOR_HOME,
-    CURSOR_LEFT,
-    CURSOR_RIGHT,
-    CURSOR_WORD_LEFT,
-    CURSOR_WORD_RIGHT,
-    DELETE_LEFT,
-    DELETE_RIGHT,
-    SELECT_ALL,
-    SELECT_END,
-    SELECT_HOME,
-    SELECT_LEFT,
-    SELECT_RIGHT,
-    SELECT_WORD_LEFT,
-    SELECT_WORD_RIGHT,
+  CLEAR,
+  COMMANDLINE_COPY,
+  COMMANDLINE_CUT,
+  COMMANDLINE_EXECUTE,
+  COMMANDLINE_INSERT_TEXT,
+  COMMANDLINE_PASTE,
+  CURSOR_END,
+  CURSOR_HOME,
+  CURSOR_LEFT,
+  CURSOR_RIGHT,
+  CURSOR_WORD_LEFT,
+  CURSOR_WORD_RIGHT,
+  DELETE_LEFT,
+  DELETE_RIGHT,
+  SELECT_ALL,
+  SELECT_END,
+  SELECT_HOME,
+  SELECT_LEFT,
+  SELECT_RIGHT,
+  SELECT_WORD_LEFT,
+  SELECT_WORD_RIGHT,
 } from "@/features/commands/commandIds";
 import { useCommandRegistry } from "@/features/commands/commands";
 import { registerCommandLineKeybindings } from "@/features/commands/registerKeybindings";
@@ -35,7 +36,6 @@ export function CommandLine() {
   const commandRegistry = useCommandRegistry();
   const visible = useAtomValue(panelsVisibleAtom);
   const { execute } = useCommandLine();
-  const { setPasteHandler } = useCommandLineRegistration();
   const { activeCwd: cwd } = useTerminal();
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -52,21 +52,6 @@ export function CommandLine() {
   cursorRef.current = cursor;
   anchorRef.current = anchor;
   onExecuteRef.current = execute;
-
-  // Expose paste injection via atom — inserts at cursor position, replacing any selection
-  useEffect(() => {
-    setPasteHandler((text: string) => {
-      const pos = cursorRef.current;
-      const anch = anchorRef.current;
-      const s = Math.min(pos, anch);
-      const e = Math.max(pos, anch);
-      const newPos = s + text.length;
-      setValue((v) => v.slice(0, s) + text + v.slice(e));
-      setCursor(newPos);
-      setAnchor(newPos);
-    });
-    return () => setPasteHandler(null);
-  }, [setPasteHandler]);
 
   // Keep commandRegistry context in sync so Enter/Backspace route correctly
   useEffect(() => {
@@ -274,6 +259,20 @@ export function CommandLine() {
   useEffect(() => {
     if (!visible) return;
     const d: Array<() => void> = [];
+
+    d.push(
+      commandRegistry.registerCommand(COMMANDLINE_INSERT_TEXT, (text: unknown) => {
+        if (typeof text !== "string") return;
+        const pos = cursorRef.current;
+        const anch = anchorRef.current;
+        const s = Math.min(pos, anch);
+        const e = Math.max(pos, anch);
+        const newPos = s + text.length;
+        setValue((v) => v.slice(0, s) + text + v.slice(e));
+        setCursor(newPos);
+        setAnchor(newPos);
+      }),
+    );
 
     d.push(...registerCommandLineKeybindings(commandRegistry));
 

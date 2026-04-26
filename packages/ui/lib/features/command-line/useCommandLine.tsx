@@ -2,6 +2,8 @@ import { useDialog } from "@/dialogs/dialogContext";
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { useBridge } from "@/features/bridge/useBridge";
 import { parseCdCommand, resolveCdPath } from "@/features/command-line/commandLineCd";
+import { COMMANDLINE_INSERT_TEXT } from "@/features/commands/commandIds";
+import { useCommandRegistry } from "@/features/commands/commands";
 import { isExistingDirectory } from "@/features/file-system/utils";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { useUserSettings } from "@/features/settings/useUserSettings";
@@ -11,22 +13,22 @@ import { useTerminal } from "@/features/terminal/useTerminal";
 import { normalizePath, resolveDotSegments } from "@/utils/path";
 import { useAtomValue } from "jotai";
 import {
-    createContext,
-    useCallback,
-    useContext,
-    useMemo,
-    useRef,
-    type ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  type ReactNode,
 } from "react";
 
 export type CommandLineContextValue = {
   execute: (cmd: string) => Promise<void>;
   paste: (text: string) => void;
-  setPasteHandler: (handler: ((text: string) => void) | null) => void;
 };
 
-export function useProvideCommandLine(terminal: Pick<TerminalContextValue, "activeCwd" | "runCommand">): CommandLineContextValue {
+function useProvideCommandLine(terminal: Pick<TerminalContextValue, "activeCwd" | "runCommand">): CommandLineContextValue {
   const bridge = useBridge();
+  const commandRegistry = useCommandRegistry();
   const { settings, updateSettings } = useUserSettings();
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -40,15 +42,10 @@ export function useProvideCommandLine(terminal: Pick<TerminalContextValue, "acti
   runCommandRef.current = runCommand;
   const { activePanelSide, getPanel } = useActivePanelNavigation();
   const { showDialog } = useDialog();
-  const pasteHandlerRef = useRef<((text: string) => void) | null>(null);
-
-  const setPasteHandler = useCallback((handler: ((text: string) => void) | null) => {
-    pasteHandlerRef.current = handler;
-  }, []);
 
   const paste = useCallback((text: string) => {
-    pasteHandlerRef.current?.(text);
-  }, []);
+    void commandRegistry.executeCommand(COMMANDLINE_INSERT_TEXT, text);
+  }, [commandRegistry]);
 
   const execute = useCallback(
     async (cmd: string) => {
@@ -129,9 +126,8 @@ export function useProvideCommandLine(terminal: Pick<TerminalContextValue, "acti
     () => ({
       execute,
       paste,
-      setPasteHandler,
     }),
-    [execute, paste, setPasteHandler],
+    [execute, paste],
   );
 }
 
@@ -149,13 +145,5 @@ export function useCommandLine() {
   return {
     execute: commandLine.execute,
     paste: commandLine.paste,
-  };
-}
-
-export function useCommandLineRegistration() {
-  const commandLine = useContext(CommandLineContext);
-  if (!commandLine) throw new Error("CommandLineProvider not mounted");
-  return {
-    setPasteHandler: commandLine.setPasteHandler,
   };
 }

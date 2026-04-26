@@ -67,7 +67,7 @@ export type TerminalContextValue = TerminalController & TerminalState;
 
 const TerminalContext = createContext<TerminalContextValue | null>(null);
 
-export function useProvideTerminal(): TerminalContextValue {
+function useProvideTerminal(): TerminalContextValue {
   const uiState = useUiState();
   const bridge = useBridge();
   const commandRegistry = useCommandRegistry();
