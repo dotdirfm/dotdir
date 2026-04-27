@@ -1,5 +1,4 @@
-import type { ActionQueue } from "@/components/FileList/actionQueue";
-import { useBridge } from "@/features/bridge/useBridge";
+import type { ActionQueue } from "./actionQueue";
 import { useCommandRegistry } from "@dotdirfm/commands";
 import {
   CURSOR_DOWN,
@@ -33,8 +32,8 @@ import {
   SELECT_RIGHT,
   SELECT_UP,
 } from "@dotdirfm/commands";
-import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
-import { dirname } from "@/utils/path";
+import { isContainerPath, parseContainerPath } from "../utils/containerPath";
+import { dirname } from "../utils/path";
 import { useEffect, useMemo, useRef, type RefObject } from "react";
 import type { UseFileListActionHandlersReturn } from "./fileListActions";
 
@@ -52,6 +51,7 @@ interface UseFileListCommandsArgs {
   displayEntriesRef: RefObject<Array<{ entry: { name: string } }>>;
   currentPathRef: RefObject<string>;
   navigateTo: (path: string) => Promise<void>;
+  getHomePath?: () => Promise<string>;
 }
 
 type CommandHandler = (...args: unknown[]) => void;
@@ -103,8 +103,8 @@ export function useFileListCommands({
   displayEntriesRef,
   currentPathRef,
   navigateTo,
+  getHomePath,
 }: UseFileListCommandsArgs): void {
-  const bridge = useBridge();
   const commandRegistry = useCommandRegistry();
   const argsRef = useRef({
     fileActions,
@@ -118,6 +118,7 @@ export function useFileListCommands({
     displayEntriesRef,
     currentPathRef,
     navigateTo,
+    getHomePath,
   });
   argsRef.current = {
     fileActions,
@@ -131,6 +132,7 @@ export function useFileListCommands({
     displayEntriesRef,
     currentPathRef,
     navigateTo,
+    getHomePath,
   };
 
   const handlers = useMemo<Record<string, CommandHandler>>(
@@ -311,7 +313,8 @@ export function useFileListCommands({
         if (parent !== currentPath) void argsRef.current.navigateTo(parent);
       },
       [COMMAND_KEYS.goHome]: async () => {
-        const home = await bridge.utils.getHomePath();
+        const home = await argsRef.current.getHomePath?.();
+        if (!home) return;
         await argsRef.current.navigateTo(home);
       },
       [COMMAND_KEYS.refresh]: () => {
@@ -329,7 +332,7 @@ export function useFileListCommands({
       [COMMAND_KEYS.pasteFilename]: () => argsRef.current.fileActions.pasteFilename(),
       [COMMAND_KEYS.pastePath]: () => argsRef.current.fileActions.pastePath(),
     }),
-    [actionQueue, bridge],
+    [actionQueue],
   );
 
   useEffect(() => {

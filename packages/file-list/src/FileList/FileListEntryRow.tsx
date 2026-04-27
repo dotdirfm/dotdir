@@ -1,8 +1,7 @@
-import { FileIcon } from "@/features/file-icons/FileIcon";
-import { cx } from "@/utils/cssModules";
+import { cx } from "../utils/cssModules";
 import { memo } from "react";
 import styles from "./FileList.module.css";
-import type { DisplayEntry } from "./types";
+import type { DisplayEntry, RenderFileIcon } from "./types";
 import { formatSize } from "./utils";
 
 interface FileListEntryRowProps {
@@ -11,9 +10,10 @@ interface FileListEntryRowProps {
   active: boolean;
   selected: boolean;
   onPointerDown: () => void;
+  renderIcon: RenderFileIcon;
 }
 
-export const FileListEntryRow = memo(function FileListEntryRow({ item, rowHeight, active, selected, onPointerDown }: FileListEntryRowProps) {
+export const FileListEntryRow = memo(function FileListEntryRow({ item, rowHeight, active, selected, onPointerDown, renderIcon }: FileListEntryRowProps) {
   const { entry, presentation } = item;
   const { style, icon } = presentation;
 
@@ -27,7 +27,7 @@ export const FileListEntryRow = memo(function FileListEntryRow({ item, rowHeight
       }}
     >
       <span className={styles["entry-icon"]}>
-        <FileIcon icon={icon} size={16} />
+        {renderIcon(icon, entry)}
       </span>
       <span
         className={styles["entry-name"]}

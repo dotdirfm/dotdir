@@ -1,4 +1,4 @@
-import type { FsNode } from "fss-lang";
+import type { FsNode } from "@dotdirfm/fss-lang";
 import styles from "./FileList.module.css";
 
 function formatSize(sizeValue: unknown): string {

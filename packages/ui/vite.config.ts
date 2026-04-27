@@ -19,6 +19,7 @@ export default defineConfig({
     rolldownOptions: {
       external: [
         "@dotdirfm/commands",
+        "@dotdirfm/fss-lang",
         "react",
         "react/jsx-runtime",
         "react-dom",
@@ -28,7 +29,6 @@ export default defineConfig({
         "@xterm/addon-fit",
         "@xterm/xterm",
         "cmdk",
-        "fss-lang",
         "jsonc-parser",
         "marked",
       ],

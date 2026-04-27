@@ -3,23 +3,17 @@ import { PanelTabs } from "@/components/PanelTabs/PanelTabs";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
 import {
-  activePanelSideAtom,
-  createFilelistTab,
-  leftActiveIndexAtom,
-  leftActiveTabIdAtom,
-  leftTabsAtom,
-  rightActiveIndexAtom,
-  rightActiveTabIdAtom,
-  rightTabsAtom,
+    activePanelSideAtom,
+    createFilelistTab,
+    leftActiveIndexAtom,
+    leftActiveTabIdAtom,
+    leftTabsAtom,
+    rightActiveIndexAtom,
+    rightActiveTabIdAtom,
+    rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
 import type { PanelTab } from "@/entities/tab/model/types";
 import { useBridge } from "@/features/bridge/useBridge";
-import { useCommandRegistry } from "@dotdirfm/commands";
-import {
-  DOTDIR_OPEN_LEFT_PANEL_MENU,
-  DOTDIR_OPEN_RIGHT_PANEL_MENU,
-  LIST_OPEN,
-} from "@dotdirfm/commands";
 import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { type FileListPanelController } from "@/features/panels/useFileListPanel";
@@ -28,7 +22,12 @@ import { useFocusContext } from "@/focusContext";
 import { cx } from "@/utils/cssModules";
 import { basename, dirname } from "@/utils/path";
 import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
-import type { FsNode } from "fss-lang";
+import {
+    DOTDIR_OPEN_LEFT_PANEL_MENU,
+    DOTDIR_OPEN_RIGHT_PANEL_MENU,
+    LIST_OPEN, useCommandRegistry
+} from "@dotdirfm/commands";
+import type { FsNode } from "@dotdirfm/fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { VscArrowDown, VscArrowUp, VscChevronLeft, VscRegex } from "react-icons/vsc";

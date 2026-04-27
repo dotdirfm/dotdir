@@ -1,15 +1,9 @@
-import { ActionQueue } from "@/components/FileList/actionQueue";
-import type { PanelSide } from "@/entities/panel/model/types";
-import type { FileListTabState } from "@/entities/tab/model/types";
-import { SHELL_EXECUTE, VIEW_FILE } from "@dotdirfm/commands";
-import { useCommandRegistry } from "@dotdirfm/commands";
-import { useFileStyleResolver } from "@/features/fss/fileStyleResolver";
-import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { cx } from "@/utils/cssModules";
-import { dirname, join } from "@/utils/path";
-import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
-import type { FsNode } from "fss-lang";
+import { ActionQueue } from "./actionQueue";
+import { useMediaQuery } from "../utils/useMediaQuery";
+import { cx } from "../utils/cssModules";
+import { dirname, join } from "../utils/path";
+import { SHELL_EXECUTE, useCommandRegistry, VIEW_FILE } from "@dotdirfm/commands";
+import type { FsNode } from "@dotdirfm/fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Breadcrumbs } from "../Breadcrumbs/Breadcrumbs";
 import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
@@ -17,27 +11,46 @@ import { FileInfoFooter } from "./FileInfoFooter";
 import styles from "./FileList.module.css";
 import { useFileListActionHandlers } from "./fileListActions";
 import { FileListEntryRow } from "./FileListEntryRow";
-import type { DisplayEntry } from "./types";
+import type { DisplayEntry, FileListState, FileOperationHandlers, FilePresentation, LanguageResolver, RenderFileIcon } from "./types";
 import { useFileListCommands } from "./useFileListCommands";
 import { clamp, formatSize, getRequestedIndex } from "./utils";
 
 const ROW_HEIGHT = 26;
 
-interface FileListProps {
-  side: PanelSide;
-  tabId: string;
-  state: FileListTabState;
+export interface FileListProps<TIcon = unknown> {
+  state: FileListState;
   showHidden: boolean;
   onNavigate: (path: string) => Promise<void>;
   active: boolean;
+  resolveEntry: (entry: FsNode) => FilePresentation<TIcon>;
+  renderIcon: RenderFileIcon<TIcon>;
+  registerFocus?: (focus: () => void) => () => void;
+  fileOperations?: FileOperationHandlers | null;
+  pasteToCommandLine?: (text: string) => void;
+  languageResolver?: LanguageResolver;
+  getHomePath?: () => Promise<string>;
+  hasViewer?: (fileName: string) => boolean;
+  hasEditor?: (fileName: string) => boolean;
   onStateChange?: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
 }
 
-export const FileList = memo(function FileList({ side, tabId, state, showHidden, onNavigate, active, onStateChange }: FileListProps) {
+function FileListBase<TIcon = unknown>({
+  state,
+  showHidden,
+  onNavigate,
+  active,
+  resolveEntry,
+  renderIcon,
+  registerFocus,
+  fileOperations,
+  pasteToCommandLine,
+  languageResolver,
+  getHomePath,
+  hasViewer,
+  hasEditor,
+  onStateChange,
+}: FileListProps<TIcon>) {
   const commandRegistry = useCommandRegistry();
-  const viewerRegistry = useViewerRegistry();
-  const editorRegistry = useEditorRegistry();
-  const { registerVisibleFileListFocus } = usePanelControllerRegistry();
   const entries = useMemo(() => (showHidden ? state.entries : state.entries.filter((e) => !e.meta.hidden)), [showHidden, state.entries]);
 
   const [actionQueue] = useState(() => new ActionQueue());
@@ -62,15 +75,13 @@ export const FileList = memo(function FileList({ side, tabId, state, showHidden,
     if (keyboardNavModeRef.current) setKeyboardNavMode(false);
   }, []);
 
-  const { resolve } = useFileStyleResolver();
-
   const comparer = useCallback((a: DisplayEntry, b: DisplayEntry) => {
     if (a.presentation.style.groupFirst !== b.presentation.style.groupFirst) return a.presentation.style.groupFirst ? -1 : 1;
     if (a.presentation.style.sortPriority !== b.presentation.style.sortPriority) return b.presentation.style.sortPriority - a.presentation.style.sortPriority;
     return a.entry.name.localeCompare(b.entry.name);
   }, []);
 
-  const toDisplayEntry = useCallback((entry: FsNode): DisplayEntry => ({ entry, presentation: resolve(entry) }), [resolve]);
+  const toDisplayEntry = useCallback((entry: FsNode): DisplayEntry<TIcon> => ({ entry, presentation: resolveEntry(entry) }), [resolveEntry]);
 
   const sorted = useMemo(() => {
     const withStyle = entries.map((entry) => toDisplayEntry(entry));
@@ -228,10 +239,10 @@ export const FileList = memo(function FileList({ side, tabId, state, showHidden,
     commandRegistry.setContext("listItemIsFile", isFile);
     commandRegistry.setContext("listItemIsDir", !isFile && item != null);
     commandRegistry.setContext("listItemIsExecutable", isExecutable);
-    commandRegistry.setContext("listItemHasViewer", isFile && viewerRegistry.resolve(fileName) !== null);
-    commandRegistry.setContext("listItemHasEditor", isFile && editorRegistry.resolve(fileName) !== null);
+    commandRegistry.setContext("listItemHasViewer", isFile && (hasViewer?.(fileName) ?? false));
+    commandRegistry.setContext("listItemHasEditor", isFile && (hasEditor?.(fileName) ?? false));
     commandRegistry.endBatch();
-  }, [commandRegistry, editorRegistry, viewerRegistry]);
+  }, [commandRegistry, hasEditor, hasViewer]);
 
   useEffect(() => {
     if (!active) return;
@@ -240,13 +251,8 @@ export const FileList = memo(function FileList({ side, tabId, state, showHidden,
 
   useEffect(() => {
     if (!active) return;
-    const unsubViewer = viewerRegistry.onChange(updateSelectionContext);
-    const unsubEditor = editorRegistry.onChange(updateSelectionContext);
-    return () => {
-      unsubViewer();
-      unsubEditor();
-    };
-  }, [active, editorRegistry, updateSelectionContext, viewerRegistry]);
+    updateSelectionContext();
+  }, [active, updateSelectionContext]);
 
   const fileActions = useFileListActionHandlers({
     actionQueue,
@@ -255,6 +261,9 @@ export const FileList = memo(function FileList({ side, tabId, state, showHidden,
     getSelectedNames: () => selectedNamesRef.current,
     navigateToEntry,
     refresh: () => onNavigateRef.current(currentPathRef.current),
+    fileOperations,
+    pasteToCommandLine,
+    languageResolver,
   });
 
   const updateCursor = useCallback(
@@ -282,13 +291,15 @@ export const FileList = memo(function FileList({ side, tabId, state, showHidden,
     displayEntriesRef,
     currentPathRef,
     navigateTo: onNavigate,
+    getHomePath,
   });
 
   useEffect(() => {
-    return registerVisibleFileListFocus(side, tabId, () => {
+    if (!registerFocus) return;
+    return registerFocus(() => {
       rootRef.current?.focus({ preventScroll: true });
     });
-  }, [registerVisibleFileListFocus, side, tabId]);
+  }, [registerFocus]);
 
   const handleItemsPerColumnChanged = useCallback((count: number) => {
     setMaxItemsPerColumn(count);
@@ -342,10 +353,17 @@ export const FileList = memo(function FileList({ side, tabId, state, showHidden,
       if (!item) return null;
 
       return (
-        <FileListEntryRow item={item} rowHeight={ROW_HEIGHT} active={isActive} selected={isSelected} onPointerDown={() => handleItemPointerDown(index)} />
+        <FileListEntryRow
+          item={item}
+          rowHeight={ROW_HEIGHT}
+          active={isActive}
+          selected={isSelected}
+          onPointerDown={() => handleItemPointerDown(index)}
+          renderIcon={renderIcon as RenderFileIcon}
+        />
       );
     },
-    [displayEntries, handleItemPointerDown],
+    [displayEntries, handleItemPointerDown, renderIcon],
   );
 
   const activeEntry = displayEntries[activeIndex];
@@ -411,4 +429,6 @@ export const FileList = memo(function FileList({ side, tabId, state, showHidden,
       </div>
     </div>
   );
-});
+}
+
+export const FileList = memo(FileListBase) as typeof FileListBase;

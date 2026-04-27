@@ -1,19 +1,18 @@
-import type { PanelSide } from "@/entities/panel/model/types";
-import { useCommandRegistry } from "@dotdirfm/commands";
-import {
-  CLOSE_TAB,
-  EDIT_IN_OPPOSITE_PANEL,
-  NEW_TAB,
-  OPEN_CURRENT_DIR_IN_OPPOSITE_PANEL_CURRENT_TAB,
-  OPEN_CURRENT_DIR_IN_OPPOSITE_PANEL_NEW_TAB,
-  OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_CURRENT_TAB,
-  OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_NEW_TAB,
-  PREVIEW_IN_OPPOSITE_PANEL,
-} from "@dotdirfm/commands";
 import { OPPOSITE_PANEL } from "@/entities/panel/model/panelSide";
+import type { PanelSide } from "@/entities/panel/model/types";
 import { createFilelistTab, createPreviewTab } from "@/entities/tab/model/tabsAtoms";
 import type { PanelTab } from "@/entities/tab/model/types";
-import type { FsNode } from "fss-lang";
+import {
+    CLOSE_TAB,
+    EDIT_IN_OPPOSITE_PANEL,
+    NEW_TAB,
+    OPEN_CURRENT_DIR_IN_OPPOSITE_PANEL_CURRENT_TAB,
+    OPEN_CURRENT_DIR_IN_OPPOSITE_PANEL_NEW_TAB,
+    OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_CURRENT_TAB,
+    OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_NEW_TAB,
+    PREVIEW_IN_OPPOSITE_PANEL, useCommandRegistry
+} from "@dotdirfm/commands";
+import type { FsNode } from "@dotdirfm/fss-lang";
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 
 interface UsePanelCommandsArgs {

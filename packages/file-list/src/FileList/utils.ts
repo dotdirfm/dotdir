@@ -1,4 +1,4 @@
-import { binarySearch } from "@/utils/binarySearch";
+import { binarySearch } from "../utils/binarySearch";
 import type { DisplayEntry } from "./types";
 
 export function formatSize(sizeValue: unknown): string {
@@ -23,7 +23,7 @@ export function getRequestedIndex(entries: DisplayEntry[], requestedName: string
     entry: { name: requestedName },
     presentation: {
       style: { groupFirst: false, sortPriority: 0 },
-      icon: { kind: "image", path: "_default", url: null, fallbackUrl: "" },
+      icon: null,
     },
   } as DisplayEntry;
   let idx = binarySearch(entries, requested, comparer);

@@ -1,13 +1,20 @@
 import { themesReadyAtom } from "@/atoms";
 import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
-import { FileStyleResolverProvider } from "@/features/fss/fileStyleResolver";
+import { useBridge } from "@/features/bridge/useBridge";
+import { useCommandLine } from "@/features/command-line/useCommandLine";
+import { FileIcon } from "@/features/file-icons/FileIcon";
+import type { ResolvedIcon } from "@/features/file-icons/iconResolver";
+import { useFileOperationHandlers } from "@/features/file-ops/fileOperationHandlers";
+import { FileStyleResolverProvider, useFileStyleResolver } from "@/features/fss/fileStyleResolver";
+import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import type { FileListPanelController } from "@/features/panels/useFileListPanel";
 import { useFileListPanel } from "@/features/panels/useFileListPanel";
+import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
+import { FileList, type FileListState, type RenderFileIcon } from "@dotdirfm/file-list";
 import { useAtomValue } from "jotai";
-import { useEffect, useMemo, useRef } from "react";
-import { FileList } from "./FileList/FileList";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 interface FileListTabPaneProps {
   side: PanelSide;
@@ -20,6 +27,62 @@ interface FileListTabPaneProps {
   onStateChange?: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
   onActivatePanelFocus: () => void;
   onActivePanelChange: (panel: FileListPanelController) => void;
+}
+
+interface FileListUiAdapterProps {
+  side: PanelSide;
+  tabId: string;
+  state: FileListState;
+  showHidden: boolean;
+  focused: boolean;
+  pathsInSync: boolean;
+  onNavigate: (path: string) => Promise<void>;
+  onStateChange?: (selectedName: string | undefined, topmostName: string | undefined, selectedNames: string[]) => void;
+}
+
+function FileListUiAdapter({ side, tabId, state, showHidden, focused, pathsInSync, onNavigate, onStateChange }: FileListUiAdapterProps) {
+  const bridge = useBridge();
+  const { paste } = useCommandLine();
+  const fileOperations = useFileOperationHandlers();
+  const { resolve } = useFileStyleResolver();
+  const languageResolver = useLanguageRegistry();
+  const viewerRegistry = useViewerRegistry();
+  const editorRegistry = useEditorRegistry();
+  const { registerVisibleFileListFocus } = usePanelControllerRegistry();
+
+  const registerFocus = useCallback(
+    (focus: () => void) => registerVisibleFileListFocus(side, tabId, focus),
+    [registerVisibleFileListFocus, side, tabId],
+  );
+
+  const getHomePath = useCallback(() => bridge.utils.getHomePath(), [bridge]);
+  const hasViewer = useCallback((fileName: string) => viewerRegistry.resolve(fileName) != null, [viewerRegistry]);
+  const hasEditor = useCallback((fileName: string) => editorRegistry.resolve(fileName) != null, [editorRegistry]);
+
+  const renderIcon = useCallback<RenderFileIcon<ResolvedIcon>>(
+    (icon) => <FileIcon icon={icon} size={16} />,
+    [],
+  );
+
+  return (
+    <FileList
+      key={tabId}
+      state={state}
+      showHidden={showHidden}
+      onNavigate={onNavigate}
+      active={focused}
+      resolveEntry={resolve}
+      renderIcon={renderIcon}
+      registerFocus={registerFocus}
+      fileOperations={fileOperations}
+      pasteToCommandLine={paste}
+      languageResolver={languageResolver}
+      getHomePath={getHomePath}
+      hasViewer={hasViewer}
+      hasEditor={hasEditor}
+      onStateChange={pathsInSync ? onStateChange : undefined}
+    />
+  );
 }
 
 export function FileListTabPane({
@@ -117,18 +180,18 @@ export function FileListTabPane({
       }}
     >
       <FileStyleResolverProvider path={renderedState.path} pathKind="directory">
-        <FileList
-          key={tabId}
+        <FileListUiAdapter
           side={side}
           tabId={tabId}
           state={renderedState}
           showHidden={showHidden}
-          onNavigate={(nextPath) => {
+          focused={focused}
+          pathsInSync={pathsInSync}
+          onNavigate={(nextPath: string) => {
             onActivatePanelFocus();
             return panel.navigateTo(nextPath);
           }}
-          active={focused}
-          onStateChange={pathsInSync ? onStateChange : undefined}
+          onStateChange={onStateChange}
         />
       </FileStyleResolverProvider>
     </div>

@@ -1,11 +1,8 @@
-import type { ActionQueue } from "@/components/FileList/actionQueue";
-import { useCommandLine } from "@/features/command-line/useCommandLine";
-import { useCommandRegistry } from "@dotdirfm/commands";
-import { EDIT_FILE, SHELL_EXECUTE, VIEW_FILE } from "@dotdirfm/commands";
-import { useFileOperationHandlers } from "@/features/file-ops/fileOperationHandlers";
-import { useLanguageRegistry } from "@/features/languages/languageRegistry";
-import type { FsNode } from "fss-lang";
+import type { ActionQueue } from "./actionQueue";
+import { EDIT_FILE, SHELL_EXECUTE, useCommandRegistry, VIEW_FILE } from "@dotdirfm/commands";
+import type { FsNode } from "@dotdirfm/fss-lang";
 import { useMemo, useRef } from "react";
+import type { FileOperationHandlers, LanguageResolver } from "./types";
 
 type DisplayEntry = {
   entry: FsNode;
@@ -18,6 +15,9 @@ type FileListActionDeps = {
   getSelectedNames: () => ReadonlySet<string>;
   navigateToEntry: (entry: FsNode) => Promise<void>;
   refresh: () => Promise<void>;
+  fileOperations?: FileOperationHandlers | null;
+  pasteToCommandLine?: (text: string) => void;
+  languageResolver?: LanguageResolver;
 };
 
 function getSelectedOrActiveEntries({
@@ -36,17 +36,8 @@ function getSelectedOrActiveEntries({
 
 export function useFileListActionHandlers(deps: FileListActionDeps) {
   const commandRegistry = useCommandRegistry();
-  const ops = useFileOperationHandlers();
-  const { paste: pasteToCommandLine } = useCommandLine();
-  const languageRegistry = useLanguageRegistry();
   const depsRef = useRef(deps);
   depsRef.current = deps;
-  const opsRef = useRef(ops);
-  opsRef.current = ops;
-  const pasteToCommandLineRef = useRef(pasteToCommandLine);
-  pasteToCommandLineRef.current = pasteToCommandLine;
-  const languageRegistryRef = useRef(languageRegistry);
-  languageRegistryRef.current = languageRegistry;
 
   return useMemo(
     () => ({
@@ -76,18 +67,18 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
             // Always resolve the language from the current registry — the value cached on
             // FsNode.lang can be stale if the folder was listed before an extension that
             // contributes the language finished loading.
-            const reg = languageRegistryRef.current;
-            const resolved = reg.getLanguageForFilename(item.entry.name);
+            const reg = depsRef.current.languageResolver;
+            const resolved = reg?.getLanguageForFilename(item.entry.name);
             const cached = typeof item.entry.lang === "string" && item.entry.lang ? item.entry.lang : "plaintext";
             const langId = resolved && resolved !== "plaintext" ? resolved : cached;
-            if (langId === "plaintext") {
+            if (reg && langId === "plaintext" && "languages" in reg && Array.isArray(reg.languages)) {
               console.warn(
                 "[editFile] falling back to plaintext for",
                 item.entry.name,
                 "— registry knows",
                 reg.languages.length,
                 "languages:",
-                reg.languages.map((l) => l.id),
+                reg.languages.map((l: { id: string }) => l.id),
               );
             }
             void commandRegistry.executeCommand(EDIT_FILE, item.entry.path as string, item.entry.name, Number(item.entry.meta.size), langId);
@@ -95,56 +86,61 @@ export function useFileListActionHandlers(deps: FileListActionDeps) {
         }),
       moveToTrash: () =>
         depsRef.current.actionQueue.enqueue(() => {
-          if (!opsRef.current) return;
+          const ops = depsRef.current.fileOperations;
+          if (!ops) return;
           const sourcePaths = getSelectedOrActiveEntries(depsRef.current).map((item) => item.entry.path as string);
           if (sourcePaths.length === 0) return;
-          opsRef.current.moveToTrash(sourcePaths, depsRef.current.refresh);
+          ops.moveToTrash(sourcePaths, depsRef.current.refresh);
         }),
       permanentDelete: () =>
         depsRef.current.actionQueue.enqueue(() => {
-          if (!opsRef.current) return;
+          const ops = depsRef.current.fileOperations;
+          if (!ops) return;
           const sourcePaths = getSelectedOrActiveEntries(depsRef.current).map((item) => item.entry.path as string);
           if (sourcePaths.length === 0) return;
-          opsRef.current.permanentDelete(sourcePaths, depsRef.current.refresh);
+          ops.permanentDelete(sourcePaths, depsRef.current.refresh);
         }),
       copy: () =>
         depsRef.current.actionQueue.enqueue(() => {
-          if (!opsRef.current) return;
+          const ops = depsRef.current.fileOperations;
+          if (!ops) return;
           const sourcePaths = getSelectedOrActiveEntries(depsRef.current).map((item) => item.entry.path as string);
           if (sourcePaths.length === 0) return;
-          opsRef.current.copy(sourcePaths, depsRef.current.refresh);
+          ops.copy(sourcePaths, depsRef.current.refresh);
         }),
       move: () =>
         depsRef.current.actionQueue.enqueue(() => {
-          if (!opsRef.current) return;
+          const ops = depsRef.current.fileOperations;
+          if (!ops) return;
           const sourcePaths = getSelectedOrActiveEntries(depsRef.current).map((item) => item.entry.path as string);
           if (sourcePaths.length === 0) return;
-          opsRef.current.move(sourcePaths, depsRef.current.refresh);
+          ops.move(sourcePaths, depsRef.current.refresh);
         }),
       rename: () =>
         depsRef.current.actionQueue.enqueue(() => {
-          if (!opsRef.current) return;
+          const ops = depsRef.current.fileOperations;
+          if (!ops) return;
           const [item] = getSelectedOrActiveEntries(depsRef.current);
           if (!item) return;
-          opsRef.current.rename(item.entry.path as string, item.entry.name, depsRef.current.refresh);
+          ops.rename(item.entry.path as string, item.entry.name, depsRef.current.refresh);
         }),
       pasteFilename: () =>
         depsRef.current.actionQueue.enqueue(() => {
           const [item] = getSelectedOrActiveEntries(depsRef.current);
           if (!item) return;
-          if (!opsRef.current) return;
+          if (!depsRef.current.pasteToCommandLine) return;
           const name = item.entry.name;
           const arg = /^[a-zA-Z0-9._+-]+$/.test(name) ? name : JSON.stringify(name);
-          pasteToCommandLineRef.current(arg);
+          depsRef.current.pasteToCommandLine(arg);
         }),
       pastePath: () =>
         depsRef.current.actionQueue.enqueue(() => {
           const [item] = getSelectedOrActiveEntries(depsRef.current);
           if (!item) return;
-          if (!opsRef.current) return;
+          if (!depsRef.current.pasteToCommandLine) return;
           const path = ((item.entry.path as string) ?? "").split("\0")[0];
           const arg = /^[a-zA-Z0-9._+/:-]+$/.test(path) ? path : JSON.stringify(path);
-          pasteToCommandLineRef.current(arg);
+          depsRef.current.pasteToCommandLine(arg);
         }),
     }),
     [commandRegistry],

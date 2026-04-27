@@ -24,7 +24,7 @@
   "scripts": {
     "dev": "vite",
     "watch": "vite build --watch",
-    "build": "pnpm --filter @dotdirfm/commands build && pnpm --filter fss-lang build && pnpm --filter @dotdirfm/extension-api build && tsc && vite build",
+    "build": "pnpm --filter @dotdirfm/commands build && pnpm --filter @dotdirfm/fss-lang build && pnpm --filter @dotdirfm/extension-api build && pnpm --filter @dotdirfm/file-list build && tsc && vite build",
     "lint": "eslint lib vite.config.ts",
     "lint:fix": "eslint lib vite.config.ts --fix",
     "fmt": "eslint lib vite.config.ts --fix",
@@ -58,23 +58,24 @@
   "dependencies": {
     "@dotdirfm/commands": "workspace:*",
     "@dotdirfm/extension-api": "workspace:*",
-    "@tanstack/react-virtual": "^3.13.23",
-    "@xterm/addon-fit": "^0.11.0",
-    "@xterm/xterm": "^6.0.0",
-    "fss-lang": "workspace:*",
-    "jotai": "^2.19.0",
-    "jsonc-parser": "^3.3.1",
-    "marked": "^17.0.5",
-    "monaco-editor": "^0.55.1",
-    "react-icons": "^5.6.0",
-    "semver": "^7.7.4",
-    "vscode-oniguruma": "^2.0.1",
-    "vscode-textmate": "^9.3.2"
+    "@dotdirfm/file-list": "workspace:*",
+    "@dotdirfm/fss-lang": "workspace:*",
+    "@tanstack/react-virtual": "catalog:",
+    "@xterm/addon-fit": "catalog:",
+    "@xterm/xterm": "catalog:",
+    "jotai": "catalog:",
+    "jsonc-parser": "catalog:",
+    "marked": "catalog:",
+    "monaco-editor": "catalog:",
+    "react-icons": "catalog:",
+    "semver": "catalog:",
+    "vscode-oniguruma": "catalog:",
+    "vscode-textmate": "catalog:"
   },
   "devDependencies": {
-    "@types/semver": "^7.7.1",
+    "@types/semver": "catalog:",
     "vite": "^8.0.0",
-    "vite-plugin-dts": "^4.5.4",
+    "vite-plugin-dts": "catalog:",
     "vitest": "^4.1.2"
   },
   "packageManager": "pnpm@10.30.3"

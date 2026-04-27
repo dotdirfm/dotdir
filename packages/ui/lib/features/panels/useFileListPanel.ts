@@ -17,8 +17,8 @@ import { buildContainerPath, isContainerPath, parseContainerPath } from "@/utils
 import { basename, dirname, isFileExecutable, isRootPath, join } from "@/utils/path";
 import { useFsProviderRegistry } from "@/viewerEditorRegistry";
 import type { FsProviderEntry } from "@dotdirfm/extension-api";
-import type { FsNode } from "fss-lang";
-import { createFsNode } from "fss-lang/helpers";
+import type { FsNode } from "@dotdirfm/fss-lang";
+import { createFsNode } from "@dotdirfm/fss-lang/helpers";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // ── Helper functions ──────────────────────────────────────────────────────────

@@ -3,8 +3,8 @@ import { extensionIconThemes, extensionRef, type LoadedExtension } from "@/featu
 import { readFileText } from "@/features/file-system/fs";
 import type { ResolvedEntryStyle } from "@/features/fss/types";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
-import type { FsNode } from "fss-lang";
-import { createLayer, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from "fss-lang";
+import type { FsNode } from "@dotdirfm/fss-lang";
+import { createLayer, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from "@dotdirfm/fss-lang";
 import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 const defaultFss = `

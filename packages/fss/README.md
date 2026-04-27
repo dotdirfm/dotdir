@@ -30,7 +30,7 @@ npm install fss-lang
 ## Quick Start
 
 ```typescript
-import { parseStylesheet, resolveStyle, createFsNode, StateFlags } from 'fss-lang'
+import { parseStylesheet, resolveStyle, createFsNode, StateFlags } from '@dotdirfm/fss-lang'
 
 // Parse an FSS stylesheet
 const sheet = parseStylesheet(`
@@ -81,7 +81,7 @@ const style = resolveStyle(sheet, node, 'dark')
 For large trees (10k+ nodes), use `CachedResolver` to avoid recomputing styles for nodes with identical signatures:
 
 ```typescript
-import { CachedResolver, parseStylesheet } from 'fss-lang'
+import { CachedResolver, parseStylesheet } from '@dotdirfm/fss-lang'
 
 const sheet = parseStylesheet(`...`)
 const resolver = new CachedResolver(sheet, 'dark')
@@ -98,7 +98,7 @@ resolver.setTheme('light')
 Support global config with per-folder overrides (e.g. `.faraday/style.fss`):
 
 ```typescript
-import { LayeredResolver, createLayer, LayerPriority } from 'fss-lang'
+import { LayeredResolver, createLayer, LayerPriority } from '@dotdirfm/fss-lang'
 
 const resolver = new LayeredResolver()
 

@@ -1,22 +1,22 @@
 import { systemThemeAtom } from "@/atoms";
 import { useBridge } from "@/features/bridge/useBridge";
-import { FileSystemObserver, useFileSystemWatchRegistry, type FileSystemChangeRecord } from "@/features/file-system/fs";
-import type { FilePresentation } from "@/features/fss/types";
-import { createPanelResolver, invalidateFssCache, resolveEntryStyle, syncLayers, useExtensionFssLayers } from "@/features/fss/fss";
 import { useResolveIcon } from "@/features/file-icons/iconResolver";
+import { FileSystemObserver, useFileSystemWatchRegistry, type FileSystemChangeRecord } from "@/features/file-system/fs";
+import { createPanelResolver, invalidateFssCache, resolveEntryStyle, syncLayers, useExtensionFssLayers } from "@/features/fss/fss";
+import type { FilePresentation } from "@/features/fss/types";
 import { basename, dirname, join, normalizePath } from "@/utils/path";
-import type { FsNode } from "fss-lang";
-import { createFsNode } from "fss-lang/helpers";
+import type { FsNode } from "@dotdirfm/fss-lang";
+import { createFsNode } from "@dotdirfm/fss-lang/helpers";
 import { useAtomValue } from "jotai";
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
 } from "react";
 
 type FileStyleResolverValue = {
