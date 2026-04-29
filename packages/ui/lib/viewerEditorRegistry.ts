@@ -3,6 +3,9 @@
  *
  * Resolves which extension should handle a given file
  * based on glob patterns and priority.
+ *
+ * The three registries are now backed by a single generic `Registry<T>` class,
+ * eliminating ~90 lines of boilerplate.
  */
 
 import {
@@ -15,6 +18,7 @@ import {
   type ExtensionViewerContribution,
   type LoadedExtension,
 } from "@/features/extensions/types";
+import { Registry, type RegistryListener } from "@/utils/registry";
 import { createContext, createElement, useContext, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 const BUILTIN_EXTENSION_DIR_PATH = "__dotdir_builtin__";
@@ -35,138 +39,26 @@ const BUILTIN_MONACO_EDITOR: ExtensionEditorContribution = {
   priority: -10_000,
 };
 
-export interface ResolvedViewer {
+// Re-export resolved types for backward compatibility.
+export type ResolvedViewer = {
   contribution: ExtensionViewerContribution;
   extensionDirPath: string;
-}
+};
 
-export interface ResolvedEditor {
+export type ResolvedEditor = {
   contribution: ExtensionEditorContribution;
   extensionDirPath: string;
-}
+};
 
-export interface ResolvedFsProvider {
+export type ResolvedFsProvider = {
   contribution: ExtensionFsProviderContribution;
   extensionDirPath: string;
-}
-
-interface RegistryEntry<T> {
-  contribution: T;
-  extensionDirPath: string;
-}
-
-function matchPattern(pattern: string, fileName: string): boolean {
-  if (pattern === "*" || pattern === "*.*") return true;
-
-  if (pattern.startsWith("*.")) {
-    const ext = pattern.slice(1);
-    return fileName.toLowerCase().endsWith(ext.toLowerCase());
-  }
-
-  return fileName.toLowerCase() === pattern.toLowerCase();
-}
-
-function matchesAny(patterns: string[], fileName: string): boolean {
-  return patterns.some((p) => matchPattern(p, fileName));
-}
-
-function resolve<T extends { patterns: string[]; priority?: number }>(entries: RegistryEntry<T>[], fileName: string): RegistryEntry<T> | null {
-  const matches = entries.filter((e) => matchesAny(e.contribution.patterns, fileName));
-  if (matches.length === 0) return null;
-  matches.sort((a, b) => (b.contribution.priority ?? 0) - (a.contribution.priority ?? 0));
-  return matches[0];
-}
-
-type RegistryListener = () => void;
-
-export class ViewerRegistry {
-  private entries: RegistryEntry<ExtensionViewerContribution>[] = [];
-  private listeners = new Set<RegistryListener>();
-
-  clear(): void {
-    this.entries = [];
-  }
-
-  register(contribution: ExtensionViewerContribution, extensionDirPath: string): void {
-    this.entries.push({ contribution, extensionDirPath });
-  }
-
-  resolve(fileName: string): ResolvedViewer | null {
-    return resolve(this.entries, fileName);
-  }
-
-  onChange(listener: RegistryListener): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
-
-  notifyListeners(): void {
-    for (const listener of this.listeners) listener();
-  }
-}
-
-export class EditorRegistry {
-  private entries: RegistryEntry<ExtensionEditorContribution>[] = [];
-  private listeners = new Set<RegistryListener>();
-
-  clear(): void {
-    this.entries = [];
-  }
-
-  register(contribution: ExtensionEditorContribution, extensionDirPath: string): void {
-    this.entries.push({ contribution, extensionDirPath });
-  }
-
-  resolve(fileName: string): ResolvedEditor | null {
-    return resolve(this.entries, fileName);
-  }
-
-  onChange(listener: RegistryListener): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
-
-  notifyListeners(): void {
-    for (const listener of this.listeners) listener();
-  }
-}
-
-export class FsProviderRegistry {
-  private entries: RegistryEntry<ExtensionFsProviderContribution>[] = [];
-  private listeners = new Set<RegistryListener>();
-
-  clear(): void {
-    this.entries = [];
-  }
-
-  register(contribution: ExtensionFsProviderContribution, extensionDirPath: string): void {
-    this.entries.push({ contribution, extensionDirPath });
-  }
-
-  resolve(fileName: string): ResolvedFsProvider | null {
-    return resolve(this.entries, fileName);
-  }
-
-  onChange(listener: RegistryListener): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
-
-  notifyListeners(): void {
-    for (const listener of this.listeners) listener();
-  }
-}
+};
 
 export class ViewerEditorRegistryManager {
-  readonly viewerRegistry = new ViewerRegistry();
-  readonly editorRegistry = new EditorRegistry();
-  readonly fsProviderRegistry = new FsProviderRegistry();
+  readonly viewerRegistry = new Registry<ExtensionViewerContribution>();
+  readonly editorRegistry = new Registry<ExtensionEditorContribution>();
+  readonly fsProviderRegistry = new Registry<ExtensionFsProviderContribution>();
   private version = 0;
   private listeners = new Set<RegistryListener>();
 
@@ -243,19 +135,19 @@ function useViewerEditorRegistryVersion(): number {
   );
 }
 
-export function useViewerRegistry(): ViewerRegistry {
+export function useViewerRegistry(): Registry<ExtensionViewerContribution> {
   const manager = useViewerEditorRegistry();
   void useViewerEditorRegistryVersion();
   return manager.viewerRegistry;
 }
 
-export function useEditorRegistry(): EditorRegistry {
+export function useEditorRegistry(): Registry<ExtensionEditorContribution> {
   const manager = useViewerEditorRegistry();
   void useViewerEditorRegistryVersion();
   return manager.editorRegistry;
 }
 
-export function useFsProviderRegistry(): FsProviderRegistry {
+export function useFsProviderRegistry(): Registry<ExtensionFsProviderContribution> {
   const manager = useViewerEditorRegistry();
   void useViewerEditorRegistryVersion();
   return manager.fsProviderRegistry;

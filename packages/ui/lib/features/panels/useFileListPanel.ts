@@ -19,6 +19,7 @@ import { useFsProviderRegistry } from "@/viewerEditorRegistry";
 import type { FsProviderEntry } from "@dotdirfm/extension-api";
 import type { FsNode } from "@dotdirfm/fss-lang";
 import { createFsNode } from "@dotdirfm/fss-lang/helpers";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // ── Helper functions ──────────────────────────────────────────────────────────
@@ -126,16 +127,14 @@ export function useFileListPanel() {
   const navAbortRef = useRef<AbortController | null>(null);
 
   const [state, setState] = useState<FileListTabState>();
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const stateRef = useLatestRef(state);
 
   const observerRef = useRef<FileSystemObserver | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentPathRef = useRef<string>("");
   const rerunCurrentPathAfterNavigationRef = useRef(false);
 
-  const showErrorRef = useRef(showError);
-  showErrorRef.current = showError;
+  const showErrorRef = useLatestRef(showError);
 
   const setupWatches = useCallback((dirPath: string) => {
     const observer = observerRef.current;
@@ -344,10 +343,8 @@ export function useFileListPanel() {
     };
   }, [bridge, watchRegistry]);
 
-  const navigateToRef = useRef(navigateTo);
-  navigateToRef.current = navigateTo;
-  const refreshRef = useRef(refresh);
-  refreshRef.current = refresh;
+  const navigateToRef = useLatestRef(navigateTo);
+  const refreshRef = useLatestRef(refresh);
 
   return useMemo(
     () => ({

@@ -27,6 +27,7 @@ import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
 import { basename, dirname, join } from "@/utils/path";
 import { useFsProviderRegistry } from "@/viewerEditorRegistry";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
 
@@ -53,16 +54,12 @@ export function useFileOperations() {
   const fsProviderRegistry = useFsProviderRegistry();
   const { refreshAll } = usePanelControllerRegistry();
 
-  const activePanel = useAtomValue(activePanelSideAtom);
-  const activePanelRef = useRef<PanelSide>(activePanel);
-  activePanelRef.current = activePanel;
+  useAtomValue(activePanelSideAtom);
 
   const inactiveTab = useAtomValue(inactiveTabAtom);
-  const inactiveTabRef = useRef(inactiveTab);
-  inactiveTabRef.current = inactiveTab;
+  const inactiveTabRef = useLatestRef(inactiveTab);
   const activeTab = useAtomValue(activeTabAtom);
-  const activeTabRef = useRef(activeTab);
-  activeTabRef.current = activeTab;
+  const activeTabRef = useLatestRef(activeTab);
   const leftActiveTabId = useAtomValue(leftActiveTabIdAtom);
   const rightActiveTabId = useAtomValue(rightActiveTabIdAtom);
   const setLeftTabs = useSetAtom(leftTabsAtom);

@@ -14,6 +14,7 @@ import { forwardRef, Suspense, useEffect, useImperativeHandle, useRef } from "re
 import { App, type AppHandle } from "./app";
 import { AppRuntimeProvider } from "./appRuntime";
 import { AppServicesProvider } from "./appServices";
+import { ComposeProviders } from "./utils/composeProviders";
 import { defaultResolveVfsUrl, VfsUrlResolverProvider, type VfsUrlKind, type VfsUrlResolver } from "./features/file-system/vfs";
 import baseStyles from "./styles/base.module.css";
 
@@ -97,22 +98,20 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
 
   return (
     <div ref={rootRef} className={baseStyles["dotdir-root"]} data-dotdir-style-host="true">
-      <VfsUrlResolverProvider resolveVfsUrl={resolveVfsUrl}>
-        <JotaiProvider>
-          <BridgeProvider bridge={bridge}>
-            <AppServicesProvider>
-              <FssProvider>
-                <ExtensionHostClientProvider>
-                  <PanelControllersProvider>
-                    <ExtensionHostWorkspaceSync />
-                    <DotDirContent widget={widget} appRef={appRef} />
-                  </PanelControllersProvider>
-                </ExtensionHostClientProvider>
-              </FssProvider>
-            </AppServicesProvider>
-          </BridgeProvider>
-        </JotaiProvider>
-      </VfsUrlResolverProvider>
+      <ComposeProviders
+        providers={[
+          [VfsUrlResolverProvider, { resolveVfsUrl }],
+          [JotaiProvider],
+          [BridgeProvider, { bridge }],
+          [AppServicesProvider],
+          [FssProvider],
+          [ExtensionHostClientProvider],
+          [PanelControllersProvider],
+        ]}
+      >
+        <ExtensionHostWorkspaceSync />
+        <DotDirContent widget={widget} appRef={appRef} />
+      </ComposeProviders>
     </div>
   );
 });

@@ -6,6 +6,7 @@ import { TerminalSession } from "@/features/terminal/TerminalSession";
 import type { ManagedTerminalSession } from "@/features/terminal/types";
 import { useFocusContext } from "@/focusContext";
 import { useAtomValue, useSetAtom } from "jotai";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import { useCallback, useRef } from "react";
 
 export type { ManagedTerminalSession };
@@ -77,10 +78,8 @@ export function useTerminalState(): TerminalState {
   const setActiveSessionId = useSetAtom(terminalActiveSessionIdAtom);
 
   // Refs for reading current values in callbacks without stale closures
-  const sessionsRef = useRef(sessions);
-  sessionsRef.current = sessions;
-  const activeSessionIdRef = useRef(activeSessionId);
-  activeSessionIdRef.current = activeSessionId;
+  const sessionsRef = useLatestRef(sessions);
+  const activeSessionIdRef = useLatestRef(activeSessionId);
   const profilesRef = useRef<TerminalProfile[]>([]);
   const currentCwdRef = useRef("");
 

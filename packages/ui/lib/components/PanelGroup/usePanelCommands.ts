@@ -13,7 +13,8 @@ import {
     PREVIEW_IN_OPPOSITE_PANEL, useCommandRegistry
 } from "@dotdirfm/commands";
 import type { FsNode } from "@dotdirfm/fss-lang";
-import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { useLatestRef } from "@/hooks/useLatestRef";
+import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
 
 interface UsePanelCommandsArgs {
   active: boolean;
@@ -35,8 +36,7 @@ interface UsePanelCommandsArgs {
 
 export function usePanelCommands(args: UsePanelCommandsArgs): void {
   const commandRegistry = useCommandRegistry();
-  const argsRef = useRef(args);
-  argsRef.current = args;
+  const argsRef = useLatestRef(args);
 
   useEffect(() => {
     if (!args.active) return;

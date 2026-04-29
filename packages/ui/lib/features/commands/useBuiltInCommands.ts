@@ -80,10 +80,11 @@ import { useShowHidden, useUserSettings } from "@/features/settings/useUserSetti
 import { useTerminal } from "@/features/terminal/useTerminal";
 import { useUiState } from "@/features/ui-state/uiState";
 import { useFocusContext } from "@/focusContext";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import { basename } from "@/utils/path";
 import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 export interface BuiltInCommandDeps {
   onOpenCreateFileConfirm: (path: string, name: string, langId: string) => Promise<void>;
@@ -97,58 +98,39 @@ export interface BuiltInCommandDeps {
 export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const bridge = useBridge();
   const { ensureWindow, flushCurrentWindowLayout, flushCurrentWindowState, getCurrentWindowId, getWindowIds, removeWindow } = useUiState();
-  const bridgeRef = useRef(bridge);
-  bridgeRef.current = bridge;
+  const bridgeRef = useLatestRef(bridge);
   const { navigateTo, cancelNavigation, getPanel, focusFileList, activePanelSide } = useActivePanelNavigation();
   const commandRegistry = useCommandRegistry();
   const focusContext = useFocusContext();
-  const focusContextRef = useRef(focusContext);
-  focusContextRef.current = focusContext;
+  const focusContextRef = useLatestRef(focusContext);
   const { showDialog, replaceDialog } = useDialog();
   const languageRegistry = useLanguageRegistry();
-  const showDialogRef = useRef(showDialog);
-  showDialogRef.current = showDialog;
-  const replaceDialogRef = useRef(replaceDialog);
-  replaceDialogRef.current = replaceDialog;
-  const languageRegistryRef = useRef(languageRegistry);
-  languageRegistryRef.current = languageRegistry;
+  const showDialogRef = useLatestRef(showDialog);
+  const replaceDialogRef = useLatestRef(replaceDialog);
+  const languageRegistryRef = useLatestRef(languageRegistry);
 
   const { paste: pasteToCommandLine } = useCommandLine();
-  const pasteToCommandLineRef = useRef(pasteToCommandLine);
-  pasteToCommandLineRef.current = pasteToCommandLine;
+  const pasteToCommandLineRef = useLatestRef(pasteToCommandLine);
 
   const { runCommand, activeCwd, activeSession } = useTerminal();
-  const runCommandRef = useRef(runCommand);
-  runCommandRef.current = runCommand;
-  const activeCwdRef = useRef(activeCwd);
-  activeCwdRef.current = activeCwd;
-  const activeSessionRef = useRef(activeSession);
-  activeSessionRef.current = activeSession;
-  const ensureWindowRef = useRef(ensureWindow);
-  ensureWindowRef.current = ensureWindow;
-  const removeWindowRef = useRef(removeWindow);
-  removeWindowRef.current = removeWindow;
-  const flushCurrentWindowLayoutRef = useRef(flushCurrentWindowLayout);
-  flushCurrentWindowLayoutRef.current = flushCurrentWindowLayout;
-  const flushCurrentWindowStateRef = useRef(flushCurrentWindowState);
-  flushCurrentWindowStateRef.current = flushCurrentWindowState;
-  const getCurrentWindowIdRef = useRef(getCurrentWindowId);
-  getCurrentWindowIdRef.current = getCurrentWindowId;
-  const getWindowIdsRef = useRef(getWindowIds);
-  getWindowIdsRef.current = getWindowIds;
+  const runCommandRef = useLatestRef(runCommand);
+  const activeCwdRef = useLatestRef(activeCwd);
+  const activeSessionRef = useLatestRef(activeSession);
+  const ensureWindowRef = useLatestRef(ensureWindow);
+  const removeWindowRef = useLatestRef(removeWindow);
+  const flushCurrentWindowLayoutRef = useLatestRef(flushCurrentWindowLayout);
+  const flushCurrentWindowStateRef = useLatestRef(flushCurrentWindowState);
+  const getCurrentWindowIdRef = useLatestRef(getCurrentWindowId);
+  const getWindowIdsRef = useLatestRef(getWindowIds);
 
   // Updated every render so command handlers always see the latest callbacks.
-  const depsRef = useRef(deps);
-  depsRef.current = deps;
+  const depsRef = useLatestRef(deps);
 
-  // loadedExtensions changes as extensions load; keep a ref for call-time reads.
-  const loadedExtensions = useLoadedExtensions();
-  const loadedExtensionsRef = useRef(loadedExtensions);
-  loadedExtensionsRef.current = loadedExtensions;
+  // loadedExtensions changes as extensions load; kept for potential call-time reads.
+  useLoadedExtensions();
 
   const { settings } = useUserSettings();
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
+  const settingsRef = useLatestRef(settings);
 
   const { setShowHidden } = useShowHidden();
 
@@ -164,37 +146,21 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
   const setTerminalFocusRequestKey = useSetAtom(terminalFocusRequestKeyAtom);
   const setCommandPaletteOpen = useSetAtom(commandPaletteOpenAtom);
 
-  const leftActiveTabRef = useRef(leftActiveTab);
-  leftActiveTabRef.current = leftActiveTab;
-  const rightActiveTabRef = useRef(rightActiveTab);
-  rightActiveTabRef.current = rightActiveTab;
-  const leftTabsRef = useRef(leftTabs);
-  leftTabsRef.current = leftTabs;
-  const rightTabsRef = useRef(rightTabs);
-  rightTabsRef.current = rightTabs;
-  const leftActiveTabIdRef = useRef(leftActiveTabId);
-  leftActiveTabIdRef.current = leftActiveTabId;
-  const rightActiveTabIdRef = useRef(rightActiveTabId);
-  rightActiveTabIdRef.current = rightActiveTabId;
-  const navigateToRef = useRef(navigateTo);
-  navigateToRef.current = navigateTo;
-  const cancelNavigationRef = useRef(cancelNavigation);
-  cancelNavigationRef.current = cancelNavigation;
-  const focusFileListRef = useRef(focusFileList);
-  focusFileListRef.current = focusFileList;
-
-  // const panelRef = useRef(activePanelSideRef.current === "left" ? leftRef.current : rightRef.current);
-  // panelRef.current = activePanelSideRef.current === "left" ? leftRef.current : rightRef.current;
+  const leftActiveTabRef = useLatestRef(leftActiveTab);
+  const rightActiveTabRef = useLatestRef(rightActiveTab);
+  const leftTabsRef = useLatestRef(leftTabs);
+  const rightTabsRef = useLatestRef(rightTabs);
+  const leftActiveTabIdRef = useLatestRef(leftActiveTabId);
+  const rightActiveTabIdRef = useLatestRef(rightActiveTabId);
+  const navigateToRef = useLatestRef(navigateTo);
+  const cancelNavigationRef = useLatestRef(cancelNavigation);
+  const focusFileListRef = useLatestRef(focusFileList);
 
   const activeTab = useAtomValue(activeTabAtom);
-  const activeTabRef = useRef(activeTab);
-  activeTabRef.current = activeTab;
-  const viewerOpenRef = useRef(deps.viewerOpen);
-  viewerOpenRef.current = deps.viewerOpen;
-  const activePanelSideRef = useRef(activePanelSide);
-  activePanelSideRef.current = activePanelSide;
-  const getPanelRef = useRef(getPanel);
-  getPanelRef.current = getPanel;
+  const activeTabRef = useLatestRef(activeTab);
+  const viewerOpenRef = useLatestRef(deps.viewerOpen);
+  const activePanelSideRef = useLatestRef(activePanelSide);
+  const getPanelRef = useLatestRef(getPanel);
 
   useEffect(() => {
     const disposables: Array<() => void> = [];

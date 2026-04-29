@@ -8,6 +8,7 @@ import { CONTAINER_SEP } from "@/utils/containerPath";
 import { isMediaFile } from "@/utils/mediaFiles";
 import { basename } from "@/utils/path";
 import { useEditorRegistry, useFsProviderRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -85,8 +86,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   const { dialog, showDialog, replaceDialog, closeDialog } = useDialog();
 
   const activePanelSide = useAtomValue(activePanelSideAtom);
-  const activePanelSideRef = useRef(activePanelSide);
-  activePanelSideRef.current = activePanelSide;
+  const activePanelSideRef = useLatestRef(activePanelSide);
 
   const handleViewFile = useCallback(
     (filePath: string, fileName: string, fileSize: number) => {
