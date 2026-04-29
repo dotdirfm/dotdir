@@ -6,9 +6,9 @@
  * On parse error, keeps current value and logs error.
  */
 
-import type { Bridge } from "@/features/bridge";
+import type { Bridge } from "@dotdirfm/ui-bridge";
 import { readFileText } from "@/features/file-system/fs";
-import { basename, dirname } from "@/utils/path";
+import { basename, dirname } from "@dotdirfm/ui-utils";
 import type { ParseError} from "jsonc-parser";
 import { parse as parseJsonc, printParseErrorCode } from "jsonc-parser";
 

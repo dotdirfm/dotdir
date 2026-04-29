@@ -14,8 +14,8 @@
  * real-world patterns (e.g. `Cargo.toml`, `*`/`Cargo.toml`, `**`/`*.sln`).
  */
 
-import type { Bridge } from "@/features/bridge";
-import { dirname, isRootPath, join } from "@/utils/path";
+import type { Bridge } from "@dotdirfm/ui-bridge";
+import { dirname, isRootPath, join } from "@dotdirfm/ui-utils";
 
 const WORKSPACE_MARKER = ".dir";
 

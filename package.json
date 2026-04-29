@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "concurrently -n lib,app -c cyan,green 'turbo run dev' 'vite'",
+    "build": "turbo run build && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "serve": "pnpm tauri dev serve",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@dotdirfm/ui": "workspace:*",
+    "@dotdirfm/ui-utils": "workspace:*",
     "@tauri-apps/api": "catalog:",
     "@tauri-apps/plugin-deep-link": "catalog:",
     "@tauri-apps/plugin-opener": "catalog:",
@@ -29,10 +30,12 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "concurrently": "catalog:",
     "eslint": "catalog:",
     "eslint-plugin-react-hooks": "catalog:",
     "eslint-plugin-react-refresh": "catalog:",
     "globals": "catalog:",
+    "turbo": "catalog:",
     "typescript": "~6.0.2",
     "typescript-eslint": "catalog:",
     "vite": "^8.0.3"

@@ -1,6 +1,6 @@
 import { List } from "@/components/List/List";
 import { DropdownSurface, type DropdownPlacement } from "@/components/DropdownSurface/DropdownSurface";
-import { useFocusContext, useManagedFocusLayer } from "@/focusContext";
+import { useFocusContext, useManagedFocusLayer } from "@dotdirfm/ui-focus";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { VscChevronDown } from "react-icons/vsc";
 import styles from "./DropdownSelect.module.css";

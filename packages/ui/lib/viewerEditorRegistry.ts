@@ -18,7 +18,7 @@ import {
   type ExtensionViewerContribution,
   type LoadedExtension,
 } from "@/features/extensions/types";
-import { Registry, type RegistryListener } from "@/utils/registry";
+import { Registry, type RegistryListener } from "@dotdirfm/ui-utils";
 import { createContext, createElement, useContext, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 const BUILTIN_EXTENSION_DIR_PATH = "__dotdir_builtin__";

@@ -11,8 +11,8 @@ import {
   rightActiveTabIdAtom,
   rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
-import type { FileSearchRequest } from "@/features/bridge";
-import { useBridge } from "@/features/bridge/useBridge";
+import type { FileSearchRequest } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { useCommandLine } from "@/features/command-line/useCommandLine";
 import {
   CLEAR,
@@ -79,9 +79,9 @@ import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings
 import { useShowHidden, useUserSettings } from "@/features/settings/useUserSettings";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import { useUiState } from "@/features/ui-state/uiState";
-import { useFocusContext } from "@/focusContext";
+import { useFocusContext } from "@dotdirfm/ui-focus";
 import { useLatestRef } from "@/hooks/useLatestRef";
-import { basename } from "@/utils/path";
+import { basename } from "@dotdirfm/ui-utils";
 import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useEffect } from "react";

@@ -1,6 +1,6 @@
 import type { PanelSide } from "@/entities/panel/model/types";
 import { atom } from "jotai";
-import { dirname, join } from "@/utils/path";
+import { dirname, join } from "@dotdirfm/ui-utils";
 import type { FileListTab, PanelTab } from "./types";
 
 let nextTabId = 0;

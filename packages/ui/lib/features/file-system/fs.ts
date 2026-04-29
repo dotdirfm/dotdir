@@ -1,8 +1,8 @@
-import type { Bridge, EntryKind, FsChangeEvent, FsChangeType } from "@/features/bridge";
-import { join, normalizePath } from "@/utils/path";
+import type { Bridge, EntryKind, FsChangeEvent, FsChangeType } from "@dotdirfm/ui-bridge";
+import { join, normalizePath } from "@dotdirfm/ui-utils";
 import type { PropsWithChildren} from "react";
 import { createContext, createElement, useContext, useRef } from "react";
-import { useBridge } from "@/features/bridge/useBridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 
 export interface HandleMeta {
   size: number;

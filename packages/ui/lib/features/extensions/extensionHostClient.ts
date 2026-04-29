@@ -8,11 +8,11 @@
  * sinks (DocumentTracker, ProviderBridge, DiagnosticsBridge, ...).
  */
 
-import type { Bridge } from "@/features/bridge";
-import { readAppDirs } from "@/features/bridge/appDirs";
-import { useBridge } from "@/features/bridge/useBridge";
+import type { Bridge } from "@dotdirfm/ui-bridge";
+import { readAppDirs } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { readFileText } from "@/features/file-system/fs";
-import { normalizePath } from "@/utils/path";
+import { normalizePath } from "@dotdirfm/ui-utils";
 import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
   CommandExecuteMsg,

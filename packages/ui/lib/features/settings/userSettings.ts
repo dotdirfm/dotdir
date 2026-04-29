@@ -4,10 +4,10 @@
  * Watches settings.json in the host-provided config directory.
  */
 
-import type { Bridge } from "@/features/bridge";
+import type { Bridge } from "@dotdirfm/ui-bridge";
 import { readFileText } from "@/features/file-system/fs";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/features/file-system/jsoncFileWatcher";
-import { dirname, join } from "@/utils/path";
+import { dirname, join } from "@dotdirfm/ui-utils";
 import { applyEdits, modify, parse as parseJsonc, printParseErrorCode, type FormattingOptions, type ModificationOptions, type ParseError } from "jsonc-parser";
 import type { DotDirSettings } from "./types";
 

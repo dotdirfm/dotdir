@@ -1,4 +1,4 @@
-import { useBridge } from "@/features/bridge/useBridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { atom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback } from "react";
 import {

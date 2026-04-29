@@ -1,7 +1,7 @@
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DialogProvider } from "@/dialogs/dialogContext";
-import type { Bridge } from "@/features/bridge";
-import { BridgeProvider, useBridge } from "@/features/bridge/useBridge";
+import type { Bridge } from "@dotdirfm/ui-bridge";
+import { BridgeProvider, useBridge } from "@dotdirfm/ui-bridge";
 import { builtInCommandContributions } from "@/features/commands/builtInCommandContributions";
 import { useCommandRegistry } from "@dotdirfm/commands";
 import { ExtensionHostClientProvider } from "@/features/extensions/extensionHostClient";
@@ -14,7 +14,7 @@ import { forwardRef, Suspense, useEffect, useImperativeHandle, useRef } from "re
 import { App, type AppHandle } from "./app";
 import { AppRuntimeProvider } from "./appRuntime";
 import { AppServicesProvider } from "./appServices";
-import { ComposeProviders } from "./utils/composeProviders";
+import { ComposeProviders } from "@dotdirfm/ui-utils";
 import { defaultResolveVfsUrl, VfsUrlResolverProvider, type VfsUrlKind, type VfsUrlResolver } from "./features/file-system/vfs";
 import baseStyles from "./styles/base.module.css";
 
@@ -36,9 +36,9 @@ export type {
   MoveOptions,
   MoveProgressEvent,
   PtyLaunchInfo
-} from "@/features/bridge";
+} from "@dotdirfm/ui-bridge";
 export { extensionIframeBootstrapSource } from "./features/extensions/iframeBootstrap";
-export { basename, dirname, join, normalizePath } from "./utils/path";
+export { basename, dirname, join, normalizePath } from "@dotdirfm/ui-utils";
 export { defaultResolveVfsUrl };
 export type { AppHandle, VfsUrlKind, VfsUrlResolver };
 

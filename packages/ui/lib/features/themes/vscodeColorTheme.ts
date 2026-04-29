@@ -5,10 +5,10 @@
  * to .dir's CSS custom properties.
  */
 
-import type { Bridge, SystemThemeKind } from "@/features/bridge";
+import type { Bridge, SystemThemeKind } from "@dotdirfm/ui-bridge";
 import { readFileText } from "@/features/file-system/fs";
-import { dirname, join } from "@/utils/path";
-import { getStyleHostElement } from "@/utils/styleHost";
+import { dirname, join } from "@dotdirfm/ui-utils";
+import { getStyleHostElement } from "@dotdirfm/ui-utils";
 import { parse as parseJsonc } from "jsonc-parser";
 
 export interface VSCodeColorThemeJson {

@@ -6,9 +6,9 @@
  * - `cd:name` — navigate to folder saved under alias `name`
  */
 
-import type { Bridge } from "@/features/bridge";
+import type { Bridge } from "@dotdirfm/ui-bridge";
 import { normalizeTerminalPath } from "@/features/terminal/path";
-import { join, normalizePath, resolveDotSegments } from "@/utils/path";
+import { join, normalizePath, resolveDotSegments } from "@dotdirfm/ui-utils";
 
 export type ParsedCdCommand =
   | { kind: "setAlias"; alias: string }

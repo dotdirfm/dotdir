@@ -1,4 +1,4 @@
-import type { TerminalProfile } from "@/features/bridge";
+import type { TerminalProfile } from "@dotdirfm/ui-bridge";
 import type { TerminalSession } from "./TerminalSession";
 
 export type TerminalSessionStatus = "idle" | "starting" | "running" | "exited" | "error";

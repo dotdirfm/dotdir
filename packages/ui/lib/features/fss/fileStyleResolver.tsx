@@ -1,10 +1,10 @@
 import { systemThemeAtom } from "@/atoms";
-import { useBridge } from "@/features/bridge/useBridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { useResolveIcon } from "@/features/file-icons/iconResolver";
 import { FileSystemObserver, useFileSystemWatchRegistry, type FileSystemChangeRecord } from "@/features/file-system/fs";
 import { createPanelResolver, invalidateFssCache, resolveEntryStyle, syncLayers, useExtensionFssLayers } from "@/features/fss/fss";
 import type { FilePresentation } from "@/features/fss/types";
-import { basename, dirname, join, normalizePath } from "@/utils/path";
+import { basename, dirname, join, normalizePath } from "@dotdirfm/ui-utils";
 import type { FsNode } from "@dotdirfm/fss-lang";
 import { createFsNode } from "@dotdirfm/fss-lang/helpers";
 import { useAtomValue } from "jotai";

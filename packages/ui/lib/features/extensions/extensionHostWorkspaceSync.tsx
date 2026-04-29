@@ -16,12 +16,12 @@
  * session.
  */
 
-import { useBridge } from "@/features/bridge/useBridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { leftActiveTabAtom, rightActiveTabAtom } from "@/entities/tab/model/tabsAtoms";
 import { extensionManifest } from "@/features/extensions/types";
 import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { findWorkspaceRoot, workspaceContainsMatch } from "@/features/extensions/workspaceContains";
-import { basename } from "@/utils/path";
+import { basename } from "@dotdirfm/ui-utils";
 import { useAtomValue } from "jotai";
 import { useEffect, useMemo, useRef } from "react";
 import { useExtensionHostClient } from "./extensionHostClient";

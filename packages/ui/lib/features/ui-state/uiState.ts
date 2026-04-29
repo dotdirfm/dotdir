@@ -1,8 +1,8 @@
 import { useAppRuntimeContext } from "@/appRuntimeContext";
-import type { Bridge } from "@/features/bridge";
-import { useBridge } from "@/features/bridge/useBridge";
+import type { Bridge } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { readFileText } from "@/features/file-system/fs";
-import { dirname, join } from "@/utils/path";
+import { dirname, join } from "@dotdirfm/ui-utils";
 import {
   useCallback,
   useEffect,

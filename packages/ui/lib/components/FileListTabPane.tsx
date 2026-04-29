@@ -1,7 +1,7 @@
 import { themesReadyAtom } from "@/atoms";
 import type { PanelSide } from "@/entities/panel/model/types";
 import type { FileListTabState } from "@/entities/tab/model/types";
-import { useBridge } from "@/features/bridge/useBridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { useCommandLine } from "@/features/command-line/useCommandLine";
 import { FileIcon } from "@/features/file-icons/FileIcon";
 import type { ResolvedIcon } from "@/features/file-icons/iconResolver";

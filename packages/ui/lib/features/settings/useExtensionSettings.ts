@@ -1,5 +1,5 @@
-import { readAppDirs } from "@/features/bridge/appDirs";
-import { useBridge } from "@/features/bridge/useBridge";
+import { readAppDirs } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { ExtensionSettingsStore, type ExtensionSettingsMap } from "@/features/extensions/extensionSettings";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { useCallback, useEffect, useRef, useState } from "react";

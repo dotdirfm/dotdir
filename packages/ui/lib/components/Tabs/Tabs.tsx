@@ -1,4 +1,4 @@
-import { cx } from "@/utils/cssModules";
+import { cx } from "@dotdirfm/ui-utils";
 import { memo, useCallback, useRef, useState } from "react";
 import { VscClose } from "react-icons/vsc";
 import styles from "./Tabs.module.css";

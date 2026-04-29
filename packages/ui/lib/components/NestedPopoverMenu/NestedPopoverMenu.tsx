@@ -12,8 +12,8 @@ import {
 } from "@dotdirfm/commands";
 import { useCommandRegistry } from "@dotdirfm/commands";
 import { DropdownSurface } from "@/components/DropdownSurface/DropdownSurface";
-import { useFocusContext, useManagedFocusLayer } from "@/focusContext";
-import { cx } from "@/utils/cssModules";
+import { useFocusContext, useManagedFocusLayer } from "@dotdirfm/ui-focus";
+import { cx } from "@dotdirfm/ui-utils";
 import {
   forwardRef,
   useCallback,

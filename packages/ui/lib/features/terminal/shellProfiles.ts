@@ -1,4 +1,4 @@
-import type { Bridge, CwdEscapeMode, TerminalProfile } from "@/features/bridge";
+import type { Bridge, CwdEscapeMode, TerminalProfile } from "@dotdirfm/ui-bridge";
 import { extensionShellIntegrations, type LoadedExtension } from "@/features/extensions/types";
 
 export interface ShellProfilesResult {

@@ -8,13 +8,13 @@
 
 import { useDialog } from "@/dialogs/dialogContext";
 import type { FileListTabState } from "@/entities/tab/model/types";
-import type { Bridge, FsChangeType, FsEntry } from "@/features/bridge";
-import { useBridge } from "@/features/bridge/useBridge";
+import type { Bridge, FsChangeType, FsEntry } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import { FileSystemObserver, useFileSystemWatchRegistry, type FileSystemChangeRecord, type HandleMeta } from "@/features/file-system/fs";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
-import { buildContainerPath, isContainerPath, parseContainerPath } from "@/utils/containerPath";
-import { basename, dirname, isFileExecutable, isRootPath, join } from "@/utils/path";
+import { buildContainerPath, isContainerPath, parseContainerPath } from "@dotdirfm/ui-utils";
+import { basename, dirname, isFileExecutable, isRootPath, join } from "@dotdirfm/ui-utils";
 import { useFsProviderRegistry } from "@/viewerEditorRegistry";
 import type { FsProviderEntry } from "@dotdirfm/extension-api";
 import type { FsNode } from "@dotdirfm/fss-lang";

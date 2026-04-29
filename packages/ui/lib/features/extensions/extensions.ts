@@ -1,7 +1,7 @@
-import type { Bridge } from "@/features/bridge";
+import type { Bridge } from "@dotdirfm/ui-bridge";
 import { readFileText } from "@/features/file-system/fs";
 import { deleteFilesystemPathRecursive } from "@/features/file-system/utils";
-import { dirname, join, normalizePath } from "@/utils/path";
+import { dirname, join, normalizePath } from "@dotdirfm/ui-utils";
 import {
   type ExtensionManifest,
   type ExtensionRef,

@@ -1,12 +1,12 @@
-import { useBridge } from "@/features/bridge/useBridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { findColorTheme, findIconTheme } from "@/features/extensions/extensions";
 import type { LoadedExtension } from "@/features/extensions/types";
 import { useSetIconTheme, useSetIconThemeKind } from "@/features/file-icons/iconResolver";
 import { readFileText } from "@/features/file-system/fs";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { clearColorTheme, loadAndApplyColorTheme, uiThemeToKind } from "@/features/themes/vscodeColorTheme";
-import { dirname } from "@/utils/path";
-import { getStyleHostElement } from "@/utils/styleHost";
+import { dirname } from "@dotdirfm/ui-utils";
+import { getStyleHostElement } from "@dotdirfm/ui-utils";
 import { type RefObject, useCallback, useEffect } from "react";
 import { useLoadedExtensions } from "../useLoadedExtensions";
 import { useLatestRef } from "./shared";

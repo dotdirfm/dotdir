@@ -13,14 +13,14 @@ import {
     rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
 import type { PanelTab } from "@/entities/tab/model/types";
-import { useBridge } from "@/features/bridge/useBridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { type FileListPanelController } from "@/features/panels/useFileListPanel";
 import { useShowHidden, useUserSettings } from "@/features/settings/useUserSettings";
-import { useFocusContext } from "@/focusContext";
-import { cx } from "@/utils/cssModules";
-import { basename, dirname } from "@/utils/path";
+import { useFocusContext } from "@dotdirfm/ui-focus";
+import { cx } from "@dotdirfm/ui-utils";
+import { basename, dirname } from "@dotdirfm/ui-utils";
 import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
 import {
     DOTDIR_OPEN_LEFT_PANEL_MENU,

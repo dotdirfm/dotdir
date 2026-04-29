@@ -1,5 +1,5 @@
-import type { FileSearchMatch, FileSearchProgressEvent, FileSearchRequest } from "@/features/bridge";
-import { useBridge } from "@/features/bridge/useBridge";
+import type { FileSearchMatch, FileSearchProgressEvent, FileSearchRequest } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import {
   ACCEPT,
   CANCEL,
@@ -16,7 +16,7 @@ import {
   useVirtualizer,
 } from "@tanstack/react-virtual";
 import type { Range } from "@tanstack/react-virtual";
-import { basename, dirname } from "@/utils/path";
+import { basename, dirname } from "@dotdirfm/ui-utils";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SmartLabel } from "./dialogHotkeys";
 import styles from "./dialogs.module.css";

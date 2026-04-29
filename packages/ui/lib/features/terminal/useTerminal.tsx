@@ -4,14 +4,14 @@ import {
   terminalFocusRequestKeyAtom,
 } from "@/atoms";
 import { activeTabAtom } from "@/entities/tab/model/tabsAtoms";
-import type { TerminalProfile } from "@/features/bridge";
-import { useBridge } from "@/features/bridge/useBridge";
+import type { TerminalProfile } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { useCommandRegistry } from "@dotdirfm/commands";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { normalizeTerminalPath } from "@/features/terminal/path";
 import { useTerminalState, type TerminalState } from "@/features/terminal/useTerminalState";
-import { useFocusContext } from "@/focusContext";
-import { normalizePath } from "@/utils/path";
+import { useFocusContext } from "@dotdirfm/ui-focus";
+import { normalizePath } from "@dotdirfm/ui-utils";
 import { useAtomValue, useSetAtom } from "jotai";
 import {
   useCallback,

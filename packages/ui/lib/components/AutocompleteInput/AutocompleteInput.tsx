@@ -9,7 +9,7 @@ import {
   CURSOR_UP,
 } from "@dotdirfm/commands";
 import { useCommandRegistry } from "@dotdirfm/commands";
-import { useFocusContext, useManagedFocusLayer } from "@/focusContext";
+import { useFocusContext, useManagedFocusLayer } from "@dotdirfm/ui-focus";
 import { DropdownSurface } from "@/components/DropdownSurface/DropdownSurface";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import styles from "./AutocompleteInput.module.css";

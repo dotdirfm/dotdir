@@ -4,9 +4,9 @@ import { NestedPopoverMenu, type NestedPopoverMenuItem } from "@/components/Nest
 import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import { OverlayDialog } from "@/dialogs/OverlayDialog";
 import { SmartLabel } from "@/dialogs/dialogHotkeys";
-import type { ExtensionInstallProgressEvent } from "@/features/bridge";
-import { readAppDirs } from "@/features/bridge/appDirs";
-import { useBridge } from "@/features/bridge/useBridge";
+import type { ExtensionInstallProgressEvent } from "@dotdirfm/ui-bridge";
+import { readAppDirs } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { colorThemeKey, extensionIconThemeKey, setExtensionAutoUpdate, uninstallExtension } from "@/features/extensions/extensions";
 import { getMarketplaceProvider, type MarketplaceDetails, type MarketplaceProviderId, type MarketplaceSearchItem } from "@/features/extensions/marketplaces";
@@ -31,9 +31,9 @@ import { useLoadedExtensions, useSetLoadedExtensions } from "@/features/extensio
 import { readFileText } from "@/features/file-system/fs";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import { useActiveColorTheme, useActiveIconTheme } from "@/features/settings/useUserSettings";
-import { cx } from "@/utils/cssModules";
-import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
-import { join } from "@/utils/path";
+import { cx } from "@dotdirfm/ui-utils";
+import { INPUT_NO_ASSIST } from "@dotdirfm/ui-utils";
+import { join } from "@dotdirfm/ui-utils";
 import { marked } from "marked";
 import { type MouseEvent as ReactMouseEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaGithub } from "react-icons/fa6";

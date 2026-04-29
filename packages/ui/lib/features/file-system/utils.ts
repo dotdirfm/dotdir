@@ -1,5 +1,5 @@
-import type { Bridge } from "@/features/bridge";
-import type { DeleteProgressEvent } from "@/features/bridge";
+import type { Bridge } from "@dotdirfm/ui-bridge";
+import type { DeleteProgressEvent } from "@dotdirfm/ui-bridge";
 
 /** True if path exists and can be listed as a directory. */
 export async function isExistingDirectory(bridge: Bridge, path: string): Promise<boolean> {

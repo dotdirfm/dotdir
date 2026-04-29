@@ -1,6 +1,6 @@
 import { useCommandRegistry } from "@dotdirfm/commands";
 import { DOTDIR_EXIT, SHOW_COMMAND_PALETTE, SHOW_EXTENSIONS, TOGGLE_HIDDEN_FILES, TOGGLE_PANELS } from "@dotdirfm/commands";
-import { useFocusContext } from "@/focusContext";
+import { useFocusContext } from "@dotdirfm/ui-focus";
 import styles from "@/styles/terminal.module.css";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal, type IDisposable } from "@xterm/xterm";

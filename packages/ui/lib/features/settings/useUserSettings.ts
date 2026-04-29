@@ -1,5 +1,5 @@
-import { readAppDirs, useAppDirs } from "@/features/bridge/appDirs";
-import { bridgeAtom, useBridge } from "@/features/bridge/useBridge";
+import { readAppDirs, useAppDirs } from "@dotdirfm/ui-bridge";
+import { bridgeAtom, useBridge } from "@dotdirfm/ui-bridge";
 import type { JsoncFileWatcher } from "@/features/file-system/jsoncFileWatcher";
 import type { DotDirSettings } from "@/features/settings/types";
 import { createUserSettingsWatcher, loadUserSettings, saveSettingsPatchToDisk } from "@/features/settings/userSettings";

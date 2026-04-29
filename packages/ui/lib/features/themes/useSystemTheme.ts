@@ -1,5 +1,5 @@
-import { type Bridge, type SystemThemeKind } from "@/features/bridge";
-import { useBridge } from "@/features/bridge/useBridge";
+import { type Bridge, type SystemThemeKind } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { useMemo, useSyncExternalStore } from "react";
 
 type ThemeStore = {

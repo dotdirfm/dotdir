@@ -1,7 +1,7 @@
 import { pathAutocompleteRecentAtom } from "@/atoms";
 import { AutocompleteInput, type AutocompleteGroup } from "@/components/AutocompleteInput/AutocompleteInput";
-import { useBridge } from "@/features/bridge/useBridge";
-import { basename, dirname, join, normalizePath } from "@/utils/path";
+import { useBridge } from "@dotdirfm/ui-bridge";
+import { basename, dirname, join, normalizePath } from "@dotdirfm/ui-utils";
 import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useMemo, useState } from "react";
 

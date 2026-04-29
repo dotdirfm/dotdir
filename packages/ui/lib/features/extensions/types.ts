@@ -1,4 +1,4 @@
-import type { CwdEscapeMode } from "@/features/bridge";
+import type { CwdEscapeMode } from "@dotdirfm/ui-bridge";
 
 export type ExtensionIconTheme = {
   id: string;

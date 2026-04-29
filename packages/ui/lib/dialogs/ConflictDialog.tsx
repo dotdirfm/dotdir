@@ -1,7 +1,7 @@
 import { useDialogButtonNav } from "@/dialogs/useDialogButtonNav";
-import type { ConflictResolution } from "@/features/bridge";
-import { cx } from "@/utils/cssModules";
-import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
+import type { ConflictResolution } from "@dotdirfm/ui-bridge";
+import { cx } from "@dotdirfm/ui-utils";
+import { INPUT_NO_ASSIST } from "@dotdirfm/ui-utils";
 import { useRef, useState } from "react";
 import { SmartLabel } from "./dialogHotkeys";
 import styles from "./dialogs.module.css";

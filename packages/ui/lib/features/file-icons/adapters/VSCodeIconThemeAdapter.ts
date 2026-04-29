@@ -1,6 +1,6 @@
-import type { Bridge } from "@/features/bridge";
+import type { Bridge } from "@dotdirfm/ui-bridge";
 import { readFileBuffer, readFileText } from "@/features/file-system/fs";
-import { dirname, join } from "@/utils/path";
+import { dirname, join } from "@dotdirfm/ui-utils";
 import { parse as parseJsonc } from "jsonc-parser";
 import type { IconAssetStore } from "../iconCache";
 import type { IconLookupInput, IconThemeAdapter, ResolvedThemeIcon } from "./types";

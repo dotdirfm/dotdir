@@ -6,7 +6,7 @@ import {
 } from "@/components/NestedPopoverMenu/NestedPopoverMenu";
 import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import type { PanelTab } from "@/entities/tab/model/types";
-import { basename } from "@/utils/path";
+import { basename } from "@dotdirfm/ui-utils";
 import { memo, useMemo, type RefObject } from "react";
 import { VscKebabVertical } from "react-icons/vsc";
 import panelTabsStyles from "./PanelTabs.module.css";

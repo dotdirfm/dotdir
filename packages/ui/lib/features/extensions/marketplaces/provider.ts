@@ -1,4 +1,4 @@
-import type { ExtensionInstallRequest } from "@/features/bridge";
+import type { ExtensionInstallRequest } from "@dotdirfm/ui-bridge";
 import type { MarketplaceUpdateInfo } from "../types";
 
 export type MarketplaceProviderId = "dotdir" | "open-vsx";

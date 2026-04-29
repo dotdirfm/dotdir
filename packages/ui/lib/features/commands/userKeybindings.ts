@@ -4,10 +4,10 @@
  * Loads and watches user-defined keybindings from the host-provided config dir.
  */
 
-import { useAppDirs } from "@/features/bridge/appDirs";
-import { useBridge } from "@/features/bridge/useBridge";
+import { useAppDirs } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { createJsoncFileWatcher, type JsoncFileWatcher } from "@/features/file-system/jsoncFileWatcher";
-import { join } from "@/utils/path";
+import { join } from "@dotdirfm/ui-utils";
 import { useEffect } from "react";
 import { type Keybinding, useCommandRegistry } from "@dotdirfm/commands";
 

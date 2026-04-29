@@ -1,7 +1,7 @@
-import type { Bridge } from "@/features/bridge";
-import { bridgeAtom } from "@/features/bridge/useBridge";
+import type { Bridge } from "@dotdirfm/ui-bridge";
+import { bridgeAtom } from "@dotdirfm/ui-bridge";
 import { readFileBuffer } from "@/features/file-system/fs";
-import { normalizePath } from "@/utils/path";
+import { normalizePath } from "@dotdirfm/ui-utils";
 import { atom, useAtomValue } from "jotai";
 import { useCallback, useSyncExternalStore } from "react";
 

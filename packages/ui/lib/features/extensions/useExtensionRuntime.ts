@@ -1,5 +1,5 @@
 import { systemThemeAtom, themesReadyAtom } from "@/atoms";
-import { useBridge } from "@/features/bridge/useBridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { useCommandRegistry } from "@dotdirfm/commands";
 import { DOTDIR_RESTART_EXTENSION_HOST } from "@dotdirfm/commands";
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";

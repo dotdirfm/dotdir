@@ -3,7 +3,7 @@ import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import { TerminalView } from "@/features/terminal/TerminalView";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import styles from "@/styles/terminal.module.css";
-import { cx } from "@/utils/cssModules";
+import { cx } from "@dotdirfm/ui-utils";
 import { useAtomValue } from "jotai";
 import { useMemo } from "react";
 import { VscAdd } from "react-icons/vsc";

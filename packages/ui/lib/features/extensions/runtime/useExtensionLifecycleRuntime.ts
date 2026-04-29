@@ -1,5 +1,5 @@
-import type { TerminalProfile } from "@/features/bridge";
-import { useBridge } from "@/features/bridge/useBridge";
+import type { TerminalProfile } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { useCommandRegistry } from "@dotdirfm/commands";
 import { registerExtensionKeybindings } from "@/features/commands/registerKeybindings";
 import { clearFsProviderCache } from "@/features/extensions/browserFsProvider";
@@ -13,7 +13,7 @@ import {
   type LoadedExtension,
 } from "@/features/extensions/types";
 import { resolveShellProfiles } from "@/features/terminal/shellProfiles";
-import { join } from "@/utils/path";
+import { join } from "@dotdirfm/ui-utils";
 import { useViewerEditorRegistry } from "@/viewerEditorRegistry";
 import { useEffect, type RefObject } from "react";
 

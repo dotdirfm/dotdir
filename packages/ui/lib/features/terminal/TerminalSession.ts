@@ -1,4 +1,4 @@
-import type { Bridge, PtyLaunchInfo, TerminalProfile } from "@/features/bridge";
+import type { Bridge, PtyLaunchInfo, TerminalProfile } from "@dotdirfm/ui-bridge";
 import { formatHiddenCd, normalizeTerminalPath } from "./path";
 import type { TerminalCapabilities, TerminalSessionEvent, TerminalSessionStatus } from "./types";
 

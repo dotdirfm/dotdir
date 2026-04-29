@@ -18,14 +18,14 @@ import {
   rightActiveTabIdAtom,
   rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
-import type { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "@/features/bridge";
-import { useBridge } from "@/features/bridge/useBridge";
+import type { ConflictResolution, CopyOptions, CopyProgressEvent, DeleteProgressEvent, MoveOptions, MoveProgressEvent } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { FsProviderExtensionApi } from "@/features/extensions/extensionApi";
 import { isExistingDirectory } from "@/features/file-system/utils";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
-import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
-import { basename, dirname, join } from "@/utils/path";
+import { isContainerPath, parseContainerPath } from "@dotdirfm/ui-utils";
+import { basename, dirname, join } from "@dotdirfm/ui-utils";
 import { useFsProviderRegistry } from "@/viewerEditorRegistry";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import { useAtomValue, useSetAtom } from "jotai";

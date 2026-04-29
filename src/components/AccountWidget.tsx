@@ -2,7 +2,7 @@
 import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useState } from "react";
-import { cx } from "../../packages/ui/lib/utils/cssModules";
+import { cx } from "@dotdirfm/ui-utils";
 import { authSigningInAtom, authUserAtom } from "../atoms";
 import { clearStoredTokens, startSignIn } from "../auth";
 import styles from "./AccountWidget.module.css";

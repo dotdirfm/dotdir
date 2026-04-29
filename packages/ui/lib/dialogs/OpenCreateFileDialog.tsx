@@ -1,6 +1,6 @@
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
-import { cx } from "@/utils/cssModules";
-import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
+import { cx } from "@dotdirfm/ui-utils";
+import { INPUT_NO_ASSIST } from "@dotdirfm/ui-utils";
 import { useEffect, useRef, useState } from "react";
 import { SmartLabel } from "./dialogHotkeys";
 import styles from "./dialogs.module.css";

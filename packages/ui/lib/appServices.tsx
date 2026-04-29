@@ -1,6 +1,6 @@
 import { CommandRegistryProvider } from "@dotdirfm/commands";
 import { FileSystemWatchRegistryProvider } from "@/features/file-system/fs";
-import { FocusProvider } from "@/focusContext";
+import { FocusProvider } from "@dotdirfm/ui-focus";
 import { ViewerEditorRegistryProvider } from "@/viewerEditorRegistry";
 import type { ReactNode } from "react";
 

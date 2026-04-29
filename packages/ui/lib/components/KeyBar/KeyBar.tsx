@@ -1,6 +1,6 @@
 import { type Command, type Keybinding, useCommandRegistry } from "@dotdirfm/commands";
-import { useFocusContext } from "@/focusContext";
-import { cx } from "@/utils/cssModules";
+import { useFocusContext } from "@dotdirfm/ui-focus";
+import { cx } from "@dotdirfm/ui-utils";
 import { useCallback, useEffect, useState } from "react";
 import styles from "./KeyBar.module.css";
 

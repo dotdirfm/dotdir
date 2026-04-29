@@ -1,4 +1,4 @@
-import type { SystemThemeKind } from "@/features/bridge";
+import type { SystemThemeKind } from "@dotdirfm/ui-bridge";
 import { atom } from "jotai";
 
 export const themesReadyAtom = atom(false);

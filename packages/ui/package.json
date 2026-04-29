@@ -22,9 +22,8 @@
     }
   },
   "scripts": {
-    "dev": "vite",
-    "watch": "vite build --watch",
-    "build": "pnpm --filter @dotdirfm/commands build && pnpm --filter @dotdirfm/fss-lang build && pnpm --filter @dotdirfm/extension-api build && pnpm --filter @dotdirfm/file-list build && tsc && vite build",
+    "dev": "vite build --watch",
+    "build": "tsc && vite build",
     "lint": "eslint lib vite.config.ts",
     "lint:fix": "eslint lib vite.config.ts --fix",
     "fmt": "eslint lib vite.config.ts --fix",
@@ -60,6 +59,9 @@
     "@dotdirfm/extension-api": "workspace:*",
     "@dotdirfm/file-list": "workspace:*",
     "@dotdirfm/fss-lang": "workspace:*",
+    "@dotdirfm/ui-bridge": "workspace:*",
+    "@dotdirfm/ui-focus": "workspace:*",
+    "@dotdirfm/ui-utils": "workspace:*",
     "@tanstack/react-virtual": "catalog:",
     "@xterm/addon-fit": "catalog:",
     "@xterm/xterm": "catalog:",

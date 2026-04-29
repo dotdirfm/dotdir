@@ -1,12 +1,12 @@
 import { useDialog } from "@/dialogs/dialogContext";
 import { activePanelSideAtom, leftActiveTabAtom, leftActiveTabIdAtom, leftTabsAtom, rightActiveTabAtom, rightActiveTabIdAtom, rightTabsAtom } from "@/entities/tab/model/tabsAtoms";
-import { useBridge } from "@/features/bridge/useBridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { useShowHidden } from "@/features/settings/useUserSettings";
-import { useFocusContext } from "@/focusContext";
-import { CONTAINER_SEP } from "@/utils/containerPath";
-import { isMediaFile } from "@/utils/mediaFiles";
-import { basename } from "@/utils/path";
+import { useFocusContext } from "@dotdirfm/ui-focus";
+import { CONTAINER_SEP } from "@dotdirfm/ui-utils";
+import { isMediaFile } from "@dotdirfm/ui-utils";
+import { basename } from "@dotdirfm/ui-utils";
 import { useEditorRegistry, useFsProviderRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import { useAtomValue, useSetAtom } from "jotai";

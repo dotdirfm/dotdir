@@ -4,8 +4,8 @@
  * Loads viewer/editor extensions inside an iframe (VFS origin) and bridges HostApi via postMessage RPC.
  */
 
-import type { Bridge } from "@/features/bridge";
-import { useBridge } from "@/features/bridge/useBridge";
+import type { Bridge } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { useCommandRegistry } from "@dotdirfm/commands";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import type { ColorThemeData, DotDirCommandsApi, DotDirGlobalApi, EditorProps, HostApi, ViewerProps } from "@/features/extensions/extensionApi";
@@ -14,11 +14,11 @@ import { readFileText as readFileTextFromFs } from "@/features/file-system/fs";
 import { useVfsUrlResolver } from "@/features/file-system/vfs";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { getActiveColorThemeData, onColorThemeChange } from "@/features/themes/vscodeColorTheme";
-import { useFocusContext, useManagedFocusLayer } from "@/focusContext";
+import { useFocusContext, useManagedFocusLayer } from "@dotdirfm/ui-focus";
 import styles from "@/styles/viewers.module.css";
-import { isContainerPath, parseContainerPath } from "@/utils/containerPath";
-import { basename, dirname, join, normalizePath } from "@/utils/path";
-import { getStyleHostElement } from "@/utils/styleHost";
+import { isContainerPath, parseContainerPath } from "@dotdirfm/ui-utils";
+import { basename, dirname, join, normalizePath } from "@dotdirfm/ui-utils";
+import { getStyleHostElement } from "@dotdirfm/ui-utils";
 import { useFsProviderRegistry } from "@/viewerEditorRegistry";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 

@@ -1,4 +1,4 @@
-import { cx } from "@/utils/cssModules";
+import { cx } from "@dotdirfm/ui-utils";
 import { SmartLabel } from "./dialogHotkeys";
 import styles from "./dialogs.module.css";
 import { OverlayDialog } from "./OverlayDialog";

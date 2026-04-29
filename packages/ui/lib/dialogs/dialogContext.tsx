@@ -1,4 +1,4 @@
-import type { ConflictResolution, CopyOptions, FileSearchMatch, FileSearchRequest, MoveOptions } from "@/features/bridge";
+import type { ConflictResolution, CopyOptions, FileSearchMatch, FileSearchRequest, MoveOptions } from "@dotdirfm/ui-bridge";
 import { useCommandRegistry } from "@dotdirfm/commands";
 import { type EditorProps, type ViewerProps } from "@/features/extensions/extensionApi";
 import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";

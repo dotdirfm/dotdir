@@ -8,7 +8,7 @@
  * See `ehProtocol.ts` for the full set of messages exchanged.
  */
 
-import { dirname, join, normalizePath } from "../../utils/path";
+import { dirname, join, normalizePath } from "./path";
 import type {
   HostToMainMessage,
   MainToHostMessage,

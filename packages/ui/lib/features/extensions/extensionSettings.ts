@@ -11,9 +11,9 @@
  * before any extension activates and reads `workspace.getConfiguration`.
  */
 
-import type { Bridge } from "@/features/bridge";
+import type { Bridge } from "@dotdirfm/ui-bridge";
 import { readFileText } from "@/features/file-system/fs";
-import { dirname, join } from "@/utils/path";
+import { dirname, join } from "@dotdirfm/ui-utils";
 
 export type ExtensionSettingsMap = Record<string, unknown>;
 

@@ -16,8 +16,8 @@ import {
   type Command,
   type Keybinding,
 } from "@dotdirfm/commands";
-import { useFocusContext } from "@/focusContext";
-import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
+import { useFocusContext } from "@dotdirfm/ui-focus";
+import { INPUT_NO_ASSIST } from "@dotdirfm/ui-utils";
 import { useAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import paletteStyles from "./CommandPalette.module.css";

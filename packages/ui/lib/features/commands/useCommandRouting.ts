@@ -1,5 +1,5 @@
 import { useCommandRegistry } from "@dotdirfm/commands";
-import { useFocusContext } from "@/focusContext";
+import { useFocusContext } from "@dotdirfm/ui-focus";
 import { useEffect, type RefObject } from "react";
 
 export function useCommandRouting(rootRef: RefObject<HTMLElement | null>): void {

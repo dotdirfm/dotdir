@@ -1,10 +1,10 @@
-import type { TerminalProfile } from "@/features/bridge";
-import { useBridge } from "@/features/bridge/useBridge";
+import type { TerminalProfile } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { formatHiddenCd, normalizeTerminalPath } from "@/features/terminal/path";
 import { terminalActiveSessionIdAtom, terminalSessionsAtom } from "@/features/terminal/terminalAtoms";
 import { TerminalSession } from "@/features/terminal/TerminalSession";
 import type { ManagedTerminalSession } from "@/features/terminal/types";
-import { useFocusContext } from "@/focusContext";
+import { useFocusContext } from "@dotdirfm/ui-focus";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import { useCallback, useRef } from "react";

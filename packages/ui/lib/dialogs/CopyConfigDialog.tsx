@@ -1,8 +1,8 @@
 import { DropdownSelect, type DropdownSelectOption } from "@/components/DropdownSelect/DropdownSelect";
 import { useDialogButtonNav } from "@/dialogs/useDialogButtonNav";
-import type { ConflictPolicy, CopyOptions, SymlinkMode } from "@/features/bridge";
-import { cx } from "@/utils/cssModules";
-import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
+import type { ConflictPolicy, CopyOptions, SymlinkMode } from "@dotdirfm/ui-bridge";
+import { cx } from "@dotdirfm/ui-utils";
+import { INPUT_NO_ASSIST } from "@dotdirfm/ui-utils";
 import { useMemo, useRef, useState } from "react";
 import { PathAutocompleteInput } from "./PathAutocompleteInput";
 import { SmartLabel } from "./dialogHotkeys";

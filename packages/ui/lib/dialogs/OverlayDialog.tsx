@@ -1,6 +1,6 @@
-import { cx } from "@/utils/cssModules";
+import { cx } from "@dotdirfm/ui-utils";
 import { useEffect, useRef } from "react";
-import { type FocusLayer, useFocusContext, useManagedFocusLayer } from "@/focusContext";
+import { type FocusLayer, useFocusContext, useManagedFocusLayer } from "@dotdirfm/ui-focus";
 import styles from "./dialogs.module.css";
 
 type Placement = "center" | "top";

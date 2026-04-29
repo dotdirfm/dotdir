@@ -1,5 +1,5 @@
-import { cx } from "@/utils/cssModules";
-import { getBreadcrumbSegments } from "@/utils/path";
+import { cx } from "@dotdirfm/ui-utils";
+import { getBreadcrumbSegments } from "@dotdirfm/ui-utils";
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import styles from "./Breadcrumbs.module.css";
 

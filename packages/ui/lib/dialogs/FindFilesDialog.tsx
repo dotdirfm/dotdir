@@ -1,5 +1,5 @@
-import type { FileSearchRequest } from "@/features/bridge";
-import { INPUT_NO_ASSIST } from "@/utils/inputNoAssist";
+import type { FileSearchRequest } from "@dotdirfm/ui-bridge";
+import { INPUT_NO_ASSIST } from "@dotdirfm/ui-utils";
 import { useMemo, useRef, useState } from "react";
 import { PathAutocompleteInput } from "./PathAutocompleteInput";
 import { SmartLabel } from "./dialogHotkeys";
