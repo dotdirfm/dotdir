@@ -40,6 +40,7 @@ import {
   setDataDir,
   setWorkspaceFolders,
   setActiveEditor,
+  setWorkspaceConfig,
   loadConfigDefaults,
   loadLanguageDefaults,
   updateUserConfigValue,
@@ -247,7 +248,70 @@ installCommandAdapter({
 
 // ── Nested worker + importScripts polyfills ─────────────────────────
 
-async function fetchAsBlobUrl(rawUrl: string): Promise<string> {
+/** Injected into nested workers so they can load file:// URLs via the parent. */
+const NESTED_XHR_SHIM = `
+(function(){
+  var _XHR = self.XMLHttpRequest;
+  self.XMLHttpRequest = function(){
+    var xhr = this;
+    var _method = 'GET', _url = '', _async = true;
+    var _status = 0, _statusText = '', _responseText = '', _readyState = 0;
+    var _onreadystatechange = null, _responseType = '';
+
+    Object.defineProperty(xhr, 'readyState', { get:function(){return _readyState} });
+    Object.defineProperty(xhr, 'status', { get:function(){return _status} });
+    Object.defineProperty(xhr, 'statusText', { get:function(){return _statusText} });
+    Object.defineProperty(xhr, 'responseText', { get:function(){return _responseText} });
+    Object.defineProperty(xhr, 'responseType', { get:function(){return _responseType}, set:function(v){_responseType=v} });
+    Object.defineProperty(xhr, 'responseURL', { get:function(){return _url} });
+    Object.defineProperty(xhr, 'onreadystatechange', { get:function(){return _onreadystatechange}, set:function(v){_onreadystatechange=v} });
+
+    xhr.open = function(method, url, async){ _method=method; _url=url; _async=async!==false };
+    xhr.send = function(){
+      var url = _url;
+      // Only intercept file:// URLs or relative extension paths
+      var isFile = /^file:\\/\\//i.test(url);
+      if(!isFile){
+        var real = new _XHR();
+        real.open(_method, url, _async);
+        real.responseType = _responseType;
+        real.onreadystatechange = function(){
+          _readyState = real.readyState;
+          _status = real.status;
+          _statusText = real.statusText;
+          _responseText = real.responseText;
+          if(_readyState === 4) _onreadystatechange&&_onreadystatechange();
+        };
+        real.send();
+        return;
+      }
+      // Ask parent worker to read the file
+      var rid = Date.now() + Math.random();
+      var handler = function(e){
+        if(e.data && e.data._xhrId === rid){
+          self.removeEventListener('message', handler);
+          _status = e.data.status || 200;
+          _statusText = e.data.statusText || 'OK';
+          _responseText = e.data.text || '';
+          _readyState = 4;
+          _onreadystatechange&&_onreadystatechange();
+        }
+      };
+      self.addEventListener('message', handler);
+      self.postMessage({ _xhrId: rid, _xhrUrl: url });
+    };
+    xhr.abort = function(){};
+    xhr.overrideMimeType = function(){};
+    xhr.getResponseHeader = function(){return null};
+    xhr.getAllResponseHeaders = function(){return ''};
+    xhr.addEventListener = function(){};
+    xhr.removeEventListener = function(){};
+    xhr.dispatchEvent = function(){return true};
+  };
+})();
+`;
+
+async function fetchAsBlobUrl(rawUrl: string, injectShim = true): Promise<string> {
   // Try to resolve by reading the script text via our existing readFile RPC.
   // Falls back to fetch() for standard http(s) URLs.
   const path = urlToLocalPath(rawUrl);
@@ -258,11 +322,14 @@ async function fetchAsBlobUrl(rawUrl: string): Promise<string> {
     // relative paths so webpack-chunked LSP servers still resolve siblings
     // from the same extension directory.
     const rewritten = rewriteBundledUrlsToAbsolute(text, path);
-    return URL.createObjectURL(new Blob([rewritten], { type: "text/javascript" }));
+    // Inject XHR shim so nested workers can read file:// resources
+    const withShim = injectShim ? NESTED_XHR_SHIM + rewritten : rewritten;
+    return URL.createObjectURL(new Blob([withShim], { type: "text/javascript" }));
   }
   const response = await fetch(rawUrl);
   const text = await response.text();
-  return URL.createObjectURL(new Blob([text], { type: "text/javascript" }));
+  const withShim = injectShim ? NESTED_XHR_SHIM + text : text;
+  return URL.createObjectURL(new Blob([withShim], { type: "text/javascript" }));
 }
 
 function urlToLocalPath(rawUrl: string): string | null {
@@ -319,6 +386,11 @@ class ProxiedWorker {
       this._impl = worker;
 
       worker.onmessage = (ev) => {
+        // Handle nested XHR requests from the injected shim
+        if (ev.data && typeof ev.data._xhrId !== "undefined" && typeof ev.data._xhrUrl === "string") {
+          void this._handleNestedXhr(worker, ev.data._xhrId, ev.data._xhrUrl);
+          return;
+        }
         this._onmessage?.(ev);
         this._fireListeners("message", ev);
       };
@@ -401,6 +473,24 @@ class ProxiedWorker {
       else l.handleEvent(ev);
     }
   }
+
+  private async _handleNestedXhr(worker: Worker, id: number | string, rawUrl: string): Promise<void> {
+    const path = urlToLocalPath(rawUrl);
+    if (!path) {
+      worker.postMessage({ _xhrId: id, status: 404, statusText: "Not Found", text: "" });
+      return;
+    }
+    try {
+      const text = await readTextFile(path);
+      if (text == null) {
+        worker.postMessage({ _xhrId: id, status: 404, statusText: "Not Found", text: "" });
+        return;
+      }
+      worker.postMessage({ _xhrId: id, status: 200, statusText: "OK", text });
+    } catch {
+      worker.postMessage({ _xhrId: id, status: 500, statusText: "Error", text: "" });
+    }
+  }
 }
 
 (globalThis as unknown as { Worker: unknown }).Worker = ProxiedWorker;
@@ -431,6 +521,103 @@ if (_originalImportScripts) {
 
 const vscodeNs = createVscodeNamespace();
 (self as unknown as { __dotdir_vscode_api?: unknown }).__dotdir_vscode_api = vscodeNs;
+
+// ── XMLHttpRequest polyfill for file:// URLs ────────────────────────
+
+const _OriginalXHR = (globalThis as unknown as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest;
+
+if (_OriginalXHR) {
+  const g = globalThis as unknown as {
+    XMLHttpRequest: typeof XMLHttpRequest;
+    _DotDirOriginalXHR?: typeof XMLHttpRequest;
+  };
+  g._DotDirOriginalXHR = _OriginalXHR;
+  g.XMLHttpRequest = class ProxiedXHR {
+    private _method = "GET";
+    private _url = "";
+    private _async = true;
+    private _status = 0;
+    private _statusText = "";
+    private _responseText = "";
+    private _responseType: XMLHttpRequestResponseType = "";
+    private _readyState = 0;
+    private _listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+    private _onreadystatechange: (() => void) | null = null;
+
+    get readyState(): number { return this._readyState; }
+    get status(): number { return this._status; }
+    get statusText(): string { return this._statusText; }
+    get responseText(): string { return this._responseText; }
+    get responseType(): XMLHttpRequestResponseType { return this._responseType; }
+    set responseType(value: XMLHttpRequestResponseType) { this._responseType = value; }
+    get responseURL(): string { return this._url; }
+
+    set onreadystatechange(cb: (() => void) | null) { this._onreadystatechange = cb; }
+    get onreadystatechange(): (() => void) | null { return this._onreadystatechange; }
+
+    open(method: string, url: string, async = true): void {
+      this._method = method;
+      this._url = url;
+      this._async = async;
+    }
+
+    send(): void {
+      const url = this._url;
+      const path = urlToLocalPath(url);
+      if (!path) {
+        // Fall through to real XHR (won't work for file:// but will for http(s))
+        const real = new _OriginalXHR();
+        real.open(this._method, url, this._async);
+        real.responseType = this._responseType;
+        real.onreadystatechange = () => {
+          this._readyState = real.readyState;
+          this._status = real.status;
+          this._statusText = real.statusText;
+          this._responseText = real.responseText;
+          if (this._readyState === 4) {
+            this._onreadystatechange?.();
+          }
+        };
+        real.send();
+        return;
+      }
+      void (async () => {
+        try {
+          const text = await readTextFile(path);
+          if (text === null) {
+            this._setState(4, 404, "Not Found", "");
+            return;
+          }
+          this._setState(4, 200, "OK", text);
+        } catch (err) {
+          this._setState(4, 500, "Error", "");
+        }
+      })();
+    }
+
+    private _setState(readyState: number, status: number, statusText: string, responseText: string): void {
+      this._readyState = readyState;
+      this._status = status;
+      this._statusText = statusText;
+      this._responseText = responseText;
+      this._onreadystatechange?.();
+    }
+
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+      let set = this._listeners.get(type);
+      if (!set) { set = new Set(); this._listeners.set(type, set); }
+      set.add(listener);
+    }
+    removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+      this._listeners.get(type)?.delete(listener);
+    }
+    dispatchEvent(): boolean { return true; }
+    abort(): void {}
+    overrideMimeType(): void {}
+    getResponseHeader(): string | null { return null; }
+    getAllResponseHeaders(): string { return ""; }
+  } as unknown as typeof XMLHttpRequest;
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -497,9 +684,17 @@ const require = (id) => {
 };
 const __filename = ${JSON.stringify(absScriptPath)};
 const __dirname = ${JSON.stringify(extDir)};
+
+// Make vscode findable by webpack externals, which may use self.vscode,
+// self.require, or __non_webpack_require__ in the worker global scope.
+self.vscode = __dotdir_vscode;
+self.require = require;
+
 (function(module, exports, require, globalThis, self, __filename, __dirname){
 ${script}
 })(module, exports, require, globalThis, self, __filename, __dirname);
+delete self.vscode;
+delete self.require;
 const __exp = module.exports && module.exports.__esModule && module.exports.default ? module.exports.default : module.exports;
 export default __exp;
 export const activate = __exp?.activate;
@@ -1090,6 +1285,12 @@ function symbolPayload(s: unknown): DocumentSymbolPayload | SymbolInformationPay
 }
 
 function locationPayload(l: unknown): LocationPayload {
+  const any = l as { uri?: Uri; range?: { start: { line: number; character: number }; end: { line: number; character: number } }; targetUri?: Uri; targetRange?: { start: { line: number; character: number }; end: { line: number; character: number } } };
+  // LocationLink (used by TypeScript extension): targetUri + targetRange
+  if (any.targetUri && any.targetRange) {
+    return { uri: any.targetUri.toString(), range: rangePayload(any.targetRange) };
+  }
+  // Location: uri + range
   const loc = l as Location;
   return { uri: loc.uri.toString(), range: rangePayload(loc.range) };
 }
@@ -1207,7 +1408,7 @@ async function invokeProvider(providerId: number, method: string, args: Provider
       result = await fn.call(provider, doc, pos, token);
       if (!result) return null;
       const arr = Array.isArray(result) ? result : [result];
-      return arr.map((l) => (l && (l as { uri?: Uri }).uri ? locationPayload(l) : locationPayload(l)));
+      return arr.map((l) => locationPayload(l));
     }
     case "reference": {
       const pos = new Position(args.position!.line, args.position!.character);
@@ -1384,6 +1585,9 @@ self.onmessage = (e: MessageEvent) => {
       break;
     case "configuration/update":
       updateUserConfigValue(msg.key, msg.value);
+      break;
+    case "configuration/workspace":
+      setWorkspaceConfig(msg.root, msg.values);
       break;
     case "editor/active":
       setActiveEditor(msg.uri);

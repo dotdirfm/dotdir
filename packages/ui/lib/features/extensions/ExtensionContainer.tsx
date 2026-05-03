@@ -16,6 +16,7 @@ import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { getActiveColorThemeData, onColorThemeChange } from "@/features/themes/vscodeColorTheme";
 import { useFocusContext, useManagedFocusLayer } from "@dotdirfm/ui-focus";
 import styles from "@/styles/viewers.module.css";
+import { LspStatusBar } from "@/features/extensions/lsp/LspStatusBar";
 import { isContainerPath, parseContainerPath } from "@dotdirfm/ui-utils";
 import { basename, dirname, join, normalizePath } from "@dotdirfm/ui-utils";
 import { getStyleHostElement } from "@dotdirfm/ui-utils";
@@ -1504,6 +1505,7 @@ export function EditorContainer({
           style={{ width: "100%", height: "100%" }}
         />
       </div>
+      <LspStatusBar languageId={currentLangId} filePath={filePath} />
     </>
   );
 

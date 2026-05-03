@@ -1,13 +1,14 @@
 /**
  * Main-thread Monaco ↔ Extension Host plumbing.
  *
- * `attachMonacoBridges(monaco, host)` wires up document tracking,
+ * `attachMonacoBridges(monaco, host, lspManager?)` wires up document tracking,
  * provider registration, and diagnostics in one go. Returns a
  * `detach()` function to tear down all three.
  */
 
 import type * as Monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import type { ExtensionHostClient } from "../extensionHostClient";
+import type { LspServerManager } from "../lsp/lspServerManager";
 import { MonacoDocumentTracker } from "./documentTracker";
 import { MonacoProviderBridge } from "./providerBridge";
 import { MonacoDiagnosticsBridge } from "./diagnosticsBridge";
@@ -22,10 +23,14 @@ export interface AttachedBridges {
   detach: () => void;
 }
 
-export function attachMonacoBridges(monaco: typeof Monaco, extensionHost: ExtensionHostClient): AttachedBridges {
-  const documentTracker = new MonacoDocumentTracker(monaco, { extensionHost });
+export function attachMonacoBridges(
+  monaco: typeof Monaco,
+  extensionHost: ExtensionHostClient,
+  lspManager?: LspServerManager | null,
+): AttachedBridges {
+  const documentTracker = new MonacoDocumentTracker(monaco, { extensionHost, lspManager });
   const providerBridge = new MonacoProviderBridge({ monaco, extensionHost });
-  const diagnosticsBridge = new MonacoDiagnosticsBridge(monaco, extensionHost);
+  const diagnosticsBridge = new MonacoDiagnosticsBridge(monaco, extensionHost, lspManager);
 
   documentTracker.attach();
   providerBridge.attach();

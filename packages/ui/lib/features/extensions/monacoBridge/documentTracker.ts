@@ -8,13 +8,18 @@
  *
  * Only file-scheme URIs are broadcast (Monaco has plenty of internal models
  * that don't represent user documents).
+ *
+ * Events are also forwarded to the LSP server manager so real language
+ * servers receive document sync notifications.
  */
 
 import type * as Monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import type { ExtensionHostClient } from "../extensionHostClient";
+import type { LspServerManager } from "../lsp/lspServerManager";
 
 export interface DocumentTrackerOptions {
   extensionHost: ExtensionHostClient;
+  lspManager?: LspServerManager | null;
   shouldTrack?: (model: Monaco.editor.ITextModel) => boolean;
 }
 
@@ -80,6 +85,7 @@ export class MonacoDocumentTracker {
     const entry = this.entries.get(model);
     if (!entry) return;
     this.options.extensionHost.documentSave(entry.uri);
+    this.options.lspManager?.documentSave(entry.uri);
   }
 
   private trackModel(model: Monaco.editor.ITextModel): void {
@@ -94,10 +100,13 @@ export class MonacoDocumentTracker {
       version,
       contentListener: model.onDidChangeContent(() => {
         entry.version = model.getVersionId();
-        this.options.extensionHost.documentChange(entry.uri, entry.version, model.getValue());
+        const text = model.getValue();
+        this.options.extensionHost.documentChange(entry.uri, entry.version, text);
+        this.options.lspManager?.documentChange(entry.uri, entry.version, text);
       }),
       disposeListener: model.onWillDispose(() => {
         this.options.extensionHost.documentClose(entry.uri);
+        this.options.lspManager?.documentClose(entry.uri);
         entry.contentListener.dispose();
         entry.disposeListener.dispose();
         this.entries.delete(model);
@@ -108,7 +117,9 @@ export class MonacoDocumentTracker {
       }),
     };
     this.entries.set(model, entry);
-    this.options.extensionHost.documentOpen(entry.uri, model.getLanguageId(), entry.version, model.getValue());
+    const text = model.getValue();
+    this.options.extensionHost.documentOpen(entry.uri, model.getLanguageId(), entry.version, text);
+    this.options.lspManager?.documentOpen(entry.uri, model.getLanguageId(), entry.version, text);
   }
 
   private handleEditorFocus(editor: Monaco.editor.IStandaloneCodeEditor): void {

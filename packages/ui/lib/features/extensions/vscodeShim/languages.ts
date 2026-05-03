@@ -327,6 +327,10 @@ export function registerTypeHierarchyProvider(_selector: DocumentSelector, _prov
   return new Disposable(() => {});
 }
 
+export function registerMultiDocumentHighlightProvider(_selector: DocumentSelector, _provider: unknown): Disposable {
+  return new Disposable(() => {});
+}
+
 export function setTextDocumentLanguage(doc: TextDocumentImpl, languageId: string): Promise<TextDocumentImpl> {
   doc.languageId = languageId;
   return Promise.resolve(doc);
@@ -338,6 +342,33 @@ export function setLanguageConfiguration(_language: string, _configuration: unkn
 
 export async function getLanguages(): Promise<string[]> {
   return [];
+}
+
+// ── Language status item ────────────────────────────────────────────
+
+import { LanguageStatusSeverity } from "./enums";
+
+interface LanguageStatusItem {
+  id: string;
+  name?: string;
+  selector: DocumentSelector;
+  severity: LanguageStatusSeverity;
+  text: string;
+  detail?: string;
+  busy: boolean;
+  command?: { command: string; title: string; arguments?: unknown[] };
+  dispose(): void;
+}
+
+export function createLanguageStatusItem(id: string, selector: DocumentSelector): LanguageStatusItem {
+  return {
+    id,
+    selector,
+    severity: LanguageStatusSeverity.Information,
+    text: "",
+    busy: false,
+    dispose: () => {},
+  };
 }
 
 // ── Assembled namespace ────────────────────────────────────────────
@@ -381,6 +412,8 @@ export const languages = {
   registerInlineCompletionItemProvider,
   registerEvaluatableExpressionProvider,
   registerTypeHierarchyProvider,
+  registerMultiDocumentHighlightProvider,
+  createLanguageStatusItem,
 };
 
 // Helper used by extensionHost.worker.ts to dispatch provider calls.

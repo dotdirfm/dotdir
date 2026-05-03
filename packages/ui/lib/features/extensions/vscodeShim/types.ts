@@ -1029,3 +1029,84 @@ export class LinkedEditingRanges {
     this.wordPattern = wordPattern;
   }
 }
+
+// ── Tab input types (used by vscode-languageclient to detect editor tabs) ─
+
+export class TabInputText {
+  readonly uri: Uri;
+  constructor(uri: Uri) {
+    this.uri = uri;
+  }
+}
+
+export class TabInputTextDiff {
+  readonly original: Uri;
+  readonly modified: Uri;
+  constructor(original: Uri, modified: Uri) {
+    this.original = original;
+    this.modified = modified;
+  }
+}
+
+export class TabInputNotebook {
+  readonly uri: Uri;
+  readonly notebookType: string;
+  constructor(uri: Uri, notebookType: string) {
+    this.uri = uri;
+    this.notebookType = notebookType;
+  }
+}
+
+export class TabInputCustom {
+  readonly uri: Uri;
+  readonly viewType: string;
+  constructor(uri: Uri, viewType: string) {
+    this.uri = uri;
+    this.viewType = viewType;
+  }
+}
+
+// ── DocumentDropOrPasteEditKind ─────────────────────────────────────
+
+export class DocumentDropOrPasteEditKind {
+  static readonly Empty = new DocumentDropOrPasteEditKind("empty");
+  static readonly Text = new DocumentDropOrPasteEditKind("text");
+
+  private _parts: string[];
+
+  readonly value: string;
+
+  private constructor(value: string, parts?: string[]) {
+    this.value = value;
+    this._parts = parts ?? [value];
+  }
+
+  append(kind: string): DocumentDropOrPasteEditKind;
+  append(...parts: string[]): DocumentDropOrPasteEditKind;
+  append(...args: string[]): DocumentDropOrPasteEditKind {
+    const parts = [...this._parts, ...args];
+    return new DocumentDropOrPasteEditKind(parts.join("."), parts);
+  }
+
+  static from(value: string): DocumentDropOrPasteEditKind {
+    return new DocumentDropOrPasteEditKind(value, value.split("."));
+  }
+}
+
+// ── RelativePattern ─────────────────────────────────────────────────
+
+export class RelativePattern {
+  base: string;
+  pattern: string;
+  baseUri?: Uri;
+
+  constructor(base: Uri | string, pattern: string) {
+    if (base instanceof Uri) {
+      this.baseUri = base;
+      this.base = base.fsPath;
+    } else {
+      this.base = base;
+    }
+    this.pattern = pattern;
+  }
+}

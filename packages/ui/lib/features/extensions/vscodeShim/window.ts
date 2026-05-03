@@ -9,7 +9,7 @@ import { ProgressLocation, StatusBarAlignment, ViewColumn } from "./enums";
 import { Disposable, EventEmitter } from "./events";
 import { getRpc, logActivation } from "./runtime";
 import { textDocuments } from "./textDocument";
-import { Position, Range, Selection, Uri } from "./types";
+import { Position, Range, Selection, Uri, TabInputText } from "./types";
 import type { TextDocumentImpl } from "./textDocument";
 
 // ── TextEditor (synthetic — backed by main-thread Monaco) ───────────
@@ -187,11 +187,13 @@ interface OutputChannel {
   dispose(): void;
 }
 
-export function createOutputChannel(name: string, _options?: string | { log?: boolean }): OutputChannel {
+export function createOutputChannel(name: string, options?: string | { log?: boolean; languageId?: string }): OutputChannel {
   const rpc = getRpc();
   const send = (text: string, newline: boolean) => {
     rpc.send({ type: "output/append", channel: name, text, newline });
   };
+  const isLog = typeof options === "object" && options?.log === true;
+
   return {
     name,
     append: (value) => send(value, false),
@@ -201,6 +203,30 @@ export function createOutputChannel(name: string, _options?: string | { log?: bo
     show: () => {},
     hide: () => {},
     dispose: () => {},
+    // LogOutputChannel properties (when { log: true })
+    ...(isLog ? {
+      logLevel: 3 as number, // 3 = Info
+      info: (message: string) => {
+        logActivation("info", `[${name}] ${message}`);
+        send(`${message}`, true);
+      },
+      trace: (message: string) => {
+        logActivation("info", `[${name}] ${message}`);
+        send(`${message}`, true);
+      },
+      warn: (message: string) => {
+        logActivation("warn", `[${name}] ${message}`);
+        send(`${message}`, true);
+      },
+      error: (message: string) => {
+        logActivation("error", `[${name}] ${message}`);
+        send(`${message}`, true);
+      },
+      debug: (message: string) => {
+        logActivation("info", `[${name}] ${message}`);
+        send(`${message}`, true);
+      },
+    } : {}),
   };
 }
 
@@ -418,11 +444,51 @@ export async function showTextDocument(
   return makeTextEditor(doc ?? (docOrUri as TextDocumentImpl));
 }
 
-// ── Tabs (stub) ─────────────────────────────────────────────────────
+// ── Tabs ─────────────────────────────────────────────────────────────
+
+interface Tab {
+  readonly input: unknown;
+  readonly label: string;
+  readonly isActive: boolean;
+  readonly group: { activeTab: Tab | undefined; tabs: Tab[] };
+}
+
+interface TabGroup {
+  readonly activeTab: Tab | undefined;
+  readonly tabs: Tab[];
+}
+
+function makeActiveTab(): Tab {
+  const doc = activeTextEditor?.document;
+  const input = doc ? new TabInputText(doc.uri) : undefined;
+  const group: TabGroup = {
+    activeTab: undefined,
+    tabs: [],
+  };
+  const tab: Tab = {
+    input,
+    label: doc?.fileName ?? "",
+    isActive: true,
+    group,
+  };
+  (group as { activeTab: Tab }).activeTab = tab;
+  (group as { tabs: Tab[] }).tabs = [tab];
+  return tab;
+}
+
+function makeTabGroup(): TabGroup {
+  const tab = activeTextEditor ? makeActiveTab() : undefined;
+  return {
+    activeTab: tab,
+    tabs: tab ? [tab] : [],
+  };
+}
 
 const tabGroups = {
-  all: [] as unknown[],
-  activeTabGroup: null as unknown,
+  all: [] as TabGroup[],
+  get activeTabGroup(): TabGroup {
+    return makeTabGroup();
+  },
   onDidChangeTabs: new EventEmitter<unknown>().event,
   onDidChangeTabGroups: new EventEmitter<unknown>().event,
   close: async (): Promise<boolean> => true,

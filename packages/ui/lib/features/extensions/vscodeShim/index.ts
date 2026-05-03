@@ -71,6 +71,11 @@ const authentication = {
   registerAuthenticationProvider: (): events.Disposable => new events.Disposable(() => {}),
 };
 
+const chat = {
+  createChatParticipant: (): { dispose(): void } => ({ dispose: () => {} }),
+  registerMappedEditsProvider: (): events.Disposable => new events.Disposable(() => {}),
+};
+
 const tests = {
   createTestController: (): { dispose(): void } => ({ dispose: () => {} }),
   registerTestProvider: (): events.Disposable => new events.Disposable(() => {}),
@@ -101,6 +106,8 @@ export function createVscodeNamespace(): Record<string, unknown> {
     UIKind: enums.UIKind,
     StatusBarAlignment: enums.StatusBarAlignment,
     ProgressLocation: enums.ProgressLocation,
+    LanguageStatusSeverity: enums.LanguageStatusSeverity,
+    LogLevel: enums.LogLevel,
     ExtensionMode,
     FileChangeType: enums.FileChangeType,
     InlineCompletionTriggerKind: enums.InlineCompletionTriggerKind,
@@ -149,6 +156,12 @@ export function createVscodeNamespace(): Record<string, unknown> {
     InlayHint: types.InlayHint,
     InlayHintLabelPart: types.InlayHintLabelPart,
     LinkedEditingRanges: types.LinkedEditingRanges,
+    TabInputText: types.TabInputText,
+    TabInputTextDiff: types.TabInputTextDiff,
+    TabInputNotebook: types.TabInputNotebook,
+    TabInputCustom: types.TabInputCustom,
+    DocumentDropOrPasteEditKind: types.DocumentDropOrPasteEditKind,
+    RelativePattern: types.RelativePattern,
     EventEmitter: events.EventEmitter,
     Disposable: events.Disposable,
     CancellationTokenSource: events.CancellationTokenSource,
@@ -166,6 +179,7 @@ export function createVscodeNamespace(): Record<string, unknown> {
     scm,
     comments,
     authentication,
+    chat,
     tests,
     l10n: l10nFallback,
 
@@ -194,5 +208,5 @@ export {
 export type { WorkerRpc, WorkerRpcHandler } from "./runtime";
 export { textDocuments } from "./textDocument";
 export type { TextDocumentImpl } from "./textDocument";
-export { setWorkspaceFolders, loadConfigDefaults, loadLanguageDefaults, applyUserConfig, updateUserConfigValue } from "./workspace";
+export { setWorkspaceFolders, setWorkspaceConfig, loadConfigDefaults, loadLanguageDefaults, applyUserConfig, updateUserConfigValue } from "./workspace";
 export { setActiveEditor } from "./window";

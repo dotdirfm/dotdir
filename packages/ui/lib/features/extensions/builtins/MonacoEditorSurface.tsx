@@ -18,6 +18,7 @@ import { useEffect, useRef } from "react";
 import { useCommandRegistry } from "@dotdirfm/commands";
 import { registerMountedExtensionCommandHandler } from "@/features/extensions/extensionCommandHandlers";
 import { useExtensionHostClient, type ExtensionHostClient } from "@/features/extensions/extensionHostClient";
+import { useLspManager } from "@/features/extensions/lsp/lspContext";
 import { attachMonacoBridges, type AttachedBridges } from "@/features/extensions/monacoBridge";
 import {
   DOTDIR_MONACO_EXECUTE_ACTION,
@@ -166,19 +167,27 @@ function overlayWidgetColors(isDark: boolean): Record<string, string> {
   };
 }
 
+import type { LspServerManager } from "@/features/extensions/lsp/lspServerManager";
+
 let attachedBridgeClient: ExtensionHostClient | null = null;
 let attachedBridges: AttachedBridges | null = null;
+let attachedLspManager: LspServerManager | null = null;
 
-export async function ensureMonacoBridgesAttached(client: ExtensionHostClient): Promise<void> {
-  if (attachedBridgeClient === client) return;
+export async function ensureMonacoBridgesAttached(
+  client: ExtensionHostClient,
+  lspManager?: LspServerManager | null,
+): Promise<void> {
+  if (attachedBridgeClient === client && attachedLspManager === lspManager) return;
   if (attachedBridges) {
     attachedBridges.detach();
     attachedBridges = null;
     attachedBridgeClient = null;
+    attachedLspManager = null;
   }
   const monaco = await loadSharedMonaco();
-  attachedBridges = attachMonacoBridges(monaco, client);
+  attachedBridges = attachMonacoBridges(monaco, client, lspManager ?? null);
   attachedBridgeClient = client;
+  attachedLspManager = lspManager ?? null;
 }
 
 function stripLangSuffix(scope: string): string {
@@ -974,6 +983,7 @@ export function MonacoEditorSurface({ hostApi, props, active, onInteract }: Mona
   const apiRef = useRef<EditorExtensionApi | null>(null);
   const commandRegistry = useCommandRegistry();
   const extensionHost = useExtensionHostClient();
+  const lspManager = useLspManager();
   const monacoCommandDisposerRef = useRef<(() => void) | null>(null);
   const monacoCommandSignatureRef = useRef<string>("");
   const activatedLanguageEventsRef = useRef(new Set<string>());
@@ -1004,10 +1014,10 @@ export function MonacoEditorSurface({ hostApi, props, active, onInteract }: Mona
   }
 
   useEffect(() => {
-    void ensureMonacoBridgesAttached(extensionHost).catch((err) => {
+    void ensureMonacoBridgesAttached(extensionHost, lspManager).catch((err) => {
       console.warn("[MonacoEditorSurface] failed to attach extension-host bridges", err);
     });
-  }, [extensionHost]);
+  }, [extensionHost, lspManager]);
 
   useEffect(() => {
     const root = rootRef.current;

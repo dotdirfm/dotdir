@@ -216,6 +216,21 @@ export enum NotebookCellKind {
   Code = 2,
 }
 
+export enum LanguageStatusSeverity {
+  Error = 0,
+  Warning = 1,
+  Information = 2,
+}
+
+export enum LogLevel {
+  Off = 0,
+  Trace = 1,
+  Debug = 2,
+  Info = 3,
+  Warning = 4,
+  Error = 5,
+}
+
 export enum FoldingRangeKind {
   Comment = 1,
   Imports = 2,

@@ -207,6 +207,8 @@ export class ExtensionHostClient {
   // Bridge listeners registered by main-thread subsystems.
   private providerRegisterListeners = new Set<ProviderRegisterListener>();
   private providerUnregisterListeners = new Set<ProviderUnregisterListener>();
+  /** Keeps track of which languages have at least one active provider from the extension host. */
+  private activeLanguages = new Set<string>();
   private diagnosticsListeners = new Set<DiagnosticsListener>();
   private diagnosticsClearListeners = new Set<DiagnosticsClearListener>();
   private outputListeners = new Set<OutputAppendListener>();
@@ -343,6 +345,10 @@ export class ExtensionHostClient {
     this.post({ type: "configuration/update", key, value, section });
   }
 
+  configurationWorkspace(root: string, values: Record<string, unknown>): void {
+    this.post({ type: "configuration/workspace", root, values });
+  }
+
   setActiveEditor(uri: string | null): void {
     this.post({ type: "editor/active", uri });
   }
@@ -363,7 +369,32 @@ export class ExtensionHostClient {
     return await this.request<unknown>({ type: "executeCommand", command, args });
   }
 
+  /** Returns the set of languages that have at least one active provider from the extension host. */
+  getActiveLanguages(): string[] {
+    return Array.from(this.activeLanguages);
+  }
+
   // ── Internals ─────────────────────────────────────────────────────
+
+  private trackProviderLanguage(_kind: string, selector: unknown): void {
+    if (typeof selector === "string" && selector !== "*") {
+      this.activeLanguages.add(selector);
+      return;
+    }
+    if (Array.isArray(selector)) {
+      for (const item of selector) {
+        if (typeof item === "string" && item !== "*") {
+          this.activeLanguages.add(item);
+        } else if (item && typeof item === "object" && typeof (item as { language?: string }).language === "string") {
+          this.activeLanguages.add((item as { language: string }).language);
+        }
+      }
+      return;
+    }
+    if (selector && typeof selector === "object" && typeof (selector as { language?: string }).language === "string") {
+      this.activeLanguages.add((selector as { language: string }).language);
+    }
+  }
 
   private spawnWorker(): void {
     const worker = new worker2();
@@ -423,6 +454,7 @@ export class ExtensionHostClient {
         return;
       }
       case "provider/register": {
+        this.trackProviderLanguage(msg.kind, msg.selector);
         for (const cb of this.providerRegisterListeners) cb({ providerId: msg.providerId, kind: msg.kind, selector: msg.selector, metadata: msg.metadata });
         return;
       }

@@ -361,6 +361,66 @@ export class MonacoProviderBridge {
         disposable = monaco.languages.registerLinkProvider(selector, provider);
         break;
       }
+      case "linkedEditingRange": {
+        const provider: Monaco.languages.LinkedEditingRangeProvider = {
+          provideLinkedEditingRanges: async (model, position) => {
+            const res = (await this.invoke(reg.providerId, "provideLinkedEditingRanges", {
+              uri: model.uri.toString(),
+              position: monacoPositionToPayload(position),
+            })) as { ranges: Array<{ start: { line: number; character: number }; end: { line: number; character: number } }>; wordPattern?: RegExp } | null;
+            if (!res) return null;
+            return { ranges: res.ranges.map((r) => ({
+              startLineNumber: r.start.line + 1,
+              startColumn: r.start.character + 1,
+              endLineNumber: r.end.line + 1,
+              endColumn: r.end.character + 1,
+            })), wordPattern: res.wordPattern };
+          },
+        };
+        disposable = monaco.languages.registerLinkedEditingRangeProvider(selector, provider);
+        break;
+      }
+      case "documentSemanticTokens": {
+        const legend = (metadata as { legend?: { tokenTypes: string[]; tokenModifiers: string[] } }).legend ?? { tokenTypes: [], tokenModifiers: [] };
+        const provider: Monaco.languages.DocumentSemanticTokensProvider = {
+          getLegend: () => ({
+            tokenTypes: legend.tokenTypes,
+            tokenModifiers: legend.tokenModifiers,
+          }),
+          provideDocumentSemanticTokens: async (model) => {
+            const res = (await this.invoke(reg.providerId, "provideDocumentSemanticTokens", {
+              uri: model.uri.toString(),
+            })) as { data: Uint32Array; resultId?: string } | null;
+            return res ?? null;
+          },
+          releaseDocumentSemanticTokens: (_resultId) => {},
+        };
+        disposable = monaco.languages.registerDocumentSemanticTokensProvider(selector, provider);
+        break;
+      }
+      case "documentRangeSemanticTokens": {
+        const legend = (metadata as { legend?: { tokenTypes: string[]; tokenModifiers: string[] } }).legend ?? { tokenTypes: [], tokenModifiers: [] };
+        const provider: Monaco.languages.DocumentRangeSemanticTokensProvider = {
+          getLegend: () => ({
+            tokenTypes: legend.tokenTypes,
+            tokenModifiers: legend.tokenModifiers,
+          }),
+          provideDocumentRangeSemanticTokens: async (model, range) => {
+            const res = (await this.invoke(reg.providerId, "provideDocumentRangeSemanticTokens", {
+              uri: model.uri.toString(),
+              range: monacoRangeToPayload(range),
+            })) as { data: Uint32Array; resultId?: string } | null;
+            return res ?? null;
+          },
+        };
+        disposable = monaco.languages.registerDocumentRangeSemanticTokensProvider(selector, provider);
+        break;
+      }
+      case "callHierarchy":
+        // Call hierarchy provider is registered by the extension but can't be
+        // bridged to Monaco — the standalone monaco-editor doesn't include the
+        // call hierarchy tree view or navigation UI (VS Code-only feature).
+        return;
       default:
         this.warn(`Provider kind ${reg.kind} not installed on Monaco`);
         return;

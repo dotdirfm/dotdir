@@ -262,6 +262,14 @@ export interface ConfigurationUpdateMsg {
   value: unknown;
 }
 
+export interface ConfigurationWorkspaceMsg {
+  type: "configuration/workspace";
+  /** Absolute path to the workspace root. */
+  root: string;
+  /** Merged workspace-level settings (from .dir/settings.json). */
+  values: Record<string, unknown>;
+}
+
 export interface ActiveEditorMsg {
   type: "editor/active";
   uri: string | null;
@@ -299,6 +307,7 @@ export type MainToHostMessage =
   | DocumentSaveMsg
   | WorkspaceFoldersMsg
   | ConfigurationUpdateMsg
+  | ConfigurationWorkspaceMsg
   | ActiveEditorMsg
   | ProviderInvokeMsg
   | ProviderCancelMsg

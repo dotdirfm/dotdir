@@ -6,6 +6,7 @@ import { builtInCommandContributions } from "@/features/commands/builtInCommandC
 import { useCommandRegistry } from "@dotdirfm/commands";
 import { ExtensionHostClientProvider } from "@/features/extensions/extensionHostClient";
 import { ExtensionHostWorkspaceSync } from "@/features/extensions/extensionHostWorkspaceSync";
+import { LspManagerProvider } from "@/features/extensions/lsp/lspContext";
 import { FssProvider } from "@/features/fss/fss";
 import { PanelControllersProvider } from "@/features/panels/panelControllers";
 import { UserSettingsProvider } from "@/features/settings/useUserSettings";
@@ -106,6 +107,7 @@ export const DotDir = forwardRef<DotDirHandle, DotDirProps>(function DotDir({ br
           [AppServicesProvider],
           [FssProvider],
           [ExtensionHostClientProvider],
+          [LspManagerProvider],
           [PanelControllersProvider],
         ]}
       >

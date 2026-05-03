@@ -45,6 +45,7 @@ type ConfigValue = unknown;
 
 const defaults = new Map<string, ConfigValue>();
 const userValues = new Map<string, ConfigValue>();
+const workspaceValues = new Map<string, ConfigValue>();
 const languageOverrides = new Map<string, Map<string, ConfigValue>>();
 
 export function loadConfigDefaults(manifestProperties: Record<string, { default?: ConfigValue }> | undefined): void {
@@ -78,6 +79,17 @@ export function applyUserConfig(flat: Record<string, ConfigValue>): void {
   }
 }
 
+export function setWorkspaceConfig(root: string, values: Record<string, ConfigValue>): void {
+  for (const [k, v] of Object.entries(values)) {
+    if (v === undefined) workspaceValues.delete(k);
+    else workspaceValues.set(k, v);
+  }
+  onDidChangeConfigurationEmitter.fire({
+    affectsConfiguration: () => true,
+  });
+  void root;
+}
+
 export function updateUserConfigValue(key: string, value: ConfigValue | undefined): void {
   if (value === undefined) userValues.delete(key);
   else userValues.set(key, value);
@@ -97,12 +109,13 @@ function resolveKey(section: string | undefined, key: string): string {
   return `${section}.${key}`;
 }
 
-function lookup(fullKey: string, language?: string): { value: ConfigValue | undefined; layer: "default" | "user" | "override" } {
+function lookup(fullKey: string, language?: string): { value: ConfigValue | undefined; layer: "default" | "user" | "workspace" | "override" } {
   if (language) {
     const m = languageOverrides.get(language);
     if (m && m.has(fullKey)) return { value: m.get(fullKey), layer: "override" };
   }
   if (userValues.has(fullKey)) return { value: userValues.get(fullKey), layer: "user" };
+  if (workspaceValues.has(fullKey)) return { value: workspaceValues.get(fullKey), layer: "workspace" };
   if (defaults.has(fullKey)) return { value: defaults.get(fullKey), layer: "default" };
   return { value: undefined, layer: "default" };
 }
@@ -150,6 +163,7 @@ export function getConfiguration(section?: string, scope?: unknown): WorkspaceCo
         key: fullKey,
         defaultValue: defaults.get(fullKey) as T | undefined,
         globalValue: userValues.get(fullKey) as T | undefined,
+        workspaceValue: workspaceValues.get(fullKey) as T | undefined,
       };
     },
     async update(key: string, value: unknown, target?: boolean | ConfigurationTarget, _overrideInLanguage?: boolean): Promise<void> {
