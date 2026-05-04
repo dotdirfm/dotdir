@@ -13,6 +13,7 @@
  * 3. User (from keybindings.json)
  */
 
+import { isMac } from "@dotdirfm/ui-utils";
 import { createContext, createElement, useContext, useRef, type ReactNode } from "react";
 
 export interface Command {
@@ -322,7 +323,7 @@ export class CommandRegistry {
 
     for (const layer of layers) {
       for (const binding of this.keybindingLayers[layer]) {
-        const normalizedKey = this.normalizeKey(this.isMac() ? (binding.mac ?? binding.key) : binding.key);
+        const normalizedKey = this.normalizeKey(this.isMacPlatform() ? (binding.mac ?? binding.key) : binding.key);
         const resolvedBinding: ResolvedKeybinding = { ...binding, normalizedKey };
 
         if (binding.command.startsWith("-")) {
@@ -354,8 +355,8 @@ export class CommandRegistry {
     return resolved;
   }
 
-  private isMac(): boolean {
-    return navigator.platform.toUpperCase().includes("MAC");
+  private isMacPlatform(): boolean {
+    return isMac();
   }
 
   /**
@@ -442,7 +443,7 @@ export class CommandRegistry {
     if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return null;
 
     const parts: string[] = [];
-    if (e.metaKey) parts.push(this.isMac() ? "cmd" : "ctrl");
+    if (e.metaKey) parts.push(this.isMacPlatform() ? "cmd" : "ctrl");
     if (e.ctrlKey) parts.push("ctrl");
     if (e.altKey) parts.push("alt");
     if (e.shiftKey) parts.push("shift");
@@ -455,7 +456,7 @@ export class CommandRegistry {
   }
 
   private normalizeKey(key: string): string {
-    const isMac = this.isMac();
+    const isMac = this.isMacPlatform();
     return key
       .toLowerCase()
       .replace(/meta/g, isMac ? "cmd" : "ctrl")
@@ -502,14 +503,14 @@ export function useCommandRegistry(): CommandRegistry {
 }
 
 export function formatKeybinding(binding: Keybinding): string {
-  const isMac = navigator.platform.toUpperCase().includes("MAC");
-  const key = isMac ? (binding.mac ?? binding.key) : binding.key;
+  const isMacPlatform = isMac();
+  const key = isMacPlatform ? (binding.mac ?? binding.key) : binding.key;
 
   return key
     .split("+")
     .map((part) => {
       const p = part.trim().toLowerCase();
-      if (isMac) {
+      if (isMacPlatform) {
         if (p === "ctrl" || p === "cmd" || p === "mod") return "⌘";
         if (p === "alt") return "⌥";
         if (p === "shift") return "⇧";
@@ -530,5 +531,5 @@ export function formatKeybinding(binding: Keybinding): string {
       if (p === "tab") return "Tab";
       return p.toUpperCase();
     })
-    .join(isMac ? "" : "+");
+    .join(isMacPlatform ? "" : "+");
 }

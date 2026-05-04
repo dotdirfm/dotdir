@@ -1,4 +1,4 @@
-import { cx } from "../utils/cssModules";
+import { cx } from "@dotdirfm/ui-utils";
 import { memo } from "react";
 import styles from "./FileList.module.css";
 import type { DisplayEntry, RenderFileIcon } from "./types";

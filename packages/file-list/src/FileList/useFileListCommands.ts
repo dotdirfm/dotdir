@@ -32,8 +32,7 @@ import {
   SELECT_RIGHT,
   SELECT_UP,
 } from "@dotdirfm/commands";
-import { isContainerPath, parseContainerPath } from "../utils/containerPath";
-import { dirname } from "../utils/path";
+import { dirname, isContainerPath, parseContainerPath } from "@dotdirfm/ui-utils";
 import { useEffect, useMemo, useRef, type RefObject } from "react";
 import type { UseFileListActionHandlersReturn } from "./fileListActions";
 

@@ -1,7 +1,5 @@
 import { ActionQueue } from "./actionQueue";
-import { useMediaQuery } from "../utils/useMediaQuery";
-import { cx } from "../utils/cssModules";
-import { dirname, join } from "../utils/path";
+import { cx, dirname, join, useMediaQuery } from "@dotdirfm/ui-utils";
 import { SHELL_EXECUTE, useCommandRegistry, VIEW_FILE } from "@dotdirfm/commands";
 import type { FsNode } from "@dotdirfm/fss-lang";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";

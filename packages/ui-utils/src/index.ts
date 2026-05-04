@@ -5,6 +5,8 @@ export { cx } from "./cssModules";
 export { INPUT_NO_ASSIST } from "./inputNoAssist";
 export { isImageFile, isVideoFile, isMediaFile } from "./mediaFiles";
 export { normalizePath, isUncRoot, isRootPath, dirname, join, resolveDotSegments, basename, isFileExecutable, getBreadcrumbSegments } from "./path";
+export { isMac, isWindows } from "./platform";
 export { Registry } from "./registry";
 export type { RegistryEntry, ResolvedResult, PatternContribution, RegistryListener } from "./registry";
 export { getStyleHostElement } from "./styleHost";
+export { useMediaQuery } from "./useMediaQuery";

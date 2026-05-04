@@ -163,7 +163,7 @@ export function usePanelCommands(args: UsePanelCommandsArgs): void {
   }, [args.active, commandRegistry]);
 }
 
-function getSelectedEntry(tab: PanelTab | null | undefined): FsNode | undefined {
+export function getSelectedEntry(tab: PanelTab | null | undefined): FsNode | undefined {
   if (!tab || tab.type !== "filelist") return undefined;
   const selectedName = tab.selectedEntryNames?.[0] ?? tab.activeEntryName;
   return selectedName ? tab.entries?.find((entry) => entry.name === selectedName) : undefined;

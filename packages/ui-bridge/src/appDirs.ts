@@ -1,4 +1,4 @@
-import { use, useMemo } from "react";
+import { use, useRef } from "react";
 import type { AppDirs, Bridge } from "./bridge";
 import { useBridge } from "./useBridge";
 
@@ -8,6 +8,11 @@ export async function readAppDirs(bridge: Bridge): Promise<AppDirs> {
 
 export function useAppDirs(): AppDirs {
   const bridge = useBridge();
-  const promise = useMemo(() => readAppDirs(bridge), [bridge]);
-  return use(promise);
+  const cached = useRef<{ bridge: Bridge; promise: Promise<AppDirs> } | null>(null);
+
+  if (!cached.current || cached.current.bridge !== bridge) {
+    cached.current = { bridge, promise: readAppDirs(bridge) };
+  }
+
+  return use(cached.current.promise);
 }

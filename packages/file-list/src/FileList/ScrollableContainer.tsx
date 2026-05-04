@@ -1,4 +1,4 @@
-import { useMediaQuery } from "../utils/useMediaQuery";
+import { isWindows, useMediaQuery } from "@dotdirfm/ui-utils";
 import type React from "react";
 import { type CSSProperties, type ReactNode, useEffect, useRef } from "react";
 
@@ -51,12 +51,12 @@ export const ScrollableContainer: React.FC<ScrollableContainerProps> = ({
       }
     };
 
-    const isWindows = navigator.platform.startsWith("Win");
+    const isWin = isWindows();
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
       event.stopPropagation();
-      const delta = lineSize && isWindows ? Math.sign(event.deltaY) * lineSize : event.deltaY;
+      const delta = lineSize && isWin ? Math.sign(event.deltaY) * lineSize : event.deltaY;
       updateScrollTop(delta);
     };
 

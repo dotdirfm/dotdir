@@ -1,7 +1,6 @@
 import { useDialogButtonNav } from "@/dialogs/useDialogButtonNav";
 import type { ConflictResolution } from "@dotdirfm/ui-bridge";
-import { cx } from "@dotdirfm/ui-utils";
-import { INPUT_NO_ASSIST } from "@dotdirfm/ui-utils";
+import { basename, cx, INPUT_NO_ASSIST } from "@dotdirfm/ui-utils";
 import { useRef, useState } from "react";
 import { SmartLabel } from "./dialogHotkeys";
 import styles from "./dialogs.module.css";
@@ -28,13 +27,6 @@ function formatSize(bytes: number): string {
 function formatDate(ms: number): string {
   if (ms == null || !Number.isFinite(ms) || ms === 0) return "—";
   return new Date(ms).toLocaleString();
-}
-
-function basename(path: string): string {
-  const sep = path.lastIndexOf("/");
-  const bsep = path.lastIndexOf("\\");
-  const idx = Math.max(sep, bsep);
-  return idx >= 0 ? path.slice(idx + 1) : path;
 }
 
 export function ConflictDialog({ src, dest, srcSize, srcMtimeMs, destSize, destMtimeMs, onResolve }: ConflictDialogProps) {

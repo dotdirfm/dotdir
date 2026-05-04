@@ -6,18 +6,69 @@ settings:
 
 catalogs:
   default:
+    '@eslint/js':
+      specifier: ^9.39.4
+      version: 9.39.4
     '@tanstack/react-virtual':
       specifier: ^3.13.23
       version: 3.13.23
+    '@tauri-apps/api':
+      specifier: ^2
+      version: 2.10.1
+    '@tauri-apps/cli':
+      specifier: ^2
+      version: 2.10.1
+    '@tauri-apps/plugin-deep-link':
+      specifier: ^2.4.8
+      version: 2.4.8
+    '@tauri-apps/plugin-opener':
+      specifier: ^2
+      version: 2.5.3
+    '@tsdown/css':
+      specifier: ^0.21.10
+      version: 0.21.10
+    '@types/css-tree':
+      specifier: ^2.3.11
+      version: 2.3.11
+    '@types/node':
+      specifier: ^25.0.3
+      version: 25.6.0
+    '@types/react':
+      specifier: ^19.2.4
+      version: 19.2.14
+    '@types/react-dom':
+      specifier: ^19.2.3
+      version: 19.2.3
     '@types/semver':
       specifier: ^7.7.1
       version: 7.7.1
+    '@vitejs/plugin-react':
+      specifier: ^6.0.1
+      version: 6.0.1
     '@xterm/addon-fit':
       specifier: ^0.11.0
       version: 0.11.0
     '@xterm/xterm':
       specifier: ^6.0.0
       version: 6.0.0
+    concurrently:
+      specifier: ^9.2.1
+      version: 9.2.1
+    css-tree:
+      specifier: ^3.1.0
+      version: 3.2.1
+    eslint:
+      specifier: ^9.39.4
+      version: 9.39.4
+    eslint-plugin-react-hooks:
+      specifier: ^7.0.1
+      version: 7.0.1
+    eslint-plugin-react-refresh:
+      specifier: ^0.5.2
+      version: 0.5.2
+    globals:
+      specifier: ^17.4.0
+      version: 17.4.0
     jotai:
       specifier: ^2.19.0
       version: 2.19.0
@@ -30,12 +81,30 @@ catalogs:
     monaco-editor:
       specifier: ^0.55.1
       version: 0.55.1
+    react:
+      specifier: ^19.2.4
+      version: 19.2.4
+    react-dom:
+      specifier: ^19.2.4
+      version: 19.2.4
     react-icons:
       specifier: ^5.6.0
       version: 5.6.0
     semver:
       specifier: ^7.7.4
       version: 7.7.4
+    tsdown:
+      specifier: ^0.21.10
+      version: 0.21.10
+    turbo:
+      specifier: ^2.9.6
+      version: 2.9.6
+    typescript:
+      specifier: ^6.0.3
+      version: 6.0.3
+    typescript-eslint:
+      specifier: ^8.58.0
+      version: 8.58.0
     vite-plugin-dts:
       specifier: ^4.5.4
       version: 4.5.4
@@ -120,6 +189,9 @@ importers:
 
   packages/commands:
     dependencies:
+      '@dotdirfm/ui-utils':
+        specifier: workspace:*
+        version: link:../ui-utils
       react:
         specifier: ^19.0.0
         version: 19.2.4
@@ -127,6 +199,9 @@ importers:
       tsdown:
         specifier: ^0.17.0
         version: 0.17.4(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(typescript@5.9.3)
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@types/node@25.6.0)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(esbuild@0.27.3))
 
   packages/extension-api:
     devDependencies:
@@ -142,6 +217,9 @@ importers:
       '@dotdirfm/fss-lang':
         specifier: workspace:*
         version: link:../fss
+      '@dotdirfm/ui-utils':
+        specifier: workspace:*
+        version: link:../ui-utils
       react:
         specifier: ^19.0.0
         version: 19.2.4
@@ -155,6 +233,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@types/node@25.6.0)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(esbuild@0.27.3))
 
   packages/fss:
     dependencies:
@@ -273,6 +354,9 @@ importers:
       tsdown:
         specifier: 'catalog:'
         version: 0.21.10(@tsdown/css@0.21.10)(typescript@6.0.3)
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@types/node@25.6.0)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.6.0)(esbuild@0.27.3))
 
   packages/ui-utils:
     dependencies:

@@ -1,4 +1,4 @@
-import { binarySearch } from "../utils/binarySearch";
+import { binarySearch } from "@dotdirfm/ui-utils";
 import type { DisplayEntry } from "./types";
 
 export function formatSize(sizeValue: unknown): string {

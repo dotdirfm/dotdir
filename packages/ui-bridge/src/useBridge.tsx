@@ -1,5 +1,4 @@
 import { atom, useAtom, useAtomValue } from "jotai";
-import { useEffect } from "react";
 import type { Bridge } from ".";
 
 export const bridgeAtom = atom<Bridge | null>(null);
@@ -17,12 +16,13 @@ export function useBridge(): Bridge {
 export function BridgeProvider({ bridge, children }: { bridge: Bridge; children: React.ReactNode }) {
   const [bridgeState, setBridge] = useAtom(bridgeAtom);
   
-  useEffect(() => {
+  if (bridgeState !== bridge) {
     setBridge(bridge);
-  }, [bridge, setBridge]);
+  }
 
   if (!bridgeState) {
     return null;
   }
+
   return <>{children}</>;
 }

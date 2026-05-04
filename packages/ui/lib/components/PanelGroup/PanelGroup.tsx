@@ -27,14 +27,13 @@ import {
     DOTDIR_OPEN_RIGHT_PANEL_MENU,
     LIST_OPEN, useCommandRegistry
 } from "@dotdirfm/commands";
-import type { FsNode } from "@dotdirfm/fss-lang";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { QuickSearchView } from "@/components/QuickSearchView/QuickSearchView";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileListTabPane } from "../FileListTabPane";
 import styles from "./PanelGroup.module.css";
-import { usePanelCommands } from "./usePanelCommands";
+import { getSelectedEntry, usePanelCommands } from "./usePanelCommands";
 
 interface PanelGroupProps {
   side: PanelSide;
@@ -819,12 +818,6 @@ export function PanelGroup({ side }: PanelGroupProps) {
       </div>
     </div>
   );
-}
-
-function getSelectedEntry(tab: PanelTab | null | undefined): FsNode | undefined {
-  if (!tab || tab.type !== "filelist") return undefined;
-  const selectedName = tab.selectedEntryNames?.[0] ?? tab.activeEntryName;
-  return selectedName ? tab.entries?.find((entry) => entry.name === selectedName) : undefined;
 }
 
 function getPanelTabDirectoryPath(tab: PanelTab | null | undefined): string | null {
