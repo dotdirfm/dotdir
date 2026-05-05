@@ -1,9 +1,9 @@
-import { ActionQueue } from "./actionQueue";
-import { cx, dirname, join, useMediaQuery } from "@dotdirfm/ui-utils";
 import { SHELL_EXECUTE, useCommandRegistry, VIEW_FILE } from "@dotdirfm/commands";
-import type { FsNode } from "@dotdirfm/fss-lang";
+import type { FsNode } from "@dotdirfm/fss";
+import { cx, dirname, join, useMediaQuery } from "@dotdirfm/ui-utils";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Breadcrumbs } from "../Breadcrumbs/Breadcrumbs";
+import { ActionQueue } from "./actionQueue";
 import { ColumnsScroller, type ColumnsScrollerProps } from "./ColumnsScroller";
 import { FileInfoFooter } from "./FileInfoFooter";
 import styles from "./FileList.module.css";

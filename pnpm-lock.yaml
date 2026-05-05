@@ -214,7 +214,7 @@ importers:
       '@dotdirfm/commands':
         specifier: workspace:*
         version: link:../commands
-      '@dotdirfm/fss-lang':
+      '@dotdirfm/fss':
         specifier: workspace:*
         version: link:../fss
       '@dotdirfm/ui-utils':
@@ -270,7 +270,7 @@ importers:
       '@dotdirfm/file-list':
         specifier: workspace:*
         version: link:../file-list
-      '@dotdirfm/fss-lang':
+      '@dotdirfm/fss':
         specifier: workspace:*
         version: link:../fss
       '@dotdirfm/ui-bridge':

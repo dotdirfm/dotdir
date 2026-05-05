@@ -1,4 +1,4 @@
-import type { FsNode } from "@dotdirfm/fss-lang";
+import type { FsNode } from "@dotdirfm/fss";
 
 export type FileListTabState = {
   path: string;

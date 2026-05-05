@@ -8,18 +8,17 @@
 
 import { useDialog } from "@/dialogs/dialogContext";
 import type { FileListTabState } from "@/entities/tab/model/types";
-import type { Bridge, FsChangeType, FsEntry } from "@dotdirfm/ui-bridge";
-import { useBridge } from "@dotdirfm/ui-bridge";
 import { loadFsProvider } from "@/features/extensions/browserFsProvider";
 import { FileSystemObserver, useFileSystemWatchRegistry, type FileSystemChangeRecord, type HandleMeta } from "@/features/file-system/fs";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
-import { buildContainerPath, isContainerPath, parseContainerPath } from "@dotdirfm/ui-utils";
-import { basename, dirname, isFileExecutable, isRootPath, join } from "@dotdirfm/ui-utils";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import { useFsProviderRegistry } from "@/viewerEditorRegistry";
 import type { FsProviderEntry } from "@dotdirfm/extension-api";
-import type { FsNode } from "@dotdirfm/fss-lang";
-import { createFsNode } from "@dotdirfm/fss-lang/helpers";
-import { useLatestRef } from "@/hooks/useLatestRef";
+import type { FsNode } from "@dotdirfm/fss";
+import { createFsNode } from "@dotdirfm/fss/helpers";
+import type { Bridge, FsChangeType, FsEntry } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
+import { basename, buildContainerPath, dirname, isContainerPath, isFileExecutable, isRootPath, join, parseContainerPath } from "@dotdirfm/ui-utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // ── Helper functions ──────────────────────────────────────────────────────────
@@ -225,7 +224,8 @@ export function useFileListPanel() {
             const parent = buildParentChain(path);
             const rawEntries = await bridge.fs.entries(path);
             if (abort.signal.aborted) return;
-            const nodes = rawEntries.map((entry) => entryToFsNode(entry, path, languageRegistry, parent));
+            const nodesParent = parent ?? createFsNode({ name: "/", type: "folder", path });
+            const nodes = rawEntries.map((entry) => entryToFsNode(entry, path, languageRegistry, nodesParent));
             if (abort.signal.aborted) return;
             updateState(parent, nodes);
             setupWatches(path);

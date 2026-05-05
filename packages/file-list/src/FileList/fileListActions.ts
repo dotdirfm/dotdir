@@ -1,7 +1,7 @@
-import type { ActionQueue } from "./actionQueue";
 import { EDIT_FILE, SHELL_EXECUTE, useCommandRegistry, VIEW_FILE } from "@dotdirfm/commands";
-import type { FsNode } from "@dotdirfm/fss-lang";
+import type { FsNode } from "@dotdirfm/fss";
 import { useMemo, useRef } from "react";
+import type { ActionQueue } from "./actionQueue";
 import type { FileOperationHandlers, LanguageResolver } from "./types";
 
 type DisplayEntry = {

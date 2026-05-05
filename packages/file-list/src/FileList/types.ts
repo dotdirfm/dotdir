@@ -1,4 +1,4 @@
-import type { FsNode } from "@dotdirfm/fss-lang";
+import type { FsNode } from "@dotdirfm/fss";
 import type { ReactNode } from "react";
 
 export interface ResolvedEntryStyle {

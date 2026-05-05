@@ -1,10 +1,10 @@
 import { activePanelSideAtom, genTabId, leftActiveIndexAtom, leftActiveTabIdAtom, leftTabsAtom, rightActiveIndexAtom, rightActiveTabIdAtom, rightTabsAtom } from "@/entities/tab/model/tabsAtoms";
 import type { PanelTab } from "@/entities/tab/model/types";
-import { useBridge } from "@dotdirfm/ui-bridge";
 import type { DotDirWindowLayout, PanelPersistedState, PersistedTab } from "@/features/ui-state/types";
 import { useUiState } from "@/features/ui-state/uiState";
+import type { FsNode } from "@dotdirfm/fss";
+import { useBridge } from "@dotdirfm/ui-bridge";
 import { basename, dirname, join } from "@dotdirfm/ui-utils";
-import type { FsNode } from "@dotdirfm/fss-lang";
 import { useAtomValue, useSetAtom } from "jotai";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";

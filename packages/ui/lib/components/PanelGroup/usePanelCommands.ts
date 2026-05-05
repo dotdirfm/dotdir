@@ -2,6 +2,7 @@ import { OPPOSITE_PANEL } from "@/entities/panel/model/panelSide";
 import type { PanelSide } from "@/entities/panel/model/types";
 import { createFilelistTab, createPreviewTab } from "@/entities/tab/model/tabsAtoms";
 import type { PanelTab } from "@/entities/tab/model/types";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import {
     CLOSE_TAB,
     EDIT_IN_OPPOSITE_PANEL,
@@ -12,8 +13,7 @@ import {
     OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_NEW_TAB,
     PREVIEW_IN_OPPOSITE_PANEL, useCommandRegistry
 } from "@dotdirfm/commands";
-import type { FsNode } from "@dotdirfm/fss-lang";
-import { useLatestRef } from "@/hooks/useLatestRef";
+import type { FsNode } from "@dotdirfm/fss";
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
 
 interface UsePanelCommandsArgs {

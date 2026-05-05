@@ -1,5 +1,5 @@
 {
-  "name": "@dotdirfm/fss-lang",
+  "name": "@dotdirfm/fss",
   "type": "module",
   "version": "0.0.6",
   "description": "File Style Sheets — a CSS-like language for describing how files should be rendered in a tree or panel.",

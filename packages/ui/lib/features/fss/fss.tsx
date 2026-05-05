@@ -1,10 +1,10 @@
-import type { Bridge } from "@dotdirfm/ui-bridge";
 import { extensionIconThemes, extensionRef, type LoadedExtension } from "@/features/extensions/types";
 import { readFileText } from "@/features/file-system/fs";
 import type { ResolvedEntryStyle } from "@/features/fss/types";
+import type { FsNode } from "@dotdirfm/fss";
+import { createLayer, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from "@dotdirfm/fss";
+import type { Bridge } from "@dotdirfm/ui-bridge";
 import { basename, dirname, join, normalizePath } from "@dotdirfm/ui-utils";
-import type { FsNode } from "@dotdirfm/fss-lang";
-import { createLayer, LayeredResolver, LayerPriority, type StyleLayer, type ThemeKind } from "@dotdirfm/fss-lang";
 import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 const defaultFss = `

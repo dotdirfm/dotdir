@@ -58,7 +58,7 @@
     "@dotdirfm/commands": "workspace:*",
     "@dotdirfm/extension-api": "workspace:*",
     "@dotdirfm/file-list": "workspace:*",
-    "@dotdirfm/fss-lang": "workspace:*",
+    "@dotdirfm/fss": "workspace:*",
     "@dotdirfm/ui-bridge": "workspace:*",
     "@dotdirfm/ui-focus": "workspace:*",
     "@dotdirfm/ui-utils": "workspace:*",

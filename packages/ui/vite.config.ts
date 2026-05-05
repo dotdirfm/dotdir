@@ -18,8 +18,6 @@ export default defineConfig({
     },
     rolldownOptions: {
       external: [
-        "@dotdirfm/commands",
-        "@dotdirfm/fss-lang",
         "react",
         "react/jsx-runtime",
         "react-dom",

@@ -53,7 +53,7 @@
   },
   "dependencies": {
     "@dotdirfm/commands": "workspace:*",
-    "@dotdirfm/fss-lang": "workspace:*",
+    "@dotdirfm/fss": "workspace:*",
     "@dotdirfm/ui-utils": "workspace:*"
   },
   "packageManager": "pnpm@10.30.3",

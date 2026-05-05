@@ -1,12 +1,12 @@
 import { systemThemeAtom } from "@/atoms";
-import { useBridge } from "@dotdirfm/ui-bridge";
 import { useResolveIcon } from "@/features/file-icons/iconResolver";
 import { FileSystemObserver, useFileSystemWatchRegistry, type FileSystemChangeRecord } from "@/features/file-system/fs";
 import { createPanelResolver, invalidateFssCache, resolveEntryStyle, syncLayers, useExtensionFssLayers } from "@/features/fss/fss";
 import type { FilePresentation } from "@/features/fss/types";
-import { basename, dirname, join, normalizePath } from "@dotdirfm/ui-utils";
-import type { FsNode } from "@dotdirfm/fss-lang";
-import { createFsNode } from "@dotdirfm/fss-lang/helpers";
+import type { FsNode } from "@dotdirfm/fss";
+import { createFsNode } from "@dotdirfm/fss/helpers";
+import { useBridge } from "@dotdirfm/ui-bridge";
+import { basename, dirname, isRootPath, join, normalizePath } from "@dotdirfm/ui-utils";
 import { useAtomValue } from "jotai";
 import {
     createContext,
@@ -179,7 +179,7 @@ export function FileStyleResolverProvider({ path, pathKind = "directory", childr
       const style = resolveEntryStyle(resolverRef.current, node);
       const presentation = {
         style,
-        icon: resolveIcon(node.name, node.type === "folder", false, node.parent == null, node.lang, style.icon),
+        icon: resolveIcon(node.name, node.type === "folder", false, isRootPath(node.path ?? ""), node.lang, style.icon),
       };
       presentationCacheRef.current.set(key, presentation);
       return presentation;

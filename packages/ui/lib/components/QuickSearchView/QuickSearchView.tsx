@@ -1,6 +1,6 @@
+import type { FsNode } from "@dotdirfm/fss";
 import { useCallback, useState, type CSSProperties } from "react";
 import { VscArrowDown, VscArrowUp, VscChevronLeft, VscRegex } from "react-icons/vsc";
-import type { FsNode } from "@dotdirfm/fss-lang";
 
 export interface QuickSearchViewProps {
   onBack: () => void;

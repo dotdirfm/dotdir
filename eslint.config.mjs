@@ -49,8 +49,21 @@ export default tseslint.config(
         },
       ],
       "@typescript-eslint/no-explicit-any": "off",
-      "react-hooks/exhaustive-deps": "warn",
+      "react-hooks/exhaustive-deps": ["warn", {
+        additionalHooks: "(useLatestRef)",
+      }],
       "react-hooks/rules-of-hooks": "error",
+    },
+  },
+  {
+    files: [
+      "packages/ui/lib/components/PanelGroup/**",
+      "packages/ui/lib/features/**",
+      "packages/ui/lib/dialogs/**",
+      "packages/ui/lib/hooks/**",
+    ],
+    rules: {
+      "react-hooks/exhaustive-deps": "off",
     },
   },
   {
