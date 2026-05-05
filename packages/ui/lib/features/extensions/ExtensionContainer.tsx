@@ -1328,6 +1328,10 @@ interface EditorContainerWrapperProps {
   languages?: EditorProps["languages"];
   grammars?: EditorProps["grammars"];
   onInteract?: () => void;
+  tabFiles?: Array<{ path: string; name: string; langId: string; dirty?: boolean }>;
+  activeTabIndex?: number;
+  onTabClose?: (index: number) => void;
+  onTabSelect?: (index: number) => void;
 }
 
 export function EditorContainer({
@@ -1343,6 +1347,10 @@ export function EditorContainer({
   onClose,
   onDirtyChange,
   onInteract,
+  tabFiles,
+  activeTabIndex,
+  onTabClose,
+  onTabSelect,
 }: EditorContainerWrapperProps) {
   const languageRegistry = useLanguageRegistry();
   const languages = languageRegistry.languages;
@@ -1491,6 +1499,60 @@ export function EditorContainer({
           ×
         </button>
       </div>
+      {tabFiles && tabFiles.length > 1 && (
+        <div
+          style={{
+            display: "flex",
+            overflow: "auto",
+            borderBottom: "1px solid var(--border, #333)",
+            flexShrink: 0,
+            minHeight: 30,
+          }}
+        >
+          {tabFiles.map((t, i) => (
+            <div
+              key={t.path}
+              onClick={() => onTabSelect?.(i)}
+              title={t.path}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "4px 10px",
+                cursor: "pointer",
+                fontSize: 12,
+                borderRight: "1px solid var(--border, #333)",
+                background: i === (activeTabIndex ?? 0) ? "var(--bg, #1e1e2e)" : "transparent",
+                color: i === (activeTabIndex ?? 0) ? "var(--fg, #cdd6f4)" : "var(--fg-muted, #6c7086)",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
+            >
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                {t.dirty ? "● " : ""}{t.name}
+              </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTabClose?.(i);
+                }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  padding: "0 2px",
+                  color: "inherit",
+                  lineHeight: 1,
+                }}
+                aria-label={`Close ${t.name}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ flex: 1, minHeight: 0 }}>
         <ExtensionContainer
           kind="editor"

@@ -167,6 +167,10 @@ export type DialogSpec =
       props: EditorProps;
       onClose: () => void;
       onDirtyChange?: (dirty: boolean) => void;
+      tabFiles?: Array<{ path: string; name: string; langId: string; dirty?: boolean }>;
+      activeTabIndex?: number;
+      onTabClose?: (index: number) => void;
+      onTabSelect?: (index: number) => void;
     };
 
 export type DialogUpdate =
@@ -585,6 +589,10 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue, stackI
           stackIndex={stackIndex}
           onClose={dialog.onClose}
           onDirtyChange={dialog.onDirtyChange}
+          tabFiles={dialog.tabFiles}
+          activeTabIndex={dialog.activeTabIndex}
+          onTabClose={dialog.onTabClose}
+          onTabSelect={dialog.onTabSelect}
         />
       );
     default:

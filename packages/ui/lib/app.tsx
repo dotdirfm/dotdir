@@ -3,9 +3,7 @@ import { CommandPalette } from "@/components/CommandPalette/CommandPalette";
 import { KeyBar } from "@/components/KeyBar/KeyBar";
 import { PanelGroup } from "@/components/PanelGroup/PanelGroup";
 import { DialogHolder, useDialog } from "@/dialogs/dialogContext";
-import { useBridge } from "@dotdirfm/ui-bridge";
 import { CommandLine } from "@/features/command-line/CommandLine/CommandLine";
-import { useCommandRegistry } from "@dotdirfm/commands";
 import { useBuiltInCommands } from "@/features/commands/useBuiltInCommands";
 import { useCommandRouting } from "@/features/commands/useCommandRouting";
 import { useExtensionRuntime } from "@/features/extensions/useExtensionRuntime";
@@ -14,12 +12,14 @@ import { useFileOperations } from "@/features/file-ops/useFileOperations";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { Terminal, TerminalToolbar } from "@/features/terminal/Terminal";
 import { useSystemTheme } from "@/features/themes/useSystemTheme";
-import { useFocusContext } from "@dotdirfm/ui-focus";
 import { useViewerEditorState } from "@/hooks/useViewerEditorState";
 import { useWorkspacePersistenceProcess, useWorkspaceRestoreProcess } from "@/processes/workspace-session/model/useWorkspaceSessionProcess";
 import baseStyles from "@/styles/base.module.css";
 import panelsStyles from "@/styles/panels.module.css";
 import terminalStyles from "@/styles/terminal.module.css";
+import { useCommandRegistry } from "@dotdirfm/commands";
+import { useBridge } from "@dotdirfm/ui-bridge";
+import { useFocusContext } from "@dotdirfm/ui-focus";
 import { cx } from "@dotdirfm/ui-utils";
 import { useAtomValue, useSetAtom } from "jotai";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
@@ -83,10 +83,16 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
   const {
     handleViewFile,
     handleEditFile,
+    openFileInEditor,
     handleOpenCreateFileConfirm,
     requestCloseViewer,
     requestCloseEditor,
+    requestCloseEditorTab,
+    setActiveEditorTab,
     viewerOpen,
+    editorFiles,
+    activeEditorFileIndex,
+    editorDirty,
   } = useViewerEditorState();
 
   useWorkspacePersistenceProcess();
@@ -146,9 +152,15 @@ export const App = forwardRef<AppHandle, { widget: React.ReactNode }>(function A
     onOpenCreateFileConfirm: handleOpenCreateFileConfirm,
     onViewFile: handleViewFile,
     onEditFile: handleEditFile,
+    openFileInEditor,
     onRequestCloseViewer: requestCloseViewer,
     onRequestCloseEditor: requestCloseEditor,
     viewerOpen,
+    editorFiles,
+    activeEditorFileIndex,
+    editorDirty,
+    requestCloseEditorTab,
+    setActiveEditorTab,
   });
 
   useCommandRouting(rootRef);

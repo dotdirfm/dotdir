@@ -417,9 +417,10 @@ export class MonacoProviderBridge {
         break;
       }
       case "callHierarchy":
-        // Call hierarchy provider is registered by the extension but can't be
-        // bridged to Monaco — the standalone monaco-editor doesn't include the
-        // call hierarchy tree view or navigation UI (VS Code-only feature).
+      case "workspaceSymbol":
+        // These providers are registered by the extension but can't be bridged
+        // to Monaco — the standalone monaco-editor doesn't include the UI for
+        // call hierarchy, workspace symbols, or other VS Code-only features.
         return;
       default:
         this.warn(`Provider kind ${reg.kind} not installed on Monaco`);

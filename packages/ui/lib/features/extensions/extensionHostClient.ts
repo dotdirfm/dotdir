@@ -219,6 +219,7 @@ export class ExtensionHostClient {
   private commandRequestListener: CommandRequestListener | null = null;
   private configReadListener: ConfigReadListener | null = null;
   private configWriteListener: ConfigWriteListener | null = null;
+  openFileRequestListener: ((path: string) => void) | null = null;
 
   private queuedOutbound: MainToHostMessage[] = [];
   private workerReady = false;
@@ -317,6 +318,9 @@ export class ExtensionHostClient {
   }
   setConfigWriteListener(listener: ConfigWriteListener | null): void {
     this.configWriteListener = listener;
+  }
+  setOpenFileRequestListener(listener: ((path: string) => void) | null): void {
+    this.openFileRequestListener = listener;
   }
 
   // ── Outbound: document / editor / workspace / configuration ──────
@@ -683,6 +687,12 @@ export function ExtensionHostClientProvider({ children }: { children: ReactNode 
       return undefined;
     });
     client.setCommandRequestListener(async (command, args) => {
+      if (command === "__dotdir/openFile") {
+        const path = String(args[0] ?? "");
+        void bridge.utils.debugLog?.(`[ExtensionHost] openFile requested: ${path}`);
+        client.openFileRequestListener?.(path);
+        return null;
+      }
       return handleWorkerCommand(bridge, command, args);
     });
     return () => {

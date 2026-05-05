@@ -12,6 +12,14 @@ import { useLatestRef } from "@/hooks/useLatestRef";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+export interface EditorFile {
+  path: string;
+  name: string;
+  size: number;
+  langId: string;
+  dirty: boolean;
+}
+
 function sameViewerDialog(
   dialog: ReturnType<typeof useDialog>["dialog"],
   next:
@@ -59,10 +67,17 @@ function sameEditorDialog(
 type UseViewerEditorStateResult = {
   handleViewFile: (filePath: string, fileName: string, fileSize: number) => void;
   handleEditFile: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
+  openFileInEditor: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
   handleOpenCreateFileConfirm: (filePath: string, fileName: string, langId: string) => Promise<void>;
   requestCloseViewer: () => void;
   requestCloseEditor: () => void;
+  requestCloseEditorTab: (index: number) => void;
+  setActiveEditorTab: (index: number) => void;
+  onEditorDirtyChange: (dirty: boolean) => void;
   viewerOpen: boolean;
+  editorFiles: EditorFile[];
+  activeEditorFileIndex: number;
+  editorDirty: boolean;
 };
 
 export function useViewerEditorState(): UseViewerEditorStateResult {
@@ -73,19 +88,24 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   const focusContext = useFocusContext();
   const { navigateTo } = useActivePanelNavigation();
   const [viewerFile, setViewerFile] = useState<{ path: string; name: string; size: number; panel: "left" | "right" } | null>(null);
-  const [editorFile, setEditorFile] = useState<{ path: string; name: string; size: number; langId: string } | null>(null);
+  const [editorFiles, setEditorFiles] = useState<EditorFile[]>([]);
+  const [activeEditorFileIndex, setActiveEditorFileIndex] = useState<number>(0);
+
+  const activePanelSide = useAtomValue(activePanelSideAtom);
+  const activePanelSideRef = useLatestRef(activePanelSide);
+
+  const { dialog, showDialog, replaceDialog, closeDialog } = useDialog();
+
   const setLeftTabs = useSetAtom(leftTabsAtom);
   const setRightTabs = useSetAtom(rightTabsAtom);
   const leftActiveTabId = useAtomValue(leftActiveTabIdAtom);
   const rightActiveTabId = useAtomValue(rightActiveTabIdAtom);
   const leftActiveTab = useAtomValue(leftActiveTabAtom);
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
-  const [editorDirty, setEditorDirty] = useState(false);
   const { showHidden } = useShowHidden();
-  const { dialog, showDialog, replaceDialog, closeDialog } = useDialog();
 
-  const activePanelSide = useAtomValue(activePanelSideAtom);
-  const activePanelSideRef = useLatestRef(activePanelSide);
+  const activeEditorFile = editorFiles[activeEditorFileIndex] ?? null;
+  const editorDirty = activeEditorFile?.dirty ?? false;
 
   const handleViewFile = useCallback(
     (filePath: string, fileName: string, fileSize: number) => {
@@ -93,8 +113,8 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
         void navigateTo(filePath + CONTAINER_SEP);
         return;
       }
-      setEditorDirty(false);
-      setEditorFile(null);
+      setEditorFiles([]);
+      setActiveEditorFileIndex(0);
       setViewerFile({
         path: filePath,
         name: fileName,
@@ -102,16 +122,98 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
         panel: activePanelSideRef.current,
       });
     },
-    [activePanelSideRef, fsProviderRegistry, navigateTo, setEditorFile, setViewerFile],
+    [activePanelSideRef, fsProviderRegistry, navigateTo],
   );
 
   const handleEditFile = useCallback(
     (filePath: string, fileName: string, fileSize: number, langId: string) => {
       setViewerFile(null);
-      setEditorDirty(false);
-      setEditorFile({ path: filePath, name: fileName, size: fileSize, langId });
+      setEditorFiles([{ path: filePath, name: fileName, size: fileSize, langId, dirty: false }]);
+      setActiveEditorFileIndex(0);
     },
-    [setEditorFile, setViewerFile],
+    [],
+  );
+
+  const openFileInEditor = useCallback(
+    (filePath: string, fileName: string, fileSize: number, langId: string) => {
+      setEditorFiles((prev) => {
+        const existingIndex = prev.findIndex((f) => f.path === filePath);
+        if (existingIndex >= 0) {
+          setActiveEditorFileIndex(existingIndex);
+          return prev;
+        }
+        const next = [...prev, { path: filePath, name: fileName, size: fileSize, langId, dirty: false }];
+        setActiveEditorFileIndex(next.length - 1);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const setActiveEditorTab = useCallback((index: number) => {
+    setActiveEditorFileIndex(index);
+  }, []);
+
+  const onEditorDirtyChange = useCallback((dirty: boolean) => {
+    setEditorFiles((prev) => {
+      if (prev.length === 0) return prev;
+      const next = [...prev];
+      // Active file index is captured in the closure of the Monaco mount
+      // We update the first file by default — the mount knows its own index
+      const idx = next.length > 0 ? next.length - 1 : 0;
+      if (next[idx]) {
+        next[idx] = { ...next[idx], dirty };
+      }
+      return next;
+    });
+  }, []);
+
+  const requestCloseEditorTab = useCallback(
+    (index: number) => {
+      const file = editorFiles[index];
+      if (!file) return;
+      if (file.dirty) {
+        showDialog({
+          type: "message",
+          title: "Unsaved Changes",
+          message: `Close "${file.name}" and discard unsaved changes?`,
+          buttons: [
+            { label: "Cancel", default: true },
+            {
+              label: "Discard",
+              onClick: () => {
+                setEditorFiles((prev) => {
+                  if (prev.length <= 1) {
+                    setActiveEditorFileIndex(0);
+                    return [];
+                  }
+                  const next = prev.filter((_, i) => i !== index);
+                  if (index <= activeEditorFileIndex && activeEditorFileIndex > 0) {
+                    setActiveEditorFileIndex((i) => Math.min(i - 1, next.length - 1));
+                  }
+                  return next;
+                });
+              },
+            },
+          ],
+        });
+        return;
+      }
+      setEditorFiles((prev) => {
+        if (prev.length <= 1) {
+          setActiveEditorFileIndex(0);
+          focusContext.restore();
+          closeDialog();
+          return [];
+        }
+        const next = prev.filter((_, i) => i !== index);
+        if (index <= activeEditorFileIndex) {
+          setActiveEditorFileIndex((i) => Math.max(0, Math.min(i - 1, next.length - 1)));
+        }
+        return next;
+      });
+    },
+    [activeEditorFileIndex, closeDialog, editorFiles, focusContext, showDialog],
   );
 
   const handleOpenCreateFileConfirm = useCallback(
@@ -122,10 +224,10 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
       }
       const size = exists ? (await bridge.fs.stat(filePath)).size : 0;
       setViewerFile(null);
-      setEditorDirty(false);
-      setEditorFile({ path: filePath, name: fileName, size, langId });
+      setEditorFiles([{ path: filePath, name: fileName, size, langId, dirty: false }]);
+      setActiveEditorFileIndex(0);
     },
-    [bridge, setEditorFile, setViewerFile],
+    [bridge],
   );
 
   const requestCloseViewer = useCallback(() => {
@@ -133,16 +235,16 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   }, []);
 
   const requestCloseEditor = useCallback(() => {
-    if (!editorDirty || !editorFile) {
+    if (!editorDirty || !activeEditorFile) {
       focusContext.restore();
-      setEditorDirty(false);
-      setEditorFile(null);
+      setEditorFiles([]);
+      setActiveEditorFileIndex(0);
       return;
     }
     showDialog({
       type: "message",
       title: "Unsaved Changes",
-      message: `Close "${editorFile.name}" and discard unsaved changes?`,
+      message: `Close "${activeEditorFile.name}" and discard unsaved changes?`,
       buttons: [
         {
           label: "Cancel",
@@ -157,13 +259,13 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
           label: "Discard",
           onClick: () => {
             focusContext.restore();
-            setEditorDirty(false);
-            setEditorFile(null);
+            setEditorFiles([]);
+            setActiveEditorFileIndex(0);
           },
         },
       ],
     });
-  }, [editorDirty, editorFile, focusContext, setEditorFile, showDialog]);
+  }, [editorDirty, activeEditorFile, focusContext, showDialog]);
 
   const viewerPanelEntries = useMemo(() => {
     if (!viewerFile) return [];
@@ -229,7 +331,7 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   );
 
   const viewerResolved = viewerFile ? viewerRegistry.resolve(viewerFile.name) : null;
-  const editorResolved = editorFile ? editorRegistry.resolve(editorFile.name) : null;
+  const editorResolved = activeEditorFile ? editorRegistry.resolve(activeEditorFile.name) : null;
   useEffect(() => {
     if (!viewerFile) return;
     const viewerActiveName = isMediaFile(viewerFile.name) ? viewerFile.name : undefined;
@@ -323,40 +425,53 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
     });
   }, [closeDialog, dialog, handleExecuteCommand, replaceDialog, requestCloseViewer, showDialog, viewerFile, viewerResolved]);
 
+  const dialogRef = useLatestRef(dialog);
+  const closeDialogRef = useLatestRef(closeDialog);
+  const showDialogRef = useLatestRef(showDialog);
+  const replaceDialogRef = useLatestRef(replaceDialog);
+  const requestCloseEditorRef = useLatestRef(requestCloseEditor);
+  const requestCloseEditorTabRef = useLatestRef(requestCloseEditorTab);
+  const setActiveEditorTabRef = useLatestRef(setActiveEditorTab);
+  const onEditorDirtyChangeRef = useLatestRef(onEditorDirtyChange);
+
   useEffect(() => {
-    const topDialogType = dialog?.type;
-    if (!editorFile) {
+    const topDialogType = dialogRef.current?.type;
+    if (editorFiles.length === 0) {
       if (topDialogType === "editor") {
-        closeDialog();
+        closeDialogRef.current();
       }
       return;
     }
 
     if (!editorResolved) {
       if (topDialogType !== "message") {
-        showDialog({
+        showDialogRef.current({
           type: "message",
           title: "No editor",
           message: "No editor extension found for this file type. Install an editor extension (e.g. Monaco Editor) from the extensions panel.",
-          buttons: [{ label: "OK", default: true, onClick: requestCloseEditor }],
+          buttons: [{ label: "OK", default: true, onClick: requestCloseEditorRef.current }],
         });
       }
       return;
     }
 
     if (topDialogType === "findFilesResults") {
-      showDialog({
+      showDialogRef.current({
         type: "editor",
         contributionId: editorResolved.contribution.id,
         extensionDirPath: editorResolved.extensionDirPath,
         entry: editorResolved.contribution.entry,
         props: {
-          filePath: editorFile.path,
-          fileName: editorFile.name,
-          langId: editorFile.langId,
+          filePath: activeEditorFile!.path,
+          fileName: activeEditorFile!.name,
+          langId: activeEditorFile!.langId,
         },
-        onClose: requestCloseEditor,
-        onDirtyChange: setEditorDirty,
+        onClose: requestCloseEditorRef.current,
+        onDirtyChange: onEditorDirtyChangeRef.current,
+        tabFiles: editorFiles.map((f) => ({ path: f.path, name: f.name, langId: f.langId, dirty: f.dirty })),
+        activeTabIndex: activeEditorFileIndex,
+        onTabClose: requestCloseEditorTabRef.current,
+        onTabSelect: setActiveEditorTabRef.current,
       });
       return;
     }
@@ -369,16 +484,14 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
       contributionId: editorResolved.contribution.id,
       extensionDirPath: editorResolved.extensionDirPath,
       entry: editorResolved.contribution.entry,
-      filePath: editorFile.path,
-      fileName: editorFile.name,
-      langId: editorFile.langId,
+      filePath: activeEditorFile!.path,
+      fileName: activeEditorFile!.name,
+      langId: activeEditorFile!.langId,
     };
 
-    if (sameEditorDialog(dialog, desiredEditor)) {
-      return;
-    }
+    if (sameEditorDialog(dialogRef.current, desiredEditor)) return;
 
-    replaceDialog({
+    replaceDialogRef.current({
       type: "editor",
       contributionId: desiredEditor.contributionId,
       extensionDirPath: desiredEditor.extensionDirPath,
@@ -388,17 +501,28 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
         fileName: desiredEditor.fileName,
         langId: desiredEditor.langId,
       },
-      onClose: requestCloseEditor,
-      onDirtyChange: setEditorDirty,
+      onClose: requestCloseEditorRef.current,
+      onDirtyChange: onEditorDirtyChangeRef.current,
+      tabFiles: editorFiles.map((f) => ({ path: f.path, name: f.name, langId: f.langId, dirty: f.dirty })),
+      activeTabIndex: activeEditorFileIndex,
+      onTabClose: requestCloseEditorTabRef.current,
+      onTabSelect: setActiveEditorTabRef.current,
     });
-  }, [closeDialog, dialog, editorFile, editorResolved, replaceDialog, requestCloseEditor, showDialog]);
+  }, [activeEditorFileIndex, editorFiles, editorResolved]);
 
   return {
     handleViewFile,
     handleEditFile,
+    openFileInEditor,
     handleOpenCreateFileConfirm,
     requestCloseViewer,
     requestCloseEditor,
+    requestCloseEditorTab,
+    setActiveEditorTab,
+    onEditorDirtyChange,
     viewerOpen: viewerFile !== null,
+    editorFiles,
+    activeEditorFileIndex,
+    editorDirty,
   };
 }

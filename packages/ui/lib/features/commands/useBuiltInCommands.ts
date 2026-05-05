@@ -73,6 +73,7 @@ import { runCommandSequence, type RunCommandsArgs } from "@dotdirfm/commands";
 import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { DOTDIR_MONACO_EXECUTE_ACTION } from "@/features/extensions/builtins/monacoCommandBridge";
+import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
@@ -90,9 +91,15 @@ export interface BuiltInCommandDeps {
   onOpenCreateFileConfirm: (path: string, name: string, langId: string) => Promise<void>;
   onViewFile: (filePath: string, fileName: string, fileSize: number) => void;
   onEditFile: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
+  openFileInEditor: (filePath: string, fileName: string, fileSize: number, langId: string) => void;
   onRequestCloseViewer: () => void;
   onRequestCloseEditor: () => void;
   viewerOpen: boolean;
+  editorFiles: Array<{ path: string; name: string; size: number; langId: string; dirty: boolean }>;
+  activeEditorFileIndex: number;
+  editorDirty: boolean;
+  requestCloseEditorTab: (index: number) => void;
+  setActiveEditorTab: (index: number) => void;
 }
 
 export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
@@ -125,6 +132,18 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
   // Updated every render so command handlers always see the latest callbacks.
   const depsRef = useLatestRef(deps);
+
+  // Wire the openFileInEditor callback to the extension host so LSP go-to-definition works.
+  const extensionHostClient = useExtensionHostClient();
+  const openFileRef = useLatestRef(deps.openFileInEditor);
+  useEffect(() => {
+    extensionHostClient.setOpenFileRequestListener((path: string) => {
+      const name = basename(path);
+      const langId = languageRegistryRef.current.getLanguageForFilename(name);
+      openFileRef.current(path, name, 0, langId);
+    });
+    return () => extensionHostClient.setOpenFileRequestListener(null);
+  }, [extensionHostClient, languageRegistryRef, openFileRef]);
 
   // loadedExtensions changes as extensions load; kept for potential call-time reads.
   useLoadedExtensions();
