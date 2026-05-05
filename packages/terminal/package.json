@@ -1,0 +1,71 @@
+{
+  "name": "@dotdirfm/terminal",
+  "version": "0.1.0",
+  "description": "Terminal session and xterm.js terminal React component for DotDir.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.mts"
+    },
+    "./terminal.css": {
+      "import": "./dist/terminal.css"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "dotdir",
+    "terminal",
+    "xterm",
+    "pty",
+    "react"
+  ],
+  "author": "Mikhail Isupov",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dotdirfm/dotdir.git"
+  },
+  "homepage": "https://github.com/dotdirfm/dotdir#readme",
+  "bugs": {
+    "url": "https://github.com/dotdirfm/dotdir/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "dependencies": {
+    "@dotdirfm/commands": "workspace:*",
+    "@dotdirfm/ui-bridge": "workspace:*",
+    "@dotdirfm/ui-focus": "workspace:*",
+    "@dotdirfm/ui-utils": "workspace:*",
+    "@xterm/addon-fit": "catalog:",
+    "@xterm/xterm": "catalog:",
+    "jotai": "catalog:"
+  },
+  "devDependencies": {
+    "@tsdown/css": "catalog:",
+    "@types/react": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^4.1.5"
+  },
+  "packageManager": "pnpm@10.30.3"
+}

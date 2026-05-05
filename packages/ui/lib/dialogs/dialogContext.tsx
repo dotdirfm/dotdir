@@ -317,9 +317,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
         dialogs: prev.dialogs.slice(0, -1),
       };
     });
-  }, []);
-
-  const updateDialog = useCallback((update: DialogUpdate) => {
+  }, []);  const updateDialog = useCallback((update: DialogUpdate) => {
     setState((prev) => {
       const current = prev.dialogs.length > 0 ? prev.dialogs[prev.dialogs.length - 1]! : null;
       if (current?.type === "deleteProgress" || current?.type === "copyProgress" || current?.type === "moveProgress") {

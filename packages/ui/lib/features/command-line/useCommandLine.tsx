@@ -6,7 +6,7 @@ import { parseCdCommand, resolveCdPath } from "@/features/command-line/commandLi
 import { isExistingDirectory } from "@/features/file-system/utils";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { useUserSettings } from "@/features/settings/useUserSettings";
-import { normalizeTerminalPath } from "@/features/terminal/path";
+import { normalizeTerminalPath } from "@dotdirfm/terminal";
 import type { TerminalContextValue } from "@/features/terminal/useTerminal";
 import { normalizePath, resolveDotSegments } from "@dotdirfm/ui-utils";
 import { useAtomValue } from "jotai";

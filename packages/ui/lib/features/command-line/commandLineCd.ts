@@ -7,7 +7,7 @@
  */
 
 import type { Bridge } from "@dotdirfm/ui-bridge";
-import { normalizeTerminalPath } from "@/features/terminal/path";
+import { normalizeTerminalPath } from "@dotdirfm/terminal";
 import { join, normalizePath, resolveDotSegments } from "@dotdirfm/ui-utils";
 
 export type ParsedCdCommand =

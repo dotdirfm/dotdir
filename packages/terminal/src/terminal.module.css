@@ -1,0 +1,26 @@
+.terminal-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.terminal-container :global(.xterm) {
+  height: 100%;
+  padding: 0 0 0 4px;
+  display: grid;
+  padding-bottom: 1px;
+}
+
+.terminal-container :global(.xterm-viewport) {
+  height: 100% !important;
+  overflow-y: auto !important;
+}
+
+.terminal-container :global(.xterm .xterm-viewport) {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+}

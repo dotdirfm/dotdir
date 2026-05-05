@@ -1,6 +1,6 @@
 import { panelsVisibleAtom, terminalFocusRequestKeyAtom } from "@/atoms";
 import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
-import { TerminalView } from "@/features/terminal/TerminalView";
+import { TerminalView } from "@dotdirfm/terminal";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import styles from "@/styles/terminal.module.css";
 import { cx } from "@dotdirfm/ui-utils";

@@ -1,9 +1,9 @@
 import type { TerminalProfile } from "@dotdirfm/ui-bridge";
 import { useBridge } from "@dotdirfm/ui-bridge";
-import { formatHiddenCd, normalizeTerminalPath } from "@/features/terminal/path";
-import { terminalActiveSessionIdAtom, terminalSessionsAtom } from "@/features/terminal/terminalAtoms";
-import { TerminalSession } from "@/features/terminal/TerminalSession";
-import type { ManagedTerminalSession } from "@/features/terminal/types";
+import { formatHiddenCd, normalizeTerminalPath } from "@dotdirfm/terminal";
+import { terminalActiveSessionIdAtom, terminalSessionsAtom } from "@dotdirfm/terminal";
+import { TerminalSession } from "@dotdirfm/terminal";
+import type { ManagedTerminalSession } from "@dotdirfm/terminal";
 import { useFocusContext } from "@dotdirfm/ui-focus";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useLatestRef } from "@/hooks/useLatestRef";

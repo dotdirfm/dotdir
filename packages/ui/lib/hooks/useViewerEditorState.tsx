@@ -10,7 +10,7 @@ import { basename } from "@dotdirfm/ui-utils";
 import { useEditorRegistry, useFsProviderRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import { useAtomValue, useSetAtom } from "jotai";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 function sameViewerDialog(
   dialog: ReturnType<typeof useDialog>["dialog"],
@@ -81,7 +81,6 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   const leftActiveTab = useAtomValue(leftActiveTabAtom);
   const rightActiveTab = useAtomValue(rightActiveTabAtom);
   const [editorDirty, setEditorDirty] = useState(false);
-  const editorCloseConfirmOpenRef = useRef(false);
   const { showHidden } = useShowHidden();
   const { dialog, showDialog, replaceDialog, closeDialog } = useDialog();
 
@@ -134,14 +133,12 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
   }, []);
 
   const requestCloseEditor = useCallback(() => {
-    if (editorCloseConfirmOpenRef.current) return;
     if (!editorDirty || !editorFile) {
       focusContext.restore();
       setEditorDirty(false);
       setEditorFile(null);
       return;
     }
-    editorCloseConfirmOpenRef.current = true;
     showDialog({
       type: "message",
       title: "Unsaved Changes",
@@ -151,7 +148,6 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
           label: "Cancel",
           default: true,
           onClick: () => {
-            editorCloseConfirmOpenRef.current = false;
             requestAnimationFrame(() => {
               focusContext.request("editor");
             });
@@ -160,7 +156,6 @@ export function useViewerEditorState(): UseViewerEditorStateResult {
         {
           label: "Discard",
           onClick: () => {
-            editorCloseConfirmOpenRef.current = false;
             focusContext.restore();
             setEditorDirty(false);
             setEditorFile(null);

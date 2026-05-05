@@ -1,7 +1,7 @@
 import { useCommandRegistry } from "@dotdirfm/commands";
 import { DOTDIR_EXIT, SHOW_COMMAND_PALETTE, SHOW_EXTENSIONS, TOGGLE_HIDDEN_FILES, TOGGLE_PANELS } from "@dotdirfm/commands";
 import { useFocusContext } from "@dotdirfm/ui-focus";
-import styles from "@/styles/terminal.module.css";
+import styles from "./terminal.module.css";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal, type IDisposable } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -102,7 +102,7 @@ export function TerminalView({ session, expanded = false, focusRequestKey = 0 }:
         const w = body.clientWidth;
         const h = body.clientHeight;
         const last = lastFitSizeRef.current;
-        if (last.w === w && last.h === h) return;
+        if (last.w === last.h && last.h === h) return;
         lastFitSizeRef.current = { w, h };
         fit.fit();
         void session.resize(Math.max(2, term.cols), Math.max(1, term.rows));

@@ -26,6 +26,7 @@ export default defineConfig({
         "jotai",
         "@xterm/addon-fit",
         "@xterm/xterm",
+        "@xterm/xterm/css/xterm.css",
         "cmdk",
         "jsonc-parser",
         "marked",
