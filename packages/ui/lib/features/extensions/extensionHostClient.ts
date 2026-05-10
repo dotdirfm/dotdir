@@ -407,7 +407,11 @@ export class ExtensionHostClient {
       this.handleMessage(worker, e.data as HostToMainMessage);
     };
     worker.onerror = (e) => {
-      console.error("[ExtensionHost] Worker runtime error:", e);
+      console.error(
+        "[ExtensionHost] Worker runtime error:",
+        `message="${e.message}", filename="${e.filename}", lineno=${e.lineno}, colno=${e.colno}`,
+        e,
+      );
     };
 
     this.worker = worker;

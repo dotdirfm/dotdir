@@ -107,6 +107,6 @@ export function useExtensionLifecycleRuntime({
       extensionHost.dispose();
     };
     // Registered once; mutable refs keep callbacks current.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 }

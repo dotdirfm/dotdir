@@ -133,7 +133,7 @@ export class LayeredResolver implements StyleResolver {
     const layers = this.getApplicableLayers(node.path);
     const cacheKey = this.buildCacheKey(node, layers);
 
-    let cached = this.styleCache.get(cacheKey);
+    const cached = this.styleCache.get(cacheKey);
     if (cached !== undefined) return cached;
 
     const merged: ResolvedStyle = {};
@@ -155,7 +155,7 @@ export class LayeredResolver implements StyleResolver {
     const layers = this.getApplicableLayers(node.path);
     const cacheKey = this.buildCacheKey(node, layers);
 
-    let cached = this.sortCache.get(cacheKey);
+    const cached = this.sortCache.get(cacheKey);
     if (cached !== undefined) return cached;
 
     const merged: Record<string, FssValue> = {};
@@ -173,7 +173,7 @@ export class LayeredResolver implements StyleResolver {
    * Resolve table config for a given path (uses closest layer).
    */
   resolveTableConfig(path: string): Record<string, any> {
-    let cached = this.tableConfigCache.get(path);
+    const cached = this.tableConfigCache.get(path);
     if (cached !== undefined) return cached;
 
     const layers = this.getApplicableLayers(path);

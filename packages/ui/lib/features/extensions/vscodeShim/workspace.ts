@@ -8,7 +8,8 @@ import { ConfigurationTarget, FileType } from "./enums";
 import { Disposable, EventEmitter } from "./events";
 import { getRpc, logActivation } from "./runtime";
 import { textDocuments as docs, type TextDocumentImpl } from "./textDocument";
-import { Range, Uri, WorkspaceEdit } from "./types";
+import type { Range, WorkspaceEdit } from "./types";
+import { Uri } from "./types";
 
 // ── Folders ─────────────────────────────────────────────────────────
 

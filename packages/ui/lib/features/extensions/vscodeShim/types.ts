@@ -7,13 +7,14 @@
  * static factories / `.is(...)` type guards.
  */
 
-import {
+import type {
   CompletionItemKind,
-  DiagnosticSeverity,
-  DocumentHighlightKind,
   EndOfLine,
   FoldingRangeKind,
-  SymbolKind,
+  SymbolKind} from "./enums";
+import {
+  DiagnosticSeverity,
+  DocumentHighlightKind
 } from "./enums";
 
 // ── Uri ─────────────────────────────────────────────────────────────

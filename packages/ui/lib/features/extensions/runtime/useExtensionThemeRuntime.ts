@@ -121,7 +121,7 @@ export function useExtensionThemeRuntime({
         clearColorTheme();
       }
     };
-    await Promise.all([applyIconTheme(exts, activeIconThemeRef.current), applyColorTheme(exts, activeColorThemeRef.current)]);
+    await Promise.all([applyIconTheme(exts, activeIconThemeRef.current), applyColorTheme(exts, activeColorThemeRef.current)]).catch(() => {});
     setThemesReady(true);
     themesReadyRef.current = true;
   }, [

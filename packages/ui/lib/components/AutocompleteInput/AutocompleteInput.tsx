@@ -1,16 +1,6 @@
-import {
-  ACCEPT,
-  CANCEL,
-  CURSOR_DOWN,
-  CURSOR_END,
-  CURSOR_HOME,
-  CURSOR_PAGE_DOWN,
-  CURSOR_PAGE_UP,
-  CURSOR_UP,
-} from "@dotdirfm/commands";
-import { useCommandRegistry } from "@dotdirfm/commands";
-import { useFocusContext, useManagedFocusLayer } from "@dotdirfm/ui-focus";
 import { DropdownSurface } from "@/components/DropdownSurface/DropdownSurface";
+import { ACCEPT, CANCEL, CURSOR_DOWN, CURSOR_END, CURSOR_HOME, CURSOR_PAGE_DOWN, CURSOR_PAGE_UP, CURSOR_UP, useCommandRegistry } from "@dotdirfm/commands";
+import { useFocusContext, useManagedFocusLayer } from "@dotdirfm/ui-focus";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import styles from "./AutocompleteInput.module.css";
 
@@ -94,9 +84,7 @@ export function AutocompleteInput({
         mergedInputRef.current?.focus();
       },
       contains(node) {
-        return node instanceof Node
-          ? mergedInputRef.current?.contains(node) === true || dropdownRef.current?.contains(node) === true
-          : false;
+        return node instanceof Node ? mergedInputRef.current?.contains(node) === true || dropdownRef.current?.contains(node) === true : false;
       },
       isEditableTarget(node) {
         return mergedInputRef.current?.contains(node as Node) === true;
@@ -143,66 +131,36 @@ export function AutocompleteInput({
   useEffect(() => {
     if (!dropdownOpen) return;
     const disposables = [
-      commandRegistry.registerCommand(
-        CANCEL,
-        () => {
-          setOpen(false);
-          setSelectedIndex(null);
-        },
-      ),
-      commandRegistry.registerCommand(
-        CURSOR_DOWN,
-        () => {
-          setSelectedIndex((current) =>
-            current === null ? 0 : Math.min(flattenedRef.current.length - 1, current + 1),
-          );
-        },
-      ),
-      commandRegistry.registerCommand(
-        CURSOR_UP,
-        () => {
-          setSelectedIndex((current) =>
-            current === null ? Math.max(0, flattenedRef.current.length - 1) : Math.max(0, current - 1),
-          );
-        },
-      ),
-      commandRegistry.registerCommand(
-        CURSOR_PAGE_DOWN,
-        () => {
-          setSelectedIndex((current) =>
-            current === null ? 0 : Math.min(flattenedRef.current.length - 1, current + PAGE_STEP),
-          );
-        },
-      ),
-      commandRegistry.registerCommand(
-        CURSOR_PAGE_UP,
-        () => {
-          setSelectedIndex((current) => (current === null ? 0 : Math.max(0, current - PAGE_STEP)));
-        },
-      ),
-      commandRegistry.registerCommand(
-        CURSOR_HOME,
-        () => {
-          if (flattenedRef.current.length === 0) return;
-          setSelectedIndex(0);
-        },
-      ),
-      commandRegistry.registerCommand(
-        CURSOR_END,
-        () => {
-          if (flattenedRef.current.length === 0) return;
-          setSelectedIndex(flattenedRef.current.length - 1);
-        },
-      ),
-      commandRegistry.registerCommand(
-        ACCEPT,
-        () => {
-          if (selectedIndexRef.current === null) return;
-          const selected = flattenedRef.current[selectedIndexRef.current];
-          if (!selected) return;
-          commitSelectionRef.current(selected.option.value);
-        },
-      ),
+      commandRegistry.registerCommand(CANCEL, () => {
+        setOpen(false);
+        setSelectedIndex(null);
+      }),
+      commandRegistry.registerCommand(CURSOR_DOWN, () => {
+        setSelectedIndex((current) => (current === null ? 0 : Math.min(flattenedRef.current.length - 1, current + 1)));
+      }),
+      commandRegistry.registerCommand(CURSOR_UP, () => {
+        setSelectedIndex((current) => (current === null ? Math.max(0, flattenedRef.current.length - 1) : Math.max(0, current - 1)));
+      }),
+      commandRegistry.registerCommand(CURSOR_PAGE_DOWN, () => {
+        setSelectedIndex((current) => (current === null ? 0 : Math.min(flattenedRef.current.length - 1, current + PAGE_STEP)));
+      }),
+      commandRegistry.registerCommand(CURSOR_PAGE_UP, () => {
+        setSelectedIndex((current) => (current === null ? 0 : Math.max(0, current - PAGE_STEP)));
+      }),
+      commandRegistry.registerCommand(CURSOR_HOME, () => {
+        if (flattenedRef.current.length === 0) return;
+        setSelectedIndex(0);
+      }),
+      commandRegistry.registerCommand(CURSOR_END, () => {
+        if (flattenedRef.current.length === 0) return;
+        setSelectedIndex(flattenedRef.current.length - 1);
+      }),
+      commandRegistry.registerCommand(ACCEPT, () => {
+        if (selectedIndexRef.current === null) return;
+        const selected = flattenedRef.current[selectedIndexRef.current];
+        if (!selected) return;
+        commitSelectionRef.current(selected.option.value);
+      }),
     ];
     return () => {
       disposables.forEach((dispose) => dispose());
@@ -252,7 +210,6 @@ export function AutocompleteInput({
           open={dropdownOpen}
           anchor={{ type: "element", ref: mergedInputRef }}
           placement="bottom-start"
-          offset={4}
           matchAnchorWidth
           className={styles["autocomplete-dropdown"]}
           surfaceRef={dropdownRef}
@@ -264,9 +221,7 @@ export function AutocompleteInput({
                 {group.label ? <div className={styles["autocomplete-group-heading"]}>{group.label}</div> : null}
                 <ul className={styles["autocomplete-list"]}>
                   {group.options.map((option) => {
-                    const flatIndex = flattened.findIndex(
-                      (item) => item.groupId === group.id && item.option.id === option.id,
-                    );
+                    const flatIndex = flattened.findIndex((item) => item.groupId === group.id && item.option.id === option.id);
                     const isSelected = flatIndex === selectedIndex;
                     return (
                       <li

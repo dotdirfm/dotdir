@@ -1,28 +1,28 @@
-import {
-  ACCEPT,
-  CANCEL,
-  CURSOR_DOWN,
-  CURSOR_END,
-  CURSOR_HOME,
-  CURSOR_LEFT,
-  CURSOR_PAGE_DOWN,
-  CURSOR_PAGE_UP,
-  CURSOR_RIGHT,
-  CURSOR_UP,
-} from "@dotdirfm/commands";
-import { useCommandRegistry } from "@dotdirfm/commands";
 import { DropdownSurface } from "@/components/DropdownSurface/DropdownSurface";
+import {
+    ACCEPT,
+    CANCEL,
+    CURSOR_DOWN,
+    CURSOR_END,
+    CURSOR_HOME,
+    CURSOR_LEFT,
+    CURSOR_PAGE_DOWN,
+    CURSOR_PAGE_UP,
+    CURSOR_RIGHT,
+    CURSOR_UP,
+    useCommandRegistry
+} from "@dotdirfm/commands";
 import { useFocusContext, useManagedFocusLayer } from "@dotdirfm/ui-focus";
 import { cx } from "@dotdirfm/ui-utils";
 import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useId,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
+    forwardRef,
+    useCallback,
+    useEffect,
+    useId,
+    useImperativeHandle,
+    useMemo,
+    useRef,
+    useState,
 } from "react";
 import { VscChevronLeft, VscChevronRight } from "react-icons/vsc";
 import styles from "./NestedPopoverMenu.module.css";
@@ -402,16 +402,16 @@ export const NestedPopoverMenu = forwardRef<NestedPopoverMenuHandle, NestedPopov
   useEffect(() => {
     if (!open) return;
     const disposables = [
-      commandRegistry.registerCommand(CURSOR_UP, () => { handleMenuCommand(CURSOR_UP); }),
-      commandRegistry.registerCommand(CURSOR_DOWN, () => { handleMenuCommand(CURSOR_DOWN); }),
-      commandRegistry.registerCommand(CURSOR_HOME, () => { handleMenuCommand(CURSOR_HOME); }),
-      commandRegistry.registerCommand(CURSOR_PAGE_UP, () => { handleMenuCommand(CURSOR_PAGE_UP); }),
-      commandRegistry.registerCommand(CURSOR_END, () => { handleMenuCommand(CURSOR_END); }),
-      commandRegistry.registerCommand(CURSOR_PAGE_DOWN, () => { handleMenuCommand(CURSOR_PAGE_DOWN); }),
-      commandRegistry.registerCommand(CURSOR_LEFT, () => { handleMenuCommand(CURSOR_LEFT); }),
-      commandRegistry.registerCommand(CURSOR_RIGHT, () => { handleMenuCommand(CURSOR_RIGHT); }),
-      commandRegistry.registerCommand(ACCEPT, () => { handleMenuCommand(ACCEPT); }),
-      commandRegistry.registerCommand(CANCEL, () => { handleMenuCommand(CANCEL); }),
+      commandRegistry.registerCommand(CURSOR_UP, () => handleMenuCommand(CURSOR_UP)),
+      commandRegistry.registerCommand(CURSOR_DOWN, () => handleMenuCommand(CURSOR_DOWN)),
+      commandRegistry.registerCommand(CURSOR_HOME, () => handleMenuCommand(CURSOR_HOME)),
+      commandRegistry.registerCommand(CURSOR_PAGE_UP, () => handleMenuCommand(CURSOR_PAGE_UP)),
+      commandRegistry.registerCommand(CURSOR_END, () => handleMenuCommand(CURSOR_END)),
+      commandRegistry.registerCommand(CURSOR_PAGE_DOWN, () => handleMenuCommand(CURSOR_PAGE_DOWN)),
+      commandRegistry.registerCommand(CURSOR_LEFT, () => handleMenuCommand(CURSOR_LEFT)),
+      commandRegistry.registerCommand(CURSOR_RIGHT, () => handleMenuCommand(CURSOR_RIGHT)),
+      commandRegistry.registerCommand(ACCEPT, () => handleMenuCommand(ACCEPT)),
+      commandRegistry.registerCommand(CANCEL, () => handleMenuCommand(CANCEL)),
     ];
     return () => {
       disposables.forEach((dispose) => dispose());

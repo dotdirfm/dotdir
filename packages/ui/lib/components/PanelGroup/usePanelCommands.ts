@@ -11,7 +11,8 @@ import {
     OPEN_CURRENT_DIR_IN_OPPOSITE_PANEL_NEW_TAB,
     OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_CURRENT_TAB,
     OPEN_SELECTED_DIR_IN_OPPOSITE_PANEL_NEW_TAB,
-    PREVIEW_IN_OPPOSITE_PANEL, useCommandRegistry
+    PREVIEW_IN_OPPOSITE_PANEL,
+    useCommandRegistry,
 } from "@dotdirfm/commands";
 import type { FsNode } from "@dotdirfm/fss";
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from "react";
@@ -41,7 +42,10 @@ export function usePanelCommands(args: UsePanelCommandsArgs): void {
   useEffect(() => {
     if (!args.active) return;
 
-    const disposables = [commandRegistry.registerCommand(NEW_TAB, () => argsRef.current.handleNewTab()), commandRegistry.registerCommand(CLOSE_TAB, () => void argsRef.current.handleCloseActiveTab())];
+    const disposables = [
+      commandRegistry.registerCommand(NEW_TAB, () => argsRef.current.handleNewTab()),
+      commandRegistry.registerCommand(CLOSE_TAB, () => void argsRef.current.handleCloseActiveTab()),
+    ];
 
     const register = (id: string, fn: () => void | Promise<void>) => {
       disposables.push(commandRegistry.registerCommand(id, fn));
@@ -54,9 +58,7 @@ export function usePanelCommands(args: UsePanelCommandsArgs): void {
       const path = fileListTab.path;
       const activeOppositeTabIdRef = opposite === "left" ? argsRef.current.leftActiveTabIdRef : argsRef.current.rightActiveTabIdRef;
       const setOppositeTabs = opposite === "left" ? argsRef.current.setLeftTabs : argsRef.current.setRightTabs;
-      setOppositeTabs((prev) =>
-        prev.map((tab) => (tab.id === activeOppositeTabIdRef.current && tab.type === "filelist" ? { ...tab, path } : tab)),
-      );
+      setOppositeTabs((prev) => prev.map((tab) => (tab.id === activeOppositeTabIdRef.current && tab.type === "filelist" ? { ...tab, path } : tab)));
       argsRef.current.setActivePanel(opposite);
     });
 

@@ -69,7 +69,7 @@ import {
 } from "@dotdirfm/commands";
 import { useCommandRegistry } from "@dotdirfm/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
-import { runCommandSequence, type RunCommandsArgs } from "@dotdirfm/commands";
+import { type RunCommandsArgs } from "@dotdirfm/commands";
 import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { DOTDIR_MONACO_EXECUTE_ACTION } from "@/features/extensions/builtins/monacoCommandBridge";
@@ -183,18 +183,37 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
 
   useEffect(() => {
     const disposables: Array<() => void> = [];
-    const isEditorFocusActive = () => focusContextRef.current.is("editor");
+    const editorMovementCommands: Array<{ commandId: string; monacoCommandId: string }> = [];
     const registerEditorMovementCommand = (commandId: string, monacoCommandId: string) => {
-      disposables.push(
-        commandRegistry.registerCommand(
-          commandId,
-          async () => {
-            await executeMountedExtensionCommand(DOTDIR_MONACO_EXECUTE_ACTION, [monacoCommandId]);
-          },
-          { isActive: isEditorFocusActive },
-        ),
-      );
+      editorMovementCommands.push({ commandId, monacoCommandId });
     };
+    const registerEditorMovementCommands = () => {
+      const regs: Array<() => void> = [];
+      for (const { commandId, monacoCommandId } of editorMovementCommands) {
+        regs.push(
+          commandRegistry.registerCommand(commandId, async () => {
+            await executeMountedExtensionCommand(DOTDIR_MONACO_EXECUTE_ACTION, [monacoCommandId]);
+          }),
+        );
+      }
+      return () => regs.forEach((r) => r());
+    };
+
+    let unregisterEditorCommands: (() => void) | null = null;
+    const onFocusChange = () => {
+      if (focusContextRef.current.is("editor")) {
+        if (!unregisterEditorCommands) {
+          unregisterEditorCommands = registerEditorMovementCommands();
+        }
+      } else {
+        unregisterEditorCommands?.();
+        unregisterEditorCommands = null;
+      }
+    };
+
+    const unsubFocus = focusContext.onChange(onFocusChange);
+    disposables.push(unsubFocus);
+    onFocusChange();
 
     const closePreviewOnSide = async (side: "left" | "right"): Promise<boolean> => {
       const activePreview = side === "left" ? leftActiveTabRef.current : rightActiveTabRef.current;
@@ -253,7 +272,7 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       commandRegistry.registerCommand(RUN_COMMANDS, async (args) => {
         const payload = (args ?? null) as RunCommandsArgs | null;
         if (!payload || !Array.isArray(payload.commands)) return;
-        await runCommandSequence(commandRegistry, payload.commands);
+        await commandRegistry.executeCommands(payload.commands);
       }),
     );
 
@@ -618,6 +637,6 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     // Intentionally register built-in commands once. Call-time behavior reads
     // the latest state through refs above, so dependency churn here only causes
     // unnecessary unregister/register storms.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [commandRegistry]);
 }

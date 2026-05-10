@@ -12,7 +12,8 @@
     "lint": "eslint . --cache",
     "lint:fix": "eslint . --cache --fix",
     "fmt": "eslint . --cache --fix",
-    "fmt:check": "eslint . --cache --fix-dry-run"
+    "fmt:check": "eslint . --cache --fix-dry-run",
+    "test": "turbo run test"
   },
   "dependencies": {
     "@dotdirfm/ui": "workspace:*",

@@ -8,72 +8,74 @@
  * See `ehProtocol.ts` for the full set of messages exchanged.
  */
 
-import { dirname, join, normalizePath } from "./path";
 import type {
-  HostToMainMessage,
-  MainToHostMessage,
-  DiagnosticPayload,
-  PositionPayload,
-  RangePayload,
-  TextEditPayload,
-  CompletionItemPayload,
-  CompletionListPayload,
-  HoverPayload,
-  DocumentSymbolPayload,
-  SymbolInformationPayload,
-  FoldingRangePayload,
-  SelectionRangePayload,
-  LocationPayload,
-  DocumentHighlightPayload,
-  ColorInformationPayload,
-  ColorPresentationPayload,
-  DocumentLinkPayload,
-  SignatureHelpPayload,
-  CodeActionPayload,
-  CodeLensPayload,
+    CodeActionPayload,
+    CodeLensPayload,
+    ColorInformationPayload,
+    ColorPresentationPayload,
+    CompletionItemPayload,
+    CompletionListPayload,
+    DiagnosticPayload,
+    DocumentHighlightPayload,
+    DocumentLinkPayload,
+    DocumentSymbolPayload,
+    FoldingRangePayload,
+    HostToMainMessage,
+    HoverPayload,
+    LocationPayload,
+    MainToHostMessage,
+    PositionPayload,
+    RangePayload,
+    SelectionRangePayload,
+    SignatureHelpPayload,
+    SymbolInformationPayload,
+    TextEditPayload,
 } from "./ehProtocol";
+import { dirname, join, normalizePath } from "./path";
 import {
-  createVscodeNamespace,
-  installWorkerRpc,
-  installCommandAdapter,
-  setActiveExtensionKey,
-  setDataDir,
-  setWorkspaceFolders,
-  setActiveEditor,
-  setWorkspaceConfig,
-  loadConfigDefaults,
-  loadLanguageDefaults,
-  updateUserConfigValue,
-  textDocuments,
-  registerExtension,
-  markExtensionActive,
-  getProvider,
-  logActivation,
-  workspace as vscodeWorkspace,
-  type WorkerRpc,
-  type WorkerRpcHandler,
+    createVscodeNamespace,
+    getProvider,
+    installCommandAdapter,
+    installWorkerRpc,
+    loadConfigDefaults,
+    loadLanguageDefaults,
+    logActivation,
+    markExtensionActive,
+    registerExtension,
+    setActiveEditor,
+    setActiveExtensionKey,
+    setDataDir,
+    setWorkspaceConfig,
+    setWorkspaceFolders,
+    textDocuments,
+    updateUserConfigValue,
+    workspace as vscodeWorkspace,
+    type WorkerRpc,
+    type WorkerRpcHandler,
 } from "./vscodeShim";
 import { Disposable } from "./vscodeShim/events";
-import {
-  CompletionItem,
-  CompletionItemLabel,
-  CompletionList,
-  Diagnostic,
-  DocumentLink,
-  DocumentSymbol,
-  FoldingRange,
-  Hover,
-  Location,
-  MarkdownString,
-  Position,
-  Range,
-  SelectionRange,
-  SymbolInformation,
-  TextEdit,
-  Uri,
-  type MarkedString,
-} from "./vscodeShim/types";
 import { ExtensionMode, registerExtension as _reg } from "./vscodeShim/extensions";
+import type {
+    CompletionItem,
+    CompletionItemLabel,
+    Diagnostic,
+    DocumentLink,
+    FoldingRange,
+    Hover,
+    Location,
+    SelectionRange,
+    SymbolInformation,
+    TextEdit
+} from "./vscodeShim/types";
+import {
+    CompletionList,
+    DocumentSymbol,
+    MarkdownString,
+    Position,
+    Range,
+    Uri,
+    type MarkedString,
+} from "./vscodeShim/types";
 
 void _reg;
 
@@ -206,6 +208,23 @@ const rpc: WorkerRpc = {
 
 installWorkerRpc(rpc);
 
+function isLocalUrl(url: string): boolean {
+  return url.startsWith("vfs://") || url.startsWith("http://vfs.localhost/") || url.startsWith("file://");
+}
+
+function localUrlToPath(rawUrl: string): string {
+  if (rawUrl.startsWith("vfs://vfs/_ext/")) {
+    return decodeURIComponent(rawUrl.slice("vfs://vfs/_ext".length));
+  }
+  if (rawUrl.startsWith("http://vfs.localhost/_ext/")) {
+    return decodeURIComponent(rawUrl.slice("http://vfs.localhost/_ext".length).replace(/^\/([A-Za-z])\//, "/$1:/"));
+  }
+  if (rawUrl.startsWith("file://")) {
+    return decodeURIComponent(new URL(rawUrl).pathname);
+  }
+  return "";
+}
+
 function readTextFile(path: string): Promise<string | null> {
   return new Promise((resolve, reject) => {
     const id = nextReadId++;
@@ -249,121 +268,6 @@ installCommandAdapter({
 // ── Nested worker + importScripts polyfills ─────────────────────────
 
 /** Injected into nested workers so they can load file:// URLs via the parent. */
-const NESTED_XHR_SHIM = `
-(function(){
-  var _XHR = self.XMLHttpRequest;
-  self.XMLHttpRequest = function(){
-    var xhr = this;
-    var _method = 'GET', _url = '', _async = true;
-    var _status = 0, _statusText = '', _responseText = '', _readyState = 0;
-    var _onreadystatechange = null, _responseType = '';
-
-    Object.defineProperty(xhr, 'readyState', { get:function(){return _readyState} });
-    Object.defineProperty(xhr, 'status', { get:function(){return _status} });
-    Object.defineProperty(xhr, 'statusText', { get:function(){return _statusText} });
-    Object.defineProperty(xhr, 'responseText', { get:function(){return _responseText} });
-    Object.defineProperty(xhr, 'responseType', { get:function(){return _responseType}, set:function(v){_responseType=v} });
-    Object.defineProperty(xhr, 'responseURL', { get:function(){return _url} });
-    Object.defineProperty(xhr, 'onreadystatechange', { get:function(){return _onreadystatechange}, set:function(v){_onreadystatechange=v} });
-
-    xhr.open = function(method, url, async){ _method=method; _url=url; _async=async!==false };
-    xhr.send = function(){
-      var url = _url;
-      // Only intercept file:// URLs or relative extension paths
-      var isFile = /^file:\\/\\//i.test(url);
-      if(!isFile){
-        var real = new _XHR();
-        real.open(_method, url, _async);
-        real.responseType = _responseType;
-        real.onreadystatechange = function(){
-          _readyState = real.readyState;
-          _status = real.status;
-          _statusText = real.statusText;
-          _responseText = real.responseText;
-          if(_readyState === 4) _onreadystatechange&&_onreadystatechange();
-        };
-        real.send();
-        return;
-      }
-      // Ask parent worker to read the file
-      var rid = Date.now() + Math.random();
-      var handler = function(e){
-        if(e.data && e.data._xhrId === rid){
-          self.removeEventListener('message', handler);
-          _status = e.data.status || 200;
-          _statusText = e.data.statusText || 'OK';
-          _responseText = e.data.text || '';
-          _readyState = 4;
-          _onreadystatechange&&_onreadystatechange();
-        }
-      };
-      self.addEventListener('message', handler);
-      self.postMessage({ _xhrId: rid, _xhrUrl: url });
-    };
-    xhr.abort = function(){};
-    xhr.overrideMimeType = function(){};
-    xhr.getResponseHeader = function(){return null};
-    xhr.getAllResponseHeaders = function(){return ''};
-    xhr.addEventListener = function(){};
-    xhr.removeEventListener = function(){};
-    xhr.dispatchEvent = function(){return true};
-  };
-})();
-`;
-
-async function fetchAsBlobUrl(rawUrl: string, injectShim = true): Promise<string> {
-  // Try to resolve by reading the script text via our existing readFile RPC.
-  // Falls back to fetch() for standard http(s) URLs.
-  const path = urlToLocalPath(rawUrl);
-  if (path) {
-    const text = await readTextFile(path);
-    if (text == null) throw new Error(`Script not found: ${rawUrl}`);
-    // Rewrite inline nested `new URL(x, import.meta.url)` / `new Worker(x, ...)`
-    // relative paths so webpack-chunked LSP servers still resolve siblings
-    // from the same extension directory.
-    const rewritten = rewriteBundledUrlsToAbsolute(text, path);
-    // Inject XHR shim so nested workers can read file:// resources
-    const withShim = injectShim ? NESTED_XHR_SHIM + rewritten : rewritten;
-    return URL.createObjectURL(new Blob([withShim], { type: "text/javascript" }));
-  }
-  const response = await fetch(rawUrl);
-  const text = await response.text();
-  const withShim = injectShim ? NESTED_XHR_SHIM + text : text;
-  return URL.createObjectURL(new Blob([withShim], { type: "text/javascript" }));
-}
-
-function urlToLocalPath(rawUrl: string): string | null {
-  if (rawUrl.startsWith("vfs://vfs/_ext/")) {
-    const encoded = rawUrl.slice("vfs://vfs/_ext".length);
-    return decodeURIComponent(encoded);
-  }
-  if (rawUrl.startsWith("http://vfs.localhost/_ext/")) {
-    const encoded = rawUrl.slice("http://vfs.localhost/_ext".length);
-    return decodeURIComponent(encoded.replace(/^\/([A-Za-z])\//, "/$1:/"));
-  }
-  if (rawUrl.startsWith("file://")) {
-    try {
-      const u = new URL(rawUrl);
-      return decodeURIComponent(u.pathname);
-    } catch {
-      return null;
-    }
-  }
-  if (rawUrl.startsWith("blob:") || rawUrl.startsWith("data:")) return null;
-  return null;
-}
-
-// Keep a back-compat alias (older code used this name).
-const vfsUrlToPath = urlToLocalPath;
-void vfsUrlToPath;
-
-function rewriteBundledUrlsToAbsolute(_source: string, _scriptLocalPath: string): string {
-  // Nothing to rewrite right now; the blob wrapper loader for nested workers
-  // handles relative URLs via its own Worker polyfill already. Placeholder
-  // kept so we can add targeted rewrites (e.g. webpack chunk imports) later.
-  return _source;
-}
-
 const _OriginalWorker = (globalThis as unknown as { Worker: typeof Worker }).Worker;
 
 class ProxiedWorker {
@@ -381,16 +285,10 @@ class ProxiedWorker {
 
   private async _bootstrap(scriptUrl: string, options?: WorkerOptions): Promise<void> {
     try {
-      const blobUrl = await fetchAsBlobUrl(scriptUrl);
-      const worker = new _OriginalWorker(blobUrl, options);
+      const worker = new _OriginalWorker(scriptUrl, options);
       this._impl = worker;
 
       worker.onmessage = (ev) => {
-        // Handle nested XHR requests from the injected shim
-        if (ev.data && typeof ev.data._xhrId !== "undefined" && typeof ev.data._xhrUrl === "string") {
-          void this._handleNestedXhr(worker, ev.data._xhrId, ev.data._xhrUrl);
-          return;
-        }
         this._onmessage?.(ev);
         this._fireListeners("message", ev);
       };
@@ -473,24 +371,6 @@ class ProxiedWorker {
       else l.handleEvent(ev);
     }
   }
-
-  private async _handleNestedXhr(worker: Worker, id: number | string, rawUrl: string): Promise<void> {
-    const path = urlToLocalPath(rawUrl);
-    if (!path) {
-      worker.postMessage({ _xhrId: id, status: 404, statusText: "Not Found", text: "" });
-      return;
-    }
-    try {
-      const text = await readTextFile(path);
-      if (text == null) {
-        worker.postMessage({ _xhrId: id, status: 404, statusText: "Not Found", text: "" });
-        return;
-      }
-      worker.postMessage({ _xhrId: id, status: 200, statusText: "OK", text });
-    } catch {
-      worker.postMessage({ _xhrId: id, status: 500, statusText: "Error", text: "" });
-    }
-  }
 }
 
 (globalThis as unknown as { Worker: unknown }).Worker = ProxiedWorker;
@@ -502,14 +382,9 @@ if (_originalImportScripts) {
   (globalThis as unknown as { importScripts: (...urls: string[]) => void }).importScripts = ((
     ...urls: string[]
   ) => {
-    // Best effort: synchronously loading VFS scripts is impossible from a
-    // Web Worker — importScripts is synchronous. We fall back to the
-    // original for non-vfs urls; for vfs urls we'd need a nested worker
-    // pre-bundled dependency. vscode-yaml doesn't trip this path after
-    // LSP handshake because all chunks are bundled into languageserver-web.js.
     for (const url of urls) {
-      if (urlToLocalPath(url)) {
-        console.warn(`[ExtHost] importScripts(${url}) not fully supported in worker; skipping`);
+      if (url.startsWith("vfs://") || url.startsWith("http://vfs.localhost/")) {
+        console.warn(`[ExtHost] importScripts(${url}) not supported for VFS URLs; skipping`);
         continue;
       }
       _originalImportScripts(url);
@@ -563,8 +438,7 @@ if (_OriginalXHR) {
 
     send(): void {
       const url = this._url;
-      const path = urlToLocalPath(url);
-      if (!path) {
+      if (!isLocalUrl(url)) {
         // Fall through to real XHR (won't work for file:// but will for http(s))
         const real = new _OriginalXHR();
         real.open(this._method, url, this._async);
@@ -583,13 +457,14 @@ if (_OriginalXHR) {
       }
       void (async () => {
         try {
+          const path = localUrlToPath(url);
           const text = await readTextFile(path);
           if (text === null) {
             this._setState(4, 404, "Not Found", "");
             return;
           }
           this._setState(4, 200, "OK", text);
-        } catch (err) {
+        } catch {
           this._setState(4, 500, "Error", "");
         }
       })();
@@ -1112,11 +987,7 @@ async function loadExtensions(dataDir: string): Promise<WorkerLoadedExtension[]>
 
 // ── Provider invocation dispatch ───────────────────────────────────
 
-const providerCancellations = new Map<number, { isCancellationRequested: boolean; onCancellationRequested: ReturnType<typeof noopCancelEvent> }>();
-
-function noopCancelEvent() {
-  return (_l: () => void) => ({ dispose() {} });
-}
+const providerCancellations = new Map<number, { isCancellationRequested: boolean; onCancellationRequested: (_l: () => void) => { dispose(): void } }>();
 
 function makeCancellationToken(requestId: number): {
   isCancellationRequested: boolean;

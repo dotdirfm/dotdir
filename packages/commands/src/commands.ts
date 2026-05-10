@@ -57,7 +57,6 @@ export type KeybindingLayer = "default" | "extension" | "user";
 type CommandHandler = (...args: unknown[]) => void | Promise<void>;
 type RegisteredCommandHandler = {
   handler: CommandHandler;
-  isActive?: () => boolean;
 };
 type ContextGetter = () => Record<string, unknown>;
 type ResolvedKeybinding = Keybinding & { normalizedKey: string };
@@ -117,9 +116,9 @@ export class CommandRegistry {
     };
   }
 
-  registerCommand(id: string, handler: CommandHandler, options?: { isActive?: () => boolean }): () => void {
+  registerCommand(id: string, handler: CommandHandler): () => void {
     const handlers = this.handlers.get(id);
-    const entry: RegisteredCommandHandler = { handler, isActive: options?.isActive };
+    const entry: RegisteredCommandHandler = { handler };
     if (handlers) {
       handlers.push(entry);
     } else {
@@ -175,15 +174,7 @@ export class CommandRegistry {
       return;
     }
 
-    const selected =
-      [...registrations].reverse().find((entry) => {
-        if (!entry.isActive) return false;
-        try {
-          return entry.isActive();
-        } catch {
-          return false;
-        }
-      }) ?? registrations[registrations.length - 1];
+    const selected = registrations[registrations.length - 1];
     if (!selected) return;
 
     console.log("[dotdir:command]", id, ...args);
@@ -484,7 +475,39 @@ export class CommandRegistry {
   private notifyListeners(): void {
     for (const cb of this.listeners) cb();
   }
+
+  async executeCommands(steps: RunCommandsStep[]): Promise<void> {
+    for (const step of steps) {
+      if (typeof step === "string") {
+        await this.executeCommand(step);
+        continue;
+      }
+
+      if (Array.isArray(step.args)) {
+        await this.executeCommand(step.command, ...step.args);
+        continue;
+      }
+
+      if (step.args !== undefined) {
+        await this.executeCommand(step.command, step.args);
+        continue;
+      }
+
+      await this.executeCommand(step.command);
+    }
+  }
 }
+
+export type RunCommandsStep =
+  | string
+  | {
+      command: string;
+      args?: unknown;
+    };
+
+export type RunCommandsArgs = {
+  commands: RunCommandsStep[];
+};
 
 const CommandRegistryReactContext = createContext<CommandRegistry | null>(null);
 

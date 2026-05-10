@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CommandRegistry } from "@dotdirfm/commands";
-import { runCommandSequence } from "@dotdirfm/commands";
+import { CommandRegistry, runCommandSequence } from "@dotdirfm/commands";
 
 function createKeyboardEvent({
   key,
@@ -114,8 +113,8 @@ describe("CommandRegistry keybinding resolution", () => {
   });
 });
 
-describe("runCommandSequence", () => {
-  it("runs string commands and object commands sequentially", async () => {
+describe("runCommandSequence (backward compat) and executeCommands", () => {
+  it("runs string commands and object commands sequentially via executeCommands", async () => {
     const registry = new CommandRegistry();
     const events: unknown[] = [];
 
@@ -129,12 +128,25 @@ describe("runCommandSequence", () => {
       events.push(["third", args]);
     });
 
-    await runCommandSequence(registry, [
+    await registry.executeCommands([
       "first",
       { command: "second", args: { answer: 42 } },
       { command: "third", args: ["a", "b"] },
     ]);
 
     expect(events).toEqual(["first", ["second", { answer: 42 }], ["third", ["a", "b"]]]);
+  });
+
+  it("runCommandSequence delegates to executeCommands", async () => {
+    const registry = new CommandRegistry();
+    const events: unknown[] = [];
+
+    registry.registerCommand("first", () => {
+      events.push("first");
+    });
+
+    await runCommandSequence(registry, ["first"]);
+
+    expect(events).toEqual(["first"]);
   });
 });

@@ -948,7 +948,7 @@ function IframeExtensionContainer(containerProps: ContainerProps) {
       }
     };
     // `props` updates are sent via postMessage to avoid unnecessary iframe remounts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [extensionDirPath, entry, kind, resolveVfsUrl]);
 
   // Re-mount when props change (e.g. file path). Skip when inactive.

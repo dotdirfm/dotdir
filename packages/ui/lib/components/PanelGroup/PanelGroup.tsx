@@ -1,5 +1,6 @@
 import type { NestedPopoverMenuHandle, NestedPopoverMenuItem } from "@/components/NestedPopoverMenu/NestedPopoverMenu";
 import { PanelTabs } from "@/components/PanelTabs/PanelTabs";
+import { QuickSearchView } from "@/components/QuickSearchView/QuickSearchView";
 import { useDialog } from "@/dialogs/dialogContext";
 import type { PanelSide } from "@/entities/panel/model/types";
 import {
@@ -13,23 +14,21 @@ import {
     rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
 import type { PanelTab } from "@/entities/tab/model/types";
-import { useBridge } from "@dotdirfm/ui-bridge";
 import { EditorContainer, ViewerContainer } from "@/features/extensions/ExtensionContainer";
 import { usePanelControllerRegistry } from "@/features/panels/panelControllers";
 import { type FileListPanelController } from "@/features/panels/useFileListPanel";
 import { useShowHidden, useUserSettings } from "@/features/settings/useUserSettings";
-import { useFocusContext } from "@dotdirfm/ui-focus";
-import { cx } from "@dotdirfm/ui-utils";
-import { basename, dirname } from "@dotdirfm/ui-utils";
+import { useLatestRef } from "@/hooks/useLatestRef";
 import { useEditorRegistry, useViewerRegistry } from "@/viewerEditorRegistry";
 import {
     DOTDIR_OPEN_LEFT_PANEL_MENU,
     DOTDIR_OPEN_RIGHT_PANEL_MENU,
     LIST_OPEN, useCommandRegistry
 } from "@dotdirfm/commands";
+import { useBridge } from "@dotdirfm/ui-bridge";
+import { useFocusContext } from "@dotdirfm/ui-focus";
+import { basename, cx, dirname } from "@dotdirfm/ui-utils";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { QuickSearchView } from "@/components/QuickSearchView/QuickSearchView";
-import { useLatestRef } from "@/hooks/useLatestRef";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileListTabPane } from "../FileListTabPane";
 import styles from "./PanelGroup.module.css";
@@ -470,9 +469,7 @@ export function PanelGroup({ side }: PanelGroupProps) {
 
   useEffect(() => {
     const commandId = side === "left" ? DOTDIR_OPEN_LEFT_PANEL_MENU : DOTDIR_OPEN_RIGHT_PANEL_MENU;
-    return commandRegistry.registerCommand(commandId, () => {
-      openPanelMenu();
-    });
+    return commandRegistry.registerCommand(commandId, () => openPanelMenu());
   }, [commandRegistry, openPanelMenu, side]);
 
   const oppositePanelPath = useMemo(() => {

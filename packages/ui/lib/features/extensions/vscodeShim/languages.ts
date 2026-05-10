@@ -11,7 +11,8 @@ import type { DocumentSelectorPayload, ProviderKind } from "../ehProtocol";
 import { DiagnosticSeverity } from "./enums";
 import { Disposable, EventEmitter } from "./events";
 import { allocProviderId, getRpc, registerProvider, unregisterProvider } from "./runtime";
-import { Diagnostic, Range, Uri } from "./types";
+import type { Diagnostic} from "./types";
+import { Range, Uri } from "./types";
 import type { TextDocumentImpl } from "./textDocument";
 
 export type DocumentSelector = DocumentSelectorPayload;

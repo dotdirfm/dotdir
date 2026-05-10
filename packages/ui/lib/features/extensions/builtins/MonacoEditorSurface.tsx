@@ -829,14 +829,12 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
       async () => {
         await save();
       },
-      { isActive: () => editor.hasWidgetFocus() },
     );
     disposeFindCommand = registerMountedExtensionCommandHandler(
       "dotdir.find",
       async () => {
         await openFindWidget(editor);
       },
-      { isActive: () => editor.hasWidgetFocus() },
     );
     const disposeExecuteActionCommand = registerMountedExtensionCommandHandler(
       DOTDIR_MONACO_EXECUTE_ACTION,
@@ -844,7 +842,6 @@ function createMonacoEditorExtensionApi(hostApi: DotDirGlobalApi, runtime?: Mona
         if (typeof actionId !== "string" || actionId.length === 0) return;
         await runEditorAction(editor, actionId, payload);
       },
-      { isActive: () => editor.hasWidgetFocus() },
     );
 
     editor.onDidChangeModelContent(() => {

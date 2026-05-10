@@ -1,15 +1,6 @@
 import { createContext, createElement, useContext, useEffect, useRef, type ReactNode } from "react";
 
-export type FocusLayer =
-  | "panel"
-  | "autocomplete"
-  | "searchResults"
-  | "menu"
-  | "commandPalette"
-  | "modal"
-  | "terminal"
-  | "editor"
-  | "viewer";
+export type FocusLayer = "panel" | "autocomplete" | "searchResults" | "menu" | "commandPalette" | "modal" | "terminal" | "editor" | "viewer";
 
 type FocusChangeCallback = (layer: FocusLayer) => void;
 type FocusStateChangeCallback = (state: FocusState) => void;

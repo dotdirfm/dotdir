@@ -76,49 +76,37 @@ describe("CommandRegistry", () => {
 
     it("does not throw when command is not found", async () => {
       const registry = createRegistry();
-      await expect(
-        registry.executeCommand("nonexistent.command"),
-      ).resolves.toBeUndefined();
+      await expect(registry.executeCommand("nonexistent.command")).resolves.toBeUndefined();
     });
 
-    it("prefers active-scoped handlers over inactive ones", async () => {
+    it("executes the last registered handler", async () => {
       const registry = createRegistry();
       const results: string[] = [];
 
-      registry.registerCommand("test.scope", () => results.push("default"));
+      registry.registerCommand("test.override", () => {
+        results.push("first");
+      });
 
-      registry.registerCommand(
-        "test.scope",
-        () => results.push("active"),
-        { isActive: () => true },
-      );
+      registry.registerCommand("test.override", () => {
+        results.push("second");
+      });
 
-      registry.registerCommand(
-        "test.scope",
-        () => results.push("inactive"),
-        { isActive: () => false },
-      );
-
-      await registry.executeCommand("test.scope");
-      expect(results).toEqual(["active"]);
+      await registry.executeCommand("test.override");
+      expect(results).toEqual(["second"]);
     });
 
-    it("falls back to the last registered handler when no active scope matches", async () => {
+    it("unregister removes the handler", async () => {
       const registry = createRegistry();
-      const results: string[] = [];
+      let called = false;
 
-      registry.registerCommand(
-        "test.fallback",
-        () => results.push("inactive"),
-        { isActive: () => false },
-      );
+      const unregister = registry.registerCommand("test.unreg", () => {
+        called = true;
+      });
 
-      registry.registerCommand("test.fallback", () =>
-        results.push("fallback"),
-      );
+      unregister();
 
-      await registry.executeCommand("test.fallback");
-      expect(results).toEqual(["fallback"]);
+      await registry.executeCommand("test.unreg");
+      expect(called).toBe(false);
     });
   });
 
@@ -130,10 +118,7 @@ describe("CommandRegistry", () => {
 
     it("adds and retrieves keybindings for a layer", () => {
       const registry = createRegistry();
-      registry.registerKeybinding(
-        { command: "test.cmd", key: "ctrl+a" },
-        "default",
-      );
+      registry.registerKeybinding({ command: "test.cmd", key: "ctrl+a" }, "default");
       const bindings = registry.getKeybindings();
       expect(bindings).toHaveLength(1);
       expect(bindings[0]!.key).toBe("ctrl+a");
@@ -141,23 +126,14 @@ describe("CommandRegistry", () => {
 
     it("filters out keybindings with empty command", () => {
       const registry = createRegistry();
-      registry.registerKeybinding(
-        { command: "", key: "ctrl+a" },
-        "default",
-      );
+      registry.registerKeybinding({ command: "", key: "ctrl+a" }, "default");
       expect(registry.getKeybindings()).toHaveLength(0);
     });
 
     it("resolves keybindings for a specific layer", () => {
       const registry = createRegistry();
-      registry.registerKeybinding(
-        { command: "cmd.a", key: "ctrl+x" },
-        "default",
-      );
-      registry.registerKeybinding(
-        { command: "cmd.b", key: "ctrl+y" },
-        "user",
-      );
+      registry.registerKeybinding({ command: "cmd.a", key: "ctrl+x" }, "default");
+      registry.registerKeybinding({ command: "cmd.b", key: "ctrl+y" }, "user");
 
       const defaultBindings = registry.getKeybindingsForLayer("default");
       expect(defaultBindings).toHaveLength(1);

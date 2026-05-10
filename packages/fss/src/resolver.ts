@@ -127,10 +127,11 @@ function getNodeAttrValue(name: string, node: FsNode): string | boolean | undefi
       return node.path;
     case 'type':
       return node.type;
-    default:
+    default: {
       const meta = node.meta[name];
       if (meta === undefined) return undefined;
       return typeof meta === 'string' || typeof meta === 'boolean' ? meta : String(meta);
+    }
   }
 }
 
@@ -207,7 +208,7 @@ function gatherCandidates(sheet: CompiledStylesheet, node: FsNode): CompiledRule
   }
 
   const bKey = computeBucketKey(sheet, node);
-  let cached = sheetCache.get(bKey);
+  const cached = sheetCache.get(bKey);
   if (cached) return cached;
 
   // Use a Set to avoid duplicates (a rule might be indexed under multiple keys)

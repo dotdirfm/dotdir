@@ -10,7 +10,8 @@
 
 import { EndOfLine } from "./enums";
 import { EventEmitter } from "./events";
-import { Position, Range, Uri } from "./types";
+import type { Uri } from "./types";
+import { Position, Range } from "./types";
 
 export interface TextLine {
   readonly lineNumber: number;
