@@ -318,7 +318,7 @@ function featureSectionsForInstalled(ext: LoadedExtension): Array<{ label: strin
   ].filter((section) => section.items.length > 0);
 }
 
-export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
+export function ExtensionsPanel({ onClose, activeExtensionKey }: { onClose: () => void; activeExtensionKey?: string }) {
   const resolveVfsUrl = useVfsUrlResolver();
   const bridge = useBridge();
   const [dataDir, setDataDir] = useState<string | null>(null);
@@ -338,7 +338,7 @@ export function ExtensionsPanel({ onClose }: { onClose: () => void }) {
   const [filterKind, setFilterKind] = useState<FilterKind>("none");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [contentTab, setContentTab] = useState<ContentTab>("details");
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(activeExtensionKey ?? null);
   const [docsByKey, setDocsByKey] = useState<Record<string, LoadedDocs>>({});
   const [remoteMetaByKey, setRemoteMetaByKey] = useState<Record<string, RemoteMetadata>>({});
   const [docsLoadingKey, setDocsLoadingKey] = useState<string | null>(null);

@@ -1,0 +1,156 @@
+.keybindings-dialog {
+  display: flex;
+  flex-direction: column;
+  width: 80vw;
+  max-width: 900px;
+  height: 70vh;
+  max-height: 700px;
+  background: var(--bg, #1e1e2e);
+  color: var(--fg, #cdd6f4);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.keybindings-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border, #333);
+  flex-shrink: 0;
+}
+
+.keybindings-search {
+  display: flex;
+}
+
+.keybindings-search-input {
+  flex: 1;
+  padding: 6px 12px;
+  border: 1px solid var(--border, #444);
+  border-radius: 4px;
+  background: var(--bg-secondary, #181825);
+  color: var(--fg, #cdd6f4);
+  font-size: 13px;
+  outline: none;
+}
+
+.keybindings-search-input:focus {
+  border-color: var(--accent, #89b4fa);
+}
+
+.keybindings-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.keybindings-toolbar-button {
+  padding: 3px 10px;
+  border: 1px solid var(--border, #444);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-secondary, #a6adc8);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.keybindings-toolbar-button:hover {
+  background: var(--bg-secondary, #181825);
+}
+
+.keybindings-toolbar-button.active {
+  border-color: var(--accent, #89b4fa);
+  color: var(--accent, #89b4fa);
+}
+
+.keybindings-table-container {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.keybindings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.keybindings-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.keybindings-table th {
+  text-align: left;
+  padding: 8px 12px;
+  background: var(--bg-secondary, #181825);
+  border-bottom: 1px solid var(--border, #333);
+  color: var(--fg-secondary, #a6adc8);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.keybindings-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border, #181825);
+  vertical-align: middle;
+}
+
+.keybindings-table tbody tr:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.03));
+}
+
+.col-command {
+  width: 35%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-keybinding {
+  width: 20%;
+}
+
+.col-keybinding code {
+  font-family: monospace;
+  font-size: 12px;
+  padding: 2px 6px;
+  background: var(--bg-secondary, #181825);
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.col-when {
+  width: 25%;
+}
+
+.col-when code {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--fg-muted, #6c7086);
+}
+
+.col-source {
+  width: 20%;
+  color: var(--fg-muted, #6c7086);
+  font-size: 12px;
+}
+
+.source-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent, #89b4fa);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.source-link:hover {
+  color: var(--fg, #cdd6f4);
+}

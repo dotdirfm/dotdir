@@ -17,6 +17,7 @@ import { MoveConfigDialog } from "./MoveConfigDialog";
 import { OpenCreateFileDialog } from "./OpenCreateFileDialog";
 import { RenameDialog } from "./RenameDialog";
 import { SettingsDialog } from "./SettingsDialog";
+import { KeybindingsDialog } from "./KeybindingsDialog";
 
 export interface MessageDialogButton {
   label: string;
@@ -127,9 +128,13 @@ export type DialogSpec =
     }
   | {
       type: "extensions";
+      activeExtensionKey?: string;
     }
   | {
       type: "settings";
+    }
+  | {
+      type: "keybindings";
     }
   | {
       type: "findFiles";
@@ -529,9 +534,11 @@ function renderDialogContent(dialog: DialogSpec, ctx: DialogContextValue, stackI
         />
       );
     case "extensions":
-      return <ExtensionsPanel onClose={ctx.closeDialog} />;
+      return <ExtensionsPanel onClose={ctx.closeDialog} activeExtensionKey={dialog.activeExtensionKey} />;
     case "settings":
       return <SettingsDialog onClose={ctx.closeDialog} />;
+    case "keybindings":
+      return <KeybindingsDialog onClose={ctx.closeDialog} />;
     case "findFiles":
       return (
         <FindFilesDialog

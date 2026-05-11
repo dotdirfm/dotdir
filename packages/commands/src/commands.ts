@@ -32,6 +32,7 @@ export interface Keybinding {
   mac?: string;
   when?: string;
   args?: unknown;
+  source?: string;
 }
 
 export interface CommandContribution {

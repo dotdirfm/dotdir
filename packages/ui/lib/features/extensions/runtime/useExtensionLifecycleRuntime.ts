@@ -10,6 +10,7 @@ import {
   extensionDirPath,
   extensionFsProviders,
   extensionKeybindings,
+  extensionRef,
   type LoadedExtension,
 } from "@/features/extensions/types";
 import { resolveShellProfiles } from "@/features/terminal/shellProfiles";
@@ -60,7 +61,9 @@ export function useExtensionLifecycleRuntime({
         }
         const keybindings = extensionKeybindings(ext);
         if (keybindings.length > 0) {
-          extensionContributionDisposersRef.current.push(...registerExtensionKeybindings(commandRegistry, keybindings));
+          const ref = extensionRef(ext);
+          const source = `${ref.publisher}.${ref.name}`;
+          extensionContributionDisposersRef.current.push(...registerExtensionKeybindings(commandRegistry, keybindings, source));
         }
       }
     };

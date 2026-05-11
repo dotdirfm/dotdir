@@ -65,6 +65,7 @@ import {
   SELECT_WORD_RIGHT,
   SHOW_COMMAND_PALETTE,
   SHOW_EXTENSIONS,
+  SHOW_KEYBINDINGS,
   SHOW_SETTINGS,
   SHOW_FIND_FILES,
   SWITCH_PANEL,
@@ -88,6 +89,7 @@ const appBuiltInKeybindings: Keybinding[] = [
   { command: TOGGLE_PANELS, key: "ctrl+o", mac: "cmd+o", when: "!terminalCommandRunning" },
   { command: SHOW_EXTENSIONS, key: "f11" },
   { command: SHOW_SETTINGS, key: "f9" },
+  { command: SHOW_KEYBINDINGS, key: "ctrl+shift+k", mac: "cmd+shift+k" },
   { command: SHOW_FIND_FILES, key: "alt+f7", when: "!dialogOpen" },
   { command: DOTDIR_OPEN_LEFT_PANEL_MENU, key: "alt+f1", when: "!dialogOpen" },
   { command: DOTDIR_OPEN_RIGHT_PANEL_MENU, key: "alt+f2", when: "!dialogOpen" },
@@ -269,6 +271,6 @@ export function registerExtensionKeybinding(registry: CommandRegistryLike, bindi
   return registry.registerKeybinding(binding, "extension");
 }
 
-export function registerExtensionKeybindings(registry: CommandRegistryLike, bindings: Keybinding[]): Disposable[] {
-  return registerKeybindings(registry, bindings, "extension");
+export function registerExtensionKeybindings(registry: CommandRegistryLike, bindings: Keybinding[], source?: string): Disposable[] {
+  return bindings.map((binding) => registry.registerKeybinding({ ...binding, source }, "extension"));
 }

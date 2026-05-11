@@ -1,87 +1,88 @@
 import { commandPaletteOpenAtom, panelsVisibleAtom, terminalFocusRequestKeyAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import {
-  activePanelSideAtom,
-  activeTabAtom,
-  createFilelistTab,
-  leftActiveTabAtom,
-  leftActiveTabIdAtom,
-  leftTabsAtom,
-  rightActiveTabAtom,
-  rightActiveTabIdAtom,
-  rightTabsAtom,
+    activePanelSideAtom,
+    activeTabAtom,
+    createFilelistTab,
+    leftActiveTabAtom,
+    leftActiveTabIdAtom,
+    leftTabsAtom,
+    rightActiveTabAtom,
+    rightActiveTabIdAtom,
+    rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
-import type { FileSearchRequest } from "@dotdirfm/ui-bridge";
-import { useBridge } from "@dotdirfm/ui-bridge";
 import { useCommandLine } from "@/features/command-line/useCommandLine";
-import {
-  CLEAR,
-  CLOSE_EDITOR,
-  CLOSE_TAB,
-  CLOSE_VIEWER,
-  CURSOR_DOWN,
-  CURSOR_DOCUMENT_END,
-  CURSOR_DOCUMENT_START,
-  CURSOR_END,
-  CURSOR_HOME,
-  CURSOR_LEFT,
-  CURSOR_PAGE_DOWN,
-  CURSOR_PAGE_UP,
-  CURSOR_RIGHT,
-  CURSOR_UP,
-  CURSOR_WORD_LEFT,
-  CURSOR_WORD_RIGHT,
-  DOTDIR_CANCEL_NAVIGATION,
-  DOTDIR_EDITOR_FIND,
-  DOTDIR_EDITOR_SAVE,
-  DOTDIR_CLOSE_WINDOW,
-  DOTDIR_EXIT,
-  DOTDIR_FOCUS_LEFT_PANEL,
-  DOTDIR_FOCUS_RIGHT_PANEL,
-  DOTDIR_NEW_WINDOW,
-  DOTDIR_PANEL_ESCAPE,
-  EDIT_FILE,
-  LIST_MAKE_DIR,
-  OPEN_CREATE_FILE,
-  PASTE_LEFT_PANEL_PATH,
-  PASTE_RIGHT_PANEL_PATH,
-  RUN_COMMANDS,
-  SELECT_ALL,
-  SELECT_DOWN,
-  SELECT_END,
-  SELECT_HOME,
-  SELECT_LEFT,
-  SELECT_PAGE_DOWN,
-  SELECT_PAGE_UP,
-  SELECT_RIGHT,
-  SELECT_UP,
-  SELECT_WORD_LEFT,
-  SELECT_WORD_RIGHT,
-  SHELL_EXECUTE,
-  SHOW_COMMAND_PALETTE,
-  SHOW_EXTENSIONS,
-  SHOW_SETTINGS,
-  SHOW_FIND_FILES,
-  SWITCH_PANEL,
-  TOGGLE_HIDDEN_FILES,
-  TOGGLE_PANELS,
-  VIEW_FILE,
-} from "@dotdirfm/commands";
-import { useCommandRegistry } from "@dotdirfm/commands";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
-import { type RunCommandsArgs } from "@dotdirfm/commands";
-import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
-import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { DOTDIR_MONACO_EXECUTE_ACTION } from "@/features/extensions/builtins/monacoCommandBridge";
+import { executeMountedExtensionCommand } from "@/features/extensions/extensionCommandHandlers";
 import { useExtensionHostClient } from "@/features/extensions/extensionHostClient";
+import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
 import { useLanguageRegistry } from "@/features/languages/languageRegistry";
 import { useActivePanelNavigation } from "@/features/panels/panelControllers";
 import { DEFAULT_EDITOR_FILE_SIZE_LIMIT } from "@/features/settings/userSettings";
 import { useShowHidden, useUserSettings } from "@/features/settings/useUserSettings";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import { useUiState } from "@/features/ui-state/uiState";
-import { useFocusContext } from "@dotdirfm/ui-focus";
 import { useLatestRef } from "@/hooks/useLatestRef";
+import {
+    CLEAR,
+    CLOSE_EDITOR,
+    CLOSE_TAB,
+    CLOSE_VIEWER,
+    CURSOR_DOCUMENT_END,
+    CURSOR_DOCUMENT_START,
+    CURSOR_DOWN,
+    CURSOR_END,
+    CURSOR_HOME,
+    CURSOR_LEFT,
+    CURSOR_PAGE_DOWN,
+    CURSOR_PAGE_UP,
+    CURSOR_RIGHT,
+    CURSOR_UP,
+    CURSOR_WORD_LEFT,
+    CURSOR_WORD_RIGHT,
+    DOTDIR_CANCEL_NAVIGATION,
+    DOTDIR_CLOSE_WINDOW,
+    DOTDIR_EDITOR_FIND,
+    DOTDIR_EDITOR_SAVE,
+    DOTDIR_EXIT,
+    DOTDIR_FOCUS_LEFT_PANEL,
+    DOTDIR_FOCUS_RIGHT_PANEL,
+    DOTDIR_NEW_WINDOW,
+    DOTDIR_PANEL_ESCAPE,
+    EDIT_FILE,
+    LIST_MAKE_DIR,
+    OPEN_CREATE_FILE,
+    PASTE_LEFT_PANEL_PATH,
+    PASTE_RIGHT_PANEL_PATH,
+    RUN_COMMANDS,
+    SELECT_ALL,
+    SELECT_DOWN,
+    SELECT_END,
+    SELECT_HOME,
+    SELECT_LEFT,
+    SELECT_PAGE_DOWN,
+    SELECT_PAGE_UP,
+    SELECT_RIGHT,
+    SELECT_UP,
+    SELECT_WORD_LEFT,
+    SELECT_WORD_RIGHT,
+    SHELL_EXECUTE,
+    SHOW_COMMAND_PALETTE,
+    SHOW_EXTENSIONS,
+    SHOW_FIND_FILES,
+    SHOW_KEYBINDINGS,
+    SHOW_SETTINGS,
+    SWITCH_PANEL,
+    TOGGLE_HIDDEN_FILES,
+    TOGGLE_PANELS,
+    VIEW_FILE,
+    useCommandRegistry,
+    type RunCommandsArgs
+} from "@dotdirfm/commands";
+import type { FileSearchRequest } from "@dotdirfm/ui-bridge";
+import { useBridge } from "@dotdirfm/ui-bridge";
+import { useFocusContext } from "@dotdirfm/ui-focus";
 import { basename } from "@dotdirfm/ui-utils";
 import { isTauri as isTauriApp } from "@tauri-apps/api/core";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
@@ -304,6 +305,13 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
       commandRegistry.registerCommand(SHOW_SETTINGS, () =>
         showDialogRef.current({
           type: "settings",
+        }),
+      ),
+    );
+    disposables.push(
+      commandRegistry.registerCommand(SHOW_KEYBINDINGS, () =>
+        showDialogRef.current({
+          type: "keybindings",
         }),
       ),
     );
