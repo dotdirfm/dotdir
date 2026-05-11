@@ -1,5 +1,6 @@
 import { DropdownSelect, type DropdownSelectOption } from "@/components/DropdownSelect/DropdownSelect";
 import { List } from "@/components/List/List";
+import { formatKeybinding } from "@dotdirfm/commands";
 import { NestedPopoverMenu, type NestedPopoverMenuItem } from "@/components/NestedPopoverMenu/NestedPopoverMenu";
 import { Tabs, type TabsItem } from "@/components/Tabs/Tabs";
 import { OverlayDialog } from "@/dialogs/OverlayDialog";
@@ -294,7 +295,7 @@ function openVsxNamespaceUrl(namespace: string): string {
 
 function featureSectionsForInstalled(ext: LoadedExtension): Array<{ label: string; items: string[] }> {
   const commands = extensionCommands(ext).map((item) => item.title || item.command);
-  const keybindings = extensionKeybindings(ext).map((item) => `${item.key} → ${item.command}`);
+  const keybindings = extensionKeybindings(ext).map((item) => `${formatKeybinding(item).join(" ")} → ${item.command}`);
   const viewers = extensionViewers(ext).map((item) => item.label);
   const editors = extensionEditors(ext).map((item) => item.label);
   const fsProviders = extensionFsProviders(ext).map((item) => item.label);

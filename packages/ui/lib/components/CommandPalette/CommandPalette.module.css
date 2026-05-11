@@ -108,6 +108,13 @@
   flex: 1;
 }
 
+.command-item-keybinding-group {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: 10px;
+}
+
 .command-item-keybinding {
   font-size: 10px;
   color: var(--command-palette-keybinding-fg);
@@ -115,5 +122,4 @@
   background: var(--command-palette-keybinding-bg);
   padding: 1px 5px;
   border-radius: 4px;
-  margin-left: 10px;
 }

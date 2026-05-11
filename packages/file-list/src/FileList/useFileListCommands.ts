@@ -1,14 +1,20 @@
-import type { ActionQueue } from "./actionQueue";
-import { useCommandRegistry } from "@dotdirfm/commands";
 import {
   CURSOR_DOWN,
+  CURSOR_DOWN_SELECT,
   CURSOR_END,
+  CURSOR_END_SELECT,
   CURSOR_HOME,
+  CURSOR_HOME_SELECT,
   CURSOR_LEFT,
+  CURSOR_LEFT_SELECT,
   CURSOR_PAGE_DOWN,
+  CURSOR_PAGE_DOWN_SELECT,
   CURSOR_PAGE_UP,
+  CURSOR_PAGE_UP_SELECT,
   CURSOR_RIGHT,
+  CURSOR_RIGHT_SELECT,
   CURSOR_UP,
+  CURSOR_UP_SELECT,
   FILELIST_GO_HOME,
   FILELIST_GO_TO_PARENT,
   FILELIST_REFRESH,
@@ -23,17 +29,11 @@ import {
   LIST_VIEW_FILE,
   PASTE_FILENAME,
   PASTE_PATH,
-  SELECT_DOWN,
-  SELECT_END,
-  SELECT_HOME,
-  SELECT_LEFT,
-  SELECT_PAGE_DOWN,
-  SELECT_PAGE_UP,
-  SELECT_RIGHT,
-  SELECT_UP,
+  useCommandRegistry,
 } from "@dotdirfm/commands";
 import { dirname, isContainerPath, parseContainerPath } from "@dotdirfm/ui-utils";
 import { useEffect, useMemo, useRef, type RefObject } from "react";
+import type { ActionQueue } from "./actionQueue";
 import type { UseFileListActionHandlersReturn } from "./fileListActions";
 
 interface UseFileListCommandsArgs {
@@ -64,14 +64,14 @@ const COMMAND_KEYS = {
   cursorEnd: CURSOR_END,
   cursorPageUp: CURSOR_PAGE_UP,
   cursorPageDown: CURSOR_PAGE_DOWN,
-  selectUp: SELECT_UP,
-  selectDown: SELECT_DOWN,
-  selectLeft: SELECT_LEFT,
-  selectRight: SELECT_RIGHT,
-  selectHome: SELECT_HOME,
-  selectEnd: SELECT_END,
-  selectPageUp: SELECT_PAGE_UP,
-  selectPageDown: SELECT_PAGE_DOWN,
+  selectUp: CURSOR_UP_SELECT,
+  selectDown: CURSOR_DOWN_SELECT,
+  selectLeft: CURSOR_LEFT_SELECT,
+  selectRight: CURSOR_RIGHT_SELECT,
+  selectHome: CURSOR_HOME_SELECT,
+  selectEnd: CURSOR_END_SELECT,
+  selectPageUp: CURSOR_PAGE_UP_SELECT,
+  selectPageDown: CURSOR_PAGE_DOWN_SELECT,
   goToParent: FILELIST_GO_TO_PARENT,
   goHome: FILELIST_GO_HOME,
   refresh: FILELIST_REFRESH,
@@ -213,10 +213,7 @@ export function useFileListCommands({
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
           argsRef.current.updateCursor(({ activeIndex, topmostIndex }) => ({
-            activeIndex: Math.min(
-              argsRef.current.displayEntriesRef.current.length - 1,
-              activeIndex + argsRef.current.displayedItemsRef.current - 1,
-            ),
+            activeIndex: Math.min(argsRef.current.displayEntriesRef.current.length - 1, activeIndex + argsRef.current.displayedItemsRef.current - 1),
             topmostIndex,
           }));
         }),
@@ -262,12 +259,7 @@ export function useFileListCommands({
             const maxTopmost = Math.max(0, argsRef.current.displayEntriesRef.current.length - totalVisible);
             nextTopmost = Math.max(0, Math.min(maxTopmost, firstVisible + step));
           }
-          argsRef.current.applySelection(
-            cur,
-            target,
-            "include-active",
-            nextTopmost,
-          );
+          argsRef.current.applySelection(cur, target, "include-active", nextTopmost);
         }),
       [COMMAND_KEYS.selectHome]: () =>
         actionQueue.enqueue(() => {
@@ -277,11 +269,7 @@ export function useFileListCommands({
       [COMMAND_KEYS.selectEnd]: () =>
         actionQueue.enqueue(() => {
           argsRef.current.markKeyboardNav();
-          argsRef.current.applySelection(
-            argsRef.current.activeIndexRef.current,
-            argsRef.current.displayEntriesRef.current.length - 1,
-            "include-active",
-          );
+          argsRef.current.applySelection(argsRef.current.activeIndexRef.current, argsRef.current.displayEntriesRef.current.length - 1, "include-active");
         }),
       [COMMAND_KEYS.selectPageUp]: () =>
         actionQueue.enqueue(() => {
@@ -336,8 +324,7 @@ export function useFileListCommands({
 
   useEffect(() => {
     if (!active) return;
-    const disposables = Object.entries(handlers)
-      .map(([commandId, handler]) => commandRegistry.registerCommand(commandId, handler));
+    const disposables = Object.entries(handlers).map(([commandId, handler]) => commandRegistry.registerCommand(commandId, handler));
     return () => {
       for (const dispose of disposables) dispose();
     };

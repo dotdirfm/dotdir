@@ -1,9 +1,11 @@
-import { useCommandRegistry, formatKeybinding, type Command, type KeybindingLayer } from "@dotdirfm/commands";
 import { useDialog } from "@/dialogs/dialogContext";
+import { extensionManifest, extensionRef } from "@/features/extensions/types";
+import { useLoadedExtensions } from "@/features/extensions/useLoadedExtensions";
+import { formatKeybinding, useCommandRegistry, type Command, type KeybindingLayer } from "@dotdirfm/commands";
 import { cx } from "@dotdirfm/ui-utils";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { OverlayDialog } from "./OverlayDialog";
 import styles from "./KeybindingsDialog.module.css";
+import { OverlayDialog } from "./OverlayDialog";
 
 interface KeybindingsDialogProps {
   onClose: () => void;
@@ -21,6 +23,18 @@ export function KeybindingsDialog({ onClose }: KeybindingsDialogProps) {
   const [search, setSearch] = useState("");
   const [sortByPrecedence, setSortByPrecedence] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
+  const loadedExtensions = useLoadedExtensions();
+
+  const sourceTitles = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const ext of loadedExtensions) {
+      const ref = extensionRef(ext);
+      const manifest = extensionManifest(ext);
+      const key = `${ref.publisher}.${ref.name}`;
+      map.set(key, manifest.displayName || key);
+    }
+    return map;
+  }, [loadedExtensions]);
 
   const allCommands = useMemo(() => commandRegistry.getAllCommands(), [commandRegistry]);
   const commandMap = useMemo(() => {
@@ -39,7 +53,7 @@ export function KeybindingsDialog({ onClose }: KeybindingsDialogProps) {
 
   const filteredRows = useMemo(() => {
     const q = search.toLowerCase();
-    const rows: Array<{ command: string; title: string; key: string; when: string; source: string; sourceKey?: string; layer: KeybindingLayer }> = [];
+      const rows: Array<{ command: string; title: string; keyParts: string[]; when: string; source: string; sourceKey?: string; layer: KeybindingLayer }> = [];
 
     for (const { layer, bindings } of bindingsByLayer) {
       for (const b of bindings) {
@@ -47,11 +61,11 @@ export function KeybindingsDialog({ onClose }: KeybindingsDialogProps) {
         const cmd = commandMap.get(b.command);
         const title = cmd?.title ?? b.command;
         if (q && !title.toLowerCase().includes(q) && !b.key.toLowerCase().includes(q) && !b.command.toLowerCase().includes(q)) continue;
-        const sourceName = b.source ?? LAYER_LABELS[layer];
+        const sourceName = b.source ? (sourceTitles.get(b.source) ?? b.source) : LAYER_LABELS[layer];
         rows.push({
           command: b.command,
           title,
-          key: formatKeybinding(b),
+          keyParts: formatKeybinding(b),
           when: b.when ?? "",
           source: sourceName,
           sourceKey: b.source,
@@ -66,7 +80,7 @@ export function KeybindingsDialog({ onClose }: KeybindingsDialogProps) {
     }
 
     return rows;
-  }, [bindingsByLayer, commandMap, search, sortByPrecedence]);
+  }, [bindingsByLayer, commandMap, search, sortByPrecedence, sourceTitles]);
 
   const handleClearSearch = useCallback(() => {
     setSearch("");
@@ -120,7 +134,6 @@ export function KeybindingsDialog({ onClose }: KeybindingsDialogProps) {
         <table className={styles["keybindings-table"]}>
           <thead>
             <tr>
-              <th className={styles["col-command"]}>Command</th>
               <th className={styles["col-keybinding"]}>Keybinding</th>
               <th className={styles["col-when"]}>When</th>
               <th className={styles["col-source"]}>Source</th>
@@ -133,16 +146,20 @@ export function KeybindingsDialog({ onClose }: KeybindingsDialogProps) {
                   {row.title}
                 </td>
                 <td className={styles["col-keybinding"]}>
-                  <code>{row.key}</code>
+                  <span className={styles["keybinding-group"]}>
+                    {row.keyParts.map((part, j) => (
+                      <code key={j}>{part}</code>
+                    ))}
+                  </span>
                 </td>
                 <td className={styles["col-when"]}>
                   <code>{row.when || "—"}</code>
                 </td>
                 <td className={styles["col-source"]}>
                   {row.sourceKey ? (
-                    <button className={styles["source-link"]} onClick={() => handleSourceClick(row.sourceKey!)} title={`Show ${row.source} extension`}>
+                    <a className={styles["source-link"]} onClick={() => handleSourceClick(row.sourceKey!)} title={`Show ${row.source} extension`}>
                       {row.source}
-                    </button>
+                    </a>
                   ) : (
                     row.source
                   )}

@@ -60,8 +60,8 @@
 }
 
 .keybindings-toolbar-button.active {
-  border-color: var(--accent, #89b4fa);
-  color: var(--accent, #89b4fa);
+  border-color: var(--accent-fg, #89b4fa);
+  color: var(--accent-fg, #89b4fa);
 }
 
 .keybindings-table-container {
@@ -113,6 +113,12 @@
 
 .col-keybinding {
   width: 20%;
+}
+
+.keybinding-group {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
 }
 
 .col-keybinding code {

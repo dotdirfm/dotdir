@@ -389,10 +389,19 @@ export function CommandPalette() {
                           {keybinding && (
                             <span
                               className={
-                                paletteStyles["command-item-keybinding"]
+                                paletteStyles["command-item-keybinding-group"]
                               }
                             >
-                              {formatKeybinding(keybinding)}
+                              {formatKeybinding(keybinding).map((part, i) => (
+                                <span
+                                  key={i}
+                                  className={
+                                    paletteStyles["command-item-keybinding"]
+                                  }
+                                >
+                                  {part}
+                                </span>
+                              ))}
                             </span>
                           )}
                         </li>

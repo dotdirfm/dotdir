@@ -526,7 +526,7 @@ export function useCommandRegistry(): CommandRegistry {
   return value;
 }
 
-export function formatKeybinding(binding: Keybinding): string {
+export function formatKeybinding(binding: Keybinding): string[] {
   const isMacPlatform = isMac();
   const key = isMacPlatform ? (binding.mac ?? binding.key) : binding.key;
 
@@ -554,6 +554,5 @@ export function formatKeybinding(binding: Keybinding): string {
       if (p === "space") return "Space";
       if (p === "tab") return "Tab";
       return p.toUpperCase();
-    })
-    .join(isMacPlatform ? "" : "+");
+    });
 }

@@ -1,15 +1,15 @@
 import { commandPaletteOpenAtom, panelsVisibleAtom, terminalFocusRequestKeyAtom } from "@/atoms";
 import { useDialog } from "@/dialogs/dialogContext";
 import {
-    activePanelSideAtom,
-    activeTabAtom,
-    createFilelistTab,
-    leftActiveTabAtom,
-    leftActiveTabIdAtom,
-    leftTabsAtom,
-    rightActiveTabAtom,
-    rightActiveTabIdAtom,
-    rightTabsAtom,
+  activePanelSideAtom,
+  activeTabAtom,
+  createFilelistTab,
+  leftActiveTabAtom,
+  leftActiveTabIdAtom,
+  leftTabsAtom,
+  rightActiveTabAtom,
+  rightActiveTabIdAtom,
+  rightTabsAtom,
 } from "@/entities/tab/model/tabsAtoms";
 import { useCommandLine } from "@/features/command-line/useCommandLine";
 import { registerAppBuiltInKeybindings, registerFileListKeybindings } from "@/features/commands/registerKeybindings";
@@ -25,60 +25,60 @@ import { useTerminal } from "@/features/terminal/useTerminal";
 import { useUiState } from "@/features/ui-state/uiState";
 import { useLatestRef } from "@/hooks/useLatestRef";
 import {
-    CLEAR,
-    CLOSE_EDITOR,
-    CLOSE_TAB,
-    CLOSE_VIEWER,
-    CURSOR_DOCUMENT_END,
-    CURSOR_DOCUMENT_START,
-    CURSOR_DOWN,
-    CURSOR_END,
-    CURSOR_HOME,
-    CURSOR_LEFT,
-    CURSOR_PAGE_DOWN,
-    CURSOR_PAGE_UP,
-    CURSOR_RIGHT,
-    CURSOR_UP,
-    CURSOR_WORD_LEFT,
-    CURSOR_WORD_RIGHT,
-    DOTDIR_CANCEL_NAVIGATION,
-    DOTDIR_CLOSE_WINDOW,
-    DOTDIR_EDITOR_FIND,
-    DOTDIR_EDITOR_SAVE,
-    DOTDIR_EXIT,
-    DOTDIR_FOCUS_LEFT_PANEL,
-    DOTDIR_FOCUS_RIGHT_PANEL,
-    DOTDIR_NEW_WINDOW,
-    DOTDIR_PANEL_ESCAPE,
-    EDIT_FILE,
-    LIST_MAKE_DIR,
-    OPEN_CREATE_FILE,
-    PASTE_LEFT_PANEL_PATH,
-    PASTE_RIGHT_PANEL_PATH,
-    RUN_COMMANDS,
-    SELECT_ALL,
-    SELECT_DOWN,
-    SELECT_END,
-    SELECT_HOME,
-    SELECT_LEFT,
-    SELECT_PAGE_DOWN,
-    SELECT_PAGE_UP,
-    SELECT_RIGHT,
-    SELECT_UP,
-    SELECT_WORD_LEFT,
-    SELECT_WORD_RIGHT,
-    SHELL_EXECUTE,
-    SHOW_COMMAND_PALETTE,
-    SHOW_EXTENSIONS,
-    SHOW_FIND_FILES,
-    SHOW_KEYBINDINGS,
-    SHOW_SETTINGS,
-    SWITCH_PANEL,
-    TOGGLE_HIDDEN_FILES,
-    TOGGLE_PANELS,
-    VIEW_FILE,
-    useCommandRegistry,
-    type RunCommandsArgs
+  CLEAR,
+  CLOSE_EDITOR,
+  CLOSE_TAB,
+  CLOSE_VIEWER,
+  CURSOR_BOTTOM,
+  CURSOR_DOWN,
+  CURSOR_DOWN_SELECT,
+  CURSOR_END,
+  CURSOR_END_SELECT,
+  CURSOR_HOME,
+  CURSOR_HOME_SELECT,
+  CURSOR_LEFT,
+  CURSOR_LEFT_SELECT,
+  CURSOR_PAGE_DOWN,
+  CURSOR_PAGE_DOWN_SELECT,
+  CURSOR_PAGE_UP,
+  CURSOR_PAGE_UP_SELECT,
+  CURSOR_RIGHT,
+  CURSOR_RIGHT_SELECT,
+  CURSOR_TOP,
+  CURSOR_UP,
+  CURSOR_UP_SELECT,
+  CURSOR_WORD_LEFT,
+  CURSOR_WORD_LEFT_SELECT,
+  CURSOR_WORD_RIGHT,
+  CURSOR_WORD_RIGHT_SELECT,
+  DOTDIR_CANCEL_NAVIGATION,
+  DOTDIR_CLOSE_WINDOW,
+  DOTDIR_EDITOR_FIND,
+  DOTDIR_EDITOR_SAVE,
+  DOTDIR_EXIT,
+  DOTDIR_FOCUS_LEFT_PANEL,
+  DOTDIR_FOCUS_RIGHT_PANEL,
+  DOTDIR_NEW_WINDOW,
+  DOTDIR_PANEL_ESCAPE,
+  EDIT_FILE,
+  LIST_MAKE_DIR,
+  OPEN_CREATE_FILE,
+  PASTE_LEFT_PANEL_PATH,
+  PASTE_RIGHT_PANEL_PATH,
+  RUN_COMMANDS,
+  SELECT_ALL,
+  SHELL_EXECUTE,
+  SHOW_COMMAND_PALETTE,
+  SHOW_EXTENSIONS,
+  SHOW_FIND_FILES,
+  SHOW_KEYBINDINGS,
+  SHOW_SETTINGS,
+  SWITCH_PANEL,
+  TOGGLE_HIDDEN_FILES,
+  TOGGLE_PANELS,
+  VIEW_FILE,
+  useCommandRegistry,
+  type RunCommandsArgs
 } from "@dotdirfm/commands";
 import type { FileSearchRequest } from "@dotdirfm/ui-bridge";
 import { useBridge } from "@dotdirfm/ui-bridge";
@@ -402,22 +402,22 @@ export function useBuiltInCommands(deps: BuiltInCommandDeps): void {
     registerEditorMovementCommand(CURSOR_RIGHT, "cursorRight");
     registerEditorMovementCommand(CURSOR_HOME, "cursorHome");
     registerEditorMovementCommand(CURSOR_END, "cursorEnd");
-    registerEditorMovementCommand(CURSOR_DOCUMENT_START, "cursorTop");
-    registerEditorMovementCommand(CURSOR_DOCUMENT_END, "cursorBottom");
+    registerEditorMovementCommand(CURSOR_TOP, "cursorTop");
+    registerEditorMovementCommand(CURSOR_BOTTOM, "cursorBottom");
     registerEditorMovementCommand(CURSOR_PAGE_UP, "cursorPageUp");
     registerEditorMovementCommand(CURSOR_PAGE_DOWN, "cursorPageDown");
     registerEditorMovementCommand(CURSOR_WORD_LEFT, "cursorWordLeft");
     registerEditorMovementCommand(CURSOR_WORD_RIGHT, "cursorWordRight");
-    registerEditorMovementCommand(SELECT_UP, "cursorUpSelect");
-    registerEditorMovementCommand(SELECT_DOWN, "cursorDownSelect");
-    registerEditorMovementCommand(SELECT_LEFT, "cursorLeftSelect");
-    registerEditorMovementCommand(SELECT_RIGHT, "cursorRightSelect");
-    registerEditorMovementCommand(SELECT_HOME, "cursorHomeSelect");
-    registerEditorMovementCommand(SELECT_END, "cursorEndSelect");
-    registerEditorMovementCommand(SELECT_PAGE_UP, "cursorPageUpSelect");
-    registerEditorMovementCommand(SELECT_PAGE_DOWN, "cursorPageDownSelect");
-    registerEditorMovementCommand(SELECT_WORD_LEFT, "cursorWordLeftSelect");
-    registerEditorMovementCommand(SELECT_WORD_RIGHT, "cursorWordRightSelect");
+    registerEditorMovementCommand(CURSOR_UP_SELECT, "cursorUpSelect");
+    registerEditorMovementCommand(CURSOR_DOWN_SELECT, "cursorDownSelect");
+    registerEditorMovementCommand(CURSOR_LEFT_SELECT, "cursorLeftSelect");
+    registerEditorMovementCommand(CURSOR_RIGHT_SELECT, "cursorRightSelect");
+    registerEditorMovementCommand(CURSOR_HOME_SELECT, "cursorHomeSelect");
+    registerEditorMovementCommand(CURSOR_END_SELECT, "cursorEndSelect");
+    registerEditorMovementCommand(CURSOR_PAGE_UP_SELECT, "cursorPageUpSelect");
+    registerEditorMovementCommand(CURSOR_PAGE_DOWN_SELECT, "cursorPageDownSelect");
+    registerEditorMovementCommand(CURSOR_WORD_LEFT_SELECT, "cursorWordLeftSelect");
+    registerEditorMovementCommand(CURSOR_WORD_RIGHT_SELECT, "cursorWordRightSelect");
     registerEditorMovementCommand(SELECT_ALL, "editor.action.selectAll");
 
     // ── Navigation ────────────────────────────────────────────────────────────

@@ -156,30 +156,32 @@ describe("CommandRegistry", () => {
 describe("formatKeybinding", () => {
   it("formats a simple key", () => {
     const result = formatKeybinding({ command: "test", key: "a" });
-    expect(result.toUpperCase()).toBe("A");
+    expect(result).toEqual(["A"]);
   });
 
   it("formats a keybinding with modifiers", () => {
     const result = formatKeybinding({ command: "test", key: "ctrl+shift+p" });
     expect(result).toContain("P");
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBeGreaterThanOrEqual(2);
   });
 
   it("formats special keys", () => {
-    expect(formatKeybinding({ command: "test", key: "enter" })).toContain("↵");
-    expect(formatKeybinding({ command: "test", key: "escape" })).toContain("Esc");
-    expect(formatKeybinding({ command: "test", key: "tab" })).toContain("Tab");
-    expect(formatKeybinding({ command: "test", key: "up" })).toContain("↑");
-    expect(formatKeybinding({ command: "test", key: "down" })).toContain("↓");
-    expect(formatKeybinding({ command: "test", key: "left" })).toContain("←");
-    expect(formatKeybinding({ command: "test", key: "right" })).toContain("→");
-    expect(formatKeybinding({ command: "test", key: "space" })).toContain("Space");
-    expect(formatKeybinding({ command: "test", key: "backspace" })).toContain("⌫");
-    expect(formatKeybinding({ command: "test", key: "delete" })).toContain("Del");
+    expect(formatKeybinding({ command: "test", key: "enter" })).toEqual(["↵"]);
+    expect(formatKeybinding({ command: "test", key: "escape" })).toEqual(["Esc"]);
+    expect(formatKeybinding({ command: "test", key: "tab" })).toEqual(["Tab"]);
+    expect(formatKeybinding({ command: "test", key: "up" })).toEqual(["↑"]);
+    expect(formatKeybinding({ command: "test", key: "down" })).toEqual(["↓"]);
+    expect(formatKeybinding({ command: "test", key: "left" })).toEqual(["←"]);
+    expect(formatKeybinding({ command: "test", key: "right" })).toEqual(["→"]);
+    expect(formatKeybinding({ command: "test", key: "space" })).toEqual(["Space"]);
+    expect(formatKeybinding({ command: "test", key: "backspace" })).toEqual(["⌫"]);
+    expect(formatKeybinding({ command: "test", key: "delete" })).toEqual(["Del"]);
   });
 
   it("formats f-keys", () => {
     const result = formatKeybinding({ command: "test", key: "f5" });
-    expect(result).toBe("F5");
+    expect(result).toEqual(["F5"]);
   });
 
   it("does not throw when called in node environment", () => {

@@ -1,31 +1,31 @@
 import { panelsVisibleAtom } from "@/atoms";
 import { useCommandLine, useCommandLineRegistration } from "@/features/command-line/useCommandLine";
-import {
-    CLEAR,
-    COMMANDLINE_COPY,
-    COMMANDLINE_CUT,
-    COMMANDLINE_EXECUTE,
-    COMMANDLINE_PASTE,
-    CURSOR_END,
-    CURSOR_HOME,
-    CURSOR_LEFT,
-    CURSOR_RIGHT,
-    CURSOR_WORD_LEFT,
-    CURSOR_WORD_RIGHT,
-    DELETE_LEFT,
-    DELETE_RIGHT,
-    SELECT_ALL,
-    SELECT_END,
-    SELECT_HOME,
-    SELECT_LEFT,
-    SELECT_RIGHT,
-    SELECT_WORD_LEFT,
-    SELECT_WORD_RIGHT,
-} from "@dotdirfm/commands";
-import { useCommandRegistry } from "@dotdirfm/commands";
 import { registerCommandLineKeybindings } from "@/features/commands/registerKeybindings";
 import { useTerminal } from "@/features/terminal/useTerminal";
 import terminalStyles from "@/styles/terminal.module.css";
+import {
+  CLEAR,
+  COMMANDLINE_COPY,
+  COMMANDLINE_CUT,
+  COMMANDLINE_EXECUTE,
+  COMMANDLINE_PASTE,
+  CURSOR_END,
+  CURSOR_END_SELECT,
+  CURSOR_HOME,
+  CURSOR_HOME_SELECT,
+  CURSOR_LEFT,
+  CURSOR_LEFT_SELECT,
+  CURSOR_RIGHT,
+  CURSOR_RIGHT_SELECT,
+  CURSOR_WORD_LEFT,
+  CURSOR_WORD_LEFT_SELECT,
+  CURSOR_WORD_RIGHT,
+  CURSOR_WORD_RIGHT_SELECT,
+  DELETE_LEFT,
+  DELETE_RIGHT,
+  SELECT_ALL,
+  useCommandRegistry,
+} from "@dotdirfm/commands";
 import { useAtomValue } from "jotai";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -179,12 +179,12 @@ export function CommandLine() {
       }),
     );
 
-    d.push(commandRegistry.registerCommand(SELECT_LEFT, () => moveCursor(Math.max(0, cursorRef.current - 1), true)));
-    d.push(commandRegistry.registerCommand(SELECT_RIGHT, () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), true)));
-    d.push(commandRegistry.registerCommand(SELECT_HOME, () => moveCursor(0, true)));
-    d.push(commandRegistry.registerCommand(SELECT_END, () => moveCursor(valueRef.current.length, true)));
+    d.push(commandRegistry.registerCommand(CURSOR_LEFT_SELECT, () => moveCursor(Math.max(0, cursorRef.current - 1), true)));
+    d.push(commandRegistry.registerCommand(CURSOR_RIGHT_SELECT, () => moveCursor(Math.min(valueRef.current.length, cursorRef.current + 1), true)));
+    d.push(commandRegistry.registerCommand(CURSOR_HOME_SELECT, () => moveCursor(0, true)));
+    d.push(commandRegistry.registerCommand(CURSOR_END_SELECT, () => moveCursor(valueRef.current.length, true)));
     d.push(
-      commandRegistry.registerCommand(SELECT_WORD_LEFT, () => {
+      commandRegistry.registerCommand(CURSOR_WORD_LEFT_SELECT, () => {
         const v = valueRef.current;
         let p = cursorRef.current;
         while (p > 0 && v[p - 1] === " ") p--;
@@ -193,7 +193,7 @@ export function CommandLine() {
       }),
     );
     d.push(
-      commandRegistry.registerCommand(SELECT_WORD_RIGHT, () => {
+      commandRegistry.registerCommand(CURSOR_WORD_RIGHT_SELECT, () => {
         const v = valueRef.current;
         let p = cursorRef.current;
         while (p < v.length && v[p] !== " ") p++;
